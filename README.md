@@ -1,13 +1,13 @@
 # Pewpew
 
 ## TODOs
-- BUG: CHECK IF THIS IS STILL HAPENNING an endpoint dependent upon a response provider deadlocks if they're not both going the same speed
 - in stats change `time` to `bucket_time` and add `start_time` and `end_time`
 - BUG: scale ups and scale downs are not generating the expected amount of load
-- allow statuses on response providers to have more than one entry, IE: `4xx or 5xx`
 - Add additional types of transforms: substring, json path extraction, unnest
-- add options to `Peek` provider: include outHeaders, log to file (each error gets new file, save all results in directory),
-      or should these be included in the results directory
+- refactor provides to have `request` and `response` (change those to be reserved provider names). Both can have `start-line`, `headers`, and `body`
+- refactor `Peek` provider: change name to `Log`, allow logging to file (each error gets new file??, save all results in directory)
+      or stdout/stderr or to stats, limit per endpoint
+- add global option for `Log` so, for example, any response that is >=400 is logged
 - add config options: for client: request timeout, standard headers, keepalive time; for providers: buffer size
 - add `files` body provider
 - update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from
@@ -31,7 +31,4 @@
       in the channel or event loop???
 - create stats viewer (raw html + js + css - no server)
 - allow load_patterns/config to change while a test is running
-- verbose output mode (show when a request is made, when a response is received with RTT)
 - add test monitoring. Possibly use tui for terminal output. Have webserver which will display a dashboard
-- make the check for load_pattern happen during deserialization so a parse error with line numbers
-      can be propogated

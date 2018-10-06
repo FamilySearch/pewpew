@@ -303,30 +303,39 @@ fn deserialize_status_string_to_fn<'de, D> (deserializer: D) -> Result<Option<Bo
     where D: Deserializer<'de>
 {
     let string = String::deserialize(deserializer)?;
-    let re = Regex::new(r"^(\d)(\d|x)(\d|x)$").unwrap();
-
-    let captures = re.captures(&string)
-            .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&string), &"a status entry like `2xx`"))?;
-
-    // hundreds place (is a digit)
-    let mut base: u16 = captures.get(1).unwrap()
-        .as_str().parse::<u16>().unwrap() * 100;
-    let mut epsilon: u8 = 0;
-    // tens place (is a digit or "x")
-    let value = captures.get(2).unwrap()
-        .as_str().parse::<u16>();
-    if let Ok(n) = value {
-        base += n * 10;
-    } else {
-        epsilon = 90;
+    let re = Regex::new(r"^([1-5])(x{2}|\d{2})$").unwrap();
+    if let Some(captures) = re.captures(&string) {
+        // hundreds place (is a digit)
+        let mut base: u16 = captures.get(1).unwrap()
+            .as_str().parse::<u16>().unwrap();
+        // rest (is two digits or "xx")
+        let rest = captures.get(2).unwrap()
+            .as_str();
+        return match rest.parse::<u16>() {
+            Ok(n) => {
+                base = base * 100 + n;
+                Ok(Some(Box::new(move |s: u16| s == base)))
+            },
+            Err(_) => Ok(Some(Box::new(move |s: u16| s / 100 == base)))
+        }
     }
-    // ones place (is a digit or "x")
-    let value = captures.get(3).unwrap()
-        .as_str().parse::<u16>();
-    if let Ok(n) = value {
-        base += n;
-    } else {
-        epsilon += 9;
+
+    let re = Regex::new(r"^(<|>)(=)?([1-5]\d{2})$").unwrap();
+    if let Some(captures) = re.captures(&string) {
+        let operator = captures.get(1).unwrap()
+            .as_str();
+        let is_equal = captures.get(2).is_some();
+        let n = captures.get(3).unwrap()
+            .as_str().parse::<u16>().unwrap();
+        let op_fn = match (operator, is_equal) {
+            (">", false) => PartialOrd::gt,
+            (">", true) => PartialOrd::ge,
+            ("<", false) => PartialOrd::lt,
+            ("<", true) => PartialOrd::le,
+            _ => unreachable!(),
+        };
+        return Ok(Some(Box::new(move |s: u16| op_fn(&s, &n))))
     }
-    Ok(Some(Box::new(move |n: u16| n >= base && n <= base + u16::from(epsilon))))
+
+    Err(DeError::invalid_value(Unexpected::Str(&string), &"a status entry like `2xx` or `>=400`"))
 }

@@ -158,10 +158,7 @@ impl LoadTest
         eprint!("{}", format!("Starting load test. Test will conclude {}\n", pretty_time));
         join_all(self.endpoint_calls)
             .map_err(|_| unreachable!("endpoint errors should not propagate this far"))
-            .and_then(move |_| {
-                println!("triggering test_ended");
-                test_ended.send(())
-            })
+            .and_then(move |_| test_ended.send(()))
             .map_err(|_| unreachable!("errors should not propagate this far"))
     }
 }

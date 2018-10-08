@@ -1,5 +1,3 @@
-
-
 use futures::try_ready;
 use tokio::{
     prelude::*,
@@ -95,14 +93,11 @@ impl LinearScaling {
 }
 
 impl ScaleFn for LinearScaling {
-    // Calculate y for x (time elapsed since start), then calculate y2
-    // for x + y, and return the average y and y2
     #[inline]
     fn y (&self, x: f64) -> f64 {
-        let y1 = self.max_x.min(self.m * x + self.b);
-        let y2 = self.max_x.min(self.m * (x + y1) + self.b);
-        (y1 + y2) / 2f64
+        self.m * x + self.b
     }
+
     #[inline]
     fn max_x(&self) -> f64 {
         self.max_x
@@ -171,3 +166,23 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
         Ok(Some(deadline).into())
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+
+//     #[test]
+//     fn scale () {
+//         let max = 30;
+//         let lb = LinearBuilder::new(0f64, 1f64, Duration::from_secs(max));
+//         let scale_fn = lb.build(&HitsPer::Second(10)).scale_fn;
+//         let mut x = 0f64;
+//         let max = (max * u64::from(NANOS_IN_SECOND)) as f64;
+//         println!("y at 30: {}", scale_fn.y(30_000_000_000f64));
+//         while x <= max {
+//             let y = scale_fn.y(x);
+//             println!("x: {}, y: {}", x, y);
+//             x += y;
+//         }
+//     }
+// }

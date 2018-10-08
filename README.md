@@ -2,12 +2,12 @@
 
 ## TODOs
 - in stats change `time` to `bucket_time` and add `start_time` and `end_time`
-- BUG: scale ups and scale downs are not generating the expected amount of load
 - Add additional types of transforms: substring, json path extraction, unnest
 - refactor provides to have `request` and `response` (change those to be reserved provider names). Both can have `start-line`, `headers`, and `body`
 - refactor `Peek` provider: change name to `Log`, allow logging to file (each error gets new file??, save all results in directory)
       or stdout/stderr or to stats, limit per endpoint
 - add global option for `Log` so, for example, any response that is >=400 is logged
+- every minute we print stats to console, also write those results to disk, overwriting the previous file every minute
 - add config options: for client: request timeout, standard headers, keepalive time; for providers: buffer size
 - add `files` body provider
 - update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from

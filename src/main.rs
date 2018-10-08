@@ -20,6 +20,9 @@ use serde_yaml;
 use tokio;
 
 fn main() {
+    if cfg!(target_os = "windows") {
+        let _ = ansi_term::enable_ansi_support();
+    }
     tokio::run(lazy(|| {
         let file = File::open("config.yaml").expect("error opening config.yaml");
         let config: Config = serde_yaml::from_reader(file).expect("couldn't parse yaml");

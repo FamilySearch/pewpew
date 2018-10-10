@@ -1,5 +1,6 @@
 use crate::channel::{
     self,
+    Limit,
     Receiver,
     Sender,
 };
@@ -185,12 +186,16 @@ impl Transformer {
     }
 }
 
-pub fn channel<F>(cap: usize, transform: Transform, test_ended: F)
+pub fn channel<F>(cap: Limit, transform: Transform, test_ended: F)
     -> (Sender<json::Value>, Receiver<json::Value>)
     where F: Future + Send + 'static,
 {
+    let cap2 = match cap {
+        Limit::Auto(_) => Limit::auto(),
+        Limit::Integer(n) => Limit::Integer(n),
+    };
     let (tx, receiver) = channel::channel(cap);
-    let (sender, rx) = channel::channel(cap);
+    let (sender, rx) = channel::channel(cap2);
 
     let transformer = Transformer {
         receiver,

@@ -18,10 +18,37 @@ use std::{
     },
 };
 
+pub enum Limit {
+    Auto(Arc<AtomicUsize>),
+    Integer(usize),
+}
+
+impl Limit {
+    pub fn auto() -> Limit {
+        Limit::Auto(Arc::new(AtomicUsize::new(5)))
+    }
+
+    pub fn get(&self) -> usize {
+        match self {
+            Limit::Auto(a) => a.load(Ordering::Relaxed),
+            Limit::Integer(n) => *n,
+        }
+    }
+}
+
+impl Clone for Limit {
+    fn clone(&self) -> Self {
+        match self {
+            Limit::Auto(a) => Limit::Auto(a.clone()),
+            Limit::Integer(n) => Limit::Integer(*n),
+        }
+    }
+}
+
 pub struct Sender<T> {
     inner: Arc<SegQueue<T>>,
     len: Arc<AtomicUsize>,
-    limit: usize,
+    limit: Limit,
     parked_receivers: Arc<SegQueue<task::Task>>,
     parked_senders: Arc<SegQueue<task::Task>>,
     sender_count: Arc<AtomicUsize>,
@@ -29,12 +56,12 @@ pub struct Sender<T> {
 
 impl<T> Sender<T> {
     pub fn limit(&self) -> usize {
-        self.limit
+        self.limit.get()
     }
 
     pub fn try_send(&self, item: T) -> Result<(), T> {
         let res = self.len.fetch_update(|n| {
-            if n < self.limit {
+            if n < self.limit.get() {
                 Some(n + 1)
             } else {
                 None
@@ -60,7 +87,7 @@ impl<T> Clone for Sender<T> {
         Sender {
             inner: self.inner.clone(),
             len: self.len.clone(),
-            limit: self.limit,
+            limit: self.limit.clone(),
             parked_receivers: self.parked_receivers.clone(),
             parked_senders: self.parked_senders.clone(),
             sender_count: self.sender_count.clone(),
@@ -98,7 +125,7 @@ impl<T> Sink for Sender<T> {
 pub struct Receiver<T> {
     inner: Arc<SegQueue<T>>,
     len: Arc<AtomicUsize>,
-    limit: usize,
+    limit: Limit,
     parked_receivers: Arc<SegQueue<task::Task>>,
     parked_senders: Arc<SegQueue<task::Task>>,
     sender_count: Arc<AtomicUsize>,
@@ -111,7 +138,14 @@ impl<T> Stream for Receiver<T> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let msg = self.inner.try_pop();
         if msg.is_some() {
-            self.len.fetch_sub(1, Ordering::Relaxed);
+            let n = self.len.fetch_sub(1, Ordering::Relaxed);
+            if n == 1 {
+                // if there's an "auto" limit and we've emptied the buffer, 
+                // increment the limit
+                if let Limit::Auto(a) = &self.limit {
+                    a.fetch_add(1, Ordering::Relaxed);
+                }
+            }
             while let Some(task) = self.parked_senders.try_pop() {
                 task.notify();
             }
@@ -128,7 +162,7 @@ impl<T> Stream for Receiver<T> {
     }
 }
 
-pub fn channel<T>(limit: usize) -> (Sender<T>, Receiver<T>) {
+pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(SegQueue::new());
     let len = Arc::new(AtomicUsize::new(0));
     let parked_receivers = Arc::new(SegQueue::new());
@@ -137,7 +171,7 @@ pub fn channel<T>(limit: usize) -> (Sender<T>, Receiver<T>) {
     let receiver = Receiver {
         inner: inner.clone(),
         len: len.clone(),
-        limit,
+        limit: limit.clone(),
         parked_receivers: parked_receivers.clone(),
         parked_senders: parked_senders.clone(),
         sender_count: sender_count.clone(),
@@ -171,7 +205,7 @@ mod tests {
     #[test]
     fn bench3() {
         tokio::run(lazy(|| {
-            let (tx, rx) = channel(20);
+            let (tx, rx) = channel(Limit::Integer(20));
             let duration = Duration::from_secs(1);
             let start = Instant::now();
             let feed = stream::repeat::<_, ()>(1)

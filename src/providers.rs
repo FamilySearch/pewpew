@@ -1,5 +1,6 @@
 use crate::channel::{
     self,
+    Limit,
     transform::{
         self,
         Transform,
@@ -18,10 +19,7 @@ use tokio::{
     prelude::*,
 };
 
-use std::{
-    cmp,
-    io::{BufReader, Error as IOError, SeekFrom},
-};
+use std::io::{BufReader, Error as IOError, SeekFrom};
 
 pub enum Kind {
     Body(Provider<channel::Receiver<Vec<u8>>>),
@@ -58,11 +56,10 @@ pub fn file<F>(template: FileProvider, test_complete: Shared<F>) -> Kind
         <F as Future>::Error: Send + Sync,
         <F as Future>::Item: Send + Sync,
 {
-    let buffer = cmp::max(1, template.buffer.get() as usize);
     let (tx, rx) = if let Some(transform) = template.transform {
-        transform::channel(buffer, transform, test_complete.clone())
+        transform::channel(template.buffer, transform, test_complete.clone())
     } else {
-        channel::channel(buffer)
+        channel::channel(template.buffer)
     };
     let tx2 = tx.clone();
     let repeat = template.repeat;
@@ -114,9 +111,9 @@ pub fn response<F>(template: ResponseProvider, test_complete: F) -> Kind
     where F: Future + Send + 'static
 {
     let (tx, rx) = if let Some(transform) = template.transform {
-        transform::channel(template.buffer.get() as usize, transform, test_complete)
+        transform::channel(template.buffer, transform, test_complete)
     } else {
-        channel::channel(template.buffer.get() as usize)
+        channel::channel(template.buffer)
     };
     Kind::Value(Provider { tx, rx })
 }
@@ -128,9 +125,9 @@ pub fn literals<F>(values: Vec<json::Value>, transform: Option<Transform>, test_
 {
     let rs: RepeaterStream<json::Value> = RepeaterStream::new(values);
     let (tx, rx) = if let Some(transform) = transform {
-        transform::channel(2, transform, test_complete.clone())
+        transform::channel(Limit::auto(), transform, test_complete.clone())
     } else {
-        channel::channel(2)
+        channel::channel(Limit::auto())
     };
     let tx2 = tx.clone();
     let prime_tx = rs.forward(tx2)
@@ -147,8 +144,8 @@ pub fn peek<F>(first: Option<usize>, test_complete: F) -> Kind
     where F: Future + Send + 'static
 {
     // TODO: make a kind which doesn't have a rx channel
-    let (tx, rx) = channel::channel(1);
-    let (_, ret_rx) = channel::channel(1);
+    let (tx, rx) = channel::channel(Limit::Integer(1));
+    let (_, ret_rx) = channel::channel(Limit::Integer(1));
     let mut counter = 1;
     let logger = rx.for_each(move |v| {
             match first {

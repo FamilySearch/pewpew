@@ -1,4 +1,7 @@
-use crate::channel::transform::{Collect, Repeat, Transform};
+use crate::channel::{
+    Limit,
+    transform::{Collect, Repeat, Transform}
+};
 use crate::mod_interval::{LinearBuilder, HitsPer};
 use crate::template::json_value_to_string;
 use hyper::Method;
@@ -14,7 +17,6 @@ use tuple_vec_map;
 
 use std::{
     collections::BTreeMap,
-    num::NonZeroU16,
     time::Duration,
 };
 
@@ -67,9 +69,9 @@ pub enum Provider {
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct FileProvider {
-    #[serde(default = "default_buffer")]
+    #[serde(default = "Limit::auto")]
     // range 1-65535
-    pub buffer: NonZeroU16,
+    pub buffer: Limit,
     pub path: String,
     #[serde(default)]
     pub repeat: bool,
@@ -87,9 +89,9 @@ pub struct PeekProvider {
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct ResponseProvider {
-    #[serde(default = "default_buffer")]
+    #[serde(default = "Limit::auto")]
     // range 1-65535
-    pub buffer: NonZeroU16,
+    pub buffer: Limit,
     #[serde(default, deserialize_with = "deserialize_provider_transforms")]
     pub transform: Option<Transform>,
 }
@@ -198,7 +200,20 @@ impl<'de> Deserialize<'de> for HitsPer {
     }
 }
 
-fn default_buffer () -> NonZeroU16 { NonZeroU16::new(5).unwrap() }
+impl<'de> Deserialize<'de> for Limit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        if string == "auto" {
+            Ok(Limit::auto())
+        } else {
+            let n = string.parse::<usize>()
+                .map_err(|_| DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value"))?;
+            Ok(Limit::Integer(n))
+        }
+    }
+}
 
 fn deserialize_provider_transforms<'de, D>(deserializer: D) -> Result<Option<Transform>, D::Error>
     where D: Deserializer<'de>

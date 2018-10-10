@@ -2,7 +2,7 @@ use chrono::{Duration as ChronoDuration, Local};
 use crate::config::{Config, LoadPattern, Provider, StaticListProvider, StaticProvider};
 use crate::providers;
 use crate::request;
-use crate::stats::{create_stats_channel, ResponseStat};
+use crate::stats::{create_stats_channel, StatsMessage};
 use futures::{
     future::{join_all, lazy, Shared},
     sync::{
@@ -41,7 +41,7 @@ pub struct LoadTest {
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Kind>,
     // channel that receives and aggregates stats for the test
-    pub stats_tx: futures_channel::UnboundedSender<ResponseStat>,
+    pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
     // a trigger used to signal when the endpoints tasks finish (including sending their stats)
     test_ended_tx: oneshot::Sender<()>,
     pub test_timeout: Shared<Box<dyn Future<Item=(), Error=()> + Send>>,
@@ -139,7 +139,7 @@ impl LoadTest
             providers,
             stats_tx,
             test_ended_tx,
-            test_timeout: test_timeout,
+            test_timeout,
         };
 
         for (i, builder) in builders.into_iter().enumerate() {
@@ -154,8 +154,12 @@ impl LoadTest
         let test_ended = self.test_ended_tx;
         // drop this client reference otherwise the event loop will not close
         drop(self.client);
-        let pretty_time = duration_to_pretty_string(self.duration);
-        eprint!("{}", format!("Starting load test. Test will conclude {}\n", pretty_time));
+        let test_end_message = duration_till_end_to_pretty_string(self.duration);
+        tokio::spawn(
+            self.stats_tx.send(StatsMessage::EndTime(Instant::now() + self.duration))
+                .then(|_| Ok(()))
+        );
+        eprint!("{}", format!("Starting load test. {}\n", test_end_message));
         join_all(self.endpoint_calls)
             .map_err(|_| unreachable!("endpoint errors should not propagate this far"))
             .and_then(move |_| test_ended.send(()))
@@ -163,43 +167,57 @@ impl LoadTest
     }
 }
 
-fn duration_to_pretty_string (duration: Duration) -> String {
+pub fn duration_till_end_to_pretty_string(duration: Duration) -> String {
+    let long_form = duration_to_pretty_long_form(duration);
+    let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
+        format!("{} {}", s, long_form)
+    } else {
+        long_form
+    };
+    format!("Test will end {}", msg)
+}
+
+fn duration_to_pretty_short_form(duration: Duration) -> Option<String> {
     if let Ok(duration) = ChronoDuration::from_std(duration) {
         let now = Local::now();
         let end = now + duration;
-        format!("around {}", end.format("%T %-e-%b-%Y"))
+        Some(format!("around {}", end.format("%T %-e-%b-%Y")))
     } else {
-        const SECOND: u64 = 1;
-        const MINUTE: u64 = 60;
-        const HOUR: u64 = MINUTE * 60;
-        const DAY: u64 = HOUR * 24;
-        let mut secs = duration.as_secs();
-        let mut builder: Vec<_> = vec!((DAY, "day"), (HOUR, "hour"), (MINUTE, "minute"), (SECOND, "second")).into_iter()
-            .filter_map(move |(unit, name)| {
-                let count = secs / unit;
-                if count > 0 {
-                    secs -= count * unit;
-                    if count > 1 {
-                        Some(format!("{} {}s", count, name))
-                    } else {
-                        Some(format!("{} {}", count, name))
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let long_time = if let Some(last) = builder.pop() {
-            let mut ret = builder.join(", ");
-            if ret.is_empty() {
-                last
-            } else {
-                ret.push_str(&format!(" and {}", last));
-                ret
-            }
-        } else {
-            "0 seconds".to_string()
-        };
-        format!("in approximately {}", long_time)
+        None
     }
+}
+
+fn duration_to_pretty_long_form(duration: Duration) -> String {
+    const SECOND: u64 = 1;
+    const MINUTE: u64 = 60;
+    const HOUR: u64 = MINUTE * 60;
+    const DAY: u64 = HOUR * 24;
+    let mut secs = duration.as_secs();
+    let mut builder: Vec<_> = vec!((DAY, "day"), (HOUR, "hour"), (MINUTE, "minute"), (SECOND, "second")).into_iter()
+        .filter_map(move |(unit, name)| {
+            let count = secs / unit;
+            if count > 0 {
+                secs -= count * unit;
+                if count > 1 {
+                    Some(format!("{} {}s", count, name))
+                } else {
+                    Some(format!("{} {}", count, name))
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+    let long_time = if let Some(last) = builder.pop() {
+        let mut ret = builder.join(", ");
+        if ret.is_empty() {
+            last
+        } else {
+            ret.push_str(&format!(" and {}", last));
+            ret
+        }
+    } else {
+        "0 seconds".to_string()
+    };
+    format!("in approximately {}", long_time)
 }

@@ -1,3 +1,4 @@
+use crate::load_test;
 use ansi_term::{Color, Style};
 use chrono::{DateTime, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
@@ -274,6 +275,11 @@ impl AggregateStats {
     }
 }
 
+pub enum StatsMessage {
+    ResponseStat(ResponseStat),
+    EndTime(Instant),
+}
+
 #[derive(Debug)]
 pub struct ResponseStat {
     pub endpoint_id: EndpointId,
@@ -285,14 +291,20 @@ pub struct ResponseStat {
     pub url: String,
 }
 
+impl From<ResponseStat> for StatsMessage {
+    fn from(rs: ResponseStat) -> Self {
+        StatsMessage::ResponseStat(rs)
+    }
+}
+
 pub fn create_stats_channel<F>(test_complete: F)
     -> (
-        futures_channel::UnboundedSender<ResponseStat>,
+        futures_channel::UnboundedSender<StatsMessage>,
         impl Future<Item = (), Error = ()> + Send,
         )
     where F: Future + Send + 'static
 {
-    let (tx, rx) = futures_channel::unbounded::<ResponseStat>();
+    let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
     let start_minute = start_sec / 60 * 60;
@@ -301,6 +313,8 @@ pub fn create_stats_channel<F>(test_complete: F)
     let stats2 = stats.clone();
     let stats3 = stats.clone();
     let stats4 = stats.clone();
+    let end_time: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+    let end_time2 = end_time.clone();
     let print_stats = Interval::new(now + next_minute, Duration::from_secs(60))
         .map_err(|_| ())
         .for_each(move |_| {
@@ -322,10 +336,19 @@ pub fn create_stats_channel<F>(test_complete: F)
             if !printed {
                 eprint!("{}", "no data\n");
             }
+            if let Some(et) = *end_time.lock() {
+                if et > Instant::now() {
+                    let test_end_msg = load_test::duration_till_end_to_pretty_string(et - Instant::now());
+                    eprint!("{}", format!("\n{}\n", test_end_msg));
+                }
+            }
             Ok(())
         });
-    let receiver = Stream::for_each(rx, move |mut datum| {
-            stats.lock().append(&mut datum);
+    let receiver = Stream::for_each(rx, move |datum| {
+            match datum {
+                StatsMessage::ResponseStat(mut rs) => stats.lock().append(&mut rs),
+                StatsMessage::EndTime(end_time) => *end_time2.lock() = Some(end_time),
+            }
             Ok(())
         })
         .join(print_stats)

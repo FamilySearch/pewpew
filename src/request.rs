@@ -397,7 +397,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                                                 status,
                                                 time: SystemTime::now(),
                                                 url,
-                                            }
+                                            }.into()
                                         )
                                         .and_then(|_| Ok(()))
                                         .map_err(|e| panic!("unexpected error trying to send stats, {}", e))

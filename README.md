@@ -2,7 +2,6 @@
 
 ## TODOs
 - in stats change `time` to `bucket_time` and add `start_time` and `end_time`
-- Add "x [time] remaining" in stats output every minute
 - Add additional types of transforms: substring, json path extraction, unnest
 - refactor provides templates. Allow looping using native handlebars `each` helper.
 - refactor json helper so it can be used in larger template. Get rid of the the `single_element` parameter in favor of

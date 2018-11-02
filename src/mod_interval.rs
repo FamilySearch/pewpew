@@ -148,7 +148,6 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
         if Instant::now() >= end_time {
             return Ok(Async::Ready(None));
         }
-
         // Wait for the delay to be done
         try_ready!(self.delay.poll());
 

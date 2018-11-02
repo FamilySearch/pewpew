@@ -1,5 +1,13 @@
 use chrono::{Duration as ChronoDuration, Local};
-use crate::config::{Config, LoadPattern, Provider, StaticListProvider, StaticProvider};
+use crate::config::{
+    Config,
+    LoadPattern,
+    Provider,
+    Select,
+    StaticListProvider,
+    StaticProvider
+};
+use crate::channel;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, StatsMessage};
@@ -17,6 +25,7 @@ pub use hyper::{
 };
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
+use serde_json::Value as JsonValue;
 use tokio::{
     prelude::*,
     timer,
@@ -40,6 +49,8 @@ pub struct LoadTest {
     pub open_requests: Arc<()>,
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Kind>,
+    // a mapping of names to their prospective loggers
+    pub loggers: BTreeMap<String, (channel::Sender<JsonValue>, Option<Select>)>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
     // a trigger used to signal when the endpoints tasks finish (including sending their stats)
@@ -61,21 +72,24 @@ impl LoadTest
             let provider = match template {
                 Provider::File(template) =>
                     providers::file(template, test_ended_rx),
-                Provider::Peek(template) =>
-                    providers::peek(template.limit, test_ended_rx),
                 Provider::Response(template) =>
-                    providers::response(template, test_ended_rx),
+                    providers::response(template),
                 Provider::Static(StaticProvider::Explicit(template)) =>
-                    providers::literals(vec!(template.value), template.transform, test_ended_rx),
+                    providers::literals(vec!(template.value), template.auto_return, test_ended_rx),
                 Provider::Static(StaticProvider::Implicit(value)) =>
                     providers::literals(vec!(value), None, test_ended_rx),
                 Provider::StaticList(StaticListProvider::Explicit(template)) =>
-                    providers::literals(template.values, template.transform, test_ended_rx),
+                    providers::literals(template.values, template.auto_return, test_ended_rx),
                 Provider::StaticList(StaticListProvider::Implicit(values)) =>
                     providers::literals(values, None, test_ended_rx),
             };
             providers.insert(name, provider);
         }
+
+        let loggers = config.loggers.into_iter().map(|(name, template)| {
+            let test_ended_rx = test_ended_rx.clone();
+            (name, (providers::logger(&template, test_ended_rx), template.select))
+        }).collect();
 
         let global_load_pattern = config.load_pattern;
         let mut duration = Duration::new(0, 0);
@@ -100,15 +114,17 @@ impl LoadTest
                 duration = cmp::max(duration, duration2);
             } else if endpoint.provides.is_empty() {
                 panic!("endpoint without peak_load must have `provides`");
-            } else if endpoint.provides.iter().all(|(_, p)| p.skip_if_full) {
-                panic!("endpoint without peak_load cannot have all the `provides` be `skip_if_full`");
+            } else if endpoint.provides.iter().all(|(_, p)| p.get_send_behavior().is_if_not_full()) {
+                panic!("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`");
             }
             let builder = request::Builder::new(endpoint.url, mod_interval)
+                .declare(endpoint.declare)
                 .body(endpoint.body)
                 .stats_id(endpoint.stats_id)
                 .method(endpoint.method)
                 .headers(endpoint.headers)
-                .provides(endpoint.provides);
+                .provides(endpoint.provides)
+                .logs(endpoint.logs);
             builders.push(builder);
         }
 
@@ -136,6 +152,7 @@ impl LoadTest
             duration,
             endpoint_calls: Vec::new(),
             open_requests: Arc::new(()),
+            loggers,
             providers,
             stats_tx,
             test_ended_tx,

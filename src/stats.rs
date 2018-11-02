@@ -103,7 +103,9 @@ type StatsId = BTreeMap<String, String>;
 struct RollingAggregateStats {
     #[serde(with = "buckets_serde")]
     buckets: BTreeMap<EndpointId, (StatsId, BTreeMap<u64, AggregateStats>)>,
+    #[serde(skip_serializing)]
     duration: u64,
+    #[serde(skip_serializing)]
     time: u64,
 }
 
@@ -119,8 +121,7 @@ impl RollingAggregateStats {
     fn append (&mut self, stat: &mut ResponseStat) {
         let key = stat.key.take();
         let duration = self.duration;
-        let time = stat.time.duration_since(UNIX_EPOCH).expect("error in system time. Time skew.")
-            .as_secs() / duration * duration;
+        let time = to_epoch(stat.time) / duration * duration;
         let (stats_id, stats_map) = self.buckets.entry(stat.endpoint_id)
             .or_insert_with(|| {
                 let mut stats_map = BTreeMap::new();
@@ -190,15 +191,22 @@ impl RollingAggregateStats {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggregateStats {
+    time: u64,
     duration: u64,
+    end_time: u64,
     #[serde(with = "histogram_serde")]
     rtt_histogram: Histogram<u64>,
+    start_time: u64,
     status_counts: FnvHashMap<u16, u64>,
-    time: u64,
 }
 
 impl AddAssign<&ResponseStat> for AggregateStats {
     fn add_assign (&mut self, rhs: &ResponseStat) {
+        let time = to_epoch(rhs.time);
+        if self.start_time == 0 {
+            self.start_time = time;
+        }
+        self.end_time = cmp::max(self.end_time, time);
         self.rtt_histogram += rhs.rtt;
         self.status_counts.entry(rhs.status)
             .and_modify(|n| { *n += 1 } )
@@ -223,6 +231,11 @@ fn get_epoch() -> u64 {
         .as_secs()
 }
 
+fn to_epoch(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH).expect("error in system time. Time skew.")
+        .as_secs()
+}
+
 fn create_date_diff(start: u64, end: u64) -> String {
     let start = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(start as i64, 0), Utc)
         .with_timezone(&Local);
@@ -242,7 +255,9 @@ impl AggregateStats {
         AggregateStats {
             time,
             duration: duration.as_secs(),
+            end_time: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
+            start_time: 0,
             status_counts: FnvHashMap::default(),
         }
     }

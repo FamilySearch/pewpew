@@ -1,12 +1,8 @@
 use crate::channel::{
     self,
     Limit,
-    transform::{
-        self,
-        Transform,
-    }
 };
-use crate::config::{FileProvider, ResponseProvider};
+use crate::config;
 use futures::{
     future::Shared,
     Future,
@@ -19,7 +15,9 @@ use tokio::{
     prelude::*,
 };
 
-use std::io::{BufReader, Error as IOError, SeekFrom};
+use std::{
+    io::{BufReader, Error as IOError, SeekFrom}
+};
 
 pub enum Kind {
     Body(Provider<channel::Receiver<Vec<u8>>>),
@@ -27,6 +25,7 @@ pub enum Kind {
 }
 
 pub struct Provider<T> {
+    pub auto_return: Option<config::EndpointProvidesSendOptions>,
     pub tx: channel::Sender<T>,
     pub rx: channel::Receiver<T>,
 }
@@ -51,16 +50,12 @@ impl Read for RecurrableFile {
 
 impl AsyncRead for RecurrableFile {}
 
-pub fn file<F>(template: FileProvider, test_complete: Shared<F>) -> Kind
+pub fn file<F>(template: config::FileProvider, test_complete: Shared<F>) -> Kind
     where F: Future + Send + 'static,
         <F as Future>::Error: Send + Sync,
         <F as Future>::Item: Send + Sync,
 {
-    let (tx, rx) = if let Some(transform) = template.transform {
-        transform::channel(template.buffer, transform, test_complete.clone())
-    } else {
-        channel::channel(template.buffer)
-    };
+    let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
     let repeat = template.repeat;
     let prime_tx = TokioFile::open(template.path)
@@ -79,7 +74,7 @@ pub fn file<F>(template: FileProvider, test_complete: Shared<F>) -> Kind
         .select(test_complete.then(|_| Ok(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Kind::Value(Provider { rx, tx })
+    Kind::Value(Provider { auto_return: template.auto_return, rx, tx })
 }
 
 #[must_use = "streams do nothing unless polled"]
@@ -107,28 +102,18 @@ impl<T> Stream for RepeaterStream<T> where T: Clone {
     }
 }
 
-pub fn response<F>(template: ResponseProvider, test_complete: F) -> Kind
-    where F: Future + Send + 'static
-{
-    let (tx, rx) = if let Some(transform) = template.transform {
-        transform::channel(template.buffer, transform, test_complete)
-    } else {
-        channel::channel(template.buffer)
-    };
-    Kind::Value(Provider { tx, rx })
+pub fn response(template: config::ResponseProvider) -> Kind {
+    let (tx, rx) = channel::channel(template.buffer);
+    Kind::Value(Provider { auto_return: template.auto_return, tx, rx })
 }
 
-pub fn literals<F>(values: Vec<json::Value>, transform: Option<Transform>, test_complete: Shared<F>) -> Kind
+pub fn literals<F>(values: Vec<json::Value>, auto_return: Option<config::EndpointProvidesSendOptions>, test_complete: Shared<F>) -> Kind
     where F: Future + Send + 'static,
         <F as Future>::Error: Send + Sync,
         <F as Future>::Item: Send + Sync, 
 {
     let rs: RepeaterStream<json::Value> = RepeaterStream::new(values);
-    let (tx, rx) = if let Some(transform) = transform {
-        transform::channel(Limit::auto(), transform, test_complete.clone())
-    } else {
-        channel::channel(Limit::auto())
-    };
+    let (tx, rx) = channel::channel(Limit::auto());
     let tx2 = tx.clone();
     let prime_tx = rs.forward(tx2)
         // Error propagate here when sender channel closes at test conclusion
@@ -136,33 +121,78 @@ pub fn literals<F>(values: Vec<json::Value>, transform: Option<Transform>, test_
         .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Kind::Value(Provider { tx, rx })
+    Kind::Value(Provider { auto_return, tx, rx })
 }
 
-
-pub fn peek<F>(first: Option<usize>, test_complete: F) -> Kind
+pub fn logger<F>(template: &config::Logger, test_complete: F) -> channel::Sender<json::Value>
     where F: Future + Send + 'static
 {
-    // TODO: make a kind which doesn't have a rx channel
-    let (tx, rx) = channel::channel(Limit::Integer(1));
-    let (_, ret_rx) = channel::channel(Limit::Integer(1));
+    let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
+    let file_name = template.to.clone();
+    let limit = template.limit;
+    let pretty = template.pretty;
     let mut counter = 1;
-    let logger = rx.for_each(move |v| {
-            match first {
-                Some(limit) if counter > limit => {
-                    // tx2.close();
-                    Err(())
-                },
-                _ => {
+    match template.to.as_str() {
+        "stderr" => {
+            let logger = rx.for_each(move |v| {
+                    if let Some(limit) = limit {
+                        if counter > limit {
+                            return Err(())
+                        }
+                    }
                     counter += 1;
-                    eprint!("{}", format!("{:#}\n", v));
+                    if pretty {
+                        eprintln!("{:#}", v);
+                    } else {
+                        eprintln!("{}", v);
+                    }
                     Ok(())
-                }
-            }
-        })
-        .then(|_| Ok(()))
-        .select(test_complete.then(|_| Ok::<_, ()>(())))
-        .then(|_| Ok(()));
-    tokio::spawn(logger);
-    Kind::Value(Provider { tx, rx: ret_rx })
+                })
+                .select(test_complete.then(|_| Ok::<_, ()>(())))
+                .then(|_| Ok(()));
+            tokio::spawn(logger);
+        },
+        "stdout" => {
+            let logger = rx.for_each(move |v| {
+                    if let Some(limit) = limit {
+                        if counter > limit {
+                            return Err(())
+                        }
+                    }
+                    counter += 1;
+                    if pretty {
+                        println!("{:#}", v);
+                    } else {
+                        println!("{}", v);
+                    }
+                    Ok(())
+                })
+                .select(test_complete.then(|_| Ok::<_, ()>(())))
+                .then(|_| Ok(()));
+            tokio::spawn(logger);
+        },
+        _ => {
+            let logger = TokioFile::create(file_name.clone())
+                .map_err(|_| ())
+                .and_then(move |mut file| {
+                    rx.for_each(move |v| {
+                        if let Some(limit) = limit {
+                            if counter > limit {
+                                return Err(())
+                            }
+                        }
+                        counter += 1;
+                        if pretty {
+                            writeln!(file, "{:#}", v)
+                        } else {
+                            writeln!(file, "{}", v)
+                        }.map_err(|e| eprintln!("Error writing to `{}`, {}", file_name, e))
+                    })
+                })
+                .select(test_complete.then(|_| Ok::<_, ()>(())))
+                .then(|_| Ok(()));
+                tokio::spawn(logger);
+        }
+    }
+    tx
 }

@@ -1,5 +1,3 @@
-pub mod transform;
-
 use crossbeam::queue::SegQueue;
 use futures::{
     Async,
@@ -78,6 +76,14 @@ impl<T> Sender<T> {
             task.notify();
         }
         ret
+    }
+
+    pub fn force_send(&self, item: T) {
+        self.len.fetch_add(1, Ordering::Relaxed);
+        self.inner.push(item);
+        while let Some(task) = self.parked_receivers.try_pop() {
+            task.notify();
+        }
     }
 }
 

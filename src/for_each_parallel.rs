@@ -68,7 +68,7 @@ where St: Stream,
                         Ok(Async::Ready(None)) => {
                             self.stream = None
                         },
-                        Ok(Async::NotReady) => {},
+                        Ok(Async::NotReady) => (),
                         Err(_) => {
                             self.stream_errored = true;
                             self.stream = None;

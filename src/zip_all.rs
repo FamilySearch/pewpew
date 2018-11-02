@@ -33,7 +33,6 @@ impl<T> Stream for ZipAll<T> where T: Stream {
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let mut all_done = true;
-
         for (s, result) in &mut self.elems.iter_mut() {
             match result {
                 None => {

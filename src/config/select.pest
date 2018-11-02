@@ -1,0 +1,74 @@
+WHITESPACE = _{ " " }
+
+value = ${ not? ~ (boolean | null | json_path | string_outer | number) }
+
+json_ident = @{ json_ident_start ~ json_ident_rest* }
+
+json_ident_start = { "$" | "_" | LETTER | LETTER_NUMBER }
+
+json_ident_rest = {
+    json_ident_start |
+    "\u{200C}" |
+    "\u{200D}" |
+    NONSPACING_MARK |
+    SPACING_MARK |
+    DECIMAL_NUMBER |
+    CONNECTOR_PUNCTUATION
+}
+
+json_path = ${
+    (function_call | json_ident) ~
+    (indexed_property | "." ~ json_ident)*
+}
+
+indexed_property = !{ "[" ~ (string_outer | integer) ~ "]" }
+
+function_ident = @{ (ASCII_ALPHANUMERIC | "_")+ }
+
+function_call = {
+	function_ident ~
+	"(" ~
+    WHITESPACE* ~
+    (function_arg ~ (WHITESPACE* ~ "," ~ WHITESPACE* ~ function_arg)*)? ~
+    WHITESPACE* ~
+    ")"
+}
+
+function_arg = _{ function_call | value }
+
+not_quote = _{ !QUOTATION_MARK ~ ANY }
+
+string = @{ ("\\\"" | not_quote)* }
+
+string_outer = _{ QUOTATION_MARK ~ string ~ QUOTATION_MARK }
+
+integer = @{ "-"? ~ ASCII_DIGIT+ }
+
+decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+}
+
+number = _{ decimal | integer }
+
+boolean = { "true" | "false" }
+
+null = { "null" }
+
+// Select/For_Each clause
+value_entry = _ { SOI ~ json_path ~ EOI }
+
+// Where clause
+where_entry = _{ SOI ~ complex_expression ~ EOI }
+
+complex_expression = _{
+    (simple_expression | group_expression) ~
+    (combiner ~ complex_expression)*
+}
+
+simple_expression = { value ~ (operator ~ value)? }
+
+group_expression = { "(" ~ complex_expression ~ ")" }
+
+combiner = { "&&" | "||" }
+
+not = { "!" }
+
+operator = { "==" | "!=" | ">=" | ">" | "<=" | "<" }

@@ -1,9 +1,20 @@
-use crate::channel::{
-    Limit,
-    transform::{Collect, Repeat, Transform}
+mod select_parser;
+
+pub use self::select_parser::{
+    REQUEST_STARTLINE,
+    REQUEST_HEADERS,
+    REQUEST_BODY,
+    RESPONSE_STARTLINE,
+    RESPONSE_HEADERS,
+    RESPONSE_BODY,
+    Select,
 };
+
+use crate::channel::Limit;
 use crate::mod_interval::{LinearBuilder, HitsPer};
+use crate::request::DeclareProvider;
 use crate::template::json_value_to_string;
+
 use hyper::Method;
 use regex::Regex;
 use serde::{
@@ -49,18 +60,10 @@ impl LoadPattern {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ProviderTransform {
-    Collect(usize),
-    Repeat(usize),
-}
-
 #[serde(rename_all = "lowercase")]
 #[derive(Deserialize)]
 pub enum Provider {
     File(FileProvider),
-    Peek(PeekProvider),
     Response(ResponseProvider),
     Static(StaticProvider),
     StaticList(StaticListProvider),
@@ -69,31 +72,23 @@ pub enum Provider {
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct FileProvider {
+    #[serde(default)]
+    pub auto_return: Option<EndpointProvidesSendOptions>,
     #[serde(default = "Limit::auto")]
     // range 1-65535
     pub buffer: Limit,
     pub path: String,
     #[serde(default)]
     pub repeat: bool,
-    #[serde(default, deserialize_with = "deserialize_provider_transforms")]
-    pub transform: Option<Transform>,
-}
-
-#[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
-pub struct PeekProvider {
-    #[serde(default)]
-    pub limit: Option<usize>,
 }
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct ResponseProvider {
+    #[serde(default)]
+    pub auto_return: Option<EndpointProvidesSendOptions>,
     #[serde(default = "Limit::auto")]
-    // range 1-65535
     pub buffer: Limit,
-    #[serde(default, deserialize_with = "deserialize_provider_transforms")]
-    pub transform: Option<Transform>,
 }
 
 #[serde(untagged)]
@@ -106,9 +101,9 @@ pub enum StaticProvider {
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct StaticProviderExplicit {
+    #[serde(default)]
+    pub auto_return: Option<EndpointProvidesSendOptions>,
     pub value: json::Value,
-    #[serde(default, deserialize_with = "deserialize_provider_transforms")]
-    pub transform: Option<Transform>,
 }
 
 #[serde(untagged)]
@@ -121,14 +116,50 @@ pub enum StaticListProvider {
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct StaticListProviderExplicit {
+    #[serde(default)]
+    pub auto_return: Option<EndpointProvidesSendOptions>,
     pub values: Vec<json::Value>,
-    #[serde(default, deserialize_with = "deserialize_provider_transforms")]
-    pub transform: Option<Transform>,
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct LoggerPreProcessed {
+    #[serde(default)]
+    select: Option<json::Value>,
+    #[serde(default)]
+    for_each: Vec<String>,
+    #[serde(default, rename="where")]
+    where_clause: Option<String>,
+    to: String,
+    #[serde(default)]
+    pretty: bool,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct LogsPreProcessed {
+    #[serde(default)]
+    select: json::Value,
+    #[serde(default)]
+    for_each: Vec<String>,
+    #[serde(default, rename="where")]
+    where_clause: Option<String>,
+}
+
+pub struct Logger {
+    pub select: Option<Select>,
+    pub to: String,
+    pub pretty: bool,
+    pub limit: Option<usize>,
 }
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 pub struct Endpoint {
+    #[serde(default)]
+    pub declare: BTreeMap<String, DeclareProvider>,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
     #[serde(default, deserialize_with = "deserialize_body")]
@@ -142,19 +173,53 @@ pub struct Endpoint {
     pub stats_id: Option<BTreeMap<String, String>>,
     pub url: String,
     #[serde(default, deserialize_with = "deserialize_providers")]
-    pub provides: Vec<(String, EndpointProvides)>,
+    pub provides: Vec<(String, Select)>,
+    #[serde(default, deserialize_with = "deserialize_logs")]
+    pub logs: Vec<(String, Select)>,
 }
 
-pub type StatusChecker = dyn Fn(u16) -> bool + Send + Sync;
+#[serde(rename_all = "snake_case")]
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub enum EndpointProvidesSendOptions {
+    Block,
+    Force,
+    IfNotFull,
+}
+
+impl EndpointProvidesSendOptions {
+    pub fn is_if_not_full(self) -> bool {
+        if let EndpointProvidesSendOptions::IfNotFull = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn to_string(self) -> String {
+        match self {
+            EndpointProvidesSendOptions::Block => "block",
+            EndpointProvidesSendOptions::Force => "force",
+            EndpointProvidesSendOptions::IfNotFull => "if_not_full",
+        }.to_string()
+    }
+}
+
+impl Default for EndpointProvidesSendOptions {
+    fn default() -> Self {
+        EndpointProvidesSendOptions::Block
+    }
+}
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
-pub struct EndpointProvides {
+struct EndpointProvidesPreProcessed {
     #[serde(default)]
-    pub skip_if_full: bool,
-    #[serde(default, deserialize_with = "deserialize_status_string_to_fn")]
-    pub status: Option<Box<StatusChecker>>,
-    pub value: json::Value,
+    pub send: EndpointProvidesSendOptions,
+    pub select: json::Value,
+    #[serde(default)]
+    pub for_each: Vec<String>,
+    #[serde(default, rename="where")]
+    pub where_clause: Option<String>,
 }
 
 #[serde(deny_unknown_fields)]
@@ -165,8 +230,64 @@ pub struct Config {
     pub load_pattern: Option<Vec<LoadPattern>>,
     #[serde(default, deserialize_with = "deserialize_providers")]
     pub providers: Vec<(String, Provider)>,
+    #[serde(default, with = "tuple_vec_map")]
+    pub loggers: Vec<(String, Logger)>,
 }
 
+impl<'de> Deserialize<'de> for Logger {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>,
+    {
+        let lpp = LoggerPreProcessed::deserialize(deserializer)?;
+        let select = if let Some(select) = lpp.select {
+            Some(Select::new(EndpointProvidesPreProcessed {
+                send: EndpointProvidesSendOptions::Block,
+                select,
+                for_each: lpp.for_each,
+                where_clause: lpp.where_clause,
+            }))
+        } else {
+            None
+        };
+        Ok(Logger {
+            select,
+            pretty: lpp.pretty,
+            to: lpp.to,
+            limit: lpp.limit,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Select {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>,
+    {
+        let select = EndpointProvidesPreProcessed::deserialize(deserializer)?;
+        Ok(Select::new(select))
+    }
+}
+
+impl<'de> Deserialize<'de> for DeclareProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // `collect(3, foo)` OR `collect(3, 5, foo)`
+        let collect_re = Regex::new(r"^collect\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?,\s*([^)\s]+?)\s*\)$").unwrap();
+        let dp = match collect_re.captures(&s) {
+            Some(captures) => {
+                let min = captures.get(1).unwrap()
+                    .as_str().parse().unwrap();
+                let max = captures.get(2).and_then(|c| c.as_str().parse().ok());
+                let ident = captures.get(3).unwrap()
+                    .as_str().to_string();
+                DeclareProvider::Collect(min, max, ident)
+            },
+            None => DeclareProvider::Alias(s),
+        };
+        Ok(dp)
+    }
+}
 impl<'de> Deserialize<'de> for Percent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: Deserializer<'de>,
@@ -215,29 +336,29 @@ impl<'de> Deserialize<'de> for Limit {
     }
 }
 
-fn deserialize_provider_transforms<'de, D>(deserializer: D) -> Result<Option<Transform>, D::Error>
-    where D: Deserializer<'de>
-{
-    let transforms: Vec<ProviderTransform> = Vec::deserialize(deserializer)?;
-    let mut ret: Option<Transform> = None;
-    for transform in transforms {
-        let transform = match transform {
-            ProviderTransform::Collect(n) => Collect::new(n).into(),
-            ProviderTransform::Repeat(n) => Repeat::new(n).into(),
-        };
-        match &mut ret {
-            Some(t) => t.wrap(transform),
-            None => ret = Some(transform),
-        }
-    }
-    Ok(ret)
-}
-
 fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
     where D: Deserializer<'de>
 {
     let res: Option<json::Value> = Option::deserialize(deserializer)?;
     Ok(res.as_ref().map(json_value_to_string))
+}
+
+fn deserialize_logs<'de, D> (deserializer: D) -> Result<Vec<(String, Select)>, D::Error>
+    where D: Deserializer<'de>
+{
+    let lpp: Vec<(String, LogsPreProcessed)> = tuple_vec_map::deserialize(deserializer)?;
+    let selects = lpp.into_iter()
+        .map(|(s, lpp)| {
+            let select = Select::new(EndpointProvidesPreProcessed {
+                send: EndpointProvidesSendOptions::Block,
+                select: lpp.select,
+                for_each: lpp.for_each,
+                where_clause: lpp.where_clause,
+            });
+            (s, select)
+        })
+        .collect();
+    Ok(selects)
 }
 
 fn deserialize_providers<'de, D, T> (deserializer: D) -> Result<Vec<(String, T)>, D::Error>
@@ -247,7 +368,7 @@ fn deserialize_providers<'de, D, T> (deserializer: D) -> Result<Vec<(String, T)>
 {
     let map: Vec<(String, T)> = tuple_vec_map::deserialize(deserializer)?;
     for (k, _) in &map {
-        if k == "body" || k == "headers" {
+        if k == "request" || k == "response" {
             return Err(DeError::invalid_value(Unexpected::Str(&k), &"Use of reserved provider name"))
         }
     }
@@ -311,46 +432,4 @@ fn deserialize_option_vec_load_pattern<'de, D>(deserializer: D) -> Result<Option
     } else {
         return Ok(None)
     }
-}
-
-// accepts strings like "2xx", "20x", "204"
-fn deserialize_status_string_to_fn<'de, D> (deserializer: D) -> Result<Option<Box<StatusChecker>>, D::Error>
-    where D: Deserializer<'de>
-{
-    let string = String::deserialize(deserializer)?;
-    let re = Regex::new(r"^([1-5])(x{2}|\d{2})$").unwrap();
-    if let Some(captures) = re.captures(&string) {
-        // hundreds place (is a digit)
-        let mut base: u16 = captures.get(1).unwrap()
-            .as_str().parse::<u16>().unwrap();
-        // rest (is two digits or "xx")
-        let rest = captures.get(2).unwrap()
-            .as_str();
-        return match rest.parse::<u16>() {
-            Ok(n) => {
-                base = base * 100 + n;
-                Ok(Some(Box::new(move |s: u16| s == base)))
-            },
-            Err(_) => Ok(Some(Box::new(move |s: u16| s / 100 == base)))
-        }
-    }
-
-    let re = Regex::new(r"^(<|>)(=)?([1-5]\d{2})$").unwrap();
-    if let Some(captures) = re.captures(&string) {
-        let operator = captures.get(1).unwrap()
-            .as_str();
-        let is_equal = captures.get(2).is_some();
-        let n = captures.get(3).unwrap()
-            .as_str().parse::<u16>().unwrap();
-        let op_fn = match (operator, is_equal) {
-            (">", false) => PartialOrd::gt,
-            (">", true) => PartialOrd::ge,
-            ("<", false) => PartialOrd::lt,
-            ("<", true) => PartialOrd::le,
-            _ => unreachable!(),
-        };
-        return Ok(Some(Box::new(move |s: u16| op_fn(&s, &n))))
-    }
-
-    Err(DeError::invalid_value(Unexpected::Str(&string), &"a status entry like `2xx` or `>=400`"))
 }

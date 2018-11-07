@@ -4,3 +4,6 @@
 *.csv
 *.yaml
 *.txt
+*.dump
+*.log
+*.json

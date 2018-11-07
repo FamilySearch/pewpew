@@ -190,6 +190,7 @@ impl RollingAggregateStats {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all="camelCase")]
 pub struct AggregateStats {
     time: u64,
     duration: u64,

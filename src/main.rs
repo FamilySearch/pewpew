@@ -21,7 +21,8 @@ use serde_yaml;
 use tokio;
 
 fn main() {
-    if cfg!(target_os = "windows") {
+    #[cfg(target_os = "windows")]
+    {
         let _ = ansi_term::enable_ansi_support();
     }
     let matches = App::new("PewPew")

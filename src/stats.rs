@@ -323,15 +323,16 @@ pub fn create_stats_channel<F>(test_complete: F)
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
-    let start_minute = start_sec / 60 * 60;
-    let next_minute = Duration::from_millis((60 - (start_sec - start_minute)) * 1000 + 1);
-    let stats = Arc::new(Mutex::new(RollingAggregateStats::new(start_minute, Duration::from_secs(60))));
+    let bucket_size = Duration::from_secs(60);
+    let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
+    let next_bucket = Duration::from_millis((bucket_size.as_secs() - (start_sec - start_bucket)) * 1000 + 1);
+    let stats = Arc::new(Mutex::new(RollingAggregateStats::new(start_bucket, bucket_size)));
     let stats2 = stats.clone();
     let stats3 = stats.clone();
     let stats4 = stats.clone();
     let end_time: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     let end_time2 = end_time.clone();
-    let print_stats = Interval::new(now + next_minute, Duration::from_secs(60))
+    let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_| ())
         .for_each(move |_| {
             let stats = stats4.lock();

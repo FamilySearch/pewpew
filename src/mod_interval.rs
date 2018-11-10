@@ -6,7 +6,6 @@ use tokio::{
 
 use std::{
     cmp,
-    ops::Mul,
     time::{Instant, Duration}
 };
 
@@ -24,32 +23,14 @@ fn nanos_to_duration (n: f64) -> Duration {
     Duration::new(secs, nanos)
 }
 
-#[inline]
-fn hits_per_to_nanos (h: &HitsPer) -> f64 {
-    let (base_nanos, inner) = match h {
-        HitsPer::Second(n) => (u64::from(NANOS_IN_SECOND), n),
-        HitsPer::Minute(n) => (u64::from(NANOS_IN_SECOND) * 60, n)
-    };
-    base_nanos.checked_div(u64::from(*inner)).unwrap_or(base_nanos) as f64
-}
-
 #[derive(Debug)]
 pub enum HitsPer {
     Second(u32),
     Minute(u32),
 }
 
-impl Mul<f64> for &HitsPer {
-     type Output = HitsPer;
-
-     fn mul(self, rhs: f64) -> Self::Output {
-         match self {
-             HitsPer::Second(n) => HitsPer::Second((f64::from(*n) * rhs).round() as u32),
-             HitsPer::Minute(n) => HitsPer::Minute((f64::from(*n) * rhs).round() as u32)
-         }
-     }
-}
-
+// x represents the time elapsed in the test
+// y represents the amount of time between hits
 pub trait ScaleFn {
     fn max_x (&self) -> f64;
     fn y (&self, x: f64) -> f64;
@@ -68,39 +49,55 @@ impl LinearBuilder {
     }
 
     pub fn build (&self, peak_load: &HitsPer) -> ModInterval<LinearScaling> {
-        let x1 = 0f64;
-        let y1 = hits_per_to_nanos(&(peak_load * self.start_percent));
-        let y2 = hits_per_to_nanos(&(peak_load * self.end_percent));
-        let x2 = duration_to_nanos(self.duration);
-        ModInterval::new(LinearScaling::new(x1, y1, x2, y2))
+        let peak_load = match peak_load {
+            HitsPer::Second(n) => f64::from(*n),
+            HitsPer::Minute(n) => f64::from(*n) / f64::from(NANOS_IN_SECOND), 
+        };
+        let duration = duration_to_nanos(self.duration);
+        ModInterval::new(
+            LinearScaling::new(
+                self.start_percent,
+                self.end_percent,
+                duration,
+                peak_load
+            )
+        )
     }
 }
 
 #[derive(Debug)]
 pub struct LinearScaling {
-    m: f64,
-    b: f64,
-    max_x: f64,
+    diff: f64,
+    duration: f64,
+    min_y: f64,
+    peak_load: f64,
+    start_percent: f64,
 }
 
 impl LinearScaling {
-    // x represents the duration for how long this scaling will happen
-    // y represents the amount of time between hits
-    pub fn new (x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
-        let m = (y2 - y1) / (x2 - x1);
-        LinearScaling { m, b: y1 - m * x1, max_x: x2 }
+    pub fn new (start_percent: f64, end_percent: f64, duration: f64, peak_load: f64) -> Self {
+        let min_y = duration / (start_percent.max(end_percent) * peak_load);
+        LinearScaling {
+            start_percent,
+            diff: end_percent - start_percent,
+            duration,
+            peak_load,
+            min_y
+        }
     }
 }
 
 impl ScaleFn for LinearScaling {
     #[inline]
     fn y (&self, x: f64) -> f64 {
-        self.m * x + self.b
+        let percent_through = x / self.duration;
+        let percent_of_peak = self.diff * percent_through + self.start_percent;
+        self.min_y.min(f64::from(NANOS_IN_SECOND) / (percent_of_peak * self.peak_load))
     }
 
     #[inline]
     fn max_x(&self) -> f64 {
-        self.max_x
+        self.duration
     }
 }
 
@@ -144,12 +141,14 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
             Some(t) => t,
         };
 
+        let now = Instant::now();
         // if we've reached the end
-        if Instant::now() >= end_time {
+        if now >= end_time {
             return Ok(Async::Ready(None));
-        }
-        // Wait for the delay to be done
+        } else if deadline >= now {
+            // Wait for the delay to finish
         try_ready!(self.delay.poll());
+        }
 
         // Calculate how long the next delay should be
         let next_deadline = {
@@ -166,22 +165,69 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn scale () {
-//         let max = 30;
-//         let lb = LinearBuilder::new(0f64, 1f64, Duration::from_secs(max));
-//         let scale_fn = lb.build(&HitsPer::Second(10)).scale_fn;
-//         let mut x = 0f64;
-//         let max = (max * u64::from(NANOS_IN_SECOND)) as f64;
-//         println!("y at 30: {}", scale_fn.y(30_000_000_000f64));
-//         while x <= max {
-//             let y = scale_fn.y(x);
-//             println!("x: {}, y: {}", x, y);
-//             x += y;
-//         }
-//     }
-// }
+    fn run_checks(checks: Vec<(f64, f64)>, mod_interval: ModInterval<LinearScaling>) {
+        let scale_fn = mod_interval.scale_fn;
+        for (i, (secs, hps)) in checks.iter().enumerate() {
+            let nanos = secs * f64::from(NANOS_IN_SECOND);
+            let right = 1f64 / (scale_fn.y(nanos) / f64::from(NANOS_IN_SECOND));
+            let left = hps;
+            let diff = right - left;
+            let equal = diff < std::f64::EPSILON && diff >= 0f64;
+            assert!(equal, "index {} left {} != right {}", i, left, right);
+        }
+    }
+
+    #[test]
+    fn scale_up() {
+        // scale from 0 to 100% over 30 seconds
+        let lb = LinearBuilder::new(0f64, 1f64, Duration::from_secs(30));
+        // 100% = 12hps
+        let hitsper = HitsPer::Second(12);
+        let mod_interval = lb.build(&hitsper);
+        // (t, hps) at time t we should be at hps
+        let checks = vec!(
+            (0.0, 0.4),
+            (10.0, 4.0),
+            (15.0,  6.0),
+            (30f64, 12f64),
+        );
+        run_checks(checks, mod_interval);
+    }
+
+    #[test]
+    fn scale_up2() {
+        // scale from 0 to 100% over 30 seconds
+        let lb = LinearBuilder::new(0.5f64, 1f64, Duration::from_secs(30));
+        // 100% = 12hps
+        let hitsper = HitsPer::Second(12);
+        let mod_interval = lb.build(&hitsper);
+        // (t, hps) at time t we should be at hps
+        let checks = vec!(
+            (0.0, 6.0),
+            (10.0, 8.0),
+            (15.0,  9.0),
+            (30f64, 12f64),
+        );
+        run_checks(checks, mod_interval);
+    }
+
+    #[test]
+    fn scale_down() {
+        // scale from 100 to 0% over 30 seconds
+        let lb = LinearBuilder::new(1f64, 0f64, Duration::from_secs(30));
+        // 100% = 12hps
+        let hitsper = HitsPer::Second(12);
+        let mod_interval = lb.build(&hitsper);
+        let checks = vec!(
+            (0f64, 12f64),
+            (15.0, 6.0),
+            (20.0, 4.0),
+            (30.0, 0.4),
+        );
+        run_checks(checks, mod_interval);
+    }
+}

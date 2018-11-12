@@ -31,7 +31,7 @@ use std::{
     time::Duration,
 };
 
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
 enum LoadPatternPreProcessed {
     Linear(LinearBuilderPreProcessed),
@@ -60,7 +60,7 @@ impl LoadPattern {
     }
 }
 
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
 pub enum Provider {
     File(FileProvider),
@@ -380,7 +380,7 @@ fn deserialize_duration<'de, D> (deserializer: D) -> Result<Duration, D::Error>
 {
     let string = String::deserialize(deserializer)?;
     let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
-    let sanity_re = Regex::new(&format!(r"^(?:{})+$", base_re)).unwrap();
+    let sanity_re = Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).unwrap();
     if !sanity_re.is_match(&string) {
         return Err(DeError::invalid_value(Unexpected::Str(&string), &"example '15m' or '2 hours'"))
     }

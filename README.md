@@ -237,7 +237,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
   ```
   specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".
 - **`body`** <sub><sup>*Optional*</sup></sub> - A string value indicating the body that should be sent with the request.
-- **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load-pattern-optional)
+- **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
 - **`peak_load`** <sub><sup>*Optional*</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. Note: that a `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
 

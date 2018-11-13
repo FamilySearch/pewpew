@@ -54,7 +54,7 @@ load_pattern:
 
 #### linear
 ---
-The linear load pattern type allows generated traffic to increase or decrease linearly. There are three parameters which can be specified for each linear segment:
+The linear *load_pattern_type* allows generated traffic to increase or decrease linearly. There are three parameters which can be specified for each linear segment:
 
 - **`from`** <sub><sup>*Optional*</sup></sub> - The starting point this segment will scale from, specified as a percentage. Defaults to `0%` if the current segment is the first entry in `load_pattern`, or the `to` value in the previous segment.
 
@@ -178,13 +178,13 @@ loggers:
 </pre>
 Loggers provide a means of logging data to a file, stderr or stdout. Any string can be used for *logger_name*.
 
-There are two types of loggers: plain loggers which has data logged to them by explicitly referencing them within an `endpoints`.`log` section, and global loggers which are evaluated for every endpoint response and cannot be explicitly specified within an `endpoints`.`log` section.
+There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints`.`log` section, and global loggers which are evaluated for every endpoint response and cannot be explicitly specified within an `endpoints`.`log` section.
 
 Loggers support the following parameters:
 - **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [`endpoints`.`provides` section](#provides) for details on how to define a `select_piece`.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints`.`provides` section](#provides) for details on how to define a `for_each_piece`.
 - **`where`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints`.`provides` section](#provides) for details on how to define a `where_piece`.
-- **`to`** - A string specifying where this logger will send its data. Values of "stderr" and "stdout" will log data to the respective process streams and any other string will log to a file with that name. Currently files are created in the current working directory where the pewpew process was launched from. When a file is specified, the file will be created if it does not exist and will be truncated if it already exists.
+- **`to`** - A string specifying where this logger will send its data. Values of "stderr" and "stdout" will log data to the respective process streams and any other string will log to a file with that name. Currently files are created in the current working directory where the pewpew process was launched from. When a file is specified, the file will be created if it does not exist or will be truncated if it already exists.
 - **`pretty`** <sub><sup>*Optional*</sup></sub> - A boolean that when `true` the value logged will have added whitespace for readability. Defaults to `false`.
 - **`limit`** <sub><sup>*Optional*</sup></sub> - An unsigned integer which indicates the logger will only log *n* values.
 
@@ -248,6 +248,8 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
   `50hpm` - 50 hits per minute
 
   `300 hps` - 300 hits per second
+
+  TODO: note when `peak_load` is required
 - **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a default stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.

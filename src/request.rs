@@ -165,8 +165,6 @@ impl DeclareProvider {
                         };
                         let mut rx = provider.rx.clone();
                         let mut holder = Vec::with_capacity(get_n());
-                        // TODO, change this to use a random number to specify the size of the vec and
-                        // use the Vec::with_capacity constructor
                         let b = stream::poll_fn(move || {
                             let r = match rx.poll() {
                                 Ok(Async::Ready(Some(v))) => {

@@ -13,7 +13,7 @@ mod zip_all;
 
 use std::fs::File;
 
-use clap::{App, Arg};
+use clap::{App, Arg, crate_version};
 use crate::config::Config;
 use crate::load_test::LoadTest;
 use futures::future::lazy;
@@ -25,7 +25,8 @@ fn main() {
     {
         let _ = ansi_term::enable_ansi_support();
     }
-    let matches = App::new("PewPew")
+    let matches = App::new("pewpew")
+        .version(crate_version!())
         .arg(Arg::with_name("CONFIG")
             .help("the load test config file to use")
             .index(1)

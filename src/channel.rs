@@ -53,8 +53,8 @@ pub struct Sender<T> {
 }
 
 impl<T> Sender<T> {
-    pub fn limit(&self) -> usize {
-        self.limit.get()
+    pub fn limit(&self) -> Limit {
+        self.limit.clone()
     }
 
     pub fn try_send(&self, item: T) -> Result<(), T> {

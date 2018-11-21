@@ -7,6 +7,10 @@ use futures::{
     sync::oneshot,
 };
 
+use crate::channel::Limit;
+
+use std::cmp;
+
 /// A stream combinator which executes a unit closure over each item on a
 /// stream in parallel.
 #[must_use = "streams do nothing unless polled"]
@@ -18,7 +22,7 @@ where St: Stream,
 {
     f: Fm,
     futures: Vec<oneshot::Receiver<()>>,
-    limit: usize,
+    limits: Vec<Limit>,
     stream: Option<St>,
     stream_errored: bool,
 }
@@ -29,9 +33,9 @@ where St: Stream,
     If: IntoFuture<Future=F, Item=F::Item, Error=F::Error>,
     F: Future<Item=(), Error=()> + Send + 'static,
 {
-    pub fn new(limit: usize, stream: St, f: Fm) -> Self {
+    pub fn new(limits: Vec<Limit>, stream: St, f: Fm) -> Self {
         ForEachParallel {
-            limit,
+            limits,
             f,
             futures: Vec::new(),
             stream: Some(stream),
@@ -50,11 +54,12 @@ where St: Stream,
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let limit = self.limits.iter().fold(0, |prev, l| cmp::max(prev, l.get()));
         loop {
             let mut made_progress_this_iter = false;
             // Try and pull an item from the stream
             if let Some(stream) = &mut self.stream {
-                if self.limit == 0 || self.limit > self.futures.len() {
+                if limit == 0 || limit > self.futures.len() {
                     match stream.poll() {
                         Ok(Async::Ready(Some(elem))) => {
                             made_progress_this_iter = true;

@@ -46,7 +46,6 @@ use crate::template::{
 use crate::zip_all::zip_all;
 
 use std::{
-    cmp,
     collections::{BTreeMap, BTreeSet},
     ops::{Deref, DerefMut},
     str,
@@ -329,7 +328,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 required_providers.extend(provider_names);
                 (key, value)
             }).collect();
-        let mut max_buffer = 0;
+        let mut limits = Vec::new();
         let mut precheck_rr_providers = 0;
         let mut rr_providers = 0;
         let mut outgoing = Vec::new();
@@ -340,7 +339,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 providers::Kind::Value(p) => p.tx.clone(),
             };
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
-                max_buffer = cmp::max(max_buffer, tx.limit());
+                limits.push(tx.limit());
             }
             rr_providers |= v.get_rr_providers();
             precheck_rr_providers |= v.get_where_rr_providers();
@@ -418,7 +417,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         let test_timeout = ctx.test_timeout.clone();
         let streams = zip_all(streams).map_err(|_| panic!("error from zip_all"))
             .select(ctx.test_timeout.clone().into_stream().map(|_| unreachable!("timeouts only error")));
-        ForEachParallel::new(max_buffer, streams, move |values| {
+        ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
             let mut body_stream = None;
             for tv in values {

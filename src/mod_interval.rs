@@ -169,7 +169,7 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
 mod tests {
     use super::*;
 
-    fn run_checks(checks: Vec<(f64, f64)>, mod_interval: ModInterval<LinearScaling>) {
+    fn run_checks(checks: &[(f64, f64)], mod_interval: ModInterval<LinearScaling>) {
         let scale_fn = mod_interval.scale_fn;
         for (i, (secs, hps)) in checks.iter().enumerate() {
             let nanos = secs * f64::from(NANOS_IN_SECOND);
@@ -195,7 +195,7 @@ mod tests {
             (15.0,  6.0),
             (30f64, 12f64),
         );
-        run_checks(checks, mod_interval);
+        run_checks(&checks, mod_interval);
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
             (15.0,  9.0),
             (30f64, 12f64),
         );
-        run_checks(checks, mod_interval);
+        run_checks(&checks, mod_interval);
     }
 
     #[test]
@@ -228,6 +228,6 @@ mod tests {
             (20.0, 4.0),
             (30.0, 0.4),
         );
-        run_checks(checks, mod_interval);
+        run_checks(&checks, mod_interval);
     }
 }

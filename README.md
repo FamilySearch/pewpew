@@ -18,12 +18,12 @@ load_pattern:
       over: 2m
 endpoints:
   - method: GET
-    url: http://127.0.0.1:8080/foo
+    url: http://localhost/foo
     peak_load: 42hpm
     headers:
       Accept: text/plain
   - method: GET
-    url: http://127.0.0.1:8080/bar
+    url: http://localhost/bar
     headers:
       Accept-Language: en-us
       Accept: application/json
@@ -110,14 +110,8 @@ providers:
 ```
 
 Every *provider_type*, except `static` and `static-list`, supports the following two optional parameters:
-- **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`.
-
-  `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until the value can be returned.
-  
-  `force` indicates that the value will be returned to the provider regardless of whether its buffer is "full". This can make a provider's buffer exceed its soft limit.
-  
-  `if_not_full` indicates that the value will be returned to the provider only if the provider is not full.
-- **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the the provider from being empty. Defaults to `auto`.
+- **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [provides section](#provides) for details on the effect of these options.
+- **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
 
 There are four *provider_type*s:
 
@@ -183,15 +177,15 @@ loggers:
 </pre>
 Loggers provide a means of logging data to a file, stderr or stdout. Any string can be used for *logger_name*.
 
-There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints`.`log` section, and global loggers which are evaluated for every endpoint response and cannot be explicitly specified within an `endpoints`.`log` section.
+There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints.log` section, and global loggers which are evaluated for every endpoint response and cannot be explicitly specified within an `endpoints.log` section.
 
 Loggers support the following parameters:
-- **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [`endpoints`.`provides` section](#provides) for details on how to define a `select_piece`.
-- **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints`.`provides` section](#provides) for details on how to define a `for_each_piece`.
-- **`where`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints`.`provides` section](#provides) for details on how to define a `where_piece`.
+- **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [`endpoints.provides` section](#provides) for details on how to define a *select_piece*.
+- **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints.provides` section](#provides) for details on how to define a *for_each_piece*.
+- **`where`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints.provides` section](#provides) for details on how to define a *where_piece*.
 - **`to`** - A string specifying where this logger will send its data. Values of "stderr" and "stdout" will log data to the respective process streams and any other string will log to a file with that name. Currently files are created in the current working directory where the pewpew process was launched from. When a file is specified, the file will be created if it does not exist or will be truncated if it already exists.
 - **`pretty`** <sub><sup>*Optional*</sup></sub> - A boolean that when `true` the value logged will have added whitespace for readability. Defaults to `false`.
-- **`limit`** <sub><sup>*Optional*</sup></sub> - An unsigned integer which indicates the logger will only log *n* values.
+- **`limit`** <sub><sup>*Optional*</sup></sub> - An unsigned integer which indicates the logger will only log the first *n* values sent to it.
 
 Example:
 ```yaml
@@ -212,7 +206,7 @@ loggers:
     pretty: true
 ```
 
-Creates a global logger which will log to the file "http_err.log" the request and response of the first five requests which have an HTTP status of 400 or greater.
+Creates a global logger named "http_errors" which will log to the file "http_err.log" the request and response of the first five requests which have an HTTP status of 400 or greater.
 
 ### endpoints
 ---
@@ -232,7 +226,9 @@ endpoints:
 The `endpoints` section declares what HTTP endpoints will be called during a test.
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare section](#declare)
-- **`headers`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs which specify the headers which should be used for the request. Values can be interpolated with names of providers. For example:
+- **`headers`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs which specify the headers which should be used for the request. Values can be interpolated with names of providers.
+
+  For example:
 
   ```yaml
   endpoints:
@@ -244,7 +240,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`body`** <sub><sup>*Optional*</sup></sub> - A string value indicating the body that should be sent with the request.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
-- **`peak_load`** <sub><sup>*Optional*</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. Note: that a `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
+- **`peak_load`** <sub><sup>*Optional*</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
 
   A valid `load_pattern` is an unsigned integer followed by an optional space and the string "hpm" (meaning "hits per minute") or "hps" (meaning "hits per second").
 
@@ -254,7 +250,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-  TODO: note when `peak_load` is required
+  While `peak_load` is marked as *optional* that is only true if the current endpoint has a *provides_section* and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.
 - **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a default stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
@@ -263,7 +259,14 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
 
 #### Referencing Providers
-TODO examples of provider interpolation and helpers
+Providers can be referenced within an endpoint's `url` parameter (though currently not permitted as part of the domain), in the `headers` parameter in a value, in the `declare` parameter in a value, or within the `body` parameter. This is done by enclosing the name of a provider within double curly braces. For example, a `url` parameter of `https://localhost/robot/{{robotId}}` would interpolate a value from the provider `robotId` into the last path segment of the url.
+
+In addition to simply referencing a provider, the following helper functions can also be used within curly braces:
+
+Helper | Description
+- | -
+`epoch()` | Returns the number of milliseconds since the unix epoch
+<code>join(*array*, *seperator*)</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, if we have a value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join(qux, "-")}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
 
 #### declare
 <pre>
@@ -275,33 +278,35 @@ A *declare_section* provides the ability to select multiple values from a single
 ```yaml
 endpoints:
   - method: PUT
-    url: https://127.0.0.1/ship/{{shipId}}/speed
+    url: https://localhost/ship/{{shipId}}/speed
     body: '{"shipId":"{{shipId}}","kesselRunTime":75}'
 ```
 
-both references to the provider `shipId` will resolve to the same value, which is desired in many cases.
+both references to the provider `shipId` will resolve to the same value, which in many cases is desired.
 
 The *declare_section* is in the format of key/value string pairs. Every key can function as a provider and can be interpolated just as a provider would be. Values can be in one of two formats:
 1) a string which is a reference to a provider
 2) a call to the `collect` function. The `collect` function "collects" multiple values from a provider into an array. `collect` can be called with two or three arguments in the format <code>collect(*n*, *provider_name*)</code> or <code>collect(*min*, *max*, *provider_name*)</code>. The two argument form creates an array of size *n* with values from a provider. The three argument form creates an array with a randomly selected size between *min* and *max* (both *min* and *max* are inclusive) with values from a provider.
 
-Examples:
+##### Example 1
 ```yaml
 endpoints:
   - declare:
       shipIds: collect(3, 5, shipId)
     method: DELETE
-    url: https://127.0.0.1/ships
+    url: https://localhost/ships
     body: '{"shipIds":{{shipIds}}}'
 ```
 Calls the endpoint `DELETE /ships` where the body is interpolated with an array of ship ids. `shipIds` will have a length between three and five.
+
+##### Example 2
 
 ```yaml
 endpoints:
   - declare:
       destroyedShipId: shipId
     method: PUT
-    url: https://127.0.0.1/ship/{{shipId}}/destroys/{{destroyedShipId}}
+    url: https://localhost/ship/{{shipId}}/destroys/{{destroyedShipId}}
 ```
 Calls `PUT` on an endpoint where `shipId` and `destroyedShipId` are interpolated to different values.
 
@@ -310,21 +315,125 @@ Calls `PUT` on an endpoint where `shipId` and `destroyedShipId` are interpolated
 <pre>
 provides:
   <i>provider_name</i>:
+    select: <i>select_piece</i>
+    [for_each: <i>for_each_piece</i>]
+    [where: <i>where_piece</i>]
     [send: block | force | if_not_full]
+</pre>
+The *provides_section* is how data can be sent to a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [`providers` section](#providers-optional). For every HTTP response that is received zero or more values can be sent to the provider based upon the conditions specified.
+
+Sending data to a provider is done with a SQL-like syntax.
+
+- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression. A `select` expression can reference any provider used to build a request in addition to "request" and "response" which are provided as a means of accessing data in the HTTP request or response.
+
+  The request object has the properties `start-line`, `headers` and `body` which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties `start-line`, `headers`, and `body` in addition to `status` which indicates the HTTP response status code. See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP messages for more details on the structure of HTTP requests and responses.
+
+  `start-line` is a string and `headers` is represented as a JSON object with key/value string pairs. Currently, `body` in the request is always a string and `body` in the response is parsed as a JSON value, when possible, otherwise it is a string. `status` is a number.
+- **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays. This is specified as an array of strings where each string is an expression. Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and `select` is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.
+
+  The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` similarly to accessing value from a provider. Because `for_each` can be iterating over multiple arrays, each value can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
+- **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is a string expression which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
+
+  A `where` expression can be as simple as `response.status == 200` or more complex expressions can be formed using `&&` (boolean and), `||` (boolean or) and parenthesis to group sub-expressions. The following comparison operators are available:
+
+  Operator | Description
+  - | - 
+  `==` | Equal. Check that two values are equal to each other
+  `!=` | Not equal. Check that two values are not equal to each other
+  `>` | Greater than. Check that the left value is greater than the right
+  `<` | Less than. Check that the left value is less than the right
+  `>=` | Greater than or equal to. Check that the left value is greater than or equal to the right
+  `<=` | Less than or equal to. Check that the left value is less than or equal to the right
+- **`send`** <sub><sup>*Optional*</sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are `block`, `force`, and `if_not_full`.
+
+  `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until there's room in the provider's buffer for the value.
+  
+  `force` indicates that the value will be returned to the provider regardless of whether its buffer is "full". This can make a provider's buffer exceed its soft limit.
+  
+  `if_not_full` indicates that the value will be returned to the provider only if the provider is not full.
+
+While boolean style expressions are especially useful in a `where` expression they can be used in `select` and `for_each` expressions as well. Additionally there are special functions which are especially helpful in a `for_each` expression but can be used elsewhere.
+
+Function | Description
+- | -
+<code>json_path(*query*)</code> | Provides the ability to execute a json path expression against an object and returns an array of values. The query must be quoted. Example: `json_path("response.body.ships.*.ids")`
+<code>repeat(*n*)</code> | Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times. Example: `repeat(10)`
+
+##### Example 1
+If we have an HTTP response with the following body
+
+```json
+{ "session": "abc123" }
+```
+
+and our provides section is defined as:
+
+```yaml
+provides:
+  session:
+    select: response.body.session
+    where: response.status < 400
+```
+
+the `session` provider would be given the value `"abc123"` if the status code was less than 400 otherwise nothing would be sent to the `session` provider.
+
+##### Example 2
+If we have an HTTP response with the following body:
+
+```json
+{
+  "characters": [
+    {
+      "type": "Human",
+      "id": "1000",
+      "name": "Luke Skywalker",
+      "friends": ["1002", "1003", "2000", "2001"],
+      "appearsIn": [4, 5, 6],
+      "homePlanet": "Tatooine",
+    },
+    {
+      "type": "Human",
+      "id": "1001",
+      "name": "Darth Vader",
+      "friends": ["1004"],
+      "appearsIn": [4, 5, 6],
+      "homePlanet": "Tatooine",
+    },
+    {
+      "type": "Droid",
+      "id": "2001",
+      "name": "R2-D2",
+      "friends": ["1000", "1002", "1003"],
+      "appearsIn": [4, 5, 6],
+      "primaryFunction": "Astromech",
+    }
+  ]
+}
+```
+
+and our provides section is defined as:
+
+```yaml
+provides:
+  names:
+    select:
+      name: for_each[0]
+    for_each:
+      - json_path("request.body.*.name")
+```
+
+The `names` provider would be sent the following values: `{ "name": "Luke Skywalker" }`, `{ "name": "Darth Vader" }`, `{ "name": "R2-D2" }`.
+
+#### logs
+<pre>
+logs:
+  <i>logger_name</i>:
     select: <i>select_piece</i>
     [for_each: <i>for_each_piece</i>]
     [where: <i>where_piece</i>]
 </pre>
-The *provides_section* is how data can be sent into a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [`providers` section](#providers-optional).
+The *logs_section* provides a means of sending data to a logger based on the result of an HTTP response. *logger_name* is a reference to a logger which must be declared in the root [`logger` section](#loggers-optional). It is structured in the same way as the [*provides_section*](#provides) except there is no explicit *send* parameter. When data is sent to a logger it has the same behavior as `send: block`, which means logging data can potentially block further requests from happening if a logger were to get "backed up". This is unlikely to be a problem unless a large amount of data was consistently logged.
 
-Sending data into a provider is done with a SQL-like syntax.
-
-- **`send`** <sub><sup>*Optional*</sup></sub> - See the `auto_return` parameter in the [`providers` section](#providers-optional).
-- **`select`** - Determines the shape of the data sent into the provider.
+- **`select`** - Determines the shape of the data sent into the logger.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays.
-- **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data into a provider based on a predicate.
-
-TODO examples and more details. Include use of `json_path` and `repeat`
-
-#### logs
-TODO
+- **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data into a logger based on a predicate.

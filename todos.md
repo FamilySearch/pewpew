@@ -2,8 +2,9 @@
 - Improve documentation
 - Log connection timeouts, connection errors, etc. to stats
 - Log when a request is waiting for a provider
-- Document Linux configuration tuning
+- Document Linux OS configuration tuning
 - Allow an url's domain to be templated with a static provider
+- Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
 - Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.
 - Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand
 - Create a Visual Studio Code language extension for the loadtest file schema

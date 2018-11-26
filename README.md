@@ -1,6 +1,6 @@
 # Pewpew
 ## Getting started
-1) Grab the latest binary from the release tab.
+1) Grab the latest binary from the release tab, or [go here](/releases/latest).
 2) Create your config file.
 3) Execute your test from the command line with `./pewpew loadtest.yaml` (Linux) or `pewpew.exe loadtest.yaml` (Windows).
 4) View the results using the viewer (found in the [pewpew-results-viewer/dist/](../pewpew-results-viewer/dist)) by opening index.html from your local machine in your browser and dragging the results file onto the page, or by using the file selector button.
@@ -34,7 +34,7 @@ The above config file tells pewpew to hit two HTTP endpoints with particular loa
 
 A config file can have four main sections.
 
-### load_pattern <sub><sup>*Optional*</sup></sub>
+### load_pattern <sub><sup>*Optional**</sup></sub>
 ---
 <pre>
 load_pattern:
@@ -42,7 +42,9 @@ load_pattern:
       [parameters]
 </pre>
 
-This section defines the "shape" that the generated traffic will take over the course of the test. Individual endpoints can choose to specify their own `load_pattern` (see the [`endpoints` section](#endpoints)). If a root level `load_pattern` is not specified then each endpoint *must* specify its own `load_pattern`.
+\* If a root level `load_pattern` is not specified then each endpoint *must* specify its own `load_pattern`.
+
+This section defines the "shape" that the generated traffic will take over the course of the test. Individual endpoints can choose to specify their own `load_pattern` (see the [`endpoints` section](#endpoints)).
 
 `load_pattern` is an array of *load_pattern_type*s specifying how generated traffic for a segment of the test will scale up, down or remain steady. Currently the only *load_pattern_type* supported is `linear`.
 
@@ -240,7 +242,9 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`body`** <sub><sup>*Optional*</sup></sub> - A string value indicating the body that should be sent with the request.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
-- **`peak_load`** <sub><sup>*Optional*</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
+- **`peak_load`** <sub><sup>*Optional**</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
+
+  \* While `peak_load` is marked as *optional* that is only true if the current endpoint has a *provides_section*, and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.
 
   A valid `load_pattern` is an unsigned integer followed by an optional space and the string "hpm" (meaning "hits per minute") or "hps" (meaning "hits per second").
 
@@ -250,7 +254,6 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-  While `peak_load` is marked as *optional* that is only true if the current endpoint has a *provides_section* and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.
 - **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a default stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.

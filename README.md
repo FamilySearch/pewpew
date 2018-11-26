@@ -1,6 +1,6 @@
 # Pewpew
 ## Getting started
-1) Grab the latest binary from the release tab, or [go here](/releases/latest).
+1) Grab the latest binary from the release tab, or [go here](https://github.com/fs-eng/SystemTestTools/releases/latest).
 2) Create your config file.
 3) Execute your test from the command line with `./pewpew loadtest.yaml` (Linux) or `pewpew.exe loadtest.yaml` (Windows).
 4) View the results using the viewer (found in the [pewpew-results-viewer/dist/](../pewpew-results-viewer/dist)) by opening index.html from your local machine in your browser and dragging the results file onto the page, or by using the file selector button.

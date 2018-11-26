@@ -192,37 +192,3 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     };
     (sender, receiver)
 }
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::{
-        future::lazy,
-        stream,
-    };
-    use tokio::{
-        self,
-        prelude::*,
-    };
-
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn bench3() {
-        tokio::run(lazy(|| {
-            let (tx, rx) = channel(Limit::Integer(20));
-            let duration = Duration::from_secs(1);
-            let start = Instant::now();
-            let feed = stream::repeat::<_, ()>(1)
-                .take_while(move |_| Ok(start.elapsed() < duration))
-                .forward(tx)
-                .map(|_| ());
-            tokio::spawn(feed);
-
-            rx.fold(0, |n, _| Ok(n + 1))
-                .map(|n| eprintln!("done {}", n))
-                .map_err(|_e| println!("err"))
-        }));
-    }
-}

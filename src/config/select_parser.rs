@@ -15,6 +15,7 @@ use serde_json as json;
 use std::{
     borrow::Cow,
     collections::BTreeSet,
+    fmt,
     iter,
     sync::Arc,
 };
@@ -29,6 +30,17 @@ enum FunctionArg {
 enum FunctionCall {
     JsonPath(Arc<jsonpath::Selector>, String),
     Repeat(usize),
+}
+
+impl fmt::Debug for FunctionCall {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FunctionCall::JsonPath(_, selector) =>
+                write!(f, "FunctionCall {{ JsonPath({}) }}", selector),
+            FunctionCall::Repeat(n) =>
+                write!(f, "FunctionCall {{ Repeat({}) }}", n),
+        }
+    }
 }
 
 impl FunctionCall {
@@ -105,7 +117,7 @@ fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> Co
     Cow::Borrowed(json)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct JsonPath {
     start: JsonPathStart,
     rest: Vec<JsonPathSegment>,
@@ -286,13 +298,13 @@ impl<A, B, C, T> Iterator for EitherThreeIterator<A, B, C, T>
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum JsonPathSegment {
     Number(usize),
     String(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum JsonPathStart {
     FunctionCall(FunctionCall),
     JsonIdent(String),
@@ -819,33 +831,36 @@ mod tests {
 
     #[test]
     fn get_providers() {
-        // (select json, where clause, expected providers returned from `get_providers`)
+        // (select json, where clause, expected providers returned from `get_providers`, expected providers in `get_rr_providers`)
         let check_table = vec!(
-            (json!(4), None, vec!()),
-            (json!("c[0].d"), None, vec!("c")),
-            (json!("request.body[0].d"), None, vec!("request.body")),
-            (json!(r#"request["start-line"]"#), None, vec!("request.start-line")),
-            (json!("repeat(5)"), None, vec!()),
-            (json!(r#"json_path("c.*.d")"#), None, vec!("c")),
-            (json!(r#"json_path("c.*.d")"#), Some("true && false && true || response.body.id == 123"), vec!("c", "response.body")),
-            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c")),
-            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c")),
-            (json!(r#"json_path("response.headers.*.d")"#), None, vec!("response.headers")),
+            (json!(4), None, vec!(), 0),
+            (json!("c[0].d"), None, vec!("c"), 0),
+            (json!("request.body[0].d"), None, vec!(), REQUEST_BODY),
+            (json!(r#"request["start-line"]"#), None, vec!(), REQUEST_STARTLINE),
+            (json!("repeat(5)"), None, vec!(), 0),
+            (json!(r#"json_path("c.*.d")"#), None, vec!("c"), 0),
+            (json!(r#"json_path("c.*.d")"#), Some("true && false && true || response.body.id == 123"), vec!("c"), RESPONSE_BODY),
+            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
+            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
+            (json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
             (
                 json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
                 None,
-                vec!("c", "foo")
+                vec!("c", "foo"),
+                0
             )
         );
 
-        for (i, (select, where_clause, expect)) in check_table.into_iter().enumerate() {
+        for (i, (select, where_clause, providers_expect, rr_expect)) in check_table.into_iter().enumerate() {
             let s = if let Some(wc) = where_clause {
                 create_select(json!({ "select": select, "where": wc }))
             } else {
                 create_select(json!({ "select": select }))
             };
             let providers: Vec<_> = std::iter::FromIterator::from_iter(s.get_providers());
-            assert_eq!(providers, expect, "index {}", i);
+            let rr_providers = s.get_rr_providers();
+            assert_eq!(providers, providers_expect, "index {}", i);
+            assert_eq!(rr_providers, rr_expect, "index {}", i);
         }
 
     }

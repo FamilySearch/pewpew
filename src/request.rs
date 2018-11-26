@@ -43,6 +43,7 @@ use crate::template::{
     stringify_helper,
     textify,
 };
+use crate::util::{ Either, Either3 };
 use crate::zip_all::zip_all;
 
 use std::{
@@ -52,62 +53,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
-
-enum Either<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A, B> Stream for Either<A, B>
-    where A: Stream,
-          B: Stream<Item = A::Item, Error = A::Error>
-{
-    type Item = A::Item;
-    type Error = A::Error;
-    fn poll(&mut self) -> Poll<Option<A::Item>, A::Error> {
-        match *self {
-            Either::A(ref mut a) => a.poll(),
-            Either::B(ref mut b) => b.poll(),
-        }
-    }
-}
-
-impl<A, B> Future for Either<A, B>
-    where A: Future,
-          B: Future<Item = A::Item, Error = A::Error>
-{
-    type Item = A::Item;
-    type Error = A::Error;
-
-    fn poll(&mut self) -> Poll<A::Item, A::Error> {
-        match *self {
-            Either::A(ref mut a) => a.poll(),
-            Either::B(ref mut b) => b.poll(),
-        }
-    }
-}
-
-enum Either3<A, B, C> {
-    A(A),
-    B(B),
-    C(C)
-}
-
-impl<A, B, C> Stream for Either3<A, B, C>
-    where A: Stream,
-          B: Stream<Item = A::Item, Error = A::Error>,
-          C: Stream<Item = A::Item, Error = A::Error>,
-{
-    type Item = A::Item;
-    type Error = A::Error;
-    fn poll(&mut self) -> Poll<Option<A::Item>, A::Error> {
-        match *self {
-            Either3::A(ref mut e) => e.poll(),
-            Either3::B(ref mut e) => e.poll(),
-            Either3::C(ref mut e) => e.poll(),
-        }
-    }
-}
 
 pub enum DeclareProvider {
     Alias(String),

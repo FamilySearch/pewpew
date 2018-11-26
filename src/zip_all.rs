@@ -69,3 +69,43 @@ impl<T> Stream for ZipAll<T> where T: Stream {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::stream;
+    use crate::util::Either;
+
+    #[test]
+    fn zip_all_works() {
+        // stream that yields: 1, 2, 3, 4
+        let a = Either::A(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
+            (1..5).map(Either::A).collect()
+        ));
+        // stream that yields: 6, 7, 8, 9
+        let b = Either::A(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
+            (6..10).map(Either::A).collect()
+        ));
+        // stream that yields: 'a', 'b', 'c', 'd'
+        let c = Either::B(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
+            ['a', 'b', 'c', 'd'].iter().map(Either::B).collect()
+        ));
+        let streams = vec!(a, b, c);
+
+        let mut expects = vec!(
+            vec!(Either::A(1), Either::A(6), Either::B(&'a')),
+            vec!(Either::A(2), Either::A(7), Either::B(&'b')),
+            vec!(Either::A(3), Either::A(8), Either::B(&'c')),
+            vec!(Either::A(4), Either::A(9), Either::B(&'d')),
+        );
+
+        for r in zip_all(streams).wait() {
+            if let Ok(r) = r {
+                let expect = expects.remove(0);
+                assert_eq!(r, expect);
+            }
+        }
+
+        assert!(expects.is_empty());
+    }
+}

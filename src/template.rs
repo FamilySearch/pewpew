@@ -119,54 +119,8 @@ pub fn json_value_to_string (v: &JsonValue) -> String {
 
 #[cfg(test)]
 mod tests {
-    use lazy_static::lazy_static;
-    use serde_json::{json, Value as JsonValue};
+    use serde_json::json;
     use super::*;
-
-    lazy_static! {
-        static ref TEMPLATES: Vec<JsonValue> = vec!(
-            json!({
-                "foo": "{{val1}}",
-                "bar": {
-                    "abc":"{{val2}}"
-                }
-            }),
-            json!("{{json \"a.*.id\"}}"),
-            json!("{{json \"b\" true}}"),
-        );
-        static ref DATA: Vec<TemplateValues> = vec!(
-            json!({
-                "val1": "it",
-                "val2": "works"
-            }),
-            json!({
-                "a": [
-                    { "id": 1 },
-                    { "id": 2 },
-                    { "id": 3 }
-                ],
-                "b": {
-                    "x": 1,
-                    "y": 1,
-                    "z": 1,
-                }
-            }),
-        ).into_iter().map(Into::into).collect();
-        static ref EXPECTS: Vec<JsonValue> = vec!(
-            json!({
-                "foo": "it",
-                "bar": {
-                    "abc":"works"
-                }
-            }),
-            json!([1, 2, 3]),
-            json!({
-                "x": 1,
-                "y": 1,
-                "z": 1,
-            }),
-        );
-    }
 
     #[test]
     fn json_value_to_string_works() {

@@ -9,6 +9,7 @@ mod providers;
 mod request;
 mod stats;
 mod template;
+mod util;
 mod zip_all;
 
 use std::fs::File;

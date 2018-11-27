@@ -62,8 +62,7 @@ pub enum DeclareProvider {
 impl DeclareProvider {
     pub fn resolve(
                 &self,
-                providers: &BTreeMap<String,
-                providers::Kind>,
+                providers: &BTreeMap<String, providers::Kind>,
                 name: &str,
                 outgoing: &mut Vec<(Select, channel::Sender<JsonValue>)>
         ) -> impl Stream<Item=JsonValue, Error=()>

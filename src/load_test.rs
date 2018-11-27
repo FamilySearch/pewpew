@@ -47,6 +47,8 @@ pub struct LoadTest {
     endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
     // a count of the number of requests in progress (currently not used)
     pub open_requests: Arc<()>,
+    // a mapping of names to their prospective static (single value) providers
+    pub static_providers: BTreeMap<String, JsonValue>,
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Kind>,
     // a mapping of names to their prospective loggers
@@ -62,6 +64,7 @@ impl LoadTest
 {
     pub fn new (config: Config) -> Self {
         let mut providers = BTreeMap::new();
+        let mut static_providers = BTreeMap::new();
 
         let (test_ended_tx, test_ended_rx) = oneshot::channel::<()>();
         let test_ended_rx = test_ended_rx.shared();
@@ -74,10 +77,14 @@ impl LoadTest
                     providers::file(template, test_ended_rx),
                 Provider::Response(template) =>
                     providers::response(template),
-                Provider::Static(StaticProvider::Explicit(template)) =>
-                    providers::literals(vec!(template.value), template.auto_return, test_ended_rx),
-                Provider::Static(StaticProvider::Implicit(value)) =>
-                    providers::literals(vec!(value), None, test_ended_rx),
+                Provider::Static(StaticProvider::Explicit(template)) => {
+                    static_providers.insert(name, template.value);
+                    continue;
+                },
+                Provider::Static(StaticProvider::Implicit(value)) => {
+                    static_providers.insert(name, value);
+                    continue;
+                },
                 Provider::StaticList(StaticListProvider::Explicit(template)) =>
                     providers::literals(template.values, template.auto_return, test_ended_rx),
                 Provider::StaticList(StaticListProvider::Implicit(values)) =>
@@ -154,6 +161,7 @@ impl LoadTest
             open_requests: Arc::new(()),
             loggers,
             providers,
+            static_providers,
             stats_tx,
             test_ended_tx,
             test_timeout,

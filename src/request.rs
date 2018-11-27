@@ -41,6 +41,7 @@ use crate::template::{
     json_value_to_string,
     join_helper,
     stringify_helper,
+    TemplateValues,
     textify,
 };
 use crate::util::{ Either, Either3 };
@@ -48,7 +49,6 @@ use crate::zip_all::zip_all;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ops::{Deref, DerefMut},
     str,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
@@ -158,45 +158,6 @@ enum StreamsReturn {
     TemplateValue((String, JsonValue)),
 }
 
-#[derive(Debug)]
-pub struct TemplateValues(JsonValue);
-
-impl TemplateValues {
-    pub fn new () -> Self {
-        TemplateValues(JsonValue::Object(json::Map::new()))
-    }
-
-    pub fn as_json (&self) -> &JsonValue {
-        &self.0
-    }
-}
-
-impl Deref for TemplateValues {
-    type Target = json::Map<String, JsonValue>;
-
-    fn deref (&self) -> &Self::Target {
-        match &self.0 {
-            JsonValue::Object(o) => o,
-            _ => panic!("cannot deref json value as object")
-        }
-    }
-}
-
-impl DerefMut for TemplateValues {
-    fn deref_mut (&mut self) -> &mut json::Map<String, JsonValue> {
-        match &mut self.0 {
-            JsonValue::Object(o) => o,
-            _ => panic!("cannot deref json value as object")
-        }
-    }
-}
-
-impl From<JsonValue> for TemplateValues {
-    fn from (map: JsonValue) -> Self {
-        TemplateValues(map)
-    }
-}
-
 impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'static{
     pub fn new (uri: String, start_stream: Option<T>) -> Self {
         Builder {
@@ -263,13 +224,13 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         handlebars.register_helper("stringify", Box::new(stringify_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
-        let (uri, provider_names) = textify(self.uri, handlebars.clone(), true);
+        let (uri, provider_names) = textify(self.uri, handlebars.clone(), &ctx.static_providers);
         required_providers.extend(provider_names);
         let headers: Vec<_> = self.headers.into_iter()
             .map(|(k, v)| {
-                let (key, provider_names) = textify(k, handlebars.clone(), true);
+                let (key, provider_names) = textify(k, handlebars.clone(), &ctx.static_providers);
                 required_providers.extend(provider_names);
-                let (value, provider_names) = textify(v, handlebars.clone(), true);
+                let (value, provider_names) = textify(v, handlebars.clone(), &ctx.static_providers);
                 required_providers.extend(provider_names);
                 (key, value)
             }).collect();
@@ -315,7 +276,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 })
         );
         let mut body = if let Some(body) = self.body {
-            let (body, provider_names) = textify(body, handlebars.clone(), true);
+            let (body, provider_names) = textify(body, handlebars.clone(), &ctx.static_providers);
             required_providers.extend(provider_names);
             Some(body)
         } else {

@@ -1,4 +1,5 @@
 # TODOs
+- Get rid of explicit static providers. There's no need to specify auto_return
 - Improve documentation
 - Log connection timeouts, connection errors, etc. to stats
 - Log when a request is waiting for a provider

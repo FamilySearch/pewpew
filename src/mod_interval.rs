@@ -51,7 +51,7 @@ impl LinearBuilder {
     pub fn build (&self, peak_load: &HitsPer) -> ModInterval<LinearScaling> {
         let peak_load = match peak_load {
             HitsPer::Second(n) => f64::from(*n),
-            HitsPer::Minute(n) => f64::from(*n) / f64::from(NANOS_IN_SECOND), 
+            HitsPer::Minute(n) => f64::from(*n) / 60f64, 
         };
         let duration = duration_to_nanos(self.duration);
         ModInterval::new(
@@ -203,7 +203,7 @@ mod tests {
         // scale from 0 to 100% over 30 seconds
         let lb = LinearBuilder::new(0.5f64, 1f64, Duration::from_secs(30));
         // 100% = 12hps
-        let hitsper = HitsPer::Second(12);
+        let hitsper = HitsPer::Minute(720);
         let mod_interval = lb.build(&hitsper);
         // (t, hps) at time t we should be at hps
         let checks = vec!(

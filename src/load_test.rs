@@ -3,9 +3,7 @@ use crate::config::{
     Config,
     LoadPattern,
     Provider,
-    Select,
-    StaticListProvider,
-    StaticProvider
+    Select
 };
 use crate::channel;
 use crate::providers;
@@ -77,17 +75,11 @@ impl LoadTest
                     providers::file(template, test_ended_rx),
                 Provider::Response(template) =>
                     providers::response(template),
-                Provider::Static(StaticProvider::Explicit(template)) => {
-                    static_providers.insert(name.clone(), template.value.clone());
-                    providers::literals(vec!(template.value), template.auto_return, test_ended_rx)
-                },
-                Provider::Static(StaticProvider::Implicit(value)) => {
+                Provider::Static(value) => {
                     static_providers.insert(name.clone(), value.clone());
                     providers::literals(vec!(value), None, test_ended_rx)
                 },
-                Provider::StaticList(StaticListProvider::Explicit(template)) =>
-                    providers::literals(template.values, template.auto_return, test_ended_rx),
-                Provider::StaticList(StaticListProvider::Implicit(values)) =>
+                Provider::StaticList(values) =>
                     providers::literals(values, None, test_ended_rx),
             };
             providers.insert(name, provider);

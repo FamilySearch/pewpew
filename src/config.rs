@@ -65,8 +65,8 @@ impl LoadPattern {
 pub enum Provider {
     File(FileProvider),
     Response(ResponseProvider),
-    Static(StaticProvider),
-    StaticList(StaticListProvider),
+    Static(json::Value),
+    StaticList(Vec<json::Value>),
 }
 
 #[serde(deny_unknown_fields)]
@@ -89,36 +89,6 @@ pub struct ResponseProvider {
     pub auto_return: Option<EndpointProvidesSendOptions>,
     #[serde(default = "Limit::auto")]
     pub buffer: Limit,
-}
-
-#[serde(untagged)]
-#[derive(Deserialize)]
-pub enum StaticProvider {
-    Explicit(StaticProviderExplicit),
-    Implicit(json::Value),
-}
-
-#[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
-pub struct StaticProviderExplicit {
-    #[serde(default)]
-    pub auto_return: Option<EndpointProvidesSendOptions>,
-    pub value: json::Value,
-}
-
-#[serde(untagged)]
-#[derive(Deserialize)]
-pub enum StaticListProvider {
-    Explicit(StaticListProviderExplicit),
-    Implicit(Vec<json::Value>),
-}
-
-#[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
-pub struct StaticListProviderExplicit {
-    #[serde(default)]
-    pub auto_return: Option<EndpointProvidesSendOptions>,
-    pub values: Vec<json::Value>,
 }
 
 #[serde(deny_unknown_fields)]

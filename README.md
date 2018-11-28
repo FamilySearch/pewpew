@@ -104,27 +104,27 @@ Example:
 providers:
   - session:
     - endpoint:
-      - auto_return: force
+        auto_return: force
   - username:
     - file:
       path: "usernames.csv"
       repeat: true
 ```
-
-Every *provider_type*, except `static` and `static-list`, supports the following two optional parameters:
-- **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [provides section](#provides) for details on the effect of these options.
-- **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
-
-There are four *provider_type*s:
+There are five *provider_type*s:
 
 #### file
 The `file` *provider_type* reads data from a file. Every line in the file is read as a value. In the future, the ability to specify the format of the data (csv, json, etc) may be implemented. A `file` provider has the following parameters:
 
-- **path** - A string value indicating the path to the file on the file system. Currently, a relative path is interpreted as being relative to the current working directory where `pewpew` was executed from. In the future this may be changed to be relative to the location of the config file.
-- **repeat** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` indicates when the provider `file` provider gets to the end of the file it should start back at the beginning. Defaults to `false`.
+- **`path`** - A string value indicating the path to the file on the file system. Currently, a relative path is interpreted as being relative to the current working directory where `pewpew` was executed from. In the future this may be changed to be relative to the location of the config file.
+- **`repeat`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` indicates when the provider `file` provider gets to the end of the file it should start back at the beginning. Defaults to `false`.
+- **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [provides section](#provides) for details on the effect of these options.
+- **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
 
 #### response
-Unlike other *provider_type*s `response` does not automatically receive data from a source. Instead a `response` provider is available to be a "sink" for data originating from an HTTP response. The `response` provider has no additional parameters beyond `auto_return` and `buffer`.
+Unlike other *provider_type*s `response` does not automatically receive data from a source. Instead a `response` provider is available to be a "sink" for data originating from an HTTP response. The `response` provider has the following parameters.
+
+- **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [provides section](#provides) for details on the effect of these options.
+- **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
 
 #### static
 The `static` *provider_type* is used for having a single pre-defined value used throughout a test. A `static` provider will make copies of the value every time a value is required from the provider. When defining a `static` provider the only parameter is the literal value which should be used.
@@ -164,6 +164,9 @@ providers:
 ```
 
 creates a `static_list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
+
+#### environment
+The `environment` *provider_type* behaves exactly like the `static` *provider_type* except the value comes from an environment variable. The value coming from the referenced environment variable will be parsed as JSON if possible, otherwise it will be a string.
 
 ### loggers <sub><sup>*Optional*</sup></sub>
 ---

@@ -75,7 +75,7 @@ impl LoadTest
                     providers::file(template, test_ended_rx),
                 Provider::Response(template) =>
                     providers::response(template),
-                Provider::Static(value) => {
+                Provider::Static(value) | Provider::Environment(value) => {
                     static_providers.insert(name.clone(), value.clone());
                     providers::literals(vec!(value), None, test_ended_rx)
                 },

@@ -28,6 +28,7 @@ use tuple_vec_map;
 
 use std::{
     collections::BTreeMap,
+    env,
     time::Duration,
 };
 
@@ -64,6 +65,8 @@ impl LoadPattern {
 #[derive(Deserialize)]
 pub enum Provider {
     File(FileProvider),
+    #[serde(deserialize_with = "deserialize_environment")]
+    Environment(json::Value),
     Response(ResponseProvider),
     Static(json::Value),
     StaticList(Vec<json::Value>),
@@ -304,6 +307,19 @@ impl<'de> Deserialize<'de> for Limit {
             Ok(Limit::Integer(n))
         }
     }
+}
+
+fn deserialize_environment<'de, D>(deserializer: D) -> Result<json::Value, D::Error>
+    where D: Deserializer<'de>
+{
+    let var = String::deserialize(deserializer)?;
+    let value = env::var(var)
+        .map_err(DeError::custom)
+        .map(|s|
+            json::from_str(&s)
+                .unwrap_or_else(|_e| json::Value::String(s))
+        )?;
+    Ok(value)
 }
 
 fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>

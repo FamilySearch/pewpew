@@ -270,9 +270,9 @@ Providers can be referenced within an endpoint's `url` parameter (though current
 In addition to simply referencing a provider, the following helper functions can also be used within curly braces:
 
 Helper | Description
-- | -
-`epoch()` | Returns the number of milliseconds since the unix epoch
-<code>join(*array*, *seperator*)</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, if we have a value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join(qux, "-")}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+--- | ---
+<code>epoch *unit*</code>| Returns time since the unix epoch. *unit* is either `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds). Quotes are required for the unit.
+<code>join *array*  *seperator*</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, if we have a value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
 
 #### declare
 <pre>

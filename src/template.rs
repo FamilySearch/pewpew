@@ -115,7 +115,9 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
             },
             TemplateElement::HelperExpression(ref helper) if !helper.block => {
                 match (helper.name.as_ref(), helper.params.as_slice()) {
-                    ("epoch", []) => (),
+                    ("epoch", [Parameter::Literal(json::Value::String(s))]) if s == "s" || s == "ms" || s == "mu" || s == "ns" => {
+                        string2 = None;
+                    },
                     ("join", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))]) => {
                         if let Some(json) = static_providers.get(param_name) {
                             let mut t = Template::new(false);
@@ -163,13 +165,18 @@ pub fn stringify_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut
     Ok(())
 }
 
-pub fn epoch_helper(_: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
+pub fn epoch_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
-    let in_ms = since_the_epoch.as_secs() * 1000 +
-        u64::from(since_the_epoch.subsec_nanos()) / 1_000_000;
-    out.write(&in_ms.to_string())?;
+    let n = match h.param(0).expect("missing epoch param").value().as_str() {
+        Some("s") =>  u128::from(since_the_epoch.as_secs()),
+        Some("ms") => since_the_epoch.as_millis(),
+        Some("mu") => since_the_epoch.as_micros(),
+        Some("ns") => since_the_epoch.as_nanos(),
+        _ => unreachable!("epoch parameter should always be 's', 'ms', 'mu', or 'ns'")
+    };
+    out.write(&n.to_string())?;
     Ok(())
 }
 
@@ -241,16 +248,21 @@ mod tests {
     fn static_replacement() {
         let mut handlebars = Handlebars::new();
         handlebars.register_helper("join", Box::new(join_helper));
+        handlebars.register_helper("epoch", Box::new(epoch_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
         let template_values = TemplateValues::new();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)
+            .expect("Time went backwards").as_secs();
+        let epoch_string = format!("epoch {}", now / 100);
 
-        let checks: Vec<(&str, json::Value, &str)> = vec!(
-            ("foo{{bar}}", json::json!({"bar": "bar"}), "foobar"),
-            (r#"{{join bar ","}}"#, json::json!({"bar": [1, 2, 3]}), "1,2,3"),
+        let checks = vec!(
+            ("foo{{bar}}", json::json!({"bar": "bar"}), "foobar", false),
+            (r#"epoch {{epoch "s"}}"#, json::json!({}), &epoch_string, true),
+            (r#"{{join bar ","}}"#, json::json!({"bar": [1, 2, 3]}), "1,2,3", false),
         );
 
-        for (i, (template, j, expect)) in checks.into_iter().enumerate() {
+        for (i, (template, j, expect, starts_with)) in checks.into_iter().enumerate() {
             let b = if let json::Value::Object(map) = j {
                 map.into_iter().collect()
             } else {
@@ -258,7 +270,12 @@ mod tests {
             };
             let (template, providers) = textify(template.to_string(), handlebars.clone(), &b);
             assert!(providers.is_empty(), "index {}", i);
-            assert_eq!(template(&template_values), expect, "index {}", i);
+            let left = template(&template_values);
+            if starts_with {
+                assert!(json_value_to_string(&left).starts_with(expect), "index {}, left {} == right {}", i, left, expect);
+            } else {
+                assert_eq!(left, expect, "index {}", i);
+            }
         }
     }
 }

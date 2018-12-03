@@ -1,4 +1,4 @@
-#![feature(drain_filter, no_more_cas, pin)]
+#![feature(drain_filter, no_more_cas, duration_as_u128)]
 
 mod channel;
 mod config;

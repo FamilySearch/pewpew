@@ -343,7 +343,7 @@ Sending data to a provider is done with a SQL-like syntax.
   A `where` expression can be as simple as `response.status == 200` or more complex expressions can be formed using `&&` (boolean and), `||` (boolean or) and parenthesis to group sub-expressions. The following comparison operators are available:
 
   Operator | Description
-  - | - 
+  --- | --- 
   `==` | Equal. Check that two values are equal to each other
   `!=` | Not equal. Check that two values are not equal to each other
   `>` | Greater than. Check that the left value is greater than the right
@@ -361,7 +361,7 @@ Sending data to a provider is done with a SQL-like syntax.
 While boolean style expressions are especially useful in a `where` expression they can be used in `select` and `for_each` expressions as well. Additionally there are special functions which are especially helpful in a `for_each` expression but can be used elsewhere.
 
 Function | Description
-- | -
+--- | ---
 <code>json_path(*query*)</code> | Provides the ability to execute a json path expression against an object and returns an array of values. The query must be quoted. Example: `json_path("response.body.ships.*.ids")`
 <code>repeat(*n*)</code> | Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times. Example: `repeat(10)`
 

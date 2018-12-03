@@ -449,25 +449,26 @@ impl ParsedSelect {
     }
 }
 
-pub const REQUEST_STARTLINE: u8 = 0b000_100;
-pub const REQUEST_HEADERS: u8 = 0b000_010;
-pub const REQUEST_BODY: u8 = 0b000_001;
+pub const REQUEST_STARTLINE: u8 = 0b0_000_100;
+pub const REQUEST_HEADERS: u8 = 0b0_000_010;
+pub const REQUEST_BODY: u8 = 0b0_000_001;
 const REQUEST_ALL: u8 = REQUEST_STARTLINE | REQUEST_HEADERS | REQUEST_BODY;
-pub const RESPONSE_STARTLINE: u8 = 0b100_000;
-pub const RESPONSE_HEADERS: u8 = 0b010_000;
-pub const RESPONSE_BODY: u8 = 0b001_000;
+pub const RESPONSE_STARTLINE: u8 = 0b0_100_000;
+pub const RESPONSE_HEADERS: u8 = 0b0_010_000;
+pub const RESPONSE_BODY: u8 = 0b0_001_000;
 const RESPONSE_ALL: u8 = RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_BODY;
+const FOR_EACH: u8 = 0b1_000_000;
 
 #[derive(Clone, Parser)]
 #[grammar = "config/select.pest"]
 pub struct Select {
     join: Vec<Value>,
     providers: BTreeSet<String>,
-    rr_providers: u8,
+    special_providers: u8,
     send_behavior: EndpointProvidesSendOptions,
     select: ParsedSelect,
     where_clause: Option<ComplexExpression>,
-    where_rr_providers: u8,
+    where_clause_special_providers: u8,
 }
 
 fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>, bitwise: &mut u8) {
@@ -482,6 +483,7 @@ fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>,
             "response.body" => *bitwise |= RESPONSE_BODY,
             "response" => *bitwise |= RESPONSE_ALL,
             "response.status" => (),
+            "for_each" => *bitwise |= FOR_EACH,
             _ => { outgoing.insert(provider); }
         }
     }
@@ -490,7 +492,7 @@ fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>,
 impl Select {
     pub(super) fn new(provides: EndpointProvidesPreProcessed) -> Self {
         let mut providers = BTreeSet::new();
-        let mut rr_providers = 0;
+        let mut special_providers = 0;
         let join: Vec<_> = provides.for_each.iter().map(|s| {
             let pairs = Select::parse(Rule::value_entry, s).unwrap();
             let v = parse_value(pairs);
@@ -498,29 +500,29 @@ impl Select {
             if p.contains("for_each") {
                 panic!("cannot reference `for_each` from within `for_each`");
             }
-            providers_helper(p, &mut providers, &mut rr_providers);
+            providers_helper(p, &mut providers, &mut special_providers);
             v
         }).collect();
-        let mut where_rr_providers = 0;
+        let mut where_clause_special_providers = 0;
         let where_clause = provides.where_clause.as_ref().map(|s| {
             let pairs = Select::parse(Rule::where_entry, s).unwrap();
             let ce = parse_complex_expression(pairs);
             let p = ce.get_providers();
-            providers_helper(p, &mut providers, &mut where_rr_providers);
+            providers_helper(p, &mut providers, &mut where_clause_special_providers);
             ce
         });
-        rr_providers |= where_rr_providers;
+        special_providers |= where_clause_special_providers;
         let select = parse_select(provides.select);
         let p = select.get_providers();
-        providers_helper(p, &mut providers, &mut rr_providers);
+        providers_helper(p, &mut providers, &mut special_providers);
         Select {
             join,
             providers,
-            rr_providers,
+            special_providers,
             select,
             send_behavior: provides.send,
             where_clause,
-            where_rr_providers,
+            where_clause_special_providers,
         }
     }
 
@@ -528,16 +530,16 @@ impl Select {
         &self.providers
     }
 
-    pub fn get_rr_providers(&self) -> u8 {
-        self.rr_providers
+    pub fn get_special_providers(&self) -> u8 {
+        self.special_providers
     }
 
     pub fn get_send_behavior(&self) -> &EndpointProvidesSendOptions {
         &self.send_behavior
     }
 
-    pub fn get_where_rr_providers(&self) -> u8 {
-        self.where_rr_providers
+    pub fn get_where_clause_special_providers(&self) -> u8 {
+        self.where_clause_special_providers
     }
 
     pub fn execute_where(&self, d: &json::Value) -> bool {
@@ -557,7 +559,7 @@ impl Select {
                 EitherThreeIterator::A(iter::once(self.select.evaluate(&d)))
             }
         } else {
-            let references_for_each = self.providers.contains("for_each");
+            let references_for_each = self.special_providers & FOR_EACH != 0;
             let where_clause = self.where_clause.clone();
             let select = self.select.clone();
             EitherThreeIterator::C(self.join.iter()
@@ -831,7 +833,7 @@ mod tests {
 
     #[test]
     fn get_providers() {
-        // (select json, where clause, expected providers returned from `get_providers`, expected providers in `get_rr_providers`)
+        // (select json, where clause, expected providers returned from `get_providers`, expected providers in `get_special_providers`)
         let check_table = vec!(
             (json!(4), None, vec!(), 0),
             (json!("c[0].d"), None, vec!("c"), 0),
@@ -843,6 +845,7 @@ mod tests {
             (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
             (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
             (json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
+            (json!(r#"for_each[0]"#), None, vec!(), FOR_EACH),
             (
                 json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
                 None,
@@ -858,7 +861,7 @@ mod tests {
                 create_select(json!({ "select": select }))
             };
             let providers: Vec<_> = std::iter::FromIterator::from_iter(s.get_providers());
-            let rr_providers = s.get_rr_providers();
+            let rr_providers = s.get_special_providers();
             assert_eq!(providers, providers_expect, "index {}", i);
             assert_eq!(rr_providers, rr_expect, "index {}", i);
         }

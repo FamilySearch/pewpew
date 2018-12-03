@@ -246,8 +246,8 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
                 limits.push(tx.limit());
             }
-            rr_providers |= v.get_rr_providers();
-            precheck_rr_providers |= v.get_where_rr_providers();
+            rr_providers |= v.get_special_providers();
+            precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
             outgoing.push((v, tx));
         }
@@ -256,8 +256,8 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             if select.is_some() {
                 panic!("endpoint cannot explicitly log to global logger `{}`", k);
             }
-            rr_providers |= v.get_rr_providers();
-            precheck_rr_providers |= v.get_where_rr_providers();
+            rr_providers |= v.get_special_providers();
+            precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
             outgoing.push((v, tx.clone()));
         }
@@ -266,8 +266,8 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 .filter_map(|(tx, select)| {
                     if let Some(select) = select {
                         required_providers.extend(select.get_providers().clone());
-                        rr_providers |= select.get_rr_providers();
-                        precheck_rr_providers |= select.get_where_rr_providers();
+                        rr_providers |= select.get_special_providers();
+                        precheck_rr_providers |= select.get_where_clause_special_providers();
                         Some((select.clone(), tx.clone()))
                     } else {
                         None
@@ -445,9 +445,9 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                         &response
                     );
                     let included_outgoing_indexes: Vec<_> = outgoing.iter().enumerate().filter_map(|(i, (select, _))| {
-                        if select.get_where_rr_providers() & RESPONSE_BODY == RESPONSE_BODY || select.execute_where(template_values.as_json()) {
+                        if select.get_where_clause_special_providers() & RESPONSE_BODY == RESPONSE_BODY || select.execute_where(template_values.as_json()) {
                             handle_response_requirements(
-                                select.get_rr_providers(),
+                                select.get_special_providers(),
                                 &mut response_fields_added,
                                 template_values.get_mut("response").unwrap().as_object_mut().unwrap(),
                                 &response

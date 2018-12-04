@@ -79,7 +79,7 @@ impl LinearScaling {
         let b = peak_load * start_percent;
         let m = (end_percent * peak_load - b) / duration;
         // find y where y = 0.5x
-        let max_y = if m > 0.0 {
+        let max_y = if m >= 0.0 {
             (-b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m)
         } else {
             -((b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m))
@@ -164,7 +164,7 @@ impl<T> Stream for ModInterval<T> where T: ScaleFn + Send {
 
         // set the next delay
         self.delay.reset(next_deadline);
-
+        
         // Return the current instant
         Ok(Some(deadline).into())
     }
@@ -231,6 +231,24 @@ mod tests {
                     (21_600.0, 0.5),
                     (32_400.0, 0.25),
                     (43_200.0, 0.000_023),
+                )
+            ),
+            (
+                1.0, 1.0, 60, HitsPer::Second(10),
+                vec!(
+                    (0.0, 10.0),
+                    (15.0, 10.0),
+                    (30.0, 10.0),
+                    (60.0, 10.0),
+                )
+            ),
+            (
+                0.5, 0.5, 60, HitsPer::Second(10),
+                vec!(
+                    (0.0, 5.0),
+                    (15.0, 5.0),
+                    (30.0, 5.0),
+                    (60.0, 5.0),
                 )
             ),
         );

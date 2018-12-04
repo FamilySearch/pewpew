@@ -180,7 +180,7 @@ fn f64_value(json: &json::Value) -> f64 {
 
 type Not = bool;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Value {
     JsonPath(Not, JsonPath),
     JsonValue(Not, json::Value),
@@ -213,13 +213,25 @@ impl Value {
         match self {
             Value::JsonPath(not, path) => {
                 let not = *not;
-                EitherThreeIterator::A(path.evaluate(d).map(move |v| {
-                    if not {
-                        json::Value::Bool(!bool_value(&v))
-                    } else {
-                        v
-                    }
-                }))
+                EitherThreeIterator::A(
+                    iter::Iterator::flatten(
+                        path.evaluate(d)
+                            .map(|v| {
+                                if let json::Value::Array(v) = v {
+                                    EitherTwoIterator::A(v.into_iter())
+                                } else {
+                                    EitherTwoIterator::B(iter::once(v))
+                                }
+                            })
+                    )
+                    .map(move |v| {
+                        if not {
+                            json::Value::Bool(!bool_value(&v))
+                        } else {
+                            v
+                        }
+                    })
+                )
             },
             Value::JsonValue(not, value) => {
                 let value = if *not {
@@ -973,6 +985,7 @@ mod tests {
         let check_table = vec!(
             (json!("a"), vec!("repeat(5)"), vec!(json!(3), json!(3), json!(3), json!(3), json!(3))),
             (json!("for_each[0]"), vec!(r#"json_path("c.*.d")"#), vec!(json!(1), json!(2), json!(3))),
+            (json!("for_each[0]"), vec!("c"), vec!(json!({ "d": 1 }), json!({ "d": 2 }), json!({ "d": 3 }))),
             (
                 json!("for_each[1]"),
                 vec!("repeat(2)", r#"json_path("c.*.d")"#),

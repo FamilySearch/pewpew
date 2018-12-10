@@ -2,7 +2,7 @@ use futures::{
     Poll,
     Stream,
 };
-
+use serde_json as json;
 use tokio::prelude::*;
 
 use std::{
@@ -89,4 +89,8 @@ impl<A, B, C> Stream for Either3<A, B, C>
             Either3::C(ref mut e) => e.poll(),
         }
     }
+}
+
+pub fn str_to_json(s: &str) -> json::Value {
+    json::from_str(s).unwrap_or_else(|_| json::Value::String(s.into()))
 }

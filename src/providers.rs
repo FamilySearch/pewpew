@@ -1,23 +1,34 @@
+mod csv_reader;
+mod json_reader;
+mod line_reader;
+
+use self::{
+    csv_reader::CsvReader,
+    json_reader::JsonReader,
+    line_reader::LineReader,
+};
+
 use crate::channel::{
     self,
     Limit,
 };
 use crate::config;
+use crate::util::Either3;
+
 use futures::{
     future::Shared,
     Future,
+    stream,
     Stream
 };
 use serde_json as json;
 use tokio::{
     fs::File as TokioFile,
-    io::{lines, Read},
     prelude::*,
 };
+use tokio_threadpool::blocking;
 
-use std::{
-    io::{BufReader, Error as IOError, SeekFrom}
-};
+use std::io;
 
 pub enum Kind {
     Body(Provider<channel::Receiver<Vec<u8>>>),
@@ -30,49 +41,28 @@ pub struct Provider<T> {
     pub rx: channel::Receiver<T>,
 }
 
-struct RecurrableFile {
-    inner: TokioFile,
-    repeat: bool,
-}
-
-impl Read for RecurrableFile {
-    fn read(&mut self, mut buf: &mut [u8]) -> Result<usize, IOError> {
-        let mut n = self.inner.read(buf)?;
-        // EOF
-        if n == 0 && self.repeat {
-            // seek back to the beginning of the file and write a newline to the buffer
-            self.inner.poll_seek(SeekFrom::Start(0))?;
-            n = buf.write(&[b'\n'])?;
-        }
-        Ok(n)
-    }
-}
-
-impl AsyncRead for RecurrableFile {}
-
 pub fn file<F>(template: config::FileProvider, test_complete: Shared<F>) -> Kind
     where F: Future + Send + 'static,
         <F as Future>::Error: Send + Sync,
         <F as Future>::Item: Send + Sync,
 {
+    let stream = match template.format {
+        config::FileFormat::Csv => Either3::A(CsvReader::new(&template).expect("error creating file reader").into_stream()),
+        config::FileFormat::Json => Either3::B(JsonReader::new(&template).expect("error creating file reader").into_stream()),
+        config::FileFormat::Line => Either3::C(LineReader::new(&template).expect("error creating file reader").into_stream()),
+    };
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
-    let repeat = template.repeat;
-    let prime_tx = TokioFile::open(template.path)
-        .map_err(|e| panic!("error opening file {}", e))
-        .and_then(move |file| {
-            lines(BufReader::new(RecurrableFile { inner: file, repeat }))
-                .filter(|s| !s.is_empty())
-                .map(json::Value::String)
-                .map_err(|e| {
-                    panic!("error reading file {}", e)
-                })
-                .forward(tx2)
-                // Error propagate here when sender channel closes at test conclusion
-                .then(|_ok| Ok(()))
-        })
+    let prime_tx = stream
+        .map_err(|e| println!("file reading error: {}", e))
+        .forward(tx2)
+        // Error propagate here when sender channel closes at test conclusion
+        // .then(|_v| Ok(()))
+        .map(|_| ())
+        .map_err(|_| ())
         .select(test_complete.then(|_| Ok(())))
         .then(|_| Ok(()));
+
     tokio::spawn(prime_tx);
     Kind::Value(Provider { auto_return: template.auto_return, rx, tx })
 }
@@ -195,4 +185,14 @@ pub fn logger<F>(template: &config::Logger, test_complete: F) -> channel::Sender
         }
     }
     tx
+}
+
+fn into_stream<I: Iterator<Item=Result<json::Value, io::Error>>>(mut iter: I)
+    -> impl Stream<Item = json::Value, Error = io::Error>    
+{
+    stream::poll_fn(move || {
+            blocking(|| iter.next())
+        })
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        .and_then(|r| r)
 }

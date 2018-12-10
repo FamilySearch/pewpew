@@ -119,6 +119,138 @@ The `file` *provider_type* reads data from a file. Every line in the file is rea
 - **`repeat`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` indicates when the provider `file` provider gets to the end of the file it should start back at the beginning. Defaults to `false`.
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [provides section](#provides) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
+- **`format`** <sub><sup>*Optional*</sup></sub> - Specifies the format for the file. The format can be one of `line` (the default), `json`, or `csv`.
+  
+  The `line` format will read the file one line at a time with each line ending in a newline (`\n`) or a carriage return and a newline (`\r\n`). Every line will attempt to be parsed as JSON, but if it is not valid JSON it will be a string. Note that a JSON object which spans multiple lines in the file, for example, will not parse into a single object.
+
+  The `json` format will read the file as a stream of JSON values. Every JSON value must be self-delineating (an object, array or string), or must be separated by whitespace or a self-delineating value. For example, the following:
+
+  ```json
+  {"a":1}{"foo":"bar"}47[1,2,3]"some text"true 56
+  ```
+
+  Would parse into separate JSON values of `{"a": 1}`, `{"foo": "bar"}`, `47`, `[1, 2, 3]`, `"some text"`, `true`, and `56`.
+
+  The `csv` format will read the file as a CSV file. Every non-header column will attempt to be parsed as JSON, but if it is not valid JSON it will be a string. The `csv` parameter allows customization over how the file should be parsed.
+- **`csv`** <sub><sup>*Optional*</sup></sub> - When parsing a file using the `csv` format, this parameter provides extra customization on how the file should be parsed. This parameter is in the format of an object with key/value pairs. If the format is not `csv` and this property is provided, it will be ignored.
+  The following sub-parameters are available:
+
+  <table>
+  <thead>
+  <th>Sub-parameter</th>
+  <th>Description</th>
+  </thead>
+  <tbody>
+  <tr>
+  <td>
+
+  comment <sub><sup>*Optional*</sup></sub>
+
+  </td>
+  <td>
+
+  Specifies a single-byte character which will mark a CSV record as a comment (ex. `#`). When not specified, no character is treated as a comment.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  delimiter <sub><sup>*Optional*</sup></sub>
+  </td>
+  <td>
+
+  Specifies a single-byte character used to separate columns in a record. Defaults to comma (`,`).
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  double_quote <sub><sup>*Optional*</sup></sub>
+
+  </td>
+  <td>
+
+  A boolean that when enabled makes it so two quote characters can be used to escape quotes within a column. Defaults to `true`.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  escape <sub><sup>*Optional*</sup></sub>
+
+  </td>
+  <td>
+
+  Specifies a single-byte character which will be used to escape nested quote characters (ex. `\`). When not specified, escapes are disabled.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  headers <sub><sup>*Optional*</sup></sub>
+
+  </td>
+  <td>
+
+  Specifies a single-byte character which will be used to escape nested quote characters (ex. `\`). When not specified, escapes are disabled.
+
+  Can be either a boolean value or a string. When a boolean, it indicates whether the first row in the file should be interpreted as column headers. When a string, the specified string is interpreted as a CSV record which is used for the column headers.
+
+  When headers are specified, each record served from the file will use the headers as keys for each column. When no headers are specified (the default), then each record will be returned as an array of values.
+
+  For example, with the following CSV file:
+
+  ```csv
+  id,name
+  0,Fred
+  1,Wilma
+  2,Pebbles
+  ```
+
+  If `headers` was `true` than the following values would be provided (shown in JSON syntax): `{"id": 0, name: "Fred"}`, `{"id": 1, name: "Wilma"}`, and `{"id": 3, name: "Pebbles"}`.
+
+  If `headers` was `false` than the following values would be provided: `[0, "Fred"]`, `[1, "Wilma"]`, and `[2, "Pebbles"]`.
+
+  If `headers` was `foo,bar` than the following values would be provided: `{"foo": "id", "bar": "name"}`, `{"foo": 0, "bar": "Fred"}`, `{"foo": 1, "bar": "Wilma"}`, and `{"foo": 3, "bar": "Pebbles"}`.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  terminator <sub><sup>*Optional*</sup></sub>
+
+  </td>
+  <td>
+
+  Specifies a single-byte character used to terminate each record in the CSV file. Defaults to a special value where `\r`, `\n`, and `\r\n` are all accepted as terminators.
+
+  When specified, pewpew becomes self-aware, unfolding a series of events which will ultimately lead to the end of the human race.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+
+  quote <sub><sup>*Optional*</sup></sub>
+  
+  </td>
+  <td>
+
+  Specifies a single-byte character that will be used to quote CSV columns. Defaults to the double-quote character (`"`).
+  
+  </td>
+  </tr>
+  </tbody>
+  </table>
+
+- **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that each record in the file should be returned in random order. Defaults to `false`.
+
+  When used with `repeat` set to `true` there is no sense of "fairness" in the randomization. Any record in the file could be used more than once before other records are used.
 
 #### response
 Unlike other *provider_type*s `response` does not automatically receive data from a source. Instead a `response` provider is available to be a "sink" for data originating from an HTTP response. The `response` provider has the following parameters.
@@ -272,7 +404,7 @@ In addition to simply referencing a provider, the following helper functions can
 Helper | Description
 --- | ---
 <code>epoch *unit*</code>| Returns time since the unix epoch. *unit* is either `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds). Quotes are required for the unit.
-<code>join *array*  *seperator*</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, if we have a value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+<code>join *array*  *seperator*</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, the value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
 
 #### declare
 <pre>
@@ -366,13 +498,13 @@ Function | Description
 <code>repeat(*n*)</code> | Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times. Example: `repeat(10)`
 
 ##### Example 1
-If we have an HTTP response with the following body
+With an HTTP response with the following body
 
 ```json
 { "session": "abc123" }
 ```
 
-and our provides section is defined as:
+and a provides section defined as:
 
 ```yaml
 provides:
@@ -384,7 +516,7 @@ provides:
 the `session` provider would be given the value `"abc123"` if the status code was less than 400 otherwise nothing would be sent to the `session` provider.
 
 ##### Example 2
-If we have an HTTP response with the following body:
+With an HTTP response with the following body:
 
 ```json
 {

@@ -21,6 +21,12 @@ pub enum Limit {
     Integer(usize),
 }
 
+impl Default for Limit {
+    fn default() -> Self {
+        Limit::auto()
+    }
+}
+
 impl Limit {
     pub fn auto() -> Limit {
         Limit::Auto(Arc::new(AtomicUsize::new(5)))

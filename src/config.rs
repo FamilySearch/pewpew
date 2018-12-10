@@ -72,15 +72,67 @@ pub enum Provider {
     StaticList(Vec<json::Value>),
 }
 
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
+pub enum FileFormat {
+    Csv,
+    Json,
+    Line,
+}
+
+impl Default for FileFormat {
+    fn default() -> Self {
+        FileFormat::Line
+    }
+}
+
+#[serde(untagged)]
+#[derive(Deserialize)]
+pub enum CsvHeader {
+    Bool(bool),
+    String(String)
+}
+
+impl Default for CsvHeader {
+    fn default() -> Self {
+        CsvHeader::Bool(false)
+    }
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Default, Deserialize)]
+pub struct CsvSettings {
+    #[serde(default, deserialize_with = "deserialize_option_char")]
+    pub comment: Option<u8>,
+    #[serde(default, deserialize_with = "deserialize_option_char")]
+    pub delimiter: Option<u8>,
+    #[serde(default)]
+    pub double_quote: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_option_char")]
+    pub escape: Option<u8>,
+    #[serde(default)]
+    pub headers: CsvHeader,
+    #[serde(default, deserialize_with = "deserialize_option_char")]
+    pub terminator: Option<u8>,
+    #[serde(default, deserialize_with = "deserialize_option_char")]
+    pub quote: Option<u8>,
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Default, Deserialize)]
 pub struct FileProvider {
     #[serde(default)]
+    pub csv: CsvSettings,
+    #[serde(default)]
     pub auto_return: Option<EndpointProvidesSendOptions>,
-    #[serde(default = "Limit::auto")]
+    #[serde(default)]
     // range 1-65535
     pub buffer: Limit,
+    #[serde(default)]
+    pub format: FileFormat,
     pub path: String,
+    #[serde(default)]
+    pub random: bool,
     #[serde(default)]
     pub repeat: bool,
 }
@@ -90,7 +142,7 @@ pub struct FileProvider {
 pub struct ResponseProvider {
     #[serde(default)]
     pub auto_return: Option<EndpointProvidesSendOptions>,
-    #[serde(default = "Limit::auto")]
+    #[serde(default)]
     pub buffer: Limit,
 }
 
@@ -307,6 +359,24 @@ impl<'de> Deserialize<'de> for Limit {
             Ok(Limit::Integer(n))
         }
     }
+}
+
+fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
+    where D: Deserializer<'de>
+{
+    let c: Option<char> = Option::deserialize(deserializer)?;
+    let c = if let Some(c) = c {
+        if c.is_ascii() {
+            let mut b = [0; 1];
+            let _ = c.encode_utf8(&mut b);
+            Some(b[0])
+        } else {
+            return Err(DeError::invalid_value(Unexpected::Char(c), &"a single-byte character"))
+        }
+    } else {
+        None
+    };
+    Ok(c)
 }
 
 fn deserialize_environment<'de, D>(deserializer: D) -> Result<json::Value, D::Error>

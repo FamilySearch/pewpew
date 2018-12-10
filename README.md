@@ -397,7 +397,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
 
 #### Referencing Providers
-Providers can be referenced within an endpoint's `url` parameter (though currently not permitted as part of the domain), in the `headers` parameter in a value, in the `declare` parameter in a value, or within the `body` parameter. This is done by enclosing the name of a provider within double curly braces. For example, a `url` parameter of `https://localhost/robot/{{robotId}}` would interpolate a value from the provider `robotId` into the last path segment of the url.
+Providers can be referenced within an endpoint's `url` parameter, in the `headers` parameter in a value, in the `declare` parameter in a value, or within the `body` parameter. This is done by enclosing the name of a provider within double curly braces. For example, a `url` parameter of `https://localhost/robot/{{robotId}}` would interpolate a value from the provider `robotId` into the last path segment of the url.
 
 In addition to simply referencing a provider, the following helper functions can also be used within curly braces:
 

@@ -5,6 +5,23 @@
 3) Execute your test from the command line with `./pewpew loadtest.yaml` (Linux) or `pewpew.exe loadtest.yaml` (Windows).
 4) View the results using the viewer (found in the [pewpew-results-viewer/dist/](../pewpew-results-viewer/dist)) by opening index.html from your local machine in your browser and dragging the results file onto the page, or by using the file selector button.
 
+## Linux tuning
+To get maximum throughput on Linux consider the following tweaks. (These have been tested in Ubuntu 18.04 and may be different in other distributions).
+
+Append the following to `/etc/sysctl.conf`:
+
+```
+fs.file-max = 999999
+net.ipv4.tcp_rmem = 4096 4096 16777216
+net.ipv4.tcp_wmem = 4096 4096 16777216
+net.ipv4.ip_local_port_range = 1024 65535
+```
+
+Append the following to `/etc/security/limits.conf`:
+```
+*               -       nofile         999999
+```
+
 ## Config file
 The pewpew executable requires a single parameter specifying the path to a load test config file. A config file is yaml with a particular schema. Here's a simple example:
 

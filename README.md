@@ -154,8 +154,10 @@ The `file` *provider_type* reads data from a file. Every line in the file is rea
 
   <table>
   <thead>
+  <tr>
   <th>Sub-parameter</th>
   <th>Description</th>
+  </tr>
   </thead>
   <tbody>
   <tr>
@@ -418,12 +420,95 @@ Providers can be referenced within an endpoint's `url` parameter, in the `header
 
 In addition to simply referencing a provider, the following helper functions can also be used within curly braces:
 
-Helper | Description
---- | ---
-<code>epoch *unit*</code>| Returns time since the unix epoch. *unit* is either `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds). Quotes are required for the unit.
-<code>join *array*  *seperator*</code> | Turns an array of values into a string.<br/><br/>*array* - a reference to a provider value or one of its properties which is an array<br/>*seperator* - a quoted string which will be used between each element in the array<br/><br/> For example, the value (`["foo", "bar", "baz"]`) from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
-<code>start_pad (*string* &#124; *number*) *number* *string*</code> | Pads a string or number to be minimum length. Any added padding will be added to the start of the string.<br/><br/>*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number<br/>*number* - the minimum length the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it<br/>*string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
-<code>end_pad (*string* &#124; *number*) *number* *string*</code> | Pads a string or number to be minimum length. Any added padding will be added to the end of the string.<br/><br/>*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number<br/>*number* - the minimum length the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it<br/>*string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>encode *string* *encoding*</code>
+</td>
+<td>
+
+Encode a string with the given encoding.
+
+*string* - a reference to a provider value or one of its properties which is a string.<br/>
+*encoding* - The encoding to be used. Encoding must be one of the following (quotes are necessary):
+- `"percent"` - Percent encodes every character included in `"percent-query"` as well as  backtick (`` ` ``), question mark (`?`) and curly braces (`{` and `}`).
+- `"percent-path"` - Percent encodes every character included in `"percent"` as well as percent (`%`) and forward slash (`/`).
+- `"percent-query"` - Percent encodes every character included in `"percent-simple"` as well as space (` `), double quote (`"`), hash (`#`) and inequality qualifiers (`>` and `<`).
+- `"percent-simple"` - Percent encode every ASCII character less than hexidecimal 20 and greater than 7E.
+- `"percent-userinfo"` - Percent encodes every character included in `"percent-path"` as well as colon (`:`), semi-colon (`;`), equality (`=`), at (`@`), backslash (`\`), square brackets (`[` and `]`), caret (`^`), and pipe (`|`)
+
+**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{start_pad foo 6 "0"}}` would resolve to `id=000083`;
+
+</td>
+</tr>
+<tr>
+<td>
+<code>epoch *unit*</code>
+</td>
+<td>
+
+Returns time since the unix epoch.
+
+*unit* - one of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds). Quotes are required for the unit.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>join *array*  *seperator*</code>
+</td>
+<td>
+
+Turns an array of values into a string.
+
+*array* - a reference to a provider value or one of its properties which is an array.<br/>
+*seperator* - a quoted string which will be used between each element in the array.
+
+**Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>start_pad (*string* &#124; *number*) *min_length* *pad_string*</code>
+</td>
+<td>
+
+Pads a string or number to be minimum length. Any added padding will be added to the start of the string.
+
+*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number.<br/>
+*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+**Example**: with the value `83` from a provider named `foo`, then the string `id={{start_pad foo 6 "0"}}` would resolve to `id=000083`.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>end_pad (*string* &#124; *number*) *min_length* *pad_string*</code>
+</td>
+<td>
+
+Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
+
+*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number.<br/>
+*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+**Example**: with the value `"Jones"` from a provider named `lastName`, then the string `{{end_pad lastName 8 "-"}}` would resolve to `Jones---`.
+
+</td>
+</tr>
+</tbody>
+</table>
 
 #### declare
 <pre>

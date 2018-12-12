@@ -121,7 +121,8 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
                     },
                     ("join", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))])
                     | ("start_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))])
-                    | ("end_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))]) => {
+                    | ("end_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))])
+                    | ("encode", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))])=> {
                         if let Some(json) = static_providers.get(param_name) {
                             let mut t = Template::new(false);
                             t.elements.push(el.to_owned());
@@ -229,6 +230,32 @@ pub fn pad_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut Rende
     Ok(())
 }
 
+pub fn encode_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
+    let mut string_to_encode = json_value_to_string(
+        &h.param(0).expect("missing encode param")
+            .value()
+    );
+    let encoding = h.param(1).expect("missing encode param")
+        .value().as_str().expect("invalid encode param");
+
+    let output = match encoding {
+        "percent" =>
+            percent_encoding::utf8_percent_encode(&string_to_encode, percent_encoding::DEFAULT_ENCODE_SET).to_string(),
+        "percent-path" =>
+            percent_encoding::utf8_percent_encode(&string_to_encode, percent_encoding::PATH_SEGMENT_ENCODE_SET).to_string(),
+        "percent-query" =>
+            percent_encoding::utf8_percent_encode(&string_to_encode, percent_encoding::QUERY_ENCODE_SET).to_string(),
+        "percent-simple" =>
+            percent_encoding::utf8_percent_encode(&string_to_encode, percent_encoding::SIMPLE_ENCODE_SET).to_string(),
+        "percent-userinfo" =>
+            percent_encoding::utf8_percent_encode(&string_to_encode, percent_encoding::USERINFO_ENCODE_SET).to_string(),
+        _ => panic!("unknown encoding `{}`", encoding)
+    };
+
+    out.write(&output)?;
+    Ok(())
+}
+
 pub fn json_value_to_string (v: &json::Value) -> String {
     match v {
         json::Value::String(s) => s.clone(),
@@ -282,6 +309,7 @@ mod tests {
         handlebars.register_helper("epoch", Box::new(epoch_helper));
         handlebars.register_helper("start_pad", Box::new(pad_helper));
         handlebars.register_helper("end_pad", Box::new(pad_helper));
+        handlebars.register_helper("encode", Box::new(encode_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
         let template_values = TemplateValues::new();
@@ -299,6 +327,11 @@ mod tests {
             (r#"{{end_pad bar 6 "0"}}"#, json::json!({"bar": "asd"}), "asd000", false),
             (r#"{{end_pad bar 5 "123"}}"#, json::json!({"bar": "asd"}), "asd12", false),
             (r#"{{end_pad bar 2 "123"}}"#, json::json!({"bar": "asd"}), "asd", false),
+            (r#"{{encode bar "percent"}}"#, json::json!({"bar": "asd jkl%"}), "asd%20jkl%", false),
+            (r#"{{encode bar "percent-path"}}"#, json::json!({"bar": "asd/jkl%"}), "asd%2Fjkl%25", false),
+            (r#"{{encode bar "percent-simple"}}"#, json::json!({"bar": "asd\njkl#"}), "asd%0Ajkl#", false),
+            (r#"{{encode bar "percent-query"}}"#, json::json!({"bar": "asd\njkl{"}), "asd%0Ajkl{", false),
+            (r#"{{encode bar "percent-userinfo"}}"#, json::json!({"bar": "asd jkl|"}), "asd%20jkl%7C", false),
         );
 
         for (i, (template, j, expect, starts_with)) in checks.into_iter().enumerate() {

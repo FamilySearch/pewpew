@@ -37,6 +37,7 @@ use crate::load_test::LoadTest;
 use crate::providers;
 use crate::stats::ResponseStat;
 use crate::template::{
+    encode_helper,
     epoch_helper,
     json_value_to_string,
     join_helper,
@@ -224,6 +225,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         handlebars.register_helper("stringify", Box::new(stringify_helper));
         handlebars.register_helper("start_pad", Box::new(pad_helper));
         handlebars.register_helper("end_pad", Box::new(pad_helper));
+        handlebars.register_helper("encode", Box::new(encode_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
         let (uri, provider_names) = textify(self.uri, handlebars.clone(), &ctx.static_providers);

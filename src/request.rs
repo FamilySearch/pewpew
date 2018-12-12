@@ -40,6 +40,7 @@ use crate::template::{
     epoch_helper,
     json_value_to_string,
     join_helper,
+    pad_helper,
     stringify_helper,
     TemplateValues,
     textify,
@@ -221,6 +222,8 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         handlebars.register_helper("epoch", Box::new(epoch_helper));
         handlebars.register_helper("join", Box::new(join_helper));
         handlebars.register_helper("stringify", Box::new(stringify_helper));
+        handlebars.register_helper("start_pad", Box::new(pad_helper));
+        handlebars.register_helper("end_pad", Box::new(pad_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
         let (uri, provider_names) = textify(self.uri, handlebars.clone(), &ctx.static_providers);

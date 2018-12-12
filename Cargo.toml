@@ -31,6 +31,7 @@ serde-tuple-vec-map = "0.2"
 serde_yaml = "0.8"
 tokio = "0.1"
 tokio-threadpool = "0.1"
+unicode-segmentation = "1"
 url = "1"
 
 [dev-dependencies]

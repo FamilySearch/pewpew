@@ -1,23 +1,22 @@
 # TODOs
-- Add url_encode helper
-- Different endpoint parameters selected randomly based on percentages
-- Improve documentation
-- Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
-- Logger enhancements: Allow loggers to have access to the "stats" (stats.rtt) and add "method" and "url" (parsed url); allow logger to have multiple select clauses and log to the first one in which the `where` matches; allow to query on array.length
 - Create "url_encode" and "pad" (make a string at least x long, should work with numbers too) helpers
 - Create a numeric incrementing provider.
 - Allow templates in declare section
-- Allow repeat to be a random number within a range
+- Allow templates in select queries (for provides and logs)
+- Logger enhancements: Allow loggers to have access to the "stats" (stats.rtt) and add "method" and "url" (parsed url); allow logger to have multiple select clauses and log to the first one in which the `where` matches; allow to query on array.length
+- Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
 - Provide a means of terminating a test with a logger
+- Different endpoint parameters selected randomly based on percentages
+- Improve documentation
+- Allow mathematical expressions in template
+- Allow repeat to be a random number within a range
 - Log connection timeouts, connection errors, etc. to stats
 - Log when a request is waiting for a provider
-- Document Linux OS configuration tuning
-- Allow an url's domain to be templated with a static provider
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
 - Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.
 - Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand
 - Create a Visual Studio Code language extension for the loadtest file schema
-- Make files referenced by a file provider relative to the configuraton file
+- Make files referenced by a file provider relative to the configuraton file. Also allow absolute paths (not sure if it currently works)
 - Add cli option for results
 - every minute we print stats to console, also write those results to disk, overwriting the previous file every minute
 - add config options: for client: request timeout, standard headers, keepalive time, dns resolution thread pool; general: bucket size, auto-sized providers start size
@@ -25,12 +24,7 @@
 - allow multipart uploads
 - update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
 - add more tests - unit and integration - get code coverage
-- resolve `static` providers before creating endpoint stream
-- add more configuration to file provider. random order; format: string, json, csv
-- create template helpers to extract fields from csv
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
-- ensure RTTs are accurate. Is there any queueing of requests if waiting for an available socket???
 - add in machine clustering. Machines should open up a secure connection using a PSK
-- create custom executor with priorities. system monitoring and logging should be high priority generating load should be low priority
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
 - add test monitoring. Possibly use tui for terminal output. Have webserver which will display a dashboard

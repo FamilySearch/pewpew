@@ -10,6 +10,7 @@ use handlebars::{
 };
 use regex::Regex;
 use serde_json as json;
+use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
     collections::BTreeMap,
@@ -118,7 +119,9 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
                     ("epoch", [Parameter::Literal(json::Value::String(s))]) if s == "s" || s == "ms" || s == "mu" || s == "ns" => {
                         string2 = None;
                     },
-                    ("join", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))]) => {
+                    ("join", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))])
+                    | ("start_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))])
+                    | ("end_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))]) => {
                         if let Some(json) = static_providers.get(param_name) {
                             let mut t = Template::new(false);
                             t.elements.push(el.to_owned());
@@ -198,6 +201,34 @@ pub fn join_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut Rend
     Ok(())
 }
 
+pub fn pad_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
+    let mut string_to_pad = json_value_to_string(
+        &h.param(0).expect("missing start_pad param")
+            .value()
+    );
+    let desired_length = h.param(1).expect("missing start_pad param")
+        .value().as_u64().expect("invalid start_pad param") as usize;
+    let pad_str = json_value_to_string(
+        &h.param(2).expect("missing start_pad param")
+            .value()
+    );
+    let str_len = string_to_pad.as_str().graphemes(true).count();
+    let diff = desired_length.saturating_sub(str_len);
+    let mut pad_str: String = pad_str.as_str().graphemes(true)
+        .cycle()
+        .take(diff)
+        .collect();
+    let output = if h.name() == "start_pad" {
+        pad_str.push_str(&string_to_pad);
+        pad_str
+    } else {
+        string_to_pad.push_str(&pad_str);
+        string_to_pad
+    };
+    out.write(&output)?;
+    Ok(())
+}
+
 pub fn json_value_to_string (v: &json::Value) -> String {
     match v {
         json::Value::String(s) => s.clone(),
@@ -249,6 +280,8 @@ mod tests {
         let mut handlebars = Handlebars::new();
         handlebars.register_helper("join", Box::new(join_helper));
         handlebars.register_helper("epoch", Box::new(epoch_helper));
+        handlebars.register_helper("start_pad", Box::new(pad_helper));
+        handlebars.register_helper("end_pad", Box::new(pad_helper));
         handlebars.set_strict_mode(true);
         let handlebars = Arc::new(handlebars);
         let template_values = TemplateValues::new();
@@ -260,6 +293,12 @@ mod tests {
             ("foo{{bar}}", json::json!({"bar": "bar"}), "foobar", false),
             (r#"epoch {{epoch "s"}}"#, json::json!({}), &epoch_string, true),
             (r#"{{join bar ","}}"#, json::json!({"bar": [1, 2, 3]}), "1,2,3", false),
+            (r#"{{start_pad bar 6 "0"}}"#, json::json!({"bar": "asd"}), "000asd", false),
+            (r#"{{start_pad bar 5 "123"}}"#, json::json!({"bar": "asd"}), "12asd", false),
+            (r#"{{start_pad bar 2 "123"}}"#, json::json!({"bar": "asd"}), "asd", false),
+            (r#"{{end_pad bar 6 "0"}}"#, json::json!({"bar": "asd"}), "asd000", false),
+            (r#"{{end_pad bar 5 "123"}}"#, json::json!({"bar": "asd"}), "asd12", false),
+            (r#"{{end_pad bar 2 "123"}}"#, json::json!({"bar": "asd"}), "asd", false),
         );
 
         for (i, (template, j, expect, starts_with)) in checks.into_iter().enumerate() {

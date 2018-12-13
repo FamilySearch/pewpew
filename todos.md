@@ -1,6 +1,4 @@
 # TODOs
-- Create "url_encode" and "pad" (make a string at least x long, should work with numbers too) helpers
-- Create a numeric incrementing provider.
 - Allow templates in declare section
 - Allow templates in select queries (for provides and logs)
 - Logger enhancements: Allow loggers to have access to the "stats" (stats.rtt) and add "method" and "url" (parsed url); allow logger to have multiple select clauses and log to the first one in which the `where` matches; allow to query on array.length

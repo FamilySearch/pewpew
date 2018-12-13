@@ -4,6 +4,7 @@ pub use self::select_parser::{
     REQUEST_STARTLINE,
     REQUEST_HEADERS,
     REQUEST_BODY,
+    REQUEST_URL,
     RESPONSE_STARTLINE,
     RESPONSE_HEADERS,
     RESPONSE_BODY,

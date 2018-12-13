@@ -27,6 +27,7 @@ use crate::config::{
     REQUEST_STARTLINE,
     REQUEST_HEADERS,
     REQUEST_BODY,
+    REQUEST_URL,
     RESPONSE_STARTLINE,
     RESPONSE_HEADERS,
     RESPONSE_BODY,
@@ -375,13 +376,39 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             };
             let request = request.body(body).unwrap();
             let mut request_provider = json::json!({});
+            let request_obj = request_provider.as_object_mut().unwrap();
+            if rr_providers & REQUEST_URL == REQUEST_URL {
+                // add in the url
+                let url = url::Url::parse(&url).unwrap();
+                let mut protocol: String = url.scheme().into();
+                if !protocol.is_empty() {
+                    protocol = format!("{}:", protocol);
+                }
+                let search_params: json::Map<String, json::Value> = url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned().into())).collect();
+                request_obj.insert(
+                    "url".into(),
+                    json::json!({
+                        "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
+                        "host": url.host_str().unwrap_or(""),
+                        "hostname": url.domain().unwrap_or(""),
+                        "href": url.as_str(),
+                        "origin": url.origin().unicode_serialization(),
+                        "password": url.password().unwrap_or(""),
+                        "pathname": url.path(),
+                        "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
+                        "protocol": protocol,
+                        "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
+                        "searchParams": search_params,
+                        "username": url.username(),
+                    })
+                );
+            }
             if rr_providers & REQUEST_STARTLINE != 0 {
                 let uri_path_and_query = request.uri().path_and_query()
                     .map(|pq| pq.as_str())
                     .unwrap_or("/");
                 let version = request.version();
-                request_provider.as_object_mut().unwrap()
-                    .insert("start-line".into(), format!("{} {} {:?}", method, uri_path_and_query, version).into());
+                request_obj.insert("start-line".into(), format!("{} {} {:?}", method, uri_path_and_query, version).into());
             }
             if rr_providers & REQUEST_HEADERS != 0 {
                 let mut headers_json = json::Map::new();
@@ -394,16 +421,15 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                         )
                     );
                 }
-                request_provider.as_object_mut().unwrap()
-                    .insert("headers".into(), JsonValue::Object(headers_json));
+                request_obj.insert("headers".into(), JsonValue::Object(headers_json));
             }
             if rr_providers & REQUEST_BODY != 0 {
                 let body_string = body_value.as_ref().map(json_value_to_string)
                     .unwrap_or_else(|| "".into())
                     .into();
-                request_provider.as_object_mut().unwrap()
-                    .insert("body".into(), body_string);
+                request_obj.insert("body".into(), body_string);
             }
+            request_obj.insert("method".into(), method.as_str().into());
             template_values.insert("request".into(), request_provider);
             let response_future = client.request(request);
             let now = Instant::now();
@@ -556,8 +582,8 @@ fn duration_to_nanos (d: &Duration) -> u128 {
 }
 
 fn handle_response_requirements(
-        bitwise: u8,
-        response_fields_added: &mut u8,
+        bitwise: u16,
+        response_fields_added: &mut u16,
         rp: &mut json::map::Map<String, JsonValue>,
         response: &Response<HyperBody>,
     )

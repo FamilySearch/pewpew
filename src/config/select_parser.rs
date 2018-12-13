@@ -461,35 +461,38 @@ impl ParsedSelect {
     }
 }
 
-pub const REQUEST_STARTLINE: u8 = 0b00_000_100;
-pub const REQUEST_HEADERS: u8 = 0b00_000_010;
-pub const REQUEST_BODY: u8 = 0b00_000_001;
-const REQUEST_ALL: u8 = REQUEST_STARTLINE | REQUEST_HEADERS | REQUEST_BODY;
-pub const RESPONSE_STARTLINE: u8 = 0b00_100_000;
-pub const RESPONSE_HEADERS: u8 = 0b00_010_000;
-pub const RESPONSE_BODY: u8 = 0b00_001_000;
-const RESPONSE_ALL: u8 = RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_BODY;
-const FOR_EACH: u8 = 0b01_000_000;
-pub const STATS: u8 = 0b10_000_000;
+pub const REQUEST_STARTLINE: u16 = 0b000_000_100;
+pub const REQUEST_HEADERS: u16 = 0b000_000_010;
+pub const REQUEST_BODY: u16 = 0b000_000_001;
+const REQUEST_ALL: u16 = REQUEST_STARTLINE | REQUEST_HEADERS | REQUEST_BODY;
+pub const RESPONSE_STARTLINE: u16 = 0b000_100_000;
+pub const RESPONSE_HEADERS: u16 = 0b000_010_000;
+pub const RESPONSE_BODY: u16 = 0b000_001_000;
+const RESPONSE_ALL: u16 = RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_BODY;
+const FOR_EACH: u16 = 0b001_000_000;
+pub const STATS: u16 = 0b010_000_000;
+pub const REQUEST_URL: u16 = 0b100_000_000;
 
 #[derive(Clone, Parser)]
 #[grammar = "config/select.pest"]
 pub struct Select {
     join: Vec<Value>,
     providers: BTreeSet<String>,
-    special_providers: u8,
+    special_providers: u16,
     send_behavior: EndpointProvidesSendOptions,
     select: ParsedSelect,
     where_clause: Option<ComplexExpression>,
-    where_clause_special_providers: u8,
+    where_clause_special_providers: u16,
 }
 
-fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>, bitwise: &mut u8) {
+fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>, bitwise: &mut u16) {
     for provider in incoming {
         match provider.as_ref() {
             "request.start-line" => *bitwise |= REQUEST_STARTLINE,
             "request.headers" => *bitwise |= REQUEST_HEADERS,
             "request.body" => *bitwise |= REQUEST_BODY,
+            "request.method" => (),
+            "request.url" => *bitwise |= REQUEST_URL,
             "request" => *bitwise |= REQUEST_ALL,
             "response.start-line" => *bitwise |= RESPONSE_STARTLINE,
             "response.headers" => *bitwise |= RESPONSE_HEADERS,
@@ -544,7 +547,7 @@ impl Select {
         &self.providers
     }
 
-    pub fn get_special_providers(&self) -> u8 {
+    pub fn get_special_providers(&self) -> u16 {
         self.special_providers
     }
 
@@ -552,7 +555,7 @@ impl Select {
         &self.send_behavior
     }
 
-    pub fn get_where_clause_special_providers(&self) -> u8 {
+    pub fn get_where_clause_special_providers(&self) -> u16 {
         self.where_clause_special_providers
     }
 

@@ -231,7 +231,7 @@ pub fn pad_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut Rende
 }
 
 pub fn encode_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
-    let mut string_to_encode = json_value_to_string(
+    let string_to_encode = json_value_to_string(
         &h.param(0).expect("missing encode param")
             .value()
     );

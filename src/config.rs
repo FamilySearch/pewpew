@@ -7,6 +7,7 @@ pub use self::select_parser::{
     RESPONSE_STARTLINE,
     RESPONSE_HEADERS,
     RESPONSE_BODY,
+    STATS,
     Select,
 };
 
@@ -448,7 +449,7 @@ fn deserialize_providers<'de, D, T> (deserializer: D) -> Result<Vec<(String, T)>
 {
     let map: Vec<(String, T)> = tuple_vec_map::deserialize(deserializer)?;
     for (k, _) in &map {
-        if k == "request" || k == "response" {
+        if k == "request" || k == "response" || k == "for_each" || k == "stats" {
             return Err(DeError::invalid_value(Unexpected::Str(&k), &"Use of reserved provider name"))
         }
     }

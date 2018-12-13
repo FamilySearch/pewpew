@@ -114,7 +114,7 @@ providers:
 
 Providers are the means of providing data to an endpoint, including using data from the response of one endpoint in the request of another. The way providers handle data can be thought of as a FIFO queue. Every provider has an internal buffer which has a soft limit on how many items can be stored.
 
-A *provider_name* is any string except for "request" and "response", which are reserved.
+A *provider_name* is any string except for "request", "response", "stats" and "for_each", which are reserved.
 
 Example:
 ```yaml
@@ -593,12 +593,14 @@ The *provides_section* is how data can be sent to a provider from an HTTP respon
 
 Sending data to a provider is done with a SQL-like syntax.
 
-- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression. A `select` expression can reference any provider used to build a request in addition to "request" and "response" which are provided as a means of accessing data in the HTTP request or response.
+- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression. A `select` expression can reference any provider used to build a request in addition to "request", "response" and "stats" which are provided as a means of accessing data in the HTTP request or response or the stats about the request.
 
   The request object has the properties `start-line`, `headers` and `body` which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties `start-line`, `headers`, and `body` in addition to `status` which indicates the HTTP response status code. See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP messages for more details on the structure of HTTP requests and responses.
 
   `start-line` is a string and `headers` is represented as a JSON object with key/value string pairs. Currently, `body` in the request is always a string and `body` in the response is parsed as a JSON value, when possible, otherwise it is a string. `status` is a number.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays. This is specified as an array of strings where each string is an expression. Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and `select` is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.
+
+  `stats` currently has one property `rtt` which is the round-trip time in milliseconds, representing how long a request took.
 
   The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` similarly to accessing value from a provider. Because `for_each` can be iterating over multiple arrays, each value can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
 - **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is a string expression which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.

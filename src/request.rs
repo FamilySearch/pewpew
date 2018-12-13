@@ -30,6 +30,7 @@ use crate::config::{
     RESPONSE_STARTLINE,
     RESPONSE_HEADERS,
     RESPONSE_BODY,
+    STATS,
     Select,
 };
 use crate::for_each_parallel::ForEachParallel;
@@ -440,7 +441,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 .and_then(move |response| {
                     let status_code = response.status();
                     let status = status_code.as_u16();
-                    let response_provider = json::json!({"status": status });
+                    let response_provider = json::json!({ "status": status });
                     template_values.insert("response".into(), response_provider);
                     let mut response_fields_added = 0b000_111;
                     handle_response_requirements(
@@ -450,7 +451,10 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                         &response
                     );
                     let included_outgoing_indexes: Vec<_> = outgoing.iter().enumerate().filter_map(|(i, (select, _))| {
-                        if select.get_where_clause_special_providers() & RESPONSE_BODY == RESPONSE_BODY || select.execute_where(template_values.as_json()) {
+                        let where_clause_special_providers = select.get_where_clause_special_providers();
+                        if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
+                            || where_clause_special_providers & STATS == STATS
+                            || select.execute_where(template_values.as_json()) {
                             handle_response_requirements(
                                 select.get_special_providers(),
                                 &mut response_fields_added,
@@ -490,6 +494,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                             // open_requests.fetch_sub(1, Ordering::Relaxed);
                             let rtt = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
                             let mut futures = Vec::new();
+                            template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
                             match result {
                                 Ok(body) => {
                                     if let Some(body) = body {

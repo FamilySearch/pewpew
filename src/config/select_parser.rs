@@ -110,7 +110,7 @@ fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> Co
         let o = match (json, index) {
             (json::Value::Object(m), JsonPathSegment::String(s)) => m.get(s),
             (json::Value::Array(a), JsonPathSegment::Number(n)) => a.get(*n),
-            _ => panic!("cannot index into json {}", json)
+            _ => panic!("cannot index into json {}. Indexes: {:?}", json, indexes),
         };
         json = o.unwrap_or(&json::Value::Null)
     }
@@ -461,15 +461,16 @@ impl ParsedSelect {
     }
 }
 
-pub const REQUEST_STARTLINE: u8 = 0b0_000_100;
-pub const REQUEST_HEADERS: u8 = 0b0_000_010;
-pub const REQUEST_BODY: u8 = 0b0_000_001;
+pub const REQUEST_STARTLINE: u8 = 0b00_000_100;
+pub const REQUEST_HEADERS: u8 = 0b00_000_010;
+pub const REQUEST_BODY: u8 = 0b00_000_001;
 const REQUEST_ALL: u8 = REQUEST_STARTLINE | REQUEST_HEADERS | REQUEST_BODY;
-pub const RESPONSE_STARTLINE: u8 = 0b0_100_000;
-pub const RESPONSE_HEADERS: u8 = 0b0_010_000;
-pub const RESPONSE_BODY: u8 = 0b0_001_000;
+pub const RESPONSE_STARTLINE: u8 = 0b00_100_000;
+pub const RESPONSE_HEADERS: u8 = 0b00_010_000;
+pub const RESPONSE_BODY: u8 = 0b00_001_000;
 const RESPONSE_ALL: u8 = RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_BODY;
-const FOR_EACH: u8 = 0b1_000_000;
+const FOR_EACH: u8 = 0b01_000_000;
+pub const STATS: u8 = 0b10_000_000;
 
 #[derive(Clone, Parser)]
 #[grammar = "config/select.pest"]
@@ -495,6 +496,7 @@ fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>,
             "response.body" => *bitwise |= RESPONSE_BODY,
             "response" => *bitwise |= RESPONSE_ALL,
             "response.status" => (),
+            "stats" => *bitwise |= STATS,
             "for_each" => *bitwise |= FOR_EACH,
             _ => { outgoing.insert(provider); }
         }
@@ -858,6 +860,7 @@ mod tests {
             (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
             (json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
             (json!(r#"for_each[0]"#), None, vec!(), FOR_EACH),
+            (json!(r#"stats.rtt"#), None, vec!(), STATS),
             (
                 json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
                 None,

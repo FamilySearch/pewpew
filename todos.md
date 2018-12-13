@@ -1,7 +1,7 @@
 # TODOs
 - Allow templates in declare section
 - Allow templates in select queries (for provides and logs)
-- Logger enhancements: Allow loggers to have access to the "stats" (stats.rtt) and add "method" and "url" (parsed url); allow logger to have multiple select clauses and log to the first one in which the `where` matches; allow to query on array.length
+- Logger enhancements: allow logger to have multiple select clauses; allow to query on array.length
 - Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
 - Provide a means of terminating a test with a logger
 - Different endpoint parameters selected randomly based on percentages

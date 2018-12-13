@@ -114,6 +114,22 @@ pub fn literals<F>(values: Vec<json::Value>, auto_return: Option<config::Endpoin
     Kind::Value(Provider { auto_return, tx, rx })
 }
 
+pub fn range<F>(range: config::RangeProvider, test_complete: Shared<F>) -> Kind
+    where F: Future + Send + 'static,
+        <F as Future>::Error: Send + Sync,
+        <F as Future>::Item: Send + Sync, 
+{
+    let (tx, rx) = channel::channel(Limit::auto());
+    let prime_tx = stream::iter_ok::<_, ()>(range.0.map(json::Value::from))
+        .forward(tx.clone())
+        // Error propagate here when sender channel closes at test conclusion
+        .then(|_| Ok(()))
+        .select(test_complete.then(|_| Ok::<_, ()>(())))
+        .then(|_| Ok(()));
+    tokio::spawn(prime_tx);
+    Kind::Value(Provider { auto_return: None, tx, rx })
+}
+
 pub fn logger<F>(template: &config::Logger, test_complete: F) -> channel::Sender<json::Value>
     where F: Future + Send + 'static
 {

@@ -127,7 +127,7 @@ providers:
       path: "usernames.csv"
       repeat: true
 ```
-There are five *provider_type*s:
+There are six *provider_type*s:
 
 #### file
 The `file` *provider_type* reads data from a file. Every line in the file is read as a value. In the future, the ability to specify the format of the data (csv, json, etc) may be implemented. A `file` provider has the following parameters:
@@ -318,6 +318,33 @@ creates a `static_list` provider named `foo` where the first value provided will
 
 #### environment
 The `environment` *provider_type* behaves exactly like the `static` *provider_type* except the value comes from an environment variable. The value coming from the referenced environment variable will be parsed as JSON if possible, otherwise it will be a string.
+
+#### range
+The `range` *provider_type* provides an incrementing sequence of numbers in a given range. A `range` provider takes three optional parameters.
+
+- **`start`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [-9223372036854775808, 9223372036854775807]. This indicates what the starting number should be for the range. Defaults to `0`.
+- **`end`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [-9223372036854775808, 9223372036854775807]. This indicates what the maximum number should be for the range. This number is included in the range. Defaults to `9223372036854775807`.
+- **`step`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [1, 65535]. This indicates how much the range will increment by. Defaults to `1`.
+
+Examples:
+```yaml
+providers:
+  foo:
+    range: {}
+```
+
+Will use the default settings and `foo` will provide the values `0`, `1`, `2`, etc. until it yields the end number (`9223372036854775807`).
+
+```yaml
+providers:
+  foo:
+    range:
+      start: -50
+      end: 100
+      step: 2
+```
+
+In this case `foo` will provide the valuels `-50`, `-48`, `-46`, etc. until it yields `100`.
 
 ### loggers <sub><sup>*Optional*</sup></sub>
 ---

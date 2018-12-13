@@ -29,6 +29,7 @@ use tuple_vec_map;
 use std::{
     collections::BTreeMap,
     env,
+    num::NonZeroU16,
     time::Duration,
 };
 
@@ -67,9 +68,20 @@ pub enum Provider {
     File(FileProvider),
     #[serde(deserialize_with = "deserialize_environment")]
     Environment(json::Value),
+    Range(RangeProvider),
     Response(ResponseProvider),
     Static(json::Value),
     StaticList(Vec<json::Value>),
+}
+
+pub struct RangeProvider(pub std::iter::StepBy<std::ops::RangeInclusive<i64>>);
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+pub struct RangeProviderPreProcessed {
+    start: Option<i64>,
+    end: Option<i64>,
+    step: Option<NonZeroU16>,
 }
 
 #[serde(rename_all = "snake_case")]
@@ -257,6 +269,18 @@ pub struct Config {
     pub providers: Vec<(String, Provider)>,
     #[serde(default, with = "tuple_vec_map")]
     pub loggers: Vec<(String, Logger)>,
+}
+
+impl<'de> Deserialize<'de> for RangeProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>,
+    {
+        let rppp = RangeProviderPreProcessed::deserialize(deserializer)?;
+        let start = rppp.start.unwrap_or(0);
+        let end = rppp.end.unwrap_or(i64::max_value());
+        let step = usize::from(rppp.step.map(|n| n.get()).unwrap_or(1));
+        Ok(RangeProvider((start..=end).step_by(step)))
+    }
 }
 
 impl<'de> Deserialize<'de> for Logger {

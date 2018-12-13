@@ -73,6 +73,8 @@ impl LoadTest
             let provider = match template {
                 Provider::File(template) =>
                     providers::file(template, test_ended_rx),
+                Provider::Range(range) =>
+                    providers::range(range, test_ended_rx),
                 Provider::Response(template) =>
                     providers::response(template),
                 Provider::Static(value) | Provider::Environment(value) => {

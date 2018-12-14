@@ -589,20 +589,19 @@ provides:
     [where: <i>where_piece</i>]
     [send: block | force | if_not_full]
 </pre>
-The *provides_section* is how data can be sent to a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [`providers` section](#providers-optional). For every HTTP response that is received zero or more values can be sent to the provider based upon the conditions specified.
+The *provides_section* is how data can be sent to a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [`providers` section](#providers-optional). For every HTTP response that is received, zero or more values can be sent to the provider based upon the conditions specified.
 
-Sending data to a provider is done with a SQL-like syntax.
+Sending data to a provider is done with a SQL-like syntax. The `select`, `for_each` and `where` sections can reference a provider in addition to the specially provided values "request", "response" and "stats". "request" provides a means of accessing data that was sent with the request, "response" provides a means of accessing data returned with the response and "stats" give access to measurements about the request (currently only `rtt` meaning round-trip time).
 
-- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression. A `select` expression can reference any provider used to build a request in addition to "request", "response" and "stats" which are provided as a means of accessing data in the HTTP request or response or the stats about the request.
+The request object has the properties `start-line`, `method`, `url`, `headers` and `body` which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties `start-line`, `headers`, and `body` in addition to `status` which indicates the HTTP response status code. See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP messages for more details on the structure of HTTP requests and responses.
 
-  The request object has the properties `start-line`, `method`, `url`, `headers` and `body` which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties `start-line`, `headers`, and `body` in addition to `status` which indicates the HTTP response status code. See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP messages for more details on the structure of HTTP requests and responses.
+`start-line` is a string and `headers` is represented as a JSON object with key/value string pairs. Currently, `body` in the request is always a string and `body` in the response is parsed as a JSON value, when possible, otherwise it is a string. `status` is a number. `method` is a string and `url` has the same properties as the web URL object (See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/API/URL)). 
 
-  `start-line` is a string and `headers` is represented as a JSON object with key/value string pairs. Currently, `body` in the request is always a string and `body` in the response is parsed as a JSON value, when possible, otherwise it is a string. `status` is a number. `method` is a string and `url` has the same properties as the web URL object (See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/API/URL)). 
+- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression..
+
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays. This is specified as an array of strings where each string is an expression. Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and `select` is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.
 
-  `stats` currently has one property `rtt` which is the round-trip time in milliseconds, representing how long a request took.
-
-  The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` similarly to accessing value from a provider. Because `for_each` can be iterating over multiple arrays, each value can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
+  The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` just like accessing a value from a provider. Because `for_each` can be iterating over multiple arrays, each value can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
 - **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is a string expression which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
 
   A `where` expression can be as simple as `response.status == 200` or more complex expressions can be formed using `&&` (boolean and), `||` (boolean or) and parenthesis to group sub-expressions. The following comparison operators are available:
@@ -694,6 +693,23 @@ provides:
 ```
 
 The `names` provider would be sent the following values: `{ "name": "Luke Skywalker" }`, `{ "name": "Darth Vader" }`, `{ "name": "R2-D2" }`.
+
+##### Example 3
+It is also possible to access the length of an array by accessing the `length` property.
+
+Using the same response data from example 2, with a provides section defined as:
+
+```yaml
+provides:
+  friendsCount:
+    select:
+      id: for_each[0]
+      count: for_each[0].friends.length
+    for_each:
+      - json_path("request.body.*")
+```
+
+The `friendsCount` provider would be sent the following values: `{ "id": 1000, "count": 4 }`, `{ "id": 1001, "count": 1 }`, `{ "id": 2001, "count": 3 }`.
 
 #### logs
 <pre>

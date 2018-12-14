@@ -100,16 +100,25 @@ fn index_json<'a>(json: &'a json::Value, index: &JsonPathSegment) -> Cow<'a, jso
     let o = match (json, index) {
         (json::Value::Object(m), JsonPathSegment::String(s)) => m.get(s),
         (json::Value::Array(a), JsonPathSegment::Number(n)) => a.get(*n),
-        _ => panic!("cannot index into json {}", json)
+        (json::Value::Array(a), JsonPathSegment::String(s)) if s == "length" =>
+            return Cow::Owned((a.len() as u64).into()),
+        _ => panic!("cannot index into json {}. Index: {:?}", json, index)
     };
     Cow::Borrowed(o.unwrap_or(&json::Value::Null))
 }
 
 fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> Cow<'a, json::Value> {
-    for index in indexes {
+    for (i, index) in indexes.iter().enumerate() {
         let o = match (json, index) {
             (json::Value::Object(m), JsonPathSegment::String(s)) => m.get(s),
             (json::Value::Array(a), JsonPathSegment::Number(n)) => a.get(*n),
+            (json::Value::Array(a), JsonPathSegment::String(s)) if s == "length" => {
+                let ret = (a.len() as u64).into();
+                if i != indexes.len() - 1 {
+                    panic!("cannot index into json {}. Indexes: {:?}", ret, indexes)
+                }
+                return Cow::Owned(ret)
+            },
             _ => panic!("cannot index into json {}. Indexes: {:?}", json, indexes),
         };
         json = o.unwrap_or(&json::Value::Null)
@@ -890,7 +899,7 @@ mod tests {
     fn select() {
         let data = json!({
             "a": 3,
-            "b": { "foo": "bar" },
+            "b": { "foo": "bar", "e": [] },
             "c": [
                 { "d": 1 },
                 { "d": 2 },
@@ -904,6 +913,8 @@ mod tests {
             (json!("c[0].d"), vec!(json!(1))),
             (json!(r#"json_path("c.*.d")"#), vec!(json!([1, 2, 3]))),
             (json!("repeat(5)"), vec!(json!([null, null, null, null, null]))),
+            (json!("c.length"), vec!(json!(3))),
+            (json!("b.e.length"), vec!(json!(0))),
             (
                 json!({"z": 42, "dees": r#"json_path("c.*.d")"#}),
                 vec!(json!({"z": 42, "dees": [1, 2, 3]}))

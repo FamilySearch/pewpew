@@ -37,7 +37,7 @@ use crate::config::{
 use crate::for_each_parallel::ForEachParallel;
 use crate::load_test::LoadTest;
 use crate::providers;
-use crate::stats::ResponseStat;
+use crate::stats;
 use crate::template::{
     encode_helper,
     epoch_helper,
@@ -320,7 +320,6 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             streams.push(provider_stream);
         }
         let outgoing = Arc::new(outgoing);
-        let open_requests = ctx.open_requests.clone();
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
         let method = self.method.clone();
@@ -433,35 +432,50 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             template_values.insert("request".into(), request_provider);
             let response_future = client.request(request);
             let now = Instant::now();
-            let open_requests = open_requests.clone();
-            let _open_requests2 = open_requests.clone();
             let stats_id = stats_id.clone();
+            let stats_id2 = stats_id.clone();
             let stats_tx = stats_tx.clone();
+            let stats_tx2 = stats_tx.clone();
             let method = method.clone();
+            let method2 = method.clone();
             let outgoing = outgoing.clone();
             let test_timeout = test_timeout.clone();
-            Timeout::new(response_future, Duration::from_secs(60))
+            let url2 = url.clone();
+            let timeout = Duration::from_secs(60);
+            let timeout_in_ms = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
+            Timeout::new(response_future, timeout)
                 .map_err(move |err| {
-                    let time_between = duration_to_nanos(&now.elapsed()) / 1_000_000;
                     if let Some(err) = err.into_inner() {
-                        // connection errors
-                        // let unfinished_requests = open_requests2.fetch_sub(1, Ordering::Relaxed) - 1;
-                        // // print!("{}", format!("{} unfinished requests\n", unfinished_requests));
-                        // let io_error_maybe = err.cause2();
-                        // if let Some(io_error_maybe) = io_error_maybe {
-                        //     let is_connection_err = match io_error_maybe.downcast_ref::<IOError>() {
-                        //         Some(ref err) if err.kind() == IOErrorKind::AddrInUse
-                        //             || cfg!(windows) && err.raw_os_error() == Some(10055) => true, // see https://docs.microsoft.com/en-us/windows/desktop/winsock/windows-sockets-error-codes-2
-                        //         _ => false
-                        //     };
-                        //     // if is_connection_err && exhausted_ports.load(Ordering::Relaxed) < unfinished_requests {
-                        //     //     print!("{}", format!("Ran out of ephemeral ports. Stopping new connections until unfinished requests go under {}\n", unfinished_requests / 2));
-                        //     //     exhausted_ports.store(unfinished_requests / 2, Ordering::Relaxed);
-                        //     // }
-                        // }
-                        eprint!("{}", format!("err: {:?}; took {}ms\n", err, time_between));
+                        let mut description = None;
+                        if let Some(io_error_maybe) = err.cause2() {
+                            if let Some(io_error) = io_error_maybe.downcast_ref::<std::io::Error>() {
+                                description = Some(format!("{}", io_error));
+                            }
+                        }
+                        let description = description.unwrap_or_else(|| format!("{}", err));
+                        let task = stats_tx2.send(
+                            stats::ResponseStat {
+                                endpoint_id,
+                                key: stats_id2,
+                                kind: stats::StatKind::ConnectionError(description),
+                                method: method2,
+                                time: SystemTime::now(),
+                                url: url2,
+                            }.into()
+                        ).then(|_| Ok(()));
+                        tokio::spawn(task);
                     } else {
-                        eprint!("{}", format!("request timed out; took {}ms\n", time_between));
+                        let task = stats_tx2.send(
+                            stats::ResponseStat {
+                                endpoint_id,
+                                key: stats_id2,
+                                kind: stats::StatKind::Timeout(timeout_in_ms),
+                                method: method2,
+                                time: SystemTime::now(),
+                                url: url2,
+                            }.into()
+                        ).then(|_| Ok(()));
+                        tokio::spawn(task);
                     }
                 })
                 .and_then(move |response| {
@@ -517,7 +531,6 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                         };
                     body_stream
                         .then(move |result| {
-                            // open_requests.fetch_sub(1, Ordering::Relaxed);
                             let rtt = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
                             let mut futures = Vec::new();
                             template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
@@ -551,12 +564,11 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                                     }
                                     futures.push(Either::B(
                                         stats_tx.send(
-                                            ResponseStat {
+                                            stats::ResponseStat {
                                                 endpoint_id,
                                                 key: stats_id,
-                                                rtt,
+                                                kind: stats::StatKind::Rtt((rtt, status)),
                                                 method,
-                                                status,
                                                 time: SystemTime::now(),
                                                 url,
                                             }.into()

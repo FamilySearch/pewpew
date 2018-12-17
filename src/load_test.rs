@@ -32,7 +32,7 @@ use tokio::{
 use std::{
     cmp,
     collections::BTreeMap,
-    sync::{Arc},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -43,8 +43,6 @@ pub struct LoadTest {
     duration: Duration,
     // a list of futures for the endpoint tasks to run
     endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
-    // a count of the number of requests in progress (currently not used)
-    pub open_requests: Arc<()>,
     // a mapping of names to their prospective static (single value) providers
     pub static_providers: BTreeMap<String, JsonValue>,
     // a mapping of names to their prospective providers
@@ -152,7 +150,6 @@ impl LoadTest
             client: Arc::new(client),
             duration,
             endpoint_calls: Vec::new(),
-            open_requests: Arc::new(()),
             loggers,
             providers,
             static_providers,

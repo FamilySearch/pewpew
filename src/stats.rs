@@ -110,7 +110,7 @@ struct RollingAggregateStats {
 }
 
 impl RollingAggregateStats {
-    fn new (time: u64, duration: Duration) -> Self {
+    fn new(time: u64, duration: Duration) -> Self {
         RollingAggregateStats {
             buckets: BTreeMap::new(),
             duration: duration.as_secs(),
@@ -118,7 +118,7 @@ impl RollingAggregateStats {
         }
     }
 
-    fn append (&mut self, stat: &mut ResponseStat) {
+    fn append(&mut self, mut stat: ResponseStat) {
         let key = stat.key.take();
         let duration = self.duration;
         let time = to_epoch(stat.time) / duration * duration;
@@ -171,10 +171,10 @@ impl RollingAggregateStats {
             .or_insert_with(|| stat.method.to_string());
         let current = stats_map.entry(time)
             .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
-        *current += &*stat;
+        *current += stat;
     }
 
-    fn persist (&self) -> impl Future<Item=(), Error=()> {
+    fn persist(&self) -> impl Future<Item=(), Error=()> {
         let stats = self.clone();
         TokioFile::create(format!("stats-{}.json", self.time))
             .and_then(move |mut file| {
@@ -192,37 +192,58 @@ impl RollingAggregateStats {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
 pub struct AggregateStats {
-    time: u64,
+    connection_errors: FnvHashMap<String, u64>,
     duration: u64,
     end_time: u64,
+    request_timeouts: u64,
     #[serde(with = "histogram_serde")]
     rtt_histogram: Histogram<u64>,
     start_time: u64,
     status_counts: FnvHashMap<u16, u64>,
+    time: u64,
 }
 
-impl AddAssign<&ResponseStat> for AggregateStats {
-    fn add_assign (&mut self, rhs: &ResponseStat) {
+impl AddAssign<ResponseStat> for AggregateStats {
+    fn add_assign(&mut self, rhs: ResponseStat) {
         let time = to_epoch(rhs.time);
         if self.start_time == 0 {
             self.start_time = time;
         }
         self.end_time = cmp::max(self.end_time, time);
-        self.rtt_histogram += rhs.rtt;
-        self.status_counts.entry(rhs.status)
-            .and_modify(|n| { *n += 1 } )
-            .or_insert(1);
+        match rhs.kind {
+            StatKind::ConnectionError(description) => {
+                self.connection_errors.entry(description)
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+            }
+            StatKind::Rtt((rtt, status)) => {
+                self.rtt_histogram += rtt;
+                self.status_counts.entry(status)
+                    .and_modify(|n| { *n += 1 } )
+                    .or_insert(1);
+            },
+            StatKind::Timeout(to) => {
+                self.rtt_histogram += to;
+                self.request_timeouts += 1
+            },
+        }
     }
 }
 
 impl AddAssign<&AggregateStats> for AggregateStats {
-    fn add_assign (&mut self, rhs: &AggregateStats) {
+    fn add_assign(&mut self, rhs: &AggregateStats) {
         self.rtt_histogram += &rhs.rtt_histogram;
         for (status, count) in &rhs.status_counts {
             self.status_counts.entry(*status)
-                .and_modify(|n| { *n += count } )
+                .and_modify(|n| *n += count)
                 .or_insert(*count);
         }
+        for (description, count) in &rhs.connection_errors {
+            self.connection_errors.entry(description.clone())
+                    .and_modify(|n| *n += count)
+                    .or_insert(*count);
+        }
+        self.request_timeouts += rhs.request_timeouts;
     }
 }
 
@@ -252,21 +273,29 @@ fn create_date_diff(start: u64, end: u64) -> String {
 }
 
 impl AggregateStats {
-    fn new (time: u64, duration: Duration) -> Self {
+    fn new(time: u64, duration: Duration) -> Self {
         AggregateStats {
-            time,
+            connection_errors: FnvHashMap::default(),
             duration: duration.as_secs(),
             end_time: 0,
+            request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             start_time: 0,
             status_counts: FnvHashMap::default(),
+            time,
         }
     }
 
-    fn print_summary (&self, method: &str, url: &str) {
+    fn print_summary(&self, method: &str, url: &str) {
         eprint!("{}", Color::Yellow.dimmed().paint(format!("\n- {} {}:\n", method, url)));
         eprint!("{}", format!("  calls made: {}\n", self.rtt_histogram.len()));
         eprint!("{}", format!("  status counts: {:?}\n", self.status_counts));
+        if self.request_timeouts > 0 {
+            eprint!("{}", format!("  request timeouts: {:?}\n", self.request_timeouts));
+        }
+        if !self.connection_errors.is_empty() {
+            eprint!("{}", format!("  connection errors: {:?}\n", self.connection_errors));
+        }
         eprint!(
             "{}",
             format!(
@@ -296,15 +325,23 @@ pub enum StatsMessage {
     EndTime(Instant),
 }
 
+type StatsKey = BTreeMap<String, String>;
+
 #[derive(Debug)]
 pub struct ResponseStat {
     pub endpoint_id: EndpointId,
-    pub key: Option<BTreeMap<String, String>>,
+    pub key: Option<StatsKey>,
     pub method: Method,
-    pub rtt: u64,
-    pub status: u16,
+    pub kind: StatKind,
     pub time: SystemTime,
     pub url: String,
+}
+
+#[derive(Debug)]
+pub enum StatKind{
+    ConnectionError(String),
+    Rtt((u64, u16)),
+    Timeout(u64),
 }
 
 impl From<ResponseStat> for StatsMessage {
@@ -363,8 +400,8 @@ pub fn create_stats_channel<F>(test_complete: F)
         });
     let receiver = Stream::for_each(rx, move |datum| {
             match datum {
-                StatsMessage::ResponseStat(mut rs) => stats.lock().append(&mut rs),
                 StatsMessage::EndTime(end_time) => *end_time2.lock() = Some(end_time),
+                StatsMessage::ResponseStat(rs) => stats.lock().append(rs),
             }
             Ok(())
         })

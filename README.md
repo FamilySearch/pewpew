@@ -49,7 +49,32 @@ endpoints:
 
 The above config file tells pewpew to hit two HTTP endpoints with particular loads. The entire test will last seven minutes where the first five minutes will be scaling up to "100%" and the last two minutes will stay steady at "100%". For the first endpoint "100%" means 42 hits per minute and for the second it means 15 hits per second.
 
-A config file can have four main sections.
+A config file can have five main sections.
+
+### config <sub><sup>*Optional**</sup></sub>
+<pre>
+config:
+  client:
+    request_timeout: <i>duration</i>
+    headers: <i>headers</i>
+    keepalive: <i>duration</i>
+  general:
+    auto_buffer_start_size: <i>unsized integer</i>
+    bucket_size: <i>duration</i>
+    summary_output_format: pretty | json
+</pre>
+
+The `config` section provides a means of customizing different parameters for the test. Parameters are broken up into two separate sections, `client` which pertain to customizations for the HTTP client and `general` which are other miscelaneous settings for the test.
+
+#### client
+- **`request_timeout`** <sub><sup>*Optional*</sup></sub> - A duration signifying how long a request will wait before it times out. Defaults to 60 seconds. See [duration](#duration).
+- **`headers`** <sub><sup>*Optional*</sup></sub> - Headers which will be sent in every request. See [headers](#headers).
+- **`keepalive`** <sub><sup>*Optional*</sup></sub> - The keepalive time that will be used on TCP socket connections. This is different from the `Keep-Alive` HTTP header. Defaults to 90 seconds. See [duration](#duration).
+
+#### general
+- **`auto_buffer_start_size`** <sub><sup>*Optional*</sup></sub> - The starting size for provider buffers which are `auto` sized. Defaults to 5.
+- **`bucket_size`** <sub><sup>*Optional*</sup></sub> - Specifies how big each bucket should be for every endpoint's aggregated stats. This also affects how often summary stats will be printed to the console. Defaults to 60 seconds. See [duration](#duration).
+- **`summary_output_format`** <sub><sup>*Optional*</sup></sub> - The format that the summary stats will be when they are printed to the console. Can be either `pretty` or `json`. Defaults to `pretty`.
 
 ### load_pattern <sub><sup>*Optional**</sup></sub>
 ---
@@ -84,24 +109,8 @@ The linear *load_pattern_type* allows generated traffic to increase or decrease 
 
   A valid percentage is any unsigned number, integer or decimal, immediately followed by the percent symbol (`%`). Percentages can exceed `100%` but cannot be negative. For example `15.25%` or `150%`. 
 - **`to`** - The end point this segment should scale to, specified as a percentage.
-- **`over`** - The duration for how long this segment should last.
-  A duration is an integer followed by an optional space and a string value indicating the time unit. Hours can be specified with "h", "hr", "hrs", "hour", or "hours", minutes with "m", "min", "mins", "minute", or "minutes", and seconds with "s", "sec", "secs", "second", or "seconds".
-
-  Examples:
-
-  `1h` = 1 hour
-
-  `30 minutes` = 30 minutes
+- **`over`** - The duration for how long this segment should last. See [duration](#duration)
   
-  Multiple duration pieces can be chained together to form more complex durations.
-
-  Examples:
-
-  `1h45m30s` = 1 hour, 45 minutes and 30 seconds
-
-  `4 hrs 15 mins` = 4 hours and 15 minutes
-
-  As seen in the above examples, an optional space can be used to delimit the individual duration pieces.
 
 ### providers <sub><sup>*Optional*</sup></sub>
 ---
@@ -409,17 +418,7 @@ endpoints:
 The `endpoints` section declares what HTTP endpoints will be called during a test.
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare section](#declare)
-- **`headers`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs which specify the headers which should be used for the request. Values can be interpolated with names of providers.
-
-  For example:
-
-  ```yaml
-  endpoints:
-    url: https://localhost/foo/bar
-    headers:
-      Authorization: Bearer {{sessionId}}
-  ```
-  specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".
+- **`headers`** <sub><sup>*Optional*</sup></sub> - See [headers](#headers)
 - **`body`** <sub><sup>*Optional*</sup></sub> - A string value indicating the body that should be sent with the request.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
@@ -435,7 +434,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-- **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a default stats identifier of the HTTP method and the immutable parts of the url.
+- **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
 - **`url`** - A string value specifying the fully qualified url to the endpoint which will be requested.
@@ -724,3 +723,33 @@ The *logs_section* provides a means of sending data to a logger based on the res
 - **`select`** - Determines the shape of the data sent into the logger.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays.
 - **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data into a logger based on a predicate.
+
+### Common Types
+- <i id="duration">`Duration`</i> - A duration is an integer followed by an optional space and a string value indicating the time unit. Hours can be specified with "h", "hr", "hrs", "hour", or "hours", minutes with "m", "min", "mins", "minute", or "minutes", and seconds with "s", "sec", "secs", "second", or "seconds".
+
+  Examples:
+
+  `1h` = 1 hour
+
+  `30 minutes` = 30 minutes
+  
+  Multiple duration pieces can be chained together to form more complex durations.
+
+  Examples:
+
+  `1h45m30s` = 1 hour, 45 minutes and 30 seconds
+
+  `4 hrs 15 mins` = 4 hours and 15 minutes
+
+  As seen in the above examples, an optional space can be used to delimit the individual duration pieces.
+- <i id="headers">`Headers`</i> - Key/value string pairs which specify the headers which will be sent with a request. Values can be interpolated with names of providers.
+
+  For example:
+
+  ```yaml
+  endpoints:
+    url: https://localhost/foo/bar
+    headers:
+      Authorization: Bearer {{sessionId}}
+  ```
+  specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".

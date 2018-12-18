@@ -139,8 +139,8 @@ pub struct FileProvider {
     pub csv: CsvSettings,
     #[serde(default)]
     pub auto_return: Option<EndpointProvidesSendOptions>,
-    #[serde(default)]
     // range 1-65535
+    #[serde(default)]
     pub buffer: Limit,
     #[serde(default)]
     pub format: FileFormat,
@@ -261,9 +261,99 @@ struct EndpointProvidesPreProcessed {
     pub where_clause: Option<String>,
 }
 
+#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Deserialize)]
+pub enum SummaryOutputFormats {
+    Json,
+    Pretty,
+}
+
+impl SummaryOutputFormats {
+    pub fn is_pretty(self) -> bool {
+        match self {
+            SummaryOutputFormats::Pretty => true,
+            _ => false
+        }
+    }
+}
+
+impl Default for SummaryOutputFormats {
+    fn default() -> Self {
+        SummaryOutputFormats::Pretty
+    }
+}
+
+fn default_bucket_size() -> Duration {
+    Duration::from_secs(60)
+}
+
+fn default_keepalive() -> Duration {
+    Duration::from_secs(90)
+}
+
+fn default_request_timeout() -> Duration {
+    Duration::from_secs(60)
+}
+
+fn default_auto_buffer_start_size() -> usize {
+    5
+}
+
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
+pub struct ClientConfig {
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout: Duration,
+    #[serde(default, with = "tuple_vec_map")]
+    pub headers: Vec<(String, String)>,
+    #[serde(default = "default_keepalive")]
+    pub keepalive: Duration,
+}
+
+impl Default for ClientConfig {
+    fn default() -> Self {
+        ClientConfig {
+            request_timeout: default_request_timeout(),
+            headers: Vec::new(),
+            keepalive: default_keepalive()
+        }
+    }
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+pub struct GeneralConfig {
+    #[serde(default = "default_auto_buffer_start_size")]
+    pub auto_buffer_start_size: usize,
+    #[serde(default = "default_bucket_size", deserialize_with = "deserialize_duration")]
+    pub bucket_size: Duration,
+    #[serde(default)]
+    pub summary_output_format: SummaryOutputFormats,
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        GeneralConfig {
+            auto_buffer_start_size: default_auto_buffer_start_size(),
+            bucket_size: default_bucket_size(),
+            summary_output_format: SummaryOutputFormats::default()
+        }
+    }
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Default, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub client: ClientConfig,
+    pub general: GeneralConfig,
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+pub struct LoadTest {
+    #[serde(default)]
+    pub config: Config,
     pub endpoints: Vec<Endpoint>,
     #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
     pub load_pattern: Option<Vec<LoadPattern>>,

@@ -328,6 +328,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         let test_timeout = ctx.test_timeout.clone();
         let streams = zip_all(streams).map_err(|_| panic!("error from zip_all"))
             .select(ctx.test_timeout.clone().into_stream().map(|_| unreachable!("timeouts only error")));
+        let timeout = ctx.config.client.request_timeout;
         ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
             let mut body_stream = None;
@@ -441,7 +442,6 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             let outgoing = outgoing.clone();
             let test_timeout = test_timeout.clone();
             let url2 = url.clone();
-            let timeout = Duration::from_secs(60);
             let timeout_in_ms = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
             Timeout::new(response_future, timeout)
                 .map_err(move |err| {

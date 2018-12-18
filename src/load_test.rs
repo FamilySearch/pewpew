@@ -1,10 +1,5 @@
 use chrono::{Duration as ChronoDuration, Local};
-use crate::config::{
-    Config,
-    LoadPattern,
-    Provider,
-    Select
-};
+use crate::config;
 use crate::channel;
 use crate::providers;
 use crate::request;
@@ -32,11 +27,12 @@ use tokio::{
 use std::{
     cmp,
     collections::BTreeMap,
-    sync::Arc,
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
 pub struct LoadTest {
+    pub config: config::Config,
     // the http client
     pub client: Arc<Client<HttpsConnector<HttpConnector>>>,
     // how long the test will run for (can go longer due to waiting for responses)
@@ -48,7 +44,7 @@ pub struct LoadTest {
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Kind>,
     // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, (channel::Sender<JsonValue>, Option<Select>)>,
+    pub loggers: BTreeMap<String, (channel::Sender<JsonValue>, Option<config::Select>)>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
     // a trigger used to signal when the endpoints tasks finish (including sending their stats)
@@ -56,9 +52,8 @@ pub struct LoadTest {
     pub test_timeout: Shared<Box<dyn Future<Item=(), Error=()> + Send>>,
 }
 
-impl LoadTest
-{
-    pub fn new (config: Config) -> Self {
+impl LoadTest {
+    pub fn new (config: config::LoadTest) -> Self {
         let mut providers = BTreeMap::new();
         let mut static_providers = BTreeMap::new();
 
@@ -66,20 +61,35 @@ impl LoadTest
         let test_ended_rx = test_ended_rx.shared();
 
         // build and register the providers
+        let auto_size = config.config.general.auto_buffer_start_size;
         for (name, template) in config.providers {
             let test_ended_rx = test_ended_rx.clone();
             let provider = match template {
-                Provider::File(template) =>
-                    providers::file(template, test_ended_rx),
-                Provider::Range(range) =>
+                config::Provider::File(template) => {
+                    // the auto_buffer_start_size is not the default
+                    if auto_size != 5 {
+                        if let channel::Limit::Auto(limit) = &template.buffer {
+                            limit.store(auto_size, Ordering::Relaxed);
+                        }
+                    }
+                    providers::file(template, test_ended_rx)
+                },
+                config::Provider::Range(range) =>
                     providers::range(range, test_ended_rx),
-                Provider::Response(template) =>
-                    providers::response(template),
-                Provider::Static(value) | Provider::Environment(value) => {
+                config::Provider::Response(template) => {
+                    // the auto_buffer_start_size is not the default
+                    if auto_size != 5 {
+                        if let channel::Limit::Auto(limit) = &template.buffer {
+                            limit.store(auto_size, Ordering::Relaxed);
+                        }
+                    }
+                    providers::response(template)
+                },
+                config::Provider::Static(value) | config::Provider::Environment(value) => {
                     static_providers.insert(name.clone(), value.clone());
                     providers::literals(vec!(value), None, test_ended_rx)
                 },
-                Provider::StaticList(values) =>
+                config::Provider::StaticList(values) =>
                     providers::literals(values, None, test_ended_rx),
             };
             providers.insert(name, provider);
@@ -103,7 +113,7 @@ impl LoadTest
                 let mod_interval2 = load_pattern.iter()
                     .fold(start, |prev, lp| {
                         match lp {
-                            LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load)))
+                            config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load)))
                         }
                     });
                 mod_interval = Some(mod_interval2);
@@ -116,12 +126,14 @@ impl LoadTest
             } else if endpoint.provides.iter().all(|(_, p)| p.get_send_behavior().is_if_not_full()) {
                 panic!("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`");
             }
+            let mut headers: Vec<_> = config.config.client.headers.clone();
+            headers.extend(endpoint.headers);
             let builder = request::Builder::new(endpoint.url, mod_interval)
                 .declare(endpoint.declare)
                 .body(endpoint.body)
                 .stats_id(endpoint.stats_id)
                 .method(endpoint.method)
-                .headers(endpoint.headers)
+                .headers(headers)
                 .provides(endpoint.provides)
                 .logs(endpoint.logs);
             builders.push(builder);
@@ -136,17 +148,18 @@ impl LoadTest
 
         let client = {
             let mut http = HttpConnector::new(4);
-            http.set_keepalive(Some(Duration::from_secs(90)));
+            http.set_keepalive(Some(config.config.client.keepalive));
             http.set_reuse_address(true);
             http.enforce_http(false);
             let https = HttpsConnector::from((http, TlsConnector::new().unwrap()));
             Client::builder().build::<_, Body>(https)
         };
 
-        let (stats_tx, stats_rx_done) = create_stats_channel(test_ended_rx);
+        let (stats_tx, stats_rx_done) = create_stats_channel(test_ended_rx, &config.config.general);
         tokio::spawn(stats_rx_done);
 
         let mut load_test = LoadTest {
+            config: config.config,
             client: Arc::new(client),
             duration,
             endpoint_calls: Vec::new(),

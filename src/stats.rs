@@ -1,3 +1,4 @@
+use crate::config;
 use crate::load_test;
 use ansi_term::{Color, Style};
 use chrono::{DateTime, Local, NaiveDateTime, Utc};
@@ -12,7 +13,7 @@ use hyper::Method;
 use parking_lot::Mutex;
 use serde::{Serialize};
 use serde_derive::{Serialize, Deserialize};
-use serde_json::{Serializer};
+use serde_json as json;
 use tokio::{
     fs::File as TokioFile,
     timer::Interval,
@@ -20,6 +21,7 @@ use tokio::{
 use url::Url;
 
 use std::{
+    cell::Cell,
     cmp,
     collections::BTreeMap,
     ops::AddAssign,
@@ -105,6 +107,10 @@ struct RollingAggregateStats {
     buckets: BTreeMap<EndpointId, (StatsId, BTreeMap<u64, AggregateStats>)>,
     #[serde(skip_serializing)]
     duration: u64,
+    #[serde(skip)]
+    end_time: Cell<Option<Instant>>,
+    #[serde(skip_serializing)]
+    last_print_time: Cell<u64>,
     #[serde(skip_serializing)]
     time: u64,
 }
@@ -114,6 +120,8 @@ impl RollingAggregateStats {
         RollingAggregateStats {
             buckets: BTreeMap::new(),
             duration: duration.as_secs(),
+            end_time: Cell::new(None),
+            last_print_time: Cell::new(0),
             time,
         }
     }
@@ -178,7 +186,7 @@ impl RollingAggregateStats {
         let stats = self.clone();
         TokioFile::create(format!("stats-{}.json", self.time))
             .and_then(move |mut file| {
-                if let Err(e) = stats.serialize(&mut Serializer::new(&mut file)) {
+                if let Err(e) = stats.serialize(&mut json::Serializer::new(&mut file)) {
                     eprint!("{}", format!("error persisting stats {:?}\n", e))
                 }
                 Ok(())
@@ -187,20 +195,52 @@ impl RollingAggregateStats {
                 Ok(())
             })
     }
+
+    fn print_summary(&self, time: u64, summary_output_format: config::SummaryOutputFormats) {
+        let mut printed = false;
+        self.last_print_time.set(time);
+        let is_pretty_format = summary_output_format.is_pretty();
+        if is_pretty_format {
+            eprint!("{}", Style::new().bold().paint(format!("\nBucket Summary {}\n", create_date_diff(time, time + self.duration))));
+        }
+        for (stats_id, stats_map) in self.buckets.values() {
+            if let Some(stats) = stats_map.get(&time) {
+                if !printed {
+                    printed = true;
+                }
+                stats.print_summary(
+                    stats_id,
+                    summary_output_format,
+                    true
+                );
+            }
+        }
+        if is_pretty_format {
+            if !printed {
+                eprint!("{}", "no data\n");
+            }
+            if let Some(et) = self.end_time.get() {
+                if et > Instant::now() {
+                    let test_end_msg = load_test::duration_till_end_to_pretty_string(et - Instant::now());
+                    eprint!("{}", format!("\n{}\n", test_end_msg));
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
 pub struct AggregateStats {
     connection_errors: FnvHashMap<String, u64>,
-    duration: u64,
-    end_time: u64,
+    duration: u64, // in seconds
+    end_time: u64, // epoch in seconds, when the last request was logged
     request_timeouts: u64,
     #[serde(with = "histogram_serde")]
     rtt_histogram: Histogram<u64>,
-    start_time: u64,
+    start_time: u64, // epoch in seconds, when the first request was logged
     status_counts: FnvHashMap<u16, u64>,
-    time: u64,
+    time: u64, // epoch in seconds, when the bucket time begins
 }
 
 impl AddAssign<ResponseStat> for AggregateStats {
@@ -232,6 +272,9 @@ impl AddAssign<ResponseStat> for AggregateStats {
 
 impl AddAssign<&AggregateStats> for AggregateStats {
     fn add_assign(&mut self, rhs: &AggregateStats) {
+        self.time = cmp::min(self.time, rhs.time);
+        self.start_time = cmp::min(self.start_time, rhs.start_time);
+        self.end_time = cmp::max(self.end_time, rhs.end_time);
         self.rtt_histogram += &rhs.rtt_histogram;
         for (status, count) in &rhs.status_counts {
             self.status_counts.entry(*status)
@@ -286,37 +329,81 @@ impl AggregateStats {
         }
     }
 
-    fn print_summary(&self, method: &str, url: &str) {
-        eprint!("{}", Color::Yellow.dimmed().paint(format!("\n- {} {}:\n", method, url)));
-        eprint!("{}", format!("  calls made: {}\n", self.rtt_histogram.len()));
-        eprint!("{}", format!("  status counts: {:?}\n", self.status_counts));
-        if self.request_timeouts > 0 {
-            eprint!("{}", format!("  request timeouts: {:?}\n", self.request_timeouts));
+    fn print_summary(&self, stats_id: &StatsId, format: config::SummaryOutputFormats, bucket_summary: bool) {
+        let calls_made = self.rtt_histogram.len() + self.request_timeouts;
+        let method = stats_id.get("method").expect("stats_id missing `method`");
+        let url = stats_id.get("url").expect("stats_id missing `url`");
+        let p50 = self.rtt_histogram.value_at_quantile(0.5);
+        let p90 = self.rtt_histogram.value_at_quantile(0.90);
+        let p95 = self.rtt_histogram.value_at_quantile(0.95);
+        let p99 = self.rtt_histogram.value_at_quantile(0.99);
+        let p99_9 = self.rtt_histogram.value_at_quantile(0.999);
+        let min = self.rtt_histogram.min();
+        let max = self.rtt_histogram.max();
+        let mean = (self.rtt_histogram.mean() * 100.0).round() / 100.0;
+        let stddev = (self.rtt_histogram.stdev() * 100.0).round() / 100.0;
+        match format {
+            config::SummaryOutputFormats::Pretty => {
+                eprint!("{}", Color::Yellow.dimmed().paint(format!("\n- {} {}:\n", method, url)));
+                eprint!("{}", format!("  calls made: {}\n", calls_made));
+                eprint!("{}", format!("  status counts: {:?}\n", self.status_counts));
+                if self.request_timeouts > 0 {
+                    eprint!("{}", format!("  request timeouts: {:?}\n", self.request_timeouts));
+                }
+                if !self.connection_errors.is_empty() {
+                    eprint!("{}", format!("  connection errors: {:?}\n", self.connection_errors));
+                }
+                eprint!(
+                    "{}",
+                    format!(
+                        "  p50: {}ms, p90: {}ms, p95: {}ms, p99: {}ms, p99.9: {}ms\n",
+                        p50, p90, p95, p99, p99_9
+                    )
+                );
+                eprint!(
+                    "{}",
+                    format!(
+                        "  min: {}ms, max: {}ms, avg: {}ms, std. dev: {}ms\n",
+                        min, max, mean, stddev
+                    )
+                );
+            },
+            config::SummaryOutputFormats::Json => {
+                let summary_type = if bucket_summary {
+                    "bucket"
+                } else {
+                    "test"
+                };
+                let output = json::json!({
+                    "startTime": self.time,
+                    "time": self.time + self.duration,
+                    "summaryType": summary_type,
+                    "method": method,
+                    "url": url,
+                    "callCount": calls_made,
+                    "statusCounts": self.status_counts,
+                    "requestTimeouts": self.request_timeouts,
+                    "connectionErrorCount":
+                        self.connection_errors.iter()
+                            .fold(0, |sum, (_, c)| sum + c),
+                    "connectionErrors": self.connection_errors,
+                    "p50": p50,
+                    "p90": p90,
+                    "p95": p95,
+                    "p99": p99,
+                    "p99_9": p99_9,
+                    "min": min,
+                    "max": max,
+                    "mean": mean,
+                    "stddev": stddev,
+                    "statsId":
+                        stats_id.iter()
+                            .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
+                            .collect::<BTreeMap<_, _>>(),
+                });
+                eprint!("{}", format!("{}\n", output));
+            }
         }
-        if !self.connection_errors.is_empty() {
-            eprint!("{}", format!("  connection errors: {:?}\n", self.connection_errors));
-        }
-        eprint!(
-            "{}",
-            format!(
-                "  p50: {}ms, p90: {}ms, p95: {}ms, p99: {}ms, p99.9: {}ms\n",
-                self.rtt_histogram.value_at_quantile(0.5),
-                self.rtt_histogram.value_at_quantile(0.90),
-                self.rtt_histogram.value_at_quantile(0.95),
-                self.rtt_histogram.value_at_quantile(0.99),
-                self.rtt_histogram.value_at_quantile(0.999),
-            )
-        );
-        eprint!(
-            "{}",
-            format!(
-                "  min: {}ms, max: {}ms, avg: {:.2}ms, std. dev: {:.2}ms\n",
-                self.rtt_histogram.min(),
-                self.rtt_histogram.max(),
-                self.rtt_histogram.mean(),
-                self.rtt_histogram.stdev(),
-            )
-        );
     }
 }
 
@@ -350,7 +437,7 @@ impl From<ResponseStat> for StatsMessage {
     }
 }
 
-pub fn create_stats_channel<F>(test_complete: F)
+pub fn create_stats_channel<F>(test_complete: F, config: &config::GeneralConfig)
     -> (
         futures_channel::UnboundedSender<StatsMessage>,
         impl Future<Item = (), Error = ()> + Send,
@@ -360,48 +447,28 @@ pub fn create_stats_channel<F>(test_complete: F)
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
-    let bucket_size = Duration::from_secs(60);
+    let bucket_size = config.bucket_size;
     let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
     let next_bucket = Duration::from_millis((bucket_size.as_secs() - (start_sec - start_bucket)) * 1000 + 1);
     let stats = Arc::new(Mutex::new(RollingAggregateStats::new(start_bucket, bucket_size)));
     let stats2 = stats.clone();
     let stats3 = stats.clone();
     let stats4 = stats.clone();
-    let end_time: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
-    let end_time2 = end_time.clone();
+    let summary_output_format = config.summary_output_format;
+    let is_pretty_format = summary_output_format.is_pretty();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_| ())
         .for_each(move |_| {
             let stats = stats4.lock();
-            let mut printed = false;
             let prev_time = get_epoch() / stats.duration * stats.duration - stats.duration;
-            eprint!("{}", Style::new().bold().paint(format!("\nMinute Summary {}\n", create_date_diff(prev_time, prev_time + stats.duration))));
-            for (stats_id, stats_map) in stats.buckets.values() {
-                if let Some(stats) = stats_map.get(&prev_time) {
-                    if !printed {
-                        printed = true;
-                    }
-                    stats.print_summary(
-                        stats_id.get("method").expect("stats_id missing `method`"),
-                        stats_id.get("url").expect("stats_id missing `url`")
-                    );
-                }
-            }
-            if !printed {
-                eprint!("{}", "no data\n");
-            }
-            if let Some(et) = *end_time.lock() {
-                if et > Instant::now() {
-                    let test_end_msg = load_test::duration_till_end_to_pretty_string(et - Instant::now());
-                    eprint!("{}", format!("\n{}\n", test_end_msg));
-                }
-            }
+            stats.print_summary(prev_time, summary_output_format);
             Ok(())
         });
     let receiver = Stream::for_each(rx, move |datum| {
+            let mut stats = stats.lock();
             match datum {
-                StatsMessage::EndTime(end_time) => *end_time2.lock() = Some(end_time),
-                StatsMessage::ResponseStat(rs) => stats.lock().append(rs),
+                StatsMessage::EndTime(end_time) => stats.end_time.set(Some(end_time)),
+                StatsMessage::ResponseStat(rs) => stats.append(rs),
             }
             Ok(())
         })
@@ -410,7 +477,7 @@ pub fn create_stats_channel<F>(test_complete: F)
         .select(test_complete.then(|_| Ok(())))
         .then(move |_| stats2.lock().persist())
         .then(move |_| {
-            let mut stats = stats3.lock();
+            let stats = stats3.lock();
             let duration = stats.duration;
             let (start, mut end) = stats.buckets.values()
                 .map(|(_, time_buckets)| {
@@ -421,8 +488,7 @@ pub fn create_stats_channel<F>(test_complete: F)
                     (first, last)
                 }).fold((u64::max_value(), 0), |(a1, b1), (a2, b2)| (cmp::min(a1, a2), cmp::max(b1, b2)));
             end += duration;
-            eprint!("{}", Style::new().bold().paint(format!("\nTest Summary {}\n", create_date_diff(start, end))));
-            for (stats_id, time_buckets) in stats.buckets.values_mut() {
+            for (i, (stats_id, time_buckets)) in stats.buckets.values().enumerate() {
                 let mut summary = {
                     let (start_time_secs, mut end_time_secs) = {
                         let mut bucket_values = time_buckets.values();
@@ -434,15 +500,23 @@ pub fn create_stats_channel<F>(test_complete: F)
                     if start_time_secs == end_time_secs {
                         end_time_secs += duration;
                     }
+                    if end_time_secs > stats.last_print_time.get() {
+                        stats.print_summary(end_time_secs, summary_output_format);
+                    }
                     let duration = Duration::from_secs(end_time_secs - start_time_secs);
                     AggregateStats::new(start_time_secs, duration)
                 };
                 for agg_stats in time_buckets.values() {
                     summary += &*agg_stats;
                 }
+                if i == 0 && is_pretty_format {
+                    eprint!("{}", Style::new().bold().paint(format!("\nTest Summary {}\n", create_date_diff(start, end))));
+                }
                 summary.print_summary(
-                    stats_id.get("method").expect("stats_id missing `method`"),
-                    stats_id.get("url").expect("stats_id missing `url`"));
+                    stats_id,
+                    summary_output_format,
+                    false
+                );
             }
             Ok(())
         });

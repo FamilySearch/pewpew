@@ -18,7 +18,6 @@
 - Make files referenced by a file provider relative to the configuraton file. Also allow absolute paths (not sure if it currently works)
 - Add cli option for results
 - every minute we print stats to console, also write those results to disk, overwriting the previous file every minute
-- add config options: for client: request timeout, standard headers, keepalive time, dns resolution thread pool; general: bucket size, auto-sized providers start size
 - add `files` body provider
 - allow multipart uploads
 - update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run

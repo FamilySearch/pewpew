@@ -15,7 +15,6 @@ mod zip_all;
 use std::fs::File;
 
 use clap::{App, Arg, crate_version};
-use crate::config::Config;
 use crate::load_test::LoadTest;
 use futures::future::lazy;
 use serde_yaml;
@@ -36,7 +35,7 @@ fn main() {
     let load_test_config_file = matches.value_of("CONFIG").unwrap().to_string();
     tokio::run(lazy(move || {
         let file = File::open(&load_test_config_file).unwrap_or_else(|_| panic!("error opening `{}`", load_test_config_file));
-        let config: Config = serde_yaml::from_reader(file).expect("couldn't parse yaml");
+        let config: config::LoadTest = serde_yaml::from_reader(file).expect("couldn't parse yaml");
         LoadTest::new(config).run()
     }));
 }

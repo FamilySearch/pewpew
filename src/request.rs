@@ -232,13 +232,11 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         let handlebars = Arc::new(handlebars);
         let (uri, provider_names) = textify(self.uri, handlebars.clone(), &ctx.static_providers);
         required_providers.extend(provider_names);
-        let headers: Vec<_> = self.headers.into_iter()
-            .map(|(k, v)| {
-                let (key, provider_names) = textify(k, handlebars.clone(), &ctx.static_providers);
-                required_providers.extend(provider_names);
+        let headers: BTreeMap<_, _> = self.headers.into_iter()
+            .map(|(key, v)| {
                 let (value, provider_names) = textify(v, handlebars.clone(), &ctx.static_providers);
                 required_providers.extend(provider_names);
-                (key, value)
+                (key.to_lowercase(), value)
             }).collect();
         let mut limits = Vec::new();
         let mut precheck_rr_providers = 0;
@@ -347,8 +345,7 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             let url = json_value_to_string(&uri(&template_values));
             request.uri(&url);
             request.method(method.clone());
-            for (k, v) in &headers {
-                let key = json_value_to_string(&k(&template_values));
+            for (key, v) in &headers {
                 let value = json_value_to_string(&v(&template_values));
                 request.header(key.as_str(), value.as_str());
             }

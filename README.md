@@ -68,7 +68,7 @@ The `config` section provides a means of customizing different parameters for th
 
 #### client
 - **`request_timeout`** <sub><sup>*Optional*</sup></sub> - A duration signifying how long a request will wait before it times out. Defaults to 60 seconds. See [duration](#duration).
-- **`headers`** <sub><sup>*Optional*</sup></sub> - Headers which will be sent in every request. See [headers](#headers).
+- **`headers`** <sub><sup>*Optional*</sup></sub> - Headers which will be sent in every request. A header specified in an endpoint will override a header specified here with the same key. See [headers](#headers).
 - **`keepalive`** <sub><sup>*Optional*</sup></sub> - The keepalive time that will be used on TCP socket connections. This is different from the `Keep-Alive` HTTP header. Defaults to 90 seconds. See [duration](#duration).
 
 #### general
@@ -470,7 +470,7 @@ Encode a string with the given encoding.
 - `"percent-simple"` - Percent encode every ASCII character less than hexidecimal 20 and greater than 7E.
 - `"percent-userinfo"` - Percent encodes every character included in `"percent-path"` as well as colon (`:`), semi-colon (`;`), equality (`=`), at (`@`), backslash (`\`), square brackets (`[` and `]`), caret (`^`), and pipe (`|`)
 
-**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{start_pad foo 6 "0"}}` would resolve to `id=000083`;
+**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{encode baz "percent-userinfo"}}` would resolve to `https://localhost/abc?foo%3Dbar`.
 
 </td>
 </tr>

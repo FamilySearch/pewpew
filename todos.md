@@ -1,16 +1,14 @@
 # TODOs
-- Make declare section use expressions. Make sure collect can only be used in declare
 - Allow templates in select expressions (for provides and logs). Perhaps something like `foo{{bar}}` (backticks included);
+- Make declare section use expressions. Make sure collect can only be used in declare
 - Clarify in the documentation where templates are used vs expressions
-- Logger enhancements: allow logger to have multiple select clauses
-- Add filename in panic messages from file provider
+- Log when a request is waiting for a provider
+- Logger enhancements: get rid of global logger restriction, and allow endpoints to send to it
 - Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
 - Provide a means of terminating a test with a logger
 - Different endpoint parameters selected randomly based on percentages
-- Improve documentation
 - Allow mathematical expressions in template
 - Allow repeat to be a random number within a range
-- Log when a request is waiting for a provider
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
 - Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.
 - Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand

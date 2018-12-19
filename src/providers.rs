@@ -46,19 +46,30 @@ pub fn file<F>(template: config::FileProvider, test_complete: Shared<F>) -> Kind
         <F as Future>::Error: Send + Sync,
         <F as Future>::Item: Send + Sync,
 {
+    let file = template.path.clone();
     let stream = match template.format {
-        config::FileFormat::Csv => Either3::A(CsvReader::new(&template).expect("error creating file reader").into_stream()),
-        config::FileFormat::Json => Either3::B(JsonReader::new(&template).expect("error creating file reader").into_stream()),
-        config::FileFormat::Line => Either3::C(LineReader::new(&template).expect("error creating file reader").into_stream()),
+        config::FileFormat::Csv => Either3::A(
+            CsvReader::new(&template)
+                .unwrap_or_else(|e| panic!("error creating file reader with file `{}`. {}", file, e))
+                .into_stream()
+        ),
+        config::FileFormat::Json =>
+            Either3::B(JsonReader::new(&template)
+                .unwrap_or_else(|e| panic!("error creating file reader with file `{}`. {}", file, e))
+                .into_stream()
+            ),
+        config::FileFormat::Line =>
+            Either3::C(LineReader::new(&template)
+                .unwrap_or_else(|e| panic!("error creating file reader with file `{}`. {}", file, e))
+                .into_stream()),
     };
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
     let prime_tx = stream
-        .map_err(|e| println!("file reading error: {}", e))
+        .map_err(move |e| println!("file reading error with file `{}`. {}", file, e))
         .forward(tx2)
-        // Error propagate here when sender channel closes at test conclusion
-        // .then(|_v| Ok(()))
         .map(|_| ())
+        // Error propagate here when sender channel closes at test conclusion
         .map_err(|_| ())
         .select(test_complete.then(|_| Ok(())))
         .then(|_| Ok(()));

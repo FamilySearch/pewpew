@@ -178,6 +178,47 @@ fn f64_value(json: &json::Value) -> f64 {
     }
 }
 
+#[derive(Clone)]
+enum ValueOrComplexExpression {
+    V(Value),
+    Ce(ComplexExpression),
+}
+
+impl ValueOrComplexExpression {
+    fn evaluate<'a, 'b: 'a>(&'b self, d: &'a json::Value) -> Cow<'a, json::Value> {
+        match self {
+            ValueOrComplexExpression::V(v) => v.evaluate(d),
+            ValueOrComplexExpression::Ce(ce) => Cow::Owned(ce.execute(d).into()),
+        }
+    }
+
+    fn evaluate_as_iter<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
+        match self {
+            ValueOrComplexExpression::V(v) => Either::A(v.evaluate_as_iter(d)),
+            ValueOrComplexExpression::Ce(ce) => Either::B(iter::once(ce.execute(d).into())),
+        }
+    }
+}
+
+impl From<ComplexExpression> for ValueOrComplexExpression {
+    fn from(mut ce: ComplexExpression) -> Self {
+        match (ce.pieces.len(), ce.pieces.last_mut()) {
+            (1, Some(Expression::Simple(se))) if se.rest.is_none() => {
+                let value = std::mem::replace(&mut se.lhs, Value::Json(false, json::Value::Null));
+                ValueOrComplexExpression::V(value)
+            },
+            (1, Some(Expression::Complex(_))) => {
+                if let Some(Expression::Complex(ce)) = ce.pieces.pop() {
+                    ce.into()
+                } else {
+                    unreachable!();
+                }
+            },
+            _ => ValueOrComplexExpression::Ce(ce),
+        }
+    }
+}
+
 type Not = bool;
 
 #[derive(Clone)]
@@ -368,7 +409,7 @@ enum ParsedSelect {
     Null,
     Bool(bool),
     Number(json::Number),
-    Value(Value),
+    Expression(ValueOrComplexExpression),
     Array(Vec<ParsedSelect>),
     Object(Vec<(String, ParsedSelect)>),
 }
@@ -379,7 +420,7 @@ impl ParsedSelect {
             ParsedSelect::Null => json::Value::Null,
             ParsedSelect::Bool(b) => json::Value::Bool(*b),
             ParsedSelect::Number(n) => json::Value::Number(n.clone()),
-            ParsedSelect::Value(v) => v.evaluate(d).into_owned(),
+            ParsedSelect::Expression(v) => v.evaluate(d).into_owned(),
             ParsedSelect::Array(v) => {
                 let v = v.iter().map(|p| p.evaluate(d))
                     .collect();
@@ -409,7 +450,7 @@ pub const REQUEST_URL: u16 = 0b100_000_000;
 #[derive(Clone, Parser)]
 #[grammar = "config/select.pest"]
 pub struct Select {
-    join: Vec<Value>,
+    join: Vec<ValueOrComplexExpression>,
     providers: BTreeSet<String>,
     special_providers: u16,
     send_behavior: EndpointProvidesSendOptions,
@@ -452,17 +493,17 @@ impl Select {
         let mut providers = BTreeSet::new();
         let mut special_providers = 0;
         let join: Vec<_> = provides.for_each.iter().map(|s| {
-            let pairs = Select::parse(Rule::value_entry, s).unwrap();
-            let v = parse_value(pairs, handlebars, &mut providers, static_providers);
+            let pairs = Select::parse(Rule::entry_point, s).unwrap();
+            let v = parse_complex_expression(pairs, handlebars, &mut providers, static_providers);
             if providers.contains("for_each") {
                 panic!("cannot reference `for_each` from within `for_each`");
             }
-            v
+            v.into()
         }).collect();
         let mut where_clause_special_providers = 0;
         let where_clause = provides.where_clause.as_ref().map(|s| {
             let mut providers2 = BTreeSet::new();
-            let pairs = Select::parse(Rule::where_entry, s).unwrap();
+            let pairs = Select::parse(Rule::entry_point, s).unwrap();
             let ce = parse_complex_expression(pairs, handlebars, &mut providers2, static_providers);
             providers_helper(&mut providers2, &mut where_clause_special_providers);
             providers.extend(providers2);
@@ -553,9 +594,9 @@ fn parse_select(
         json::Value::Bool(b) => ParsedSelect::Bool(b),
         json::Value::Number(n) => ParsedSelect::Number(n),
         json::Value::String(s) => {
-            let pairs = Select::parse(Rule::value_entry, &s).unwrap();
-            let value = parse_value(pairs, handlebars, providers, static_providers);
-            ParsedSelect::Value(value)
+            let pairs = Select::parse(Rule::entry_point, &s).unwrap();
+            let value = parse_complex_expression(pairs, handlebars, providers, static_providers);
+            ParsedSelect::Expression(value.into())
         },
         json::Value::Array(a) => {
             let new = a.into_iter().map(|v| parse_select(v, handlebars, providers, static_providers))
@@ -763,6 +804,7 @@ fn parse_complex_expression(
     let mut append_to_previous = false;
     for pair in pairs {
         let rule = pair.as_rule();
+        println!("rule {:?}", rule);
         match rule {
             Rule::simple_expression | Rule::group_expression => {
                 let new = match rule {
@@ -900,7 +942,10 @@ mod tests {
         // (select json, expected out data)
         let check_table = vec!(
             (json::json!(4), vec!(json::json!(4))),
+            (json::json!("true && false"), vec!(false.into())),
+            (json::json!("((true || false))"), vec!(true.into())),
             (json::json!("c[0].d"), vec!(json::json!(1))),
+            (json::json!("(c[0].d)"), vec!(json::json!(1))),
             (json::json!(r#"json_path("c.*.d")"#), vec!(json::json!([1, 2, 3]))),
             (json::json!("repeat(5)"), vec!(json::json!([null, null, null, null, null]))),
             (json::json!("c.length"), vec!(json::json!(3))),
@@ -994,6 +1039,7 @@ mod tests {
         // (select, for_each, expect)
         let check_table = vec!(
             (json::json!("a"), vec!("repeat(5)"), vec!(json::json!(3), json::json!(3), json::json!(3), json::json!(3), json::json!(3))),
+            (json::json!("for_each[1]"), vec!("repeat(3)", "true || false"), vec!(true.into(), true.into(), true.into())),
             (json::json!("for_each[0]"), vec!(r#"json_path("c.*.d")"#), vec!(json::json!(1), json::json!(2), json::json!(3))),
             (json::json!("for_each[0]"), vec!("c"), vec!(json::json!({ "d": 1 }), json::json!({ "d": 2 }), json::json!({ "d": 3 }))),
             (

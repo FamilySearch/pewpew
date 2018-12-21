@@ -54,11 +54,7 @@ boolean = { "true" | "false" }
 
 null = { "null" }
 
-// Select/For_Each clause
-value_entry = _ { SOI ~ value ~ EOI }
-
-// Where clause
-where_entry = _{ SOI ~ complex_expression ~ EOI }
+entry_point = _ { SOI ~ complex_expression ~ EOI }
 
 complex_expression = _{
     (simple_expression | group_expression) ~

@@ -1,10 +1,11 @@
 # TODOs
-- Allow templates in select expressions (for provides and logs). Perhaps something like `foo{{bar}}` (backticks included);
 - Make declare section use expressions. Make sure collect can only be used in declare
+- Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
+- Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
 - Clarify in the documentation where templates are used vs expressions
 - Log when a request is waiting for a provider
 - Logger enhancements: get rid of global logger restriction, and allow endpoints to send to it
-- Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
+- Add ability to parse substring/strings out of a string with a regex. If no capture groups then just a single string will return if it matches. If there are capture groups and object will be provided with the capture group number or name as the key and the matche as the value. It should skip capture group 0.
 - Provide a means of terminating a test with a logger
 - Different endpoint parameters selected randomly based on percentages
 - Allow mathematical expressions in template

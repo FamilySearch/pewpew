@@ -36,11 +36,13 @@ function_call = {
 
 function_arg = _{ function_call | value }
 
-not_quote = _{ !QUOTATION_MARK ~ ANY }
+QUOTATION_MARK = _{ "\"" | "'" | "`" }
 
-string = @{ ("\\\"" | not_quote)* }
+not_quote = _{ !PEEK ~ ANY }
 
-string_outer = _{ QUOTATION_MARK ~ string ~ QUOTATION_MARK }
+string = @{ (("\\" ~ ANY) | not_quote)* }
+
+string_outer = _{ PUSH(QUOTATION_MARK) ~ string ~ POP }
 
 integer = @{ "-"? ~ ASCII_DIGIT+ }
 
@@ -53,7 +55,7 @@ boolean = { "true" | "false" }
 null = { "null" }
 
 // Select/For_Each clause
-value_entry = _ { SOI ~ json_path ~ EOI }
+value_entry = _ { SOI ~ value ~ EOI }
 
 // Where clause
 where_entry = _{ SOI ~ complex_expression ~ EOI }

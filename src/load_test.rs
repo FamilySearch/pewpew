@@ -4,6 +4,13 @@ use crate::channel;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, StatsMessage};
+use crate::template::{
+    encode_helper,
+    epoch_helper,
+    join_helper,
+    pad_helper,
+    stringify_helper,
+};
 use futures::{
     future::{join_all, lazy, Shared},
     sync::{
@@ -11,6 +18,7 @@ use futures::{
         oneshot,
     }
 };
+use handlebars::Handlebars;
 pub use hyper::{
     Body,
     client::HttpConnector,
@@ -39,6 +47,7 @@ pub struct LoadTest {
     duration: Duration,
     // a list of futures for the endpoint tasks to run
     endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
+    pub handlebars: Arc<Handlebars>,
     // a mapping of names to their prospective static (single value) providers
     pub static_providers: BTreeMap<String, JsonValue>,
     // a mapping of names to their prospective providers
@@ -54,6 +63,15 @@ pub struct LoadTest {
 
 impl LoadTest {
     pub fn new (config: config::LoadTest) -> Self {
+        let mut handlebars = Handlebars::new();
+        handlebars.register_helper("epoch", Box::new(epoch_helper));
+        handlebars.register_helper("join", Box::new(join_helper));
+        handlebars.register_helper("stringify", Box::new(stringify_helper));
+        handlebars.register_helper("start_pad", Box::new(pad_helper));
+        handlebars.register_helper("end_pad", Box::new(pad_helper));
+        handlebars.register_helper("encode", Box::new(encode_helper));
+        handlebars.set_strict_mode(true);
+        let handlebars = Arc::new(handlebars);
         let mut providers = BTreeMap::new();
         let mut static_providers = BTreeMap::new();
 
@@ -95,9 +113,11 @@ impl LoadTest {
             providers.insert(name, provider);
         }
 
+        let eppp_to_select = |eppp| config::Select::new(eppp, &handlebars, &static_providers);
+
         let loggers = config.loggers.into_iter().map(|(name, template)| {
             let test_ended_rx = test_ended_rx.clone();
-            (name, (providers::logger(&template, test_ended_rx), template.select))
+            (name, (providers::logger(&template, test_ended_rx), template.select.map(eppp_to_select)))
         }).collect();
 
         let global_load_pattern = config.load_pattern;
@@ -106,6 +126,11 @@ impl LoadTest {
         // create the endpoints
         for endpoint in config.endpoints {
             let mut mod_interval = None;
+            let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>| -> Vec<(String, config::Select)> {
+                v.into_iter().map(|(s, eppp)| (s, eppp_to_select(eppp)))
+                    .collect()
+            };
+            let provides = to_select_values(endpoint.provides);
             if let Some(peak_load) = endpoint.peak_load {
                 let load_pattern = endpoint.load_pattern.as_ref()
                     .unwrap_or_else(|| global_load_pattern.as_ref().expect("missing load_pattern"));
@@ -121,9 +146,9 @@ impl LoadTest {
                     left + right.duration()
                 });
                 duration = cmp::max(duration, duration2);
-            } else if endpoint.provides.is_empty() {
+            } else if provides.is_empty() {
                 panic!("endpoint without peak_load must have `provides`");
-            } else if endpoint.provides.iter().all(|(_, p)| p.get_send_behavior().is_if_not_full()) {
+            } else if provides.iter().all(|(_, p)| p.get_send_behavior().is_if_not_full()) {
                 panic!("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`");
             }
             let mut headers: Vec<_> = config.config.client.headers.clone();
@@ -134,8 +159,8 @@ impl LoadTest {
                 .stats_id(endpoint.stats_id)
                 .method(endpoint.method)
                 .headers(headers)
-                .provides(endpoint.provides)
-                .logs(endpoint.logs);
+                .provides(provides)
+                .logs(to_select_values(endpoint.logs));
             builders.push(builder);
         }
 
@@ -163,6 +188,7 @@ impl LoadTest {
             client: Arc::new(client),
             duration,
             endpoint_calls: Vec::new(),
+            handlebars,
             loggers,
             providers,
             static_providers,

@@ -4,7 +4,6 @@ use futures::{
     stream,
     Stream,
 };
-use handlebars::Handlebars;
 use hyper::{
     Body as HyperBody,
     Method,
@@ -23,6 +22,7 @@ use tokio::{
 
 use crate::channel;
 use crate::config::{
+    EndpointProvidesPreProcessed,
     EndpointProvidesSendOptions,
     REQUEST_STARTLINE,
     REQUEST_HEADERS,
@@ -39,12 +39,7 @@ use crate::load_test::LoadTest;
 use crate::providers;
 use crate::stats;
 use crate::template::{
-    encode_helper,
-    epoch_helper,
     json_value_to_string,
-    join_helper,
-    pad_helper,
-    stringify_helper,
     TemplateValues,
     textify,
 };
@@ -66,14 +61,14 @@ pub enum DeclareProvider {
 impl DeclareProvider {
     pub fn resolve(
                 &self,
-                providers: &BTreeMap<String, providers::Kind>,
+                ctx: &LoadTest,
                 name: &str,
                 outgoing: &mut Vec<(Select, channel::Sender<JsonValue>)>
         ) -> impl Stream<Item=JsonValue, Error=()>
     {
         match self {
             DeclareProvider::Alias(s) => {
-                let provider = providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
+                let provider = ctx.providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
                 match provider {
                     providers::Kind::Value(provider) => {
                         if let Some(ar) = provider.auto_return {
@@ -81,8 +76,9 @@ impl DeclareProvider {
                                 "send": ar.to_string(),
                                 "select": name,
                             });
-                            let provide: Select = json::from_value(j).unwrap();
-                            outgoing.push((provide, provider.tx.clone()));
+                            let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
+                            let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
+                            outgoing.push((select, provider.tx.clone()));
                         }
                         Either::A(provider.rx.clone())
                     },
@@ -90,7 +86,7 @@ impl DeclareProvider {
                 }
             },
             DeclareProvider::Collect(min, max, s) => {
-                let provider = providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
+                let provider = ctx.providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
                 match provider {
                     providers::Kind::Value(provider) => {
                         if let Some(ar) = provider.auto_return {
@@ -98,8 +94,9 @@ impl DeclareProvider {
                                 "send": ar.to_string(),
                                 "select": name,
                             });
-                            let provide: Select = json::from_value(j).unwrap();
-                            outgoing.push((provide, provider.tx.clone()));
+                            let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
+                            let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
+                            outgoing.push((select, provider.tx.clone()));
                         }
                         let min = *min;
                         let random = max.map(move |max| Uniform::new_inclusive(min, max));
@@ -221,21 +218,10 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             );
         }
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
-        let mut handlebars = Handlebars::new();
-        handlebars.register_helper("epoch", Box::new(epoch_helper));
-        handlebars.register_helper("join", Box::new(join_helper));
-        handlebars.register_helper("stringify", Box::new(stringify_helper));
-        handlebars.register_helper("start_pad", Box::new(pad_helper));
-        handlebars.register_helper("end_pad", Box::new(pad_helper));
-        handlebars.register_helper("encode", Box::new(encode_helper));
-        handlebars.set_strict_mode(true);
-        let handlebars = Arc::new(handlebars);
-        let (uri, provider_names) = textify(self.uri, handlebars.clone(), &ctx.static_providers);
-        required_providers.extend(provider_names);
+        let uri = textify(self.uri, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers);
         let headers: BTreeMap<_, _> = self.headers.into_iter()
             .map(|(key, v)| {
-                let (value, provider_names) = textify(v, handlebars.clone(), &ctx.static_providers);
-                required_providers.extend(provider_names);
+                let value = textify(v, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers);
                 (key.to_lowercase(), value)
             }).collect();
         let mut limits = Vec::new();
@@ -279,16 +265,10 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                     }
                 })
         );
-        let mut body = if let Some(body) = self.body {
-            let (body, provider_names) = textify(body, handlebars.clone(), &ctx.static_providers);
-            required_providers.extend(provider_names);
-            Some(body)
-        } else {
-            None
-        };
+        let mut body = self.body.map(|body| textify(body, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers));
         for (name, d) in &self.declare {
             required_providers.remove(name);
-            let provider_stream = d.resolve(&ctx.providers, name, &mut outgoing);
+            let provider_stream = d.resolve(&ctx, name, &mut outgoing);
             let name = name.clone();
             let provider_stream = Either3::B(provider_stream.map(move |v| StreamsReturn::TemplateValue((name.clone(), v))));
             streams.push(provider_stream);
@@ -306,8 +286,9 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                             "send": ar.to_string(),
                             "select": name,
                         });
-                        let provide: Select = json::from_value(j).unwrap();
-                        outgoing.push((provide, s.tx.clone()));
+                        let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
+                        let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
+                        outgoing.push((select, s.tx.clone()));
                     }
                     s.rx.clone()
                 },
@@ -342,11 +323,11 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 };
             }
             let mut request = Request::builder();
-            let url = json_value_to_string(&uri(&template_values));
+            let url = uri.to_string(template_values.as_json());
             request.uri(&url);
             request.method(method.clone());
             for (key, v) in &headers {
-                let value = json_value_to_string(&v(&template_values));
+                let value = v.to_string(template_values.as_json());
                 request.header(key.as_str(), value.as_str());
             }
             let mut body_value = None;
@@ -354,20 +335,19 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 match response {
                     ProviderResponse::Channel(_) => unimplemented!(),
                     ProviderResponse::Value(v) => {
-                        let ret = json_value_to_string(&v).into();
+                        let body = json_value_to_string(&v);
                         if rr_providers & REQUEST_BODY != 0 {
-                            body_value = Some(v);
+                            body_value = Some(body.clone());
                         }
-                        ret
+                        body.into()
                     },
                 }
-            } else if let Some(render) = body.as_mut() {
-                let v = render(&template_values);
-                let body = json_value_to_string(&v).into();
+            } else if let Some(b) = body.as_mut() {
+                let body = b.to_string(template_values.as_json());
                 if rr_providers & REQUEST_BODY != 0 {
-                    body_value = Some(v);
+                    body_value = Some(body.clone());
                 }
-                body
+                body.into()
             } else {
                 HyperBody::empty()
             };
@@ -421,10 +401,8 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                 request_obj.insert("headers".into(), JsonValue::Object(headers_json));
             }
             if rr_providers & REQUEST_BODY != 0 {
-                let body_string = body_value.as_ref().map(json_value_to_string)
-                    .unwrap_or_else(|| "".into())
-                    .into();
-                request_obj.insert("body".into(), body_string);
+                let body_string = body_value.unwrap_or_else(|| "".into());
+                request_obj.insert("body".into(), body_string.into());
             }
             request_obj.insert("method".into(), method.as_str().into());
             template_values.insert("request".into(), request_provider);

@@ -1,3 +1,4 @@
+use crate::util::parse_provider_name;
 use handlebars::{
     Context,
     Handlebars,
@@ -8,12 +9,11 @@ use handlebars::{
     RenderContext,
     template::{HelperTemplate, Parameter, Template, TemplateElement},
 };
-use regex::Regex;
 use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ops::{Deref, DerefMut},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -59,12 +59,38 @@ impl From<json::Value> for TemplateValues {
     }
 }
 
-pub type TextifyReturnFn = dyn (Fn(&TemplateValues) -> json::Value) + Send + Sync;
+pub type TextifyReturnFn = dyn (Fn(&json::Value) -> json::Value) + Send + Sync;
 
-pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &BTreeMap<String, json::Value>)
-    -> (Box<TextifyReturnFn>, Vec<String>)
+pub enum TextifyReturn {
+    Trf(Box<TextifyReturnFn>),
+    String(String)
+}
+
+impl TextifyReturn {
+    pub fn to_string(&self, value: &json::Value) -> String {
+        match self {
+            TextifyReturn::Trf(t) => json_value_to_string(&t(value)),
+            TextifyReturn::String(s) => s.clone(),
+        }
+    }
+
+    // is used in test
+    #[allow(dead_code)]
+    fn to_json(&self, value: &json::Value) -> json::Value {
+        match self {
+            TextifyReturn::Trf(t) => t(value),
+            TextifyReturn::String(s) => s.as_str().into(),
+        }
+    }
+}
+
+pub fn textify(
+        string: String,
+        handlebars: Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> TextifyReturn
 {
-    let mut params = Vec::new();
     let mut t = Template::compile(&string).expect("invalid template");
     let mut string2 = Some("".to_string());
     for el in &mut t.elements {
@@ -78,12 +104,9 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
             TemplateElement::Expression(ref param) => {
                 match param {
                     Parameter::Name(n) => {
-                        let object_name_re = Regex::new(r"^([^.]*)").unwrap();
-                        let param_name: String = object_name_re.captures(n).unwrap()
-                            .get(1).expect("invalid provider reference")
-                            .as_str().into();
+                        let param_name = parse_provider_name(n);
                         // if the referenced value is a static provider, resolve it now
-                        if let Some(json) = static_providers.get(&param_name) {
+                        if let Some(json) = static_providers.get(param_name) {
                             let mut t = Template::new(false);
                             t.elements.push(el.to_owned());
                             let ctx = Context::wraps(json::json!({ param_name: json_value_to_string(json) })).expect("could not render template");
@@ -107,8 +130,8 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
                                 block: false,
                             };
                             string2 = None;
+                            providers.insert(param_name.into());
                             *el = TemplateElement::HelperExpression(Box::new(ht));
-                            params.push(param_name);
                         }
                     },
                     _ => panic!("unsupported template syntax")
@@ -123,10 +146,10 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
                     | ("start_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))])
                     | ("end_pad", [Parameter::Name(param_name), Parameter::Literal(json::Value::Number(_)), Parameter::Literal(json::Value::String(_))])
                     | ("encode", [Parameter::Name(param_name), Parameter::Literal(json::Value::String(_))])=> {
+                        let param_name = parse_provider_name(param_name);
                         if let Some(json) = static_providers.get(param_name) {
                             let mut t = Template::new(false);
                             t.elements.push(el.to_owned());
-                            let param_name: &str = param_name.as_ref();
                             let ctx = Context::wraps(json::json!({ param_name: json })).expect("could not render template");
                             let mut render_context = RenderContext::new(None);
                             let s = t.renders(&handlebars, &ctx, &mut render_context)
@@ -138,7 +161,7 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
                             *el = TemplateElement::RawString(s);
                         } else {
                             string2 = None;
-                            params.push(param_name.clone());
+                            providers.insert(param_name.into());
                         }
                     },
                     _ => panic!("unknown template helper or invalid syntax `{}`", helper.name)
@@ -147,20 +170,20 @@ pub fn textify(string: String, handlebars: Arc<Handlebars>, static_providers: &B
             _ => panic!("unsupported template syntax, {:?}", el)
         }
     }
-    let ret_fn: Box<TextifyReturnFn> = if let Some(s) = string2 {
-        Box::new(move |_| json::Value::String(s.clone()))
+    if let Some(s) = string2 {
+        TextifyReturn::String(s)
     } else {
-        Box::new(
+        let ret_fn: Box<TextifyReturnFn> = Box::new(
             move |d| {
-                let ctx = Context::wraps(d.as_json()).expect("could not render template");
+                let ctx = Context::wraps(d).expect("could not render template");
                 let mut render_context = RenderContext::new(None);
                 let s = t.renders(&handlebars, &ctx, &mut render_context)
-                    .unwrap_or_else(|e| panic!("could not render template, {}, {}", string, e));
+                    .unwrap_or_else(|e| panic!("could not render template `{}`, {}", string, e));
                 json::Value::String(s)
             }
-        )
-    };
-    (ret_fn, params)
+        );
+        TextifyReturn::Trf(ret_fn)
+    }
 }
 
 pub fn stringify_helper(h: &Helper<'_, '_>, _: &Handlebars, _: &Context, _: &mut RenderContext<'_>, out: &mut dyn Output) -> HelperResult {
@@ -293,10 +316,13 @@ mod tests {
             ("{{bar.baz}}", ["bar"].iter().map(|s| s.to_string()).collect()),
             ("{{foo}}{{bar}}", ["foo", "bar"].iter().map(|s| s.to_string()).collect()),
             (r#"{{join foo "-"}}"#, ["foo"].iter().map(|s| s.to_string()).collect()),
+            (r#"{{join foo.bar "-"}}"#, ["foo"].iter().map(|s| s.to_string()).collect()),
         );
 
         for (i, (s, expects)) in checks.into_iter().enumerate() {
-            let (_, providers) = textify(s.to_string(), handlebars.clone(), &static_providers);
+            let mut providers = BTreeSet::new();
+            textify(s.into(), handlebars.clone(), &mut providers, &static_providers);
+            let expects: BTreeSet<_> = expects.into_iter().collect();
             assert_eq!(expects, providers, "index {}", i);
         }
     }
@@ -340,9 +366,10 @@ mod tests {
             } else {
                 unreachable!()
             };
-            let (template, providers) = textify(template.to_string(), handlebars.clone(), &b);
+            let mut providers = BTreeSet::new();
+            let left = textify(template.into(), handlebars.clone(), &mut providers, &b)
+                .to_json(template_values.as_json());
             assert!(providers.is_empty(), "index {}", i);
-            let left = template(&template_values);
             if starts_with {
                 assert!(json_value_to_string(&left).starts_with(expect), "index {}, left {} == right {}", i, left, expect);
             } else {

@@ -2,20 +2,21 @@ use super::{
     EndpointProvidesPreProcessed,
     EndpointProvidesSendOptions,
 };
+use crate::template::{textify, TextifyReturn, TextifyReturnFn, json_value_to_string};
+use crate::util::{Either, Either3, parse_provider_name};
+
+use handlebars::Handlebars;
 use itertools::Itertools;
-use jsonpath;
 use pest::{
     iterators::{Pairs, Pair},
     Parser as PestParser,
 };
 use pest_derive::Parser;
-use regex::Regex;
 use serde_json as json;
 
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
-    fmt,
+    collections::{BTreeMap, BTreeSet},
     iter,
     sync::Arc,
 };
@@ -28,45 +29,41 @@ enum FunctionArg {
 
 #[derive(Clone)]
 enum FunctionCall {
-    JsonPath(Arc<jsonpath::Selector>, String),
+    JsonPath(Arc<jsonpath::Selector>),
     Repeat(usize),
 }
 
-impl fmt::Debug for FunctionCall {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            FunctionCall::JsonPath(_, selector) =>
-                write!(f, "FunctionCall {{ JsonPath({}) }}", selector),
-            FunctionCall::Repeat(n) =>
-                write!(f, "FunctionCall {{ Repeat({}) }}", n),
-        }
-    }
-}
-
 impl FunctionCall {
-    fn new (ident: &str, args: &[FunctionArg]) -> Self {
+    fn new (
+            ident: &str, args: &[FunctionArg],
+            providers: &mut BTreeSet<String>,
+            static_providers: &BTreeMap<String, json::Value>
+        ) -> Either<Self, json::Value>
+    {
         if ident == "json_path" {
             match (args.len(), args.first()) {
                 // TODO: if there's ever another function which returns a string, modify this to allow a nested function
-                (1, Some(FunctionArg::Value(Value::JsonValue(false, json::Value::String(json_path))))) => {
-                    // parse out the provider name, or if it's `request` or `response` get the second layer
-                    // TODO: make this more versatile so ['request'].body is parsed properly
-                    let object_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
-                    let provider = object_name_re.captures(json_path).unwrap()
-                        .get(1).expect("invalid json path query")
-                        .as_str().into();
+                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::String(json_path))))) => {
+                    let provider = parse_provider_name(&json_path);
                     // jsonpath requires the query to start with `$.`, so add it in
                     let json_path = format!("$.{}", json_path);
                     let json_path = jsonpath::Selector::new(&json_path)
                          .unwrap_or_else(|e| panic!("invalid json path query, {}\n{:?}", json_path, e));
-                    FunctionCall::JsonPath(Arc::new(json_path), provider)
+                    let ret = if let Some(v) = static_providers.get(provider) {
+                        let r = json_path.find(v);
+                        Either::B(json::Value::Array(r.cloned().collect()))
+                    } else {
+                        Either::A(FunctionCall::JsonPath(Arc::new(json_path)))
+                    };
+                    providers.insert(provider.into());
+                    ret
                 },
                 _ => panic!("invalid arguments for json_path")
             }
         } else if ident == "repeat" {
             match (args.len(), args.first()) {
-                (1, Some(FunctionArg::Value(Value::JsonValue(false, json::Value::Number(n))))) if n.is_u64() => {
-                    FunctionCall::Repeat(n.as_u64().unwrap() as usize)
+                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::Number(n))))) if n.is_u64() => {
+                    Either::A(FunctionCall::Repeat(n.as_u64().unwrap() as usize))
                 },
                  _ => panic!("invalid arguments for repeat")
             }
@@ -77,56 +74,62 @@ impl FunctionCall {
 
     fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
         match &self {
-            FunctionCall::JsonPath(jp, _) => {
+            FunctionCall::JsonPath(jp) => {
                 let result = jp.find(d);
                 let v: Vec<_> = result.cloned().collect();
-                EitherTwoIterator::A(v.into_iter())
+                Either::A(v.into_iter())
             },
             FunctionCall::Repeat(n) => 
-                EitherTwoIterator::B(iter::repeat(json::Value::Null).take(*n)),
+                Either::B(iter::repeat(json::Value::Null).take(*n)),
         }
-    }
-
-    fn get_providers(&self) -> BTreeSet<String> {
-        let mut ret = BTreeSet::new();
-        if let FunctionCall::JsonPath(_, p) = &self {
-            ret.insert(p.clone());
-        }
-        ret
     }
 }
 
-fn index_json<'a>(json: &'a json::Value, index: &JsonPathSegment) -> Cow<'a, json::Value> {
-    let o = match (json, index) {
-        (json::Value::Object(m), JsonPathSegment::String(s)) => m.get(s),
-        (json::Value::Array(a), JsonPathSegment::Number(n)) => a.get(*n),
-        (json::Value::Array(a), JsonPathSegment::String(s)) if s == "length" =>
+fn index_json<'a>(json: &'a json::Value, index: Either<&JsonPathSegment, &str>) -> Cow<'a, json::Value> {
+    #[allow(unused_assignments)]
+    let mut holder = None;
+    let str_or_number = match index {
+        Either::A(jps) => {
+            match jps.evaluate(json) {
+                Either::A(s) => {
+                    holder = Some(s);
+                    Either::A(holder.as_ref().unwrap().as_str())
+                },
+                Either::B(n) => Either::B(n),
+            }
+        },
+        Either::B(s) => Either::A(s),
+    };
+    let o = match (json, str_or_number) {
+        (json::Value::Object(m), Either::A(s)) => m.get(s),
+        (json::Value::Array(a), Either::B(n)) => a.get(n),
+        (json::Value::Array(a), Either::A(s)) if s == "length" =>
             return Cow::Owned((a.len() as u64).into()),
-        _ => panic!("cannot index into json {}. Index: {:?}", json, index)
+        _ => panic!("cannot index into json {}", json)
     };
     Cow::Borrowed(o.unwrap_or(&json::Value::Null))
 }
 
-fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> Cow<'a, json::Value> {
+fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> json::Value {
     for (i, index) in indexes.iter().enumerate() {
-        let o = match (json, index) {
-            (json::Value::Object(m), JsonPathSegment::String(s)) => m.get(s),
-            (json::Value::Array(a), JsonPathSegment::Number(n)) => a.get(*n),
-            (json::Value::Array(a), JsonPathSegment::String(s)) if s == "length" => {
+        let o = match (json, index.evaluate(json)) {
+            (json::Value::Object(m), Either::A(ref s)) => m.get(s),
+            (json::Value::Array(a), Either::B(n)) => a.get(n),
+            (json::Value::Array(a), Either::A(ref s)) if s == "length" => {
                 let ret = (a.len() as u64).into();
                 if i != indexes.len() - 1 {
-                    panic!("cannot index into json {}. Indexes: {:?}", ret, indexes)
+                    panic!("cannot index into json {}", ret)
                 }
-                return Cow::Owned(ret)
+                return ret
             },
-            _ => panic!("cannot index into json {}. Indexes: {:?}", json, indexes),
+            _ => panic!("cannot index into json {}", json),
         };
         json = o.unwrap_or(&json::Value::Null)
     }
-    Cow::Borrowed(json)
+    json.clone()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct JsonPath {
     start: JsonPathStart,
     rest: Vec<JsonPathSegment>,
@@ -137,32 +140,20 @@ impl JsonPath {
         match &self.start {
             JsonPathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
-                EitherTwoIterator::A(
-                    fnc.evaluate(d).map(move |j| index_json2(&j, &rest).into_owned())
+                Either::A(
+                    fnc.evaluate(d).map(move |j| index_json2(&j, &rest))
                 )
             },
             JsonPathStart::JsonIdent(s) => {
-                let j = index_json(d, &JsonPathSegment::String(s.clone()));
-                EitherTwoIterator::B(
-                    iter::once(index_json2(&j, &self.rest).into_owned())
+                let j = index_json(d, Either::B(s));
+                Either::B(
+                    iter::once(index_json2(&j, &self.rest))
                 )
+            },
+            JsonPathStart::Value(v) => {
+                Either::B(iter::once(v.clone()))
             }
         }
-    }
-
-    fn get_providers(&self) -> BTreeSet<String> {
-        let mut ret = BTreeSet::new();
-        match &self.start {
-            JsonPathStart::FunctionCall(fnc) => ret.extend(fnc.get_providers()),
-            JsonPathStart::JsonIdent(s) => {
-                match (s.as_ref(), self.rest.first()) {
-                    ("request", Some(JsonPathSegment::String(s2))) | ("response", Some(JsonPathSegment::String(s2))) =>
-                        ret.insert(format!("{}.{}", s, s2)),
-                    _ => ret.insert(s.clone())
-                };
-            },
-        }
-        ret
     }
 }
 
@@ -189,13 +180,28 @@ fn f64_value(json: &json::Value) -> f64 {
 
 type Not = bool;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum Value {
     JsonPath(Not, JsonPath),
-    JsonValue(Not, json::Value),
+    Json(Not, json::Value),
+    Template(Not, Arc<TextifyReturnFn>),
 }
 
 impl Value {
+    fn from_string(
+            s: String,
+            not: bool,
+            handlebars: Arc<Handlebars>,
+            providers: &mut BTreeSet<String>,
+            static_providers: &BTreeMap<String, json::Value>
+        ) -> Self
+    {
+        match textify(s, handlebars, providers, static_providers) {
+            TextifyReturn::Trf(t) => Value::Template(not, t.into()),
+            TextifyReturn::String(s) => Value::Json(not, s.into())
+        }
+    }
+
     fn evaluate<'a, 'b: 'a>(&'b self, d: &'a json::Value) -> Cow<'a, json::Value> {
         let (not, v) = match self {
             Value::JsonPath(not, path) => {
@@ -209,7 +215,8 @@ impl Value {
                 };
                 (*not, c)
             },
-            Value::JsonValue(not, value) => (*not, Cow::Borrowed(value)),
+            Value::Json(not, value) => (*not, Cow::Borrowed(value)),
+            Value::Template(not, t) => (*not, Cow::Owned(t(d)))
         };
         if not {
             Cow::Owned(json::Value::Bool(!bool_value(&v)))
@@ -221,114 +228,68 @@ impl Value {
     fn evaluate_as_iter<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
         match self {
             Value::JsonPath(not, path) => {
-                let not = *not;
-                EitherThreeIterator::A(
-                    iter::Iterator::flatten(
+                if *not {
+                    Either3::C(iter::once(false.into()))
+                } else {
+                    Either3::A(
                         path.evaluate(d)
                             .map(|v| {
                                 if let json::Value::Array(v) = v {
-                                    EitherTwoIterator::A(v.into_iter())
+                                    Either::A(v.into_iter())
                                 } else {
-                                    EitherTwoIterator::B(iter::once(v))
+                                    Either::B(iter::once(v))
                                 }
                             })
+                            .flatten()
                     )
-                    .map(move |v| {
-                        if not {
-                            json::Value::Bool(!bool_value(&v))
-                        } else {
-                            v
-                        }
-                    })
-                )
-            },
-            Value::JsonValue(not, value) => {
-                let value = if *not {
-                    json::Value::Bool(!bool_value(&value))
-                } else {
-                    value.clone()
-                };
-                match value {
-                    json::Value::Array(v) => EitherThreeIterator::B(v.into_iter()),
-                    _ => EitherThreeIterator::C(iter::once(value)),
                 }
             },
-        }
-    }
-
-    fn get_providers(&self) -> BTreeSet<String> {
-        if let Value::JsonPath(_, p) = self {
-            p.get_providers()
-        } else {
-            BTreeSet::new()
-        }
-    }
-}
-
-#[derive(Clone)]
-enum EitherTwoIterator<A, B, T>
-    where
-        A: Iterator<Item=T> + Clone,
-        B: Iterator<Item=T> + Clone,
-{
-    A(A),
-    B(B),
-}
-
-impl<A, B, T> Iterator for EitherTwoIterator<A, B, T>
-    where
-        A: Iterator<Item=T> + Clone,
-        B: Iterator<Item=T> + Clone,
-{
-    type Item=T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            EitherTwoIterator::A(a) => a.next(),
-            EitherTwoIterator::B(b) => b.next(),
+            _ => {
+                let value = self.evaluate(d).into_owned();
+                match value {
+                    json::Value::Array(v) => Either3::B(v.into_iter()),
+                    _ => Either3::C(iter::once(value)),
+                }
+            }
         }
     }
 }
 
 #[derive(Clone)]
-enum EitherThreeIterator<A, B, C, T>
-    where
-        A: Iterator<Item=T> + Clone,
-        B: Iterator<Item=T> + Clone,
-        C: Iterator<Item=T> + Clone,
-{
-    A(A),
-    B(B),
-    C(C),
-}
-
-impl<A, B, C, T> Iterator for EitherThreeIterator<A, B, C, T>
-    where
-        A: Iterator<Item=T> + Clone,
-        B: Iterator<Item=T> + Clone,
-        C: Iterator<Item=T> + Clone,
-{
-    type Item=T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            EitherThreeIterator::A(a) => a.next(),
-            EitherThreeIterator::B(b) => b.next(),
-            EitherThreeIterator::C(c) => c.next(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 enum JsonPathSegment {
     Number(usize),
     String(String),
+    Template(Arc<TextifyReturnFn>)
 }
 
-#[derive(Clone, Debug)]
+impl JsonPathSegment {
+    fn from_string(
+            s: String,
+            handlebars: Arc<Handlebars>,
+            providers: &mut BTreeSet<String>,
+            static_providers: &BTreeMap<String, json::Value>
+        ) -> Self
+    {
+        match textify(s, handlebars, providers, static_providers) {
+            TextifyReturn::Trf(t) => JsonPathSegment::Template(t.into()),
+            TextifyReturn::String(s) => JsonPathSegment::String(s)
+        }
+    }
+
+    fn evaluate(&self, d: &json::Value) -> Either<String, usize> {
+        match self {
+            JsonPathSegment::Number(n) => Either::B(*n),
+            JsonPathSegment::String(s) => Either::A(s.clone()),
+            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d)))
+        }
+    }
+}
+
+#[derive(Clone)]
 enum JsonPathStart {
     FunctionCall(FunctionCall),
     JsonIdent(String),
+    Value(json::Value),
 }
 
 #[derive(Clone, PartialEq)]
@@ -374,22 +335,6 @@ impl ComplexExpression {
             Combiner::And => self.pieces.iter().all(|e| e.execute(d)),
             Combiner::Or => self.pieces.iter().any(|e| e.execute(d)),
         }
-    }
-
-    fn get_providers(&self) -> BTreeSet<String> {
-        let mut providers = BTreeSet::new();
-        for piece in &self.pieces {
-            match piece {
-                Expression::Simple(se) => {
-                    providers.extend(se.lhs.get_providers());
-                    if let Some((_, rhs)) = &se.rest {
-                        providers.extend(rhs.get_providers());
-                    }
-                },
-                Expression::Complex(ce) => providers.extend(ce.get_providers()),
-            }
-        }
-        providers
     }
 }
 
@@ -447,27 +392,6 @@ impl ParsedSelect {
             },
         }
     }
-
-    fn get_providers(&self) -> BTreeSet<String> {
-        let mut providers = BTreeSet::new();
-        match self {
-            ParsedSelect::Value(v) => {
-                providers.extend(v.get_providers());
-            },
-            ParsedSelect::Array(v) => {
-                for ps in v {
-                    providers.extend(ps.get_providers());
-                }
-            },
-            ParsedSelect::Object(v) => {
-                for (_, ps) in v {
-                    providers.extend(ps.get_providers());
-                }
-            }
-            _ => ()
-        }
-        providers
-    }
 }
 
 pub const REQUEST_STARTLINE: u16 = 0b000_000_100;
@@ -494,8 +418,9 @@ pub struct Select {
     where_clause_special_providers: u16,
 }
 
-fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>, bitwise: &mut u16) {
-    for provider in incoming {
+fn providers_helper(incoming: &mut BTreeSet<String>, bitwise: &mut u16) {
+    let previous = std::mem::replace(incoming, Default::default());
+    for provider in previous.into_iter() {
         match provider.as_ref() {
             "request.start-line" => *bitwise |= REQUEST_STARTLINE,
             "request.headers" => *bitwise |= REQUEST_HEADERS,
@@ -510,37 +435,42 @@ fn providers_helper(incoming: BTreeSet<String>, outgoing: &mut BTreeSet<String>,
             "response.status" => (),
             "stats" => *bitwise |= STATS,
             "for_each" => *bitwise |= FOR_EACH,
-            _ => { outgoing.insert(provider); }
+            _ => {
+                incoming.insert(provider);
+            },
         }
     }
 }
 
 impl Select {
-    pub(super) fn new(provides: EndpointProvidesPreProcessed) -> Self {
+    pub fn new(
+            provides: EndpointProvidesPreProcessed,
+            handlebars: &Arc<Handlebars>,
+            static_providers: &BTreeMap<String, json::Value>
+        ) -> Self
+    {
         let mut providers = BTreeSet::new();
         let mut special_providers = 0;
         let join: Vec<_> = provides.for_each.iter().map(|s| {
             let pairs = Select::parse(Rule::value_entry, s).unwrap();
-            let v = parse_value(pairs);
-            let p = v.get_providers();
-            if p.contains("for_each") {
+            let v = parse_value(pairs, handlebars, &mut providers, static_providers);
+            if providers.contains("for_each") {
                 panic!("cannot reference `for_each` from within `for_each`");
             }
-            providers_helper(p, &mut providers, &mut special_providers);
             v
         }).collect();
         let mut where_clause_special_providers = 0;
         let where_clause = provides.where_clause.as_ref().map(|s| {
+            let mut providers2 = BTreeSet::new();
             let pairs = Select::parse(Rule::where_entry, s).unwrap();
-            let ce = parse_complex_expression(pairs);
-            let p = ce.get_providers();
-            providers_helper(p, &mut providers, &mut where_clause_special_providers);
+            let ce = parse_complex_expression(pairs, handlebars, &mut providers2, static_providers);
+            providers_helper(&mut providers2, &mut where_clause_special_providers);
+            providers.extend(providers2);
             ce
         });
         special_providers |= where_clause_special_providers;
-        let select = parse_select(provides.select);
-        let p = select.get_providers();
-        providers_helper(p, &mut providers, &mut special_providers);
+        let select = parse_select(provides.select, handlebars, &mut providers, static_providers);
+        providers_helper(&mut providers, &mut special_providers);
         Select {
             join,
             providers,
@@ -577,18 +507,18 @@ impl Select {
         if self.join.is_empty() {
             if let Some(wc) = &self.where_clause {
                 if wc.execute(&d) {
-                    EitherThreeIterator::A(iter::once(self.select.evaluate(&d)))
+                    Either3::A(iter::once(self.select.evaluate(&d)))
                 } else {
-                    EitherThreeIterator::B(iter::empty())
+                    Either3::B(iter::empty())
                 }
             } else {
-                EitherThreeIterator::A(iter::once(self.select.evaluate(&d)))
+                Either3::A(iter::once(self.select.evaluate(&d)))
             }
         } else {
             let references_for_each = self.special_providers & FOR_EACH != 0;
             let where_clause = self.where_clause.clone();
             let select = self.select.clone();
-            EitherThreeIterator::C(self.join.iter()
+            Either3::C(self.join.iter()
                 .map(|v| v.evaluate_as_iter(&d))
                 .multi_cartesian_product()
                 .filter_map(move |v| {
@@ -611,28 +541,41 @@ impl Select {
     }
 }
 
-fn parse_select(select: json::Value) -> ParsedSelect {
+fn parse_select(
+        select: json::Value,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> ParsedSelect
+{
     match select {
         json::Value::Null => ParsedSelect::Null,
         json::Value::Bool(b) => ParsedSelect::Bool(b),
         json::Value::Number(n) => ParsedSelect::Number(n),
         json::Value::String(s) => {
             let pairs = Select::parse(Rule::value_entry, &s).unwrap();
-            let value = parse_value(pairs);
+            let value = parse_value(pairs, handlebars, providers, static_providers);
             ParsedSelect::Value(value)
         },
         json::Value::Array(a) => {
-            let new = a.into_iter().map(parse_select).collect();
+            let new = a.into_iter().map(|v| parse_select(v, handlebars, providers, static_providers))
+                .collect();
             ParsedSelect::Array(new)
         },
         json::Value::Object(m) => {
-            let new = m.into_iter().map(|(k, v)| (k, parse_select(v))).collect();
+            let new = m.into_iter().map(|(k, v)| (k, parse_select(v, handlebars, providers, static_providers))).collect();
             ParsedSelect::Object(new)
         }
     }
 }
 
-fn parse_function_call(pair: Pair<Rule>) -> FunctionCall {
+fn parse_function_call(
+        pair: Pair<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> Either<FunctionCall, json::Value>
+{
     let mut ident = None;
     let mut args = Vec::new();
     for pair in pair.into_inner() {
@@ -641,62 +584,95 @@ fn parse_function_call(pair: Pair<Rule>) -> FunctionCall {
                 ident = Some(pair.as_str());
             },
             Rule::function_call => {
-                args.push(FunctionArg::FunctionCall(parse_function_call(pair)));
+                match parse_function_call(pair, handlebars, providers, static_providers) {
+                    Either::A(fc) => args.push(FunctionArg::FunctionCall(fc)),
+                    Either::B(v) => args.push(FunctionArg::Value(Value::Json(false, v)))
+                }
             },
             Rule::value => {
-                args.push(FunctionArg::Value(parse_value(pair.into_inner())));
+                args.push(FunctionArg::Value(parse_value(pair.into_inner(), handlebars, providers, static_providers)));
             },
             r => unreachable!("unexpected rule for function call, `{:?}`", r)
         }
     }
-    FunctionCall::new(ident.unwrap(), &args)
+    FunctionCall::new(ident.unwrap(), &args, providers, static_providers)
 }
 
-fn parse_indexed_property(pair: Pair<Rule>) -> JsonPathSegment {
+fn parse_indexed_property(
+        pair: Pair<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> JsonPathSegment
+{
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::string => JsonPathSegment::String(pair.as_str().into()),
+        Rule::string => JsonPathSegment::from_string(pair.as_str().into(), handlebars.clone(), providers, static_providers),
         Rule::integer => JsonPathSegment::Number(pair.as_str().parse().unwrap()),
         r => unreachable!("unexpected rule for path segment, `{:?}`", r)
     }
 }
 
-fn parse_json_path(pair: Pair<Rule>) -> JsonPath {
+fn parse_json_path(
+        pair: Pair<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> JsonPath
+{
     let mut start = None;
     let mut rest = Vec::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::function_call => {
                 if start.is_none() {
-                    start = Some(
-                        JsonPathStart::FunctionCall(parse_function_call(pair))
-                    );
+                    let jps = match parse_function_call(pair, handlebars, providers, static_providers) {
+                        Either::A(fc) => JsonPathStart::FunctionCall(fc),
+                        Either::B(v) => JsonPathStart::Value(v),
+                    };
+                    start = Some(jps);
                 } else {
                     unreachable!("encountered unexpected function call");
                 }
             },
             Rule::json_ident => {
-                let s = pair.as_str().into();
+                let s: String = pair.as_str().into();
                 if start.is_none() {
                     start = Some(JsonPathStart::JsonIdent(s));
                 } else {
-                    rest.push(JsonPathSegment::String(s));
+                    rest.push(
+                        JsonPathSegment::from_string(s, handlebars.clone(), providers, static_providers)
+                    );
                 }
             },
             Rule::indexed_property => {
                 if start.is_none() {
                     unreachable!("encountered unexpected indexed property");
                 } else {
-                    rest.push(parse_indexed_property(pair));
+                    rest.push(parse_indexed_property(pair, handlebars, providers, static_providers));
                 }
             },
             r => unreachable!("unexpected rule for json path, `{:?}`", r)
         }
     }
-    JsonPath { start: start.unwrap(), rest }
+    let start = start.unwrap();
+    if let JsonPathStart::JsonIdent(start) = &start {
+        match (&start, rest.first()) {
+            (start, Some(JsonPathSegment::String(next))) if start.as_str() == "request" || start.as_str() == "response" =>
+                providers.insert(format!("{}.{}", start, next)),
+            _ => providers.insert(start.clone()),
+        };
+    }
+    JsonPath { start, rest }
 }
 
-fn parse_value(pairs: Pairs<Rule>) -> Value {
+fn parse_value(
+        pairs: Pairs<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> Value
+{
     let mut not = false;
     for pair in pairs {
         match pair.as_rule() {
@@ -709,37 +685,41 @@ fn parse_value(pairs: Pairs<Rule>) -> Value {
                     "false" => false,
                     s => unreachable!("unexpected boolean value, `{}`", s),
                 };
-                return Value::JsonValue(not, json::Value::Bool(b))
+                return Value::Json(not, b.into())
             },
-            Rule::null => {
-                return Value::JsonValue(not, json::Value::Null)
-            },
-            Rule::json_path => {
-                return Value::JsonPath(not, parse_json_path(pair))
-            },
-            Rule::string => {
-                return Value::JsonValue(not, json::Value::String(pair.as_str().into()))
-            },
-            Rule::integer | Rule::decimal => {
-                return Value::JsonValue(
+            Rule::null =>
+                return Value::Json(not, json::Value::Null),
+            Rule::json_path =>
+                return Value::JsonPath(not, parse_json_path(pair, handlebars, providers, static_providers)),
+            Rule::string => 
+                return Value::from_string(pair.as_str().into(), not, handlebars.clone(), providers, static_providers),
+            Rule::integer | Rule::decimal =>
+                return Value::Json(
                     not,
                     json::Value::Number(std::str::FromStr::from_str(pair.as_str()).unwrap())
-                )
-            },
+                ),
+            Rule::value =>
+                return parse_value(pair.into_inner(), handlebars, providers, static_providers),
             r => unreachable!("unexpected rule for value, `{:?}`", r)
         }
     }
     unreachable!("unexpectedly reached end of function in parse_value")
 }
 
-fn parse_simple_expression(pair: Pair<Rule>) -> SimpleExpression {
+fn parse_simple_expression(
+        pair: Pair<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> SimpleExpression
+{
     let mut lhs = None;
     let mut operator = None;
     let mut rhs = None;
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::value => {
-                let v = Some(parse_value(pair.into_inner()));
+                let v = Some(parse_value(pair.into_inner(), handlebars, providers, static_providers));
                 if lhs.is_none() {
                     lhs = v;
                 } else {
@@ -769,7 +749,13 @@ fn parse_simple_expression(pair: Pair<Rule>) -> SimpleExpression {
     SimpleExpression { lhs: lhs.unwrap(), rest }
 }
 
-fn parse_complex_expression(pairs: Pairs<Rule>) -> ComplexExpression {
+fn parse_complex_expression(
+        pairs: Pairs<Rule>,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>
+    ) -> ComplexExpression
+{
     let mut ret = ComplexExpression {
         combiner: Combiner::And,
         pieces: Vec::new(),
@@ -781,9 +767,9 @@ fn parse_complex_expression(pairs: Pairs<Rule>) -> ComplexExpression {
             Rule::simple_expression | Rule::group_expression => {
                 let new = match rule {
                     Rule::simple_expression =>
-                        Expression::Simple(parse_simple_expression(pair)),
+                        Expression::Simple(parse_simple_expression(pair, handlebars, providers, static_providers)),
                     Rule::group_expression =>
-                        Expression::Complex(parse_complex_expression(pair.into_inner())),
+                        Expression::Complex(parse_complex_expression(pair.into_inner(), handlebars, providers, static_providers)),
                     _ => unreachable!("impossible"),
                 };
                 if append_to_previous {
@@ -843,38 +829,42 @@ fn parse_complex_expression(pairs: Pairs<Rule>) -> ComplexExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value as JsonValue};
+    use serde_json as json;
+    use crate::template::join_helper;
 
-
-    fn check_results(select: JsonValue, data: JsonValue, expect: &[JsonValue], i: usize) {
+    fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
         let select = create_select(select);
         let result: Vec<_> = select.as_iter(data).collect();
         assert_eq!(result.as_slice(), expect, "index {}", i)
     }
 
-    fn create_select(json: JsonValue) -> Select {
+    fn create_select(json: json::Value) -> Select {
+        let mut handlebars = Handlebars::new();
+        handlebars.register_helper("join", Box::new(join_helper));
+        handlebars.set_strict_mode(true);
         let eppp = json::from_value(json).unwrap();
-        Select::new(eppp)
+        Select::new(eppp, &handlebars.into(), &Default::default())
     }
 
     #[test]
     fn get_providers() {
         // (select json, where clause, expected providers returned from `get_providers`, expected providers in `get_special_providers`)
         let check_table = vec!(
-            (json!(4), None, vec!(), 0),
-            (json!("c[0].d"), None, vec!("c"), 0),
-            (json!("request.body[0].d"), None, vec!(), REQUEST_BODY),
-            (json!(r#"request["start-line"]"#), None, vec!(), REQUEST_STARTLINE),
-            (json!("repeat(5)"), None, vec!(), 0),
-            (json!(r#"json_path("c.*.d")"#), None, vec!("c"), 0),
-            (json!(r#"json_path("c.*.d")"#), Some("true && false && true || response.body.id == 123"), vec!("c"), RESPONSE_BODY),
-            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
-            (json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
-            (json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
-            (json!(r#"for_each[0]"#), None, vec!(), FOR_EACH),
-            (json!(r#"stats.rtt"#), None, vec!(), STATS),
+            (json::json!(4), None, vec!(), 0),
+            (json::json!("c[0].d"), None, vec!("c"), 0),
+            (json::json!("request.body[0].d"), None, vec!(), REQUEST_BODY),
+            (json::json!(r#"request["start-line"]"#), None, vec!(), REQUEST_STARTLINE),
+            (json::json!("repeat(5)"), None, vec!(), 0),
+            (json::json!(r#"json_path("c.*.d")"#), None, vec!("c"), 0),
+            (json::json!(r#"json_path("c.*.d")"#), Some("true && false && true || response.body.id == 123"), vec!("c"), RESPONSE_BODY),
+            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
+            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
+            (json::json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
+            (json::json!(r#"for_each[0]"#), None, vec!(), FOR_EACH),
+            (json::json!(r#"stats.rtt"#), None, vec!(), STATS),
+            (json::json!(r#"`{{join b.e "-"}}`"#), None, vec!("b"), 0),
             (
-                json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
+                json::json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
                 None,
                 vec!("c", "foo"),
                 0
@@ -883,9 +873,9 @@ mod tests {
 
         for (i, (select, where_clause, providers_expect, rr_expect)) in check_table.into_iter().enumerate() {
             let s = if let Some(wc) = where_clause {
-                create_select(json!({ "select": select, "where": wc }))
+                create_select(json::json!({ "select": select, "where": wc }))
             } else {
-                create_select(json!({ "select": select }))
+                create_select(json::json!({ "select": select }))
             };
             let providers: Vec<_> = std::iter::FromIterator::from_iter(s.get_providers());
             let rr_providers = s.get_special_providers();
@@ -897,9 +887,9 @@ mod tests {
 
     #[test]
     fn select() {
-        let data = json!({
+        let data = json::json!({
             "a": 3,
-            "b": { "foo": "bar", "e": [] },
+            "b": { "foo": "bar", "e": [5, 6, 7, 8] },
             "c": [
                 { "d": 1 },
                 { "d": 2 },
@@ -909,21 +899,24 @@ mod tests {
 
         // (select json, expected out data)
         let check_table = vec!(
-            (json!(4), vec!(json!(4))),
-            (json!("c[0].d"), vec!(json!(1))),
-            (json!(r#"json_path("c.*.d")"#), vec!(json!([1, 2, 3]))),
-            (json!("repeat(5)"), vec!(json!([null, null, null, null, null]))),
-            (json!("c.length"), vec!(json!(3))),
-            (json!("b.e.length"), vec!(json!(0))),
+            (json::json!(4), vec!(json::json!(4))),
+            (json::json!("c[0].d"), vec!(json::json!(1))),
+            (json::json!(r#"json_path("c.*.d")"#), vec!(json::json!([1, 2, 3]))),
+            (json::json!("repeat(5)"), vec!(json::json!([null, null, null, null, null]))),
+            (json::json!("c.length"), vec!(json::json!(3))),
+            (json::json!("b.e.length"), vec!(json::json!(4))),
+            (json::json!(r#""foo-bar""#), vec!(json::json!("foo-bar"))),
+            (json::json!("'foo-bar'"), vec!(json::json!("foo-bar"))),
+            (json::json!(r#"`{{join b.e "-"}}`"#), vec!(json::json!("5-6-7-8"))),
             (
-                json!({"z": 42, "dees": r#"json_path("c.*.d")"#}),
-                vec!(json!({"z": 42, "dees": [1, 2, 3]}))
+                json::json!({"z": 42, "dees": r#"json_path("c.*.d")"#}),
+                vec!(json::json!({"z": 42, "dees": [1, 2, 3]}))
             )
         );
 
         for (i, (select, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let s = json!({ "select": select });
+            let s = json::json!({ "select": select });
             check_results(s, data, &expect, i);
         }
 
@@ -931,13 +924,13 @@ mod tests {
 
     #[test]
     fn r#where() {
-        let data = json!({
+        let data = json::json!({
             "three": 3,
             "empty_object": {},
             "empty_array": [],
         });
 
-        let three = vec!(json!(3));
+        let three = vec!(json::json!(3));
         let empty = Vec::new();
 
         // (where clause, expected out data)
@@ -978,7 +971,7 @@ mod tests {
 
         for (i, (where_clause, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let select = json!({
+            let select = json::json!({
                 "select": "three",
                 "where": where_clause
             });
@@ -988,7 +981,7 @@ mod tests {
 
     #[test]
     fn for_each() {
-        let data = json!({
+        let data = json::json!({
             "a": 3,
             "b": { "foo": "bar" },
             "c": [
@@ -1000,19 +993,19 @@ mod tests {
 
         // (select, for_each, expect)
         let check_table = vec!(
-            (json!("a"), vec!("repeat(5)"), vec!(json!(3), json!(3), json!(3), json!(3), json!(3))),
-            (json!("for_each[0]"), vec!(r#"json_path("c.*.d")"#), vec!(json!(1), json!(2), json!(3))),
-            (json!("for_each[0]"), vec!("c"), vec!(json!({ "d": 1 }), json!({ "d": 2 }), json!({ "d": 3 }))),
+            (json::json!("a"), vec!("repeat(5)"), vec!(json::json!(3), json::json!(3), json::json!(3), json::json!(3), json::json!(3))),
+            (json::json!("for_each[0]"), vec!(r#"json_path("c.*.d")"#), vec!(json::json!(1), json::json!(2), json::json!(3))),
+            (json::json!("for_each[0]"), vec!("c"), vec!(json::json!({ "d": 1 }), json::json!({ "d": 2 }), json::json!({ "d": 3 }))),
             (
-                json!("for_each[1]"),
+                json::json!("for_each[1]"),
                 vec!("repeat(2)", r#"json_path("c.*.d")"#),
-                vec!(json!(1), json!(2), json!(3), json!(1), json!(2), json!(3))
+                vec!(json::json!(1), json::json!(2), json::json!(3), json::json!(1), json::json!(2), json::json!(3))
             ),
         );
 
         for (i, (select, for_each, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let select = json!({
+            let select = json::json!({
                 "select": select,
                 "for_each": for_each
             });

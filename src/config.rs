@@ -188,7 +188,7 @@ struct LogsPreProcessed {
 }
 
 pub struct Logger {
-    pub select: Option<Select>,
+    pub select: Option<EndpointProvidesPreProcessed>,
     pub to: String,
     pub pretty: bool,
     pub limit: Option<usize>,
@@ -212,9 +212,9 @@ pub struct Endpoint {
     pub stats_id: Option<BTreeMap<String, String>>,
     pub url: String,
     #[serde(default, deserialize_with = "deserialize_providers")]
-    pub provides: Vec<(String, Select)>,
+    pub provides: Vec<(String, EndpointProvidesPreProcessed)>,
     #[serde(default, deserialize_with = "deserialize_logs")]
-    pub logs: Vec<(String, Select)>,
+    pub logs: Vec<(String, EndpointProvidesPreProcessed)>,
 }
 
 #[serde(rename_all = "snake_case")]
@@ -251,7 +251,7 @@ impl Default for EndpointProvidesSendOptions {
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
-struct EndpointProvidesPreProcessed {
+pub struct EndpointProvidesPreProcessed {
     #[serde(default)]
     pub send: EndpointProvidesSendOptions,
     pub select: json::Value,
@@ -381,12 +381,12 @@ impl<'de> Deserialize<'de> for Logger {
     {
         let lpp = LoggerPreProcessed::deserialize(deserializer)?;
         let select = if let Some(select) = lpp.select {
-            Some(Select::new(EndpointProvidesPreProcessed {
+            Some(EndpointProvidesPreProcessed {
                 send: EndpointProvidesSendOptions::Block,
                 select,
                 for_each: lpp.for_each,
                 where_clause: lpp.where_clause,
-            }))
+            })
         } else {
             None
         };
@@ -396,15 +396,6 @@ impl<'de> Deserialize<'de> for Logger {
             to: lpp.to,
             limit: lpp.limit,
         })
-    }
-}
-
-impl<'de> Deserialize<'de> for Select {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
-    {
-        let select = EndpointProvidesPreProcessed::deserialize(deserializer)?;
-        Ok(Select::new(select))
     }
 }
 
@@ -515,19 +506,19 @@ fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
     Ok(res.as_ref().map(json_value_to_string))
 }
 
-fn deserialize_logs<'de, D> (deserializer: D) -> Result<Vec<(String, Select)>, D::Error>
+fn deserialize_logs<'de, D> (deserializer: D) -> Result<Vec<(String, EndpointProvidesPreProcessed)>, D::Error>
     where D: Deserializer<'de>
 {
     let lpp: Vec<(String, LogsPreProcessed)> = tuple_vec_map::deserialize(deserializer)?;
     let selects = lpp.into_iter()
         .map(|(s, lpp)| {
-            let select = Select::new(EndpointProvidesPreProcessed {
+            let eppp = EndpointProvidesPreProcessed {
                 send: EndpointProvidesSendOptions::Block,
                 select: lpp.select,
                 for_each: lpp.for_each,
                 where_clause: lpp.where_clause,
-            });
-            (s, select)
+            };
+            (s, eppp)
         })
         .collect();
     Ok(selects)

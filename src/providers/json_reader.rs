@@ -1,7 +1,5 @@
 use crate::config;
-use futures::{
-    Stream,
-};
+use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
@@ -24,7 +22,7 @@ pub struct JsonReader {
 impl JsonReader {
     pub fn new(config: &config::FileProvider) -> Result<Self, io::Error> {
         let mut jr = JsonReader {
-            staging_buffer: vec![0; 8 * (1<<10)],
+            staging_buffer: vec![0; 8 * (1 << 10)],
             buffer: Vec::new(),
             position: 0,
             positions: Vec::new(),
@@ -35,8 +33,9 @@ impl JsonReader {
         if config.random {
             loop {
                 match jr.get_value(None) {
-                    Some(Ok((_, pos, length))) =>
-                        jr.positions.push((io::SeekFrom::Start(pos), length)),
+                    Some(Ok((_, pos, length))) => {
+                        jr.positions.push((io::SeekFrom::Start(pos), length))
+                    }
                     Some(Err(e)) => return Err(e),
                     None => break,
                 }
@@ -55,42 +54,45 @@ impl JsonReader {
         Ok(jr)
     }
 
-    fn get_value(&mut self, size_hint: Option<usize>) -> Option<Result<(json::Value, u64, usize), io::Error>>
-    {
+    fn get_value(
+        &mut self,
+        size_hint: Option<usize>,
+    ) -> Option<Result<(json::Value, u64, usize), io::Error>> {
         let position = self.position;
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.staging_buffer.len());
             if let Some(extend_length) = extend_length {
-                self.staging_buffer.extend(iter::repeat(0).take(extend_length));
+                self.staging_buffer
+                    .extend(iter::repeat(0).take(extend_length));
             }
             let buf = &mut self.staging_buffer[..hint];
             self.position += hint as u64;
             if let Err(e) = self.reader.read_exact(buf) {
-                return Some(Err(e))
+                return Some(Err(e));
             }
             self.buffer.extend_from_slice(buf);
         };
         loop {
-            let mut deserializer = json::Deserializer::from_slice(&self.buffer)
-                .into_iter::<json::Value>();
+            let mut deserializer =
+                json::Deserializer::from_slice(&self.buffer).into_iter::<json::Value>();
             let result = deserializer.next();
             if let Some(Ok(value)) = result {
                 let length = deserializer.byte_offset();
                 self.buffer.drain(..length);
                 self.position += length as u64;
-                return Some(Ok((value, position, length)))
+                return Some(Ok((value, position, length)));
             }
             if let Some(Err(e)) = result {
                 if !e.is_eof() {
-                    return Some(Err(e.into()))
+                    return Some(Err(e.into()));
                 }
             }
-            let mut buf = &mut self.staging_buffer[..8 * (1<<10)];
+            let mut buf = &mut self.staging_buffer[..8 * (1 << 10)];
             match self.reader.read(&mut buf) {
                 Err(e) => return Some(Err(e)),
                 Ok(n) => {
                     if n == 0 {
-                        return None
+                        return None;
                     }
                     self.buffer.extend(&buf[..n])
                 }
@@ -127,7 +129,7 @@ impl Iterator for JsonReader {
                 self.positions.remove(i)
             };
             if let Err(e) = self.seek(pos) {
-                return Some(Err(e))
+                return Some(Err(e));
             }
             Some(size)
         } else {
@@ -168,21 +170,19 @@ mod tests {
         let mut fp = config::FileProvider::default();
         fp.format = config::FileFormat::Json;
 
-        let expect = vec!(
+        let expect = vec![
             json::json!({ "foo": 1 }),
             json::json!({ "foo": 2, "bar": 1 }),
             json::json!({ "foo": 3 }),
             json::json!({ "foo": 4, "bar": 2 }),
-        );
+        ];
 
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", JSON_LINES.join(line_ending)).unwrap();
             fp.path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = JsonReader::new(&fp).unwrap()
-                .map(|r| r.unwrap())
-                .collect();
+            let values: Vec<_> = JsonReader::new(&fp).unwrap().map(|r| r.unwrap()).collect();
 
             assert_eq!(values, expect);
         }

@@ -1,14 +1,11 @@
-use super::{
-    EndpointProvidesPreProcessed,
-    EndpointProvidesSendOptions,
-};
-use crate::template::{textify, TextifyReturn, TextifyReturnFn, json_value_to_string};
-use crate::util::{Either, Either3, parse_provider_name};
+use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
+use crate::template::{json_value_to_string, textify, TextifyReturn, TextifyReturnFn};
+use crate::util::{parse_provider_name, Either, Either3};
 
 use handlebars::Handlebars;
 use itertools::Itertools;
 use pest::{
-    iterators::{Pairs, Pair},
+    iterators::{Pair, Pairs},
     Parser as PestParser,
 };
 use pest_derive::Parser;
@@ -34,21 +31,25 @@ enum FunctionCall {
 }
 
 impl FunctionCall {
-    fn new (
-            ident: &str, args: &[FunctionArg],
-            providers: &mut BTreeSet<String>,
-            static_providers: &BTreeMap<String, json::Value>
-        ) -> Either<Self, json::Value>
-    {
+    fn new(
+        ident: &str,
+        args: &[FunctionArg],
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Either<Self, json::Value> {
         if ident == "json_path" {
             match (args.len(), args.first()) {
                 // TODO: if there's ever another function which returns a string, modify this to allow a nested function
-                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::String(json_path))))) => {
+                (
+                    1,
+                    Some(FunctionArg::Value(Value::Json(false, json::Value::String(json_path)))),
+                ) => {
                     let provider = parse_provider_name(&json_path);
                     // jsonpath requires the query to start with `$.`, so add it in
                     let json_path = format!("$.{}", json_path);
-                    let json_path = jsonpath::Selector::new(&json_path)
-                         .unwrap_or_else(|e| panic!("invalid json path query, {}\n{:?}", json_path, e));
+                    let json_path = jsonpath::Selector::new(&json_path).unwrap_or_else(|e| {
+                        panic!("invalid json path query, {}\n{:?}", json_path, e)
+                    });
                     let ret = if let Some(v) = static_providers.get(provider) {
                         let r = json_path.find(v);
                         Either::B(json::Value::Array(r.cloned().collect()))
@@ -57,55 +58,58 @@ impl FunctionCall {
                     };
                     providers.insert(provider.into());
                     ret
-                },
-                _ => panic!("invalid arguments for json_path")
+                }
+                _ => panic!("invalid arguments for json_path"),
             }
         } else if ident == "repeat" {
             match (args.len(), args.first()) {
-                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::Number(n))))) if n.is_u64() => {
+                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::Number(n)))))
+                    if n.is_u64() =>
+                {
                     Either::A(FunctionCall::Repeat(n.as_u64().unwrap() as usize))
-                },
-                 _ => panic!("invalid arguments for repeat")
+                }
+                _ => panic!("invalid arguments for repeat"),
             }
         } else {
             panic!("unknown function reference `{}`", ident);
         }
     }
 
-    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
+    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item = json::Value> + Clone {
         match &self {
             FunctionCall::JsonPath(jp) => {
                 let result = jp.find(d);
                 let v: Vec<_> = result.cloned().collect();
                 Either::A(v.into_iter())
-            },
-            FunctionCall::Repeat(n) => 
-                Either::B(iter::repeat(json::Value::Null).take(*n)),
+            }
+            FunctionCall::Repeat(n) => Either::B(iter::repeat(json::Value::Null).take(*n)),
         }
     }
 }
 
-fn index_json<'a>(json: &'a json::Value, index: Either<&JsonPathSegment, &str>) -> Cow<'a, json::Value> {
+fn index_json<'a>(
+    json: &'a json::Value,
+    index: Either<&JsonPathSegment, &str>,
+) -> Cow<'a, json::Value> {
     #[allow(unused_assignments)]
     let mut holder = None;
     let str_or_number = match index {
-        Either::A(jps) => {
-            match jps.evaluate(json) {
-                Either::A(s) => {
-                    holder = Some(s);
-                    Either::A(holder.as_ref().unwrap().as_str())
-                },
-                Either::B(n) => Either::B(n),
+        Either::A(jps) => match jps.evaluate(json) {
+            Either::A(s) => {
+                holder = Some(s);
+                Either::A(holder.as_ref().unwrap().as_str())
             }
+            Either::B(n) => Either::B(n),
         },
         Either::B(s) => Either::A(s),
     };
     let o = match (json, str_or_number) {
         (json::Value::Object(m), Either::A(s)) => m.get(s),
         (json::Value::Array(a), Either::B(n)) => a.get(n),
-        (json::Value::Array(a), Either::A(s)) if s == "length" =>
-            return Cow::Owned((a.len() as u64).into()),
-        _ => panic!("cannot index into json {}", json)
+        (json::Value::Array(a), Either::A(s)) if s == "length" => {
+            return Cow::Owned((a.len() as u64).into());
+        }
+        _ => panic!("cannot index into json {}", json),
     };
     Cow::Borrowed(o.unwrap_or(&json::Value::Null))
 }
@@ -120,8 +124,8 @@ fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> js
                 if i != indexes.len() - 1 {
                     panic!("cannot index into json {}", ret)
                 }
-                return ret
-            },
+                return ret;
+            }
             _ => panic!("cannot index into json {}", json),
         };
         json = o.unwrap_or(&json::Value::Null)
@@ -136,23 +140,17 @@ struct JsonPath {
 }
 
 impl JsonPath {
-    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
+    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item = json::Value> + Clone {
         match &self.start {
             JsonPathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
-                Either::A(
-                    fnc.evaluate(d).map(move |j| index_json2(&j, &rest))
-                )
-            },
+                Either::A(fnc.evaluate(d).map(move |j| index_json2(&j, &rest)))
+            }
             JsonPathStart::JsonIdent(s) => {
                 let j = index_json(d, Either::B(s));
-                Either::B(
-                    iter::once(index_json2(&j, &self.rest))
-                )
-            },
-            JsonPathStart::Value(v) => {
-                Either::B(iter::once(v.clone()))
+                Either::B(iter::once(index_json2(&j, &self.rest)))
             }
+            JsonPathStart::Value(v) => Either::B(iter::once(v.clone())),
         }
     }
 }
@@ -192,7 +190,10 @@ impl ValueOrComplexExpression {
         }
     }
 
-    fn evaluate_as_iter<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
+    fn evaluate_as_iter<'a>(
+        &self,
+        d: &'a json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
         match self {
             ValueOrComplexExpression::V(v) => Either::A(v.evaluate_as_iter(d)),
             ValueOrComplexExpression::Ce(ce) => Either::B(iter::once(ce.execute(d).into())),
@@ -206,14 +207,14 @@ impl From<ComplexExpression> for ValueOrComplexExpression {
             (1, Some(Expression::Simple(se))) if se.rest.is_none() => {
                 let value = std::mem::replace(&mut se.lhs, Value::Json(false, json::Value::Null));
                 ValueOrComplexExpression::V(value)
-            },
+            }
             (1, Some(Expression::Complex(_))) => {
                 if let Some(Expression::Complex(ce)) = ce.pieces.pop() {
                     ce.into()
                 } else {
                     unreachable!();
                 }
-            },
+            }
             _ => ValueOrComplexExpression::Ce(ce),
         }
     }
@@ -230,16 +231,15 @@ enum Value {
 
 impl Value {
     fn from_string(
-            s: String,
-            not: bool,
-            handlebars: Arc<Handlebars>,
-            providers: &mut BTreeSet<String>,
-            static_providers: &BTreeMap<String, json::Value>
-        ) -> Self
-    {
+        s: String,
+        not: bool,
+        handlebars: Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Self {
         match textify(s, handlebars, providers, static_providers) {
             TextifyReturn::Trf(t) => Value::Template(not, t.into()),
-            TextifyReturn::String(s) => Value::Json(not, s.into())
+            TextifyReturn::String(s) => Value::Json(not, s.into()),
         }
     }
 
@@ -255,9 +255,9 @@ impl Value {
                     Cow::Owned(json::Value::Array(v))
                 };
                 (*not, c)
-            },
+            }
             Value::Json(not, value) => (*not, Cow::Borrowed(value)),
-            Value::Template(not, t) => (*not, Cow::Owned(t(d)))
+            Value::Template(not, t) => (*not, Cow::Owned(t(d))),
         };
         if not {
             Cow::Owned(json::Value::Bool(!bool_value(&v)))
@@ -266,7 +266,10 @@ impl Value {
         }
     }
 
-    fn evaluate_as_iter<'a>(&self, d: &'a json::Value) -> impl Iterator<Item=json::Value> + Clone {
+    fn evaluate_as_iter<'a>(
+        &self,
+        d: &'a json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
         match self {
             Value::JsonPath(not, path) => {
                 if *not {
@@ -281,10 +284,10 @@ impl Value {
                                     Either::B(iter::once(v))
                                 }
                             })
-                            .flatten()
+                            .flatten(),
                     )
                 }
-            },
+            }
             _ => {
                 let value = self.evaluate(d).into_owned();
                 match value {
@@ -300,20 +303,19 @@ impl Value {
 enum JsonPathSegment {
     Number(usize),
     String(String),
-    Template(Arc<TextifyReturnFn>)
+    Template(Arc<TextifyReturnFn>),
 }
 
 impl JsonPathSegment {
     fn from_string(
-            s: String,
-            handlebars: Arc<Handlebars>,
-            providers: &mut BTreeSet<String>,
-            static_providers: &BTreeMap<String, json::Value>
-        ) -> Self
-    {
+        s: String,
+        handlebars: Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Self {
         match textify(s, handlebars, providers, static_providers) {
             TextifyReturn::Trf(t) => JsonPathSegment::Template(t.into()),
-            TextifyReturn::String(s) => JsonPathSegment::String(s)
+            TextifyReturn::String(s) => JsonPathSegment::String(s),
         }
     }
 
@@ -321,7 +323,7 @@ impl JsonPathSegment {
         match self {
             JsonPathSegment::Number(n) => Either::B(*n),
             JsonPathSegment::String(s) => Either::A(s.clone()),
-            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d)))
+            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d))),
         }
     }
 }
@@ -422,15 +424,13 @@ impl ParsedSelect {
             ParsedSelect::Number(n) => json::Value::Number(n.clone()),
             ParsedSelect::Expression(v) => v.evaluate(d).into_owned(),
             ParsedSelect::Array(v) => {
-                let v = v.iter().map(|p| p.evaluate(d))
-                    .collect();
+                let v = v.iter().map(|p| p.evaluate(d)).collect();
                 json::Value::Array(v)
-            },
+            }
             ParsedSelect::Object(v) => {
-                let m = v.iter().map(|(k, v)| (k.clone(), v.evaluate(d)))
-                    .collect();
+                let m = v.iter().map(|(k, v)| (k.clone(), v.evaluate(d))).collect();
                 json::Value::Object(m)
-            },
+            }
         }
     }
 }
@@ -478,28 +478,32 @@ fn providers_helper(incoming: &mut BTreeSet<String>, bitwise: &mut u16) {
             "for_each" => *bitwise |= FOR_EACH,
             _ => {
                 incoming.insert(provider);
-            },
+            }
         }
     }
 }
 
 impl Select {
     pub fn new(
-            provides: EndpointProvidesPreProcessed,
-            handlebars: &Arc<Handlebars>,
-            static_providers: &BTreeMap<String, json::Value>
-        ) -> Self
-    {
+        provides: EndpointProvidesPreProcessed,
+        handlebars: &Arc<Handlebars>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Self {
         let mut providers = BTreeSet::new();
         let mut special_providers = 0;
-        let join: Vec<_> = provides.for_each.iter().map(|s| {
-            let pairs = Select::parse(Rule::entry_point, s).unwrap();
-            let v = parse_complex_expression(pairs, handlebars, &mut providers, static_providers);
-            if providers.contains("for_each") {
-                panic!("cannot reference `for_each` from within `for_each`");
-            }
-            v.into()
-        }).collect();
+        let join: Vec<_> = provides
+            .for_each
+            .iter()
+            .map(|s| {
+                let pairs = Select::parse(Rule::entry_point, s).unwrap();
+                let v =
+                    parse_complex_expression(pairs, handlebars, &mut providers, static_providers);
+                if providers.contains("for_each") {
+                    panic!("cannot reference `for_each` from within `for_each`");
+                }
+                v.into()
+            })
+            .collect();
         let mut where_clause_special_providers = 0;
         let where_clause = provides.where_clause.as_ref().map(|s| {
             let mut providers2 = BTreeSet::new();
@@ -510,7 +514,12 @@ impl Select {
             ce
         });
         special_providers |= where_clause_special_providers;
-        let select = parse_select(provides.select, handlebars, &mut providers, static_providers);
+        let select = parse_select(
+            provides.select,
+            handlebars,
+            &mut providers,
+            static_providers,
+        );
         providers_helper(&mut providers, &mut special_providers);
         Select {
             join,
@@ -540,11 +549,13 @@ impl Select {
     }
 
     pub fn execute_where(&self, d: &json::Value) -> bool {
-        self.where_clause.as_ref().map(|wc| wc.execute(d))
+        self.where_clause
+            .as_ref()
+            .map(|wc| wc.execute(d))
             .unwrap_or(true)
     }
 
-    pub fn as_iter(&self, mut d: json::Value) -> impl Iterator<Item=json::Value> + Clone {
+    pub fn as_iter(&self, mut d: json::Value) -> impl Iterator<Item = json::Value> + Clone {
         if self.join.is_empty() {
             if let Some(wc) = &self.where_clause {
                 if wc.execute(&d) {
@@ -559,36 +570,39 @@ impl Select {
             let references_for_each = self.special_providers & FOR_EACH != 0;
             let where_clause = self.where_clause.clone();
             let select = self.select.clone();
-            Either3::C(self.join.iter()
-                .map(|v| v.evaluate_as_iter(&d))
-                .multi_cartesian_product()
-                .filter_map(move |v| {
-                    if references_for_each {
-                        d = d.clone();
-                        d.as_object_mut().unwrap().insert("for_each".to_string(), json::Value::Array(v));
-                    }
-                    if let Some(wc) = where_clause.clone() {
-                        if wc.execute(&d) {
-                            Some(select.evaluate(&d))
-                        } else {
-                            None
+            Either3::C(
+                self.join
+                    .iter()
+                    .map(|v| v.evaluate_as_iter(&d))
+                    .multi_cartesian_product()
+                    .filter_map(move |v| {
+                        if references_for_each {
+                            d = d.clone();
+                            d.as_object_mut()
+                                .unwrap()
+                                .insert("for_each".to_string(), json::Value::Array(v));
                         }
-                    } else {
-                        Some(select.evaluate(&d))
-                    }
-                })
+                        if let Some(wc) = where_clause.clone() {
+                            if wc.execute(&d) {
+                                Some(select.evaluate(&d))
+                            } else {
+                                None
+                            }
+                        } else {
+                            Some(select.evaluate(&d))
+                        }
+                    }),
             )
         }
     }
 }
 
 fn parse_select(
-        select: json::Value,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> ParsedSelect
-{
+    select: json::Value,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> ParsedSelect {
     match select {
         json::Value::Null => ParsedSelect::Null,
         json::Value::Bool(b) => ParsedSelect::Bool(b),
@@ -597,110 +611,134 @@ fn parse_select(
             let pairs = Select::parse(Rule::entry_point, &s).unwrap();
             let value = parse_complex_expression(pairs, handlebars, providers, static_providers);
             ParsedSelect::Expression(value.into())
-        },
+        }
         json::Value::Array(a) => {
-            let new = a.into_iter().map(|v| parse_select(v, handlebars, providers, static_providers))
+            let new = a
+                .into_iter()
+                .map(|v| parse_select(v, handlebars, providers, static_providers))
                 .collect();
             ParsedSelect::Array(new)
-        },
+        }
         json::Value::Object(m) => {
-            let new = m.into_iter().map(|(k, v)| (k, parse_select(v, handlebars, providers, static_providers))).collect();
+            let new = m
+                .into_iter()
+                .map(|(k, v)| (k, parse_select(v, handlebars, providers, static_providers)))
+                .collect();
             ParsedSelect::Object(new)
         }
     }
 }
 
 fn parse_function_call(
-        pair: Pair<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> Either<FunctionCall, json::Value>
-{
+    pair: Pair<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> Either<FunctionCall, json::Value> {
     let mut ident = None;
     let mut args = Vec::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::function_ident => {
                 ident = Some(pair.as_str());
-            },
+            }
             Rule::function_call => {
                 match parse_function_call(pair, handlebars, providers, static_providers) {
                     Either::A(fc) => args.push(FunctionArg::FunctionCall(fc)),
-                    Either::B(v) => args.push(FunctionArg::Value(Value::Json(false, v)))
+                    Either::B(v) => args.push(FunctionArg::Value(Value::Json(false, v))),
                 }
-            },
+            }
             Rule::value => {
-                args.push(FunctionArg::Value(parse_value(pair.into_inner(), handlebars, providers, static_providers)));
-            },
-            r => unreachable!("unexpected rule for function call, `{:?}`", r)
+                args.push(FunctionArg::Value(parse_value(
+                    pair.into_inner(),
+                    handlebars,
+                    providers,
+                    static_providers,
+                )));
+            }
+            r => unreachable!("unexpected rule for function call, `{:?}`", r),
         }
     }
     FunctionCall::new(ident.unwrap(), &args, providers, static_providers)
 }
 
 fn parse_indexed_property(
-        pair: Pair<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> JsonPathSegment
-{
+    pair: Pair<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> JsonPathSegment {
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::string => JsonPathSegment::from_string(pair.as_str().into(), handlebars.clone(), providers, static_providers),
+        Rule::string => JsonPathSegment::from_string(
+            pair.as_str().into(),
+            handlebars.clone(),
+            providers,
+            static_providers,
+        ),
         Rule::integer => JsonPathSegment::Number(pair.as_str().parse().unwrap()),
-        r => unreachable!("unexpected rule for path segment, `{:?}`", r)
+        r => unreachable!("unexpected rule for path segment, `{:?}`", r),
     }
 }
 
 fn parse_json_path(
-        pair: Pair<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> JsonPath
-{
+    pair: Pair<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> JsonPath {
     let mut start = None;
     let mut rest = Vec::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::function_call => {
                 if start.is_none() {
-                    let jps = match parse_function_call(pair, handlebars, providers, static_providers) {
-                        Either::A(fc) => JsonPathStart::FunctionCall(fc),
-                        Either::B(v) => JsonPathStart::Value(v),
-                    };
+                    let jps =
+                        match parse_function_call(pair, handlebars, providers, static_providers) {
+                            Either::A(fc) => JsonPathStart::FunctionCall(fc),
+                            Either::B(v) => JsonPathStart::Value(v),
+                        };
                     start = Some(jps);
                 } else {
                     unreachable!("encountered unexpected function call");
                 }
-            },
+            }
             Rule::json_ident => {
                 let s: String = pair.as_str().into();
                 if start.is_none() {
                     start = Some(JsonPathStart::JsonIdent(s));
                 } else {
-                    rest.push(
-                        JsonPathSegment::from_string(s, handlebars.clone(), providers, static_providers)
-                    );
+                    rest.push(JsonPathSegment::from_string(
+                        s,
+                        handlebars.clone(),
+                        providers,
+                        static_providers,
+                    ));
                 }
-            },
+            }
             Rule::indexed_property => {
                 if start.is_none() {
                     unreachable!("encountered unexpected indexed property");
                 } else {
-                    rest.push(parse_indexed_property(pair, handlebars, providers, static_providers));
+                    rest.push(parse_indexed_property(
+                        pair,
+                        handlebars,
+                        providers,
+                        static_providers,
+                    ));
                 }
-            },
-            r => unreachable!("unexpected rule for json path, `{:?}`", r)
+            }
+            r => unreachable!("unexpected rule for json path, `{:?}`", r),
         }
     }
     let start = start.unwrap();
     if let JsonPathStart::JsonIdent(start) = &start {
         match (&start, rest.first()) {
-            (start, Some(JsonPathSegment::String(next))) if start.as_str() == "request" || start.as_str() == "response" =>
-                providers.insert(format!("{}.{}", start, next)),
+            (start, Some(JsonPathSegment::String(next)))
+                if start.as_str() == "request" || start.as_str() == "response" =>
+            {
+                providers.insert(format!("{}.{}", start, next))
+            }
             _ => providers.insert(start.clone()),
         };
     }
@@ -708,65 +746,80 @@ fn parse_json_path(
 }
 
 fn parse_value(
-        pairs: Pairs<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> Value
-{
+    pairs: Pairs<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> Value {
     let mut not = false;
     for pair in pairs {
         match pair.as_rule() {
             Rule::not => {
                 not = true;
-            },
+            }
             Rule::boolean => {
                 let b = match pair.as_str() {
                     "true" => true,
                     "false" => false,
                     s => unreachable!("unexpected boolean value, `{}`", s),
                 };
-                return Value::Json(not, b.into())
-            },
-            Rule::null =>
-                return Value::Json(not, json::Value::Null),
-            Rule::json_path =>
-                return Value::JsonPath(not, parse_json_path(pair, handlebars, providers, static_providers)),
-            Rule::string => 
-                return Value::from_string(pair.as_str().into(), not, handlebars.clone(), providers, static_providers),
-            Rule::integer | Rule::decimal =>
+                return Value::Json(not, b.into());
+            }
+            Rule::null => return Value::Json(not, json::Value::Null),
+            Rule::json_path => {
+                return Value::JsonPath(
+                    not,
+                    parse_json_path(pair, handlebars, providers, static_providers),
+                );
+            }
+            Rule::string => {
+                return Value::from_string(
+                    pair.as_str().into(),
+                    not,
+                    handlebars.clone(),
+                    providers,
+                    static_providers,
+                );
+            }
+            Rule::integer | Rule::decimal => {
                 return Value::Json(
                     not,
-                    json::Value::Number(std::str::FromStr::from_str(pair.as_str()).unwrap())
-                ),
-            Rule::value =>
-                return parse_value(pair.into_inner(), handlebars, providers, static_providers),
-            r => unreachable!("unexpected rule for value, `{:?}`", r)
+                    json::Value::Number(std::str::FromStr::from_str(pair.as_str()).unwrap()),
+                );
+            }
+            Rule::value => {
+                return parse_value(pair.into_inner(), handlebars, providers, static_providers);
+            }
+            r => unreachable!("unexpected rule for value, `{:?}`", r),
         }
     }
     unreachable!("unexpectedly reached end of function in parse_value")
 }
 
 fn parse_simple_expression(
-        pair: Pair<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> SimpleExpression
-{
+    pair: Pair<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> SimpleExpression {
     let mut lhs = None;
     let mut operator = None;
     let mut rhs = None;
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::value => {
-                let v = Some(parse_value(pair.into_inner(), handlebars, providers, static_providers));
+                let v = Some(parse_value(
+                    pair.into_inner(),
+                    handlebars,
+                    providers,
+                    static_providers,
+                ));
                 if lhs.is_none() {
                     lhs = v;
                 } else {
                     rhs = v;
                 }
-            },
+            }
             Rule::operator => {
                 let o = match pair.as_str() {
                     "==" => Operator::Eq,
@@ -778,8 +831,8 @@ fn parse_simple_expression(
                     o => unreachable!("unexpected operator, `{:?}`", o),
                 };
                 operator = Some(o);
-            },
-            r => unreachable!("unexpected rule for simple expression, `{:?}`", r)
+            }
+            r => unreachable!("unexpected rule for simple expression, `{:?}`", r),
         }
     }
     let rest = if let (Some(o), Some(r)) = (operator, rhs) {
@@ -787,16 +840,18 @@ fn parse_simple_expression(
     } else {
         None
     };
-    SimpleExpression { lhs: lhs.unwrap(), rest }
+    SimpleExpression {
+        lhs: lhs.unwrap(),
+        rest,
+    }
 }
 
 fn parse_complex_expression(
-        pairs: Pairs<Rule>,
-        handlebars: &Arc<Handlebars>,
-        providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>
-    ) -> ComplexExpression
-{
+    pairs: Pairs<Rule>,
+    handlebars: &Arc<Handlebars>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> ComplexExpression {
     let mut ret = ComplexExpression {
         combiner: Combiner::And,
         pieces: Vec::new(),
@@ -808,10 +863,18 @@ fn parse_complex_expression(
         match rule {
             Rule::simple_expression | Rule::group_expression => {
                 let new = match rule {
-                    Rule::simple_expression =>
-                        Expression::Simple(parse_simple_expression(pair, handlebars, providers, static_providers)),
-                    Rule::group_expression =>
-                        Expression::Complex(parse_complex_expression(pair.into_inner(), handlebars, providers, static_providers)),
+                    Rule::simple_expression => Expression::Simple(parse_simple_expression(
+                        pair,
+                        handlebars,
+                        providers,
+                        static_providers,
+                    )),
+                    Rule::group_expression => Expression::Complex(parse_complex_expression(
+                        pair.into_inner(),
+                        handlebars,
+                        providers,
+                        static_providers,
+                    )),
                     _ => unreachable!("impossible"),
                 };
                 if append_to_previous {
@@ -825,8 +888,8 @@ fn parse_complex_expression(
                                 } else {
                                     None
                                 }
-                            },
-                            _ => None
+                            }
+                            _ => None,
                         }
                     } {
                         c.pieces.push(new);
@@ -834,14 +897,14 @@ fn parse_complex_expression(
                         let previous = ret.pieces.pop().unwrap();
                         let ce = ComplexExpression {
                             combiner: Combiner::And,
-                            pieces: vec!(previous, new)
+                            pieces: vec![previous, new],
                         };
                         ret.pieces.push(Expression::Complex(ce));
                     }
                 } else {
                     ret.pieces.push(new);
                 }
-            },
+            }
             Rule::combiner => {
                 let c = match pair.as_str() {
                     "&&" => Combiner::And,
@@ -856,13 +919,13 @@ fn parse_complex_expression(
                     } else {
                         ret = ComplexExpression {
                             combiner: c,
-                            pieces: vec!(Expression::Complex(ret)),
+                            pieces: vec![Expression::Complex(ret)],
                         }
                     }
                 }
-            },
+            }
             Rule::EOI => (),
-            r => unreachable!("unexpected rule for complex expression, `{:?}`", r)
+            r => unreachable!("unexpected rule for complex expression, `{:?}`", r),
         }
     }
     ret
@@ -871,8 +934,8 @@ fn parse_complex_expression(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json as json;
     use crate::template::join_helper;
+    use serde_json as json;
 
     fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
         let select = create_select(select);
@@ -891,29 +954,46 @@ mod tests {
     #[test]
     fn get_providers() {
         // (select json, where clause, expected providers returned from `get_providers`, expected providers in `get_special_providers`)
-        let check_table = vec!(
-            (json::json!(4), None, vec!(), 0),
-            (json::json!("c[0].d"), None, vec!("c"), 0),
-            (json::json!("request.body[0].d"), None, vec!(), REQUEST_BODY),
-            (json::json!(r#"request["start-line"]"#), None, vec!(), REQUEST_STARTLINE),
-            (json::json!("repeat(5)"), None, vec!(), 0),
-            (json::json!(r#"json_path("c.*.d")"#), None, vec!("c"), 0),
-            (json::json!(r#"json_path("c.*.d")"#), Some("true && false && true || response.body.id == 123"), vec!("c"), RESPONSE_BODY),
-            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
-            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!("c"), 0),
-            (json::json!(r#"json_path("response.headers.*.d")"#), None, vec!(), RESPONSE_HEADERS),
-            (json::json!(r#"for_each[0]"#), None, vec!(), FOR_EACH),
-            (json::json!(r#"stats.rtt"#), None, vec!(), STATS),
-            (json::json!(r#"`{{join b.e "-"}}`"#), None, vec!("b"), 0),
+        let check_table = vec![
+            (json::json!(4), None, vec![], 0),
+            (json::json!("c[0].d"), None, vec!["c"], 0),
+            (json::json!("request.body[0].d"), None, vec![], REQUEST_BODY),
+            (
+                json::json!(r#"request["start-line"]"#),
+                None,
+                vec![],
+                REQUEST_STARTLINE,
+            ),
+            (json::json!("repeat(5)"), None, vec![], 0),
+            (json::json!(r#"json_path("c.*.d")"#), None, vec!["c"], 0),
+            (
+                json::json!(r#"json_path("c.*.d")"#),
+                Some("true && false && true || response.body.id == 123"),
+                vec!["c"],
+                RESPONSE_BODY,
+            ),
+            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!["c"], 0),
+            (json::json!(r#"json_path("c.foo.*.d")"#), None, vec!["c"], 0),
+            (
+                json::json!(r#"json_path("response.headers.*.d")"#),
+                None,
+                vec![],
+                RESPONSE_HEADERS,
+            ),
+            (json::json!(r#"for_each[0]"#), None, vec![], FOR_EACH),
+            (json::json!(r#"stats.rtt"#), None, vec![], STATS),
+            (json::json!(r#"`{{join b.e "-"}}`"#), None, vec!["b"], 0),
             (
                 json::json!({"z": 42, "dees": r#"json_path("c.*.d")"#, "x": "foo"}),
                 None,
-                vec!("c", "foo"),
-                0
-            )
-        );
+                vec!["c", "foo"],
+                0,
+            ),
+        ];
 
-        for (i, (select, where_clause, providers_expect, rr_expect)) in check_table.into_iter().enumerate() {
+        for (i, (select, where_clause, providers_expect, rr_expect)) in
+            check_table.into_iter().enumerate()
+        {
             let s = if let Some(wc) = where_clause {
                 create_select(json::json!({ "select": select, "where": wc }))
             } else {
@@ -924,7 +1004,6 @@ mod tests {
             assert_eq!(providers, providers_expect, "index {}", i);
             assert_eq!(rr_providers, rr_expect, "index {}", i);
         }
-
     }
 
     #[test]
@@ -940,31 +1019,39 @@ mod tests {
         });
 
         // (select json, expected out data)
-        let check_table = vec!(
-            (json::json!(4), vec!(json::json!(4))),
-            (json::json!("true && false"), vec!(false.into())),
-            (json::json!("((true || false))"), vec!(true.into())),
-            (json::json!("c[0].d"), vec!(json::json!(1))),
-            (json::json!("(c[0].d)"), vec!(json::json!(1))),
-            (json::json!(r#"json_path("c.*.d")"#), vec!(json::json!([1, 2, 3]))),
-            (json::json!("repeat(5)"), vec!(json::json!([null, null, null, null, null]))),
-            (json::json!("c.length"), vec!(json::json!(3))),
-            (json::json!("b.e.length"), vec!(json::json!(4))),
-            (json::json!(r#""foo-bar""#), vec!(json::json!("foo-bar"))),
-            (json::json!("'foo-bar'"), vec!(json::json!("foo-bar"))),
-            (json::json!(r#"`{{join b.e "-"}}`"#), vec!(json::json!("5-6-7-8"))),
+        let check_table = vec![
+            (json::json!(4), vec![json::json!(4)]),
+            (json::json!("true && false"), vec![false.into()]),
+            (json::json!("((true || false))"), vec![true.into()]),
+            (json::json!("c[0].d"), vec![json::json!(1)]),
+            (json::json!("(c[0].d)"), vec![json::json!(1)]),
+            (
+                json::json!(r#"json_path("c.*.d")"#),
+                vec![json::json!([1, 2, 3])],
+            ),
+            (
+                json::json!("repeat(5)"),
+                vec![json::json!([null, null, null, null, null])],
+            ),
+            (json::json!("c.length"), vec![json::json!(3)]),
+            (json::json!("b.e.length"), vec![json::json!(4)]),
+            (json::json!(r#""foo-bar""#), vec![json::json!("foo-bar")]),
+            (json::json!("'foo-bar'"), vec![json::json!("foo-bar")]),
+            (
+                json::json!(r#"`{{join b.e "-"}}`"#),
+                vec![json::json!("5-6-7-8")],
+            ),
             (
                 json::json!({"z": 42, "dees": r#"json_path("c.*.d")"#}),
-                vec!(json::json!({"z": 42, "dees": [1, 2, 3]}))
-            )
-        );
+                vec![json::json!({"z": 42, "dees": [1, 2, 3]})],
+            ),
+        ];
 
         for (i, (select, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
             let s = json::json!({ "select": select });
             check_results(s, data, &expect, i);
         }
-
     }
 
     #[test]
@@ -975,11 +1062,11 @@ mod tests {
             "empty_array": [],
         });
 
-        let three = vec!(json::json!(3));
+        let three = vec![json::json!(3)];
         let empty = Vec::new();
 
         // (where clause, expected out data)
-        let check_table = vec!(
+        let check_table = vec![
             ("three > 2", &three),
             ("three > 3", &empty),
             ("three < 4", &three),
@@ -1012,7 +1099,7 @@ mod tests {
             ("false || (true || false) && false", &empty),
             ("false || (true && false) && true", &empty),
             ("false || (true || false) && true", &three),
-        );
+        ];
 
         for (i, (where_clause, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
@@ -1037,17 +1124,50 @@ mod tests {
         });
 
         // (select, for_each, expect)
-        let check_table = vec!(
-            (json::json!("a"), vec!("repeat(5)"), vec!(json::json!(3), json::json!(3), json::json!(3), json::json!(3), json::json!(3))),
-            (json::json!("for_each[1]"), vec!("repeat(3)", "true || false"), vec!(true.into(), true.into(), true.into())),
-            (json::json!("for_each[0]"), vec!(r#"json_path("c.*.d")"#), vec!(json::json!(1), json::json!(2), json::json!(3))),
-            (json::json!("for_each[0]"), vec!("c"), vec!(json::json!({ "d": 1 }), json::json!({ "d": 2 }), json::json!({ "d": 3 }))),
+        let check_table = vec![
+            (
+                json::json!("a"),
+                vec!["repeat(5)"],
+                vec![
+                    json::json!(3),
+                    json::json!(3),
+                    json::json!(3),
+                    json::json!(3),
+                    json::json!(3),
+                ],
+            ),
             (
                 json::json!("for_each[1]"),
-                vec!("repeat(2)", r#"json_path("c.*.d")"#),
-                vec!(json::json!(1), json::json!(2), json::json!(3), json::json!(1), json::json!(2), json::json!(3))
+                vec!["repeat(3)", "true || false"],
+                vec![true.into(), true.into(), true.into()],
             ),
-        );
+            (
+                json::json!("for_each[0]"),
+                vec![r#"json_path("c.*.d")"#],
+                vec![json::json!(1), json::json!(2), json::json!(3)],
+            ),
+            (
+                json::json!("for_each[0]"),
+                vec!["c"],
+                vec![
+                    json::json!({ "d": 1 }),
+                    json::json!({ "d": 2 }),
+                    json::json!({ "d": 3 }),
+                ],
+            ),
+            (
+                json::json!("for_each[1]"),
+                vec!["repeat(2)", r#"json_path("c.*.d")"#],
+                vec![
+                    json::json!(1),
+                    json::json!(2),
+                    json::json!(3),
+                    json::json!(1),
+                    json::json!(2),
+                    json::json!(3),
+                ],
+            ),
+        ];
 
         for (i, (select, for_each, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
@@ -1057,6 +1177,5 @@ mod tests {
             });
             check_results(select, data, &expect, i);
         }
-
     }
 }

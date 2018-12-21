@@ -1,19 +1,9 @@
 use crossbeam::queue::SegQueue;
-use futures::{
-    Async,
-    AsyncSink,
-    Poll,
-    sink::Sink,
-    StartSend,
-    Stream,
-    task,
-};
+use futures::{sink::Sink, task, Async, AsyncSink, Poll, StartSend, Stream};
 
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 pub enum Limit {
@@ -64,13 +54,17 @@ impl<T> Sender<T> {
     }
 
     pub fn try_send(&self, item: T) -> Result<(), T> {
-        let res = self.len.fetch_update(|n| {
-            if n < self.limit.get() {
-                Some(n + 1)
-            } else {
-                None
-            }
-        }, Ordering::Relaxed, Ordering::Relaxed);
+        let res = self.len.fetch_update(
+            |n| {
+                if n < self.limit.get() {
+                    Some(n + 1)
+                } else {
+                    None
+                }
+            },
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        );
         let ret = if res.is_ok() {
             self.inner.push(item);
             Ok(())
@@ -124,11 +118,11 @@ impl<T> Sink for Sender<T> {
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         match self.try_send(item) {
             Ok(_) => Ok(AsyncSink::Ready),
-            Err(item) => Ok(AsyncSink::NotReady(item))
+            Err(item) => Ok(AsyncSink::NotReady(item)),
         }
     }
 
-    fn poll_complete (&mut self) -> Poll<(), Self::SinkError> {
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         Ok(Async::Ready(()))
     }
 }
@@ -152,7 +146,7 @@ impl<T> Stream for Receiver<T> {
         if msg.is_some() {
             let n = self.len.fetch_sub(1, Ordering::Relaxed);
             if n == 1 {
-                // if there's an "auto" limit and we've emptied the buffer, 
+                // if there's an "auto" limit and we've emptied the buffer,
                 // increment the limit
                 if let Limit::Auto(a) = &self.limit {
                     a.fetch_add(1, Ordering::Relaxed);

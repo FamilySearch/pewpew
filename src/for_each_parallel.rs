@@ -1,11 +1,4 @@
-use futures::{
-    Async,
-    Future,
-    IntoFuture,
-    Poll,
-    Stream,
-    sync::oneshot,
-};
+use futures::{sync::oneshot, Async, Future, IntoFuture, Poll, Stream};
 
 use crate::channel::Limit;
 
@@ -15,10 +8,11 @@ use std::cmp;
 /// stream in parallel.
 #[must_use = "streams do nothing unless polled"]
 pub struct ForEachParallel<St, If, Fm, F>
-where St: Stream,
+where
+    St: Stream,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future=F, Item=F::Item, Error=F::Error>,
-    F: Future<Item=(), Error=()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
+    F: Future<Item = (), Error = ()> + Send + 'static,
 {
     f: Fm,
     futures: Vec<oneshot::Receiver<()>>,
@@ -28,10 +22,11 @@ where St: Stream,
 }
 
 impl<St, If, Fm, F> ForEachParallel<St, If, Fm, F>
-where St: Stream,
+where
+    St: Stream,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future=F, Item=F::Item, Error=F::Error>,
-    F: Future<Item=(), Error=()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
+    F: Future<Item = (), Error = ()> + Send + 'static,
 {
     pub fn new(limits: Vec<Limit>, stream: St, f: Fm) -> Self {
         ForEachParallel {
@@ -45,16 +40,20 @@ where St: Stream,
 }
 
 impl<St, If, Fm, F> Future for ForEachParallel<St, If, Fm, F>
-where St: Stream,
+where
+    St: Stream,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future=F, Item=F::Item, Error=F::Error>,
-    F: Future<Item=(), Error=()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
+    F: Future<Item = (), Error = ()> + Send + 'static,
 {
     type Item = ();
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let limit = self.limits.iter().fold(0, |prev, l| cmp::max(prev, l.get()));
+        let limit = self
+            .limits
+            .iter()
+            .fold(0, |prev, l| cmp::max(prev, l.get()));
         loop {
             let mut made_progress_this_iter = false;
             // Try and pull an item from the stream
@@ -64,20 +63,17 @@ where St: Stream,
                         Ok(Async::Ready(Some(elem))) => {
                             made_progress_this_iter = true;
                             let (tx, rx) = oneshot::channel();
-                            let next_future = (self.f)(elem)
-                                .into_future()
-                                .then(move |_| tx.send(()));
+                            let next_future =
+                                (self.f)(elem).into_future().then(move |_| tx.send(()));
                             tokio::spawn(next_future);
                             self.futures.push(rx);
-                        },
-                        Ok(Async::Ready(None)) => {
-                            self.stream = None
-                        },
+                        }
+                        Ok(Async::Ready(None)) => self.stream = None,
                         Ok(Async::NotReady) => (),
                         Err(_) => {
                             self.stream_errored = true;
                             self.stream = None;
-                        },
+                        }
                     }
                 }
             }
@@ -93,11 +89,11 @@ where St: Stream,
 
             if self.futures.is_empty() && self.stream.is_none() {
                 if self.stream_errored {
-                    return Err(())
+                    return Err(());
                 }
-                return Ok(Async::Ready(()))
+                return Ok(Async::Ready(()));
             } else if !made_progress_this_iter {
-                return Ok(Async::NotReady)
+                return Ok(Async::NotReady);
             }
         }
     }
@@ -112,12 +108,11 @@ mod tests {
     use std::{
         iter,
         sync::{
-            Arc,
             atomic::{AtomicUsize, Ordering},
+            Arc,
         },
         time::{Duration, Instant},
     };
-
 
     #[test]
     fn for_each_parallel() {
@@ -128,17 +123,21 @@ mod tests {
         let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(vec!(), s, move |_| {
+        let fep = ForEachParallel::new(vec![], s, move |_| {
             counter.fetch_add(1, Ordering::Relaxed);
             Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
-        }).then(|_| Ok(()));
+        })
+        .then(|_| Ok(()));
         let start = Instant::now();
         tokio::run(fep);
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);
         // check that the whole process ran in an acceptable time span (meaning the tasks went in parallel)
-        assert!(elapsed < Duration::from_millis(wait_time_ms * 2) && elapsed > Duration::from_millis(wait_time_ms));
+        assert!(
+            elapsed < Duration::from_millis(wait_time_ms * 2)
+                && elapsed > Duration::from_millis(wait_time_ms)
+        );
     }
 
     #[test]
@@ -150,10 +149,15 @@ mod tests {
         let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(vec!(Limit::Integer(100), Limit::Integer(250)), s, move |_| {
-            counter.fetch_add(1, Ordering::Relaxed);
-            Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
-        }).then(|_| Ok(()));
+        let fep = ForEachParallel::new(
+            vec![Limit::Integer(100), Limit::Integer(250)],
+            s,
+            move |_| {
+                counter.fetch_add(1, Ordering::Relaxed);
+                Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
+            },
+        )
+        .then(|_| Ok(()));
         let start = Instant::now();
         tokio::run(fep);
         let elapsed = start.elapsed();
@@ -161,6 +165,9 @@ mod tests {
         assert_eq!(counter2.load(Ordering::Relaxed), n);
         // check that the whole process ran in an acceptable time span (meaning the tasks went in parallel and
         // with a certain limit of concurrent tasks)
-        assert!(elapsed < Duration::from_millis(wait_time_ms * 3) && elapsed > Duration::from_millis(wait_time_ms * 2));
+        assert!(
+            elapsed < Duration::from_millis(wait_time_ms * 3)
+                && elapsed > Duration::from_millis(wait_time_ms * 2)
+        );
     }
 }

@@ -1,15 +1,9 @@
-use futures::{
-    Poll,
-    Stream,
-};
+use futures::{Poll, Stream};
 use regex::Regex;
 use serde_json as json;
 use tokio::prelude::*;
 
-use std::{
-    cmp::PartialEq,
-    fmt,
-};
+use std::{cmp::PartialEq, fmt};
 
 pub enum Either<A, B> {
     A(A),
@@ -17,8 +11,9 @@ pub enum Either<A, B> {
 }
 
 impl<A, B> Stream for Either<A, B>
-    where A: Stream,
-          B: Stream<Item = A::Item, Error = A::Error>
+where
+    A: Stream,
+    B: Stream<Item = A::Item, Error = A::Error>,
 {
     type Item = A::Item;
     type Error = A::Error;
@@ -31,9 +26,9 @@ impl<A, B> Stream for Either<A, B>
 }
 
 impl<A, B> Clone for Either<A, B>
-    where
-        A: Clone,
-        B: Clone
+where
+    A: Clone,
+    B: Clone,
 {
     fn clone(&self) -> Self {
         match self {
@@ -44,11 +39,11 @@ impl<A, B> Clone for Either<A, B>
 }
 
 impl<A, B, T> Iterator for Either<A, B>
-    where
-        A: Iterator<Item=T>,
-        B: Iterator<Item=T>,
+where
+    A: Iterator<Item = T>,
+    B: Iterator<Item = T>,
 {
-    type Item=T;
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -59,8 +54,9 @@ impl<A, B, T> Iterator for Either<A, B>
 }
 
 impl<A, B> fmt::Debug for Either<A, B>
-    where A: fmt::Debug,
-          B: fmt::Debug,
+where
+    A: fmt::Debug,
+    B: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
@@ -71,8 +67,9 @@ impl<A, B> fmt::Debug for Either<A, B>
 }
 
 impl<A, B> PartialEq for Either<A, B>
-    where A: PartialEq,
-          B: PartialEq
+where
+    A: PartialEq,
+    B: PartialEq,
 {
     fn eq(&self, rhs: &Either<A, B>) -> bool {
         match (self, rhs) {
@@ -84,8 +81,9 @@ impl<A, B> PartialEq for Either<A, B>
 }
 
 impl<A, B> Future for Either<A, B>
-    where A: Future,
-          B: Future<Item = A::Item, Error = A::Error>
+where
+    A: Future,
+    B: Future<Item = A::Item, Error = A::Error>,
 {
     type Item = A::Item;
     type Error = A::Error;
@@ -101,13 +99,14 @@ impl<A, B> Future for Either<A, B>
 pub enum Either3<A, B, C> {
     A(A),
     B(B),
-    C(C)
+    C(C),
 }
 
 impl<A, B, C> Stream for Either3<A, B, C>
-    where A: Stream,
-          B: Stream<Item = A::Item, Error = A::Error>,
-          C: Stream<Item = A::Item, Error = A::Error>,
+where
+    A: Stream,
+    B: Stream<Item = A::Item, Error = A::Error>,
+    C: Stream<Item = A::Item, Error = A::Error>,
 {
     type Item = A::Item;
     type Error = A::Error;
@@ -121,12 +120,12 @@ impl<A, B, C> Stream for Either3<A, B, C>
 }
 
 impl<A, B, C, T> Iterator for Either3<A, B, C>
-    where
-        A: Iterator<Item=T>,
-        B: Iterator<Item=T>,
-        C: Iterator<Item=T>,
+where
+    A: Iterator<Item = T>,
+    B: Iterator<Item = T>,
+    C: Iterator<Item = T>,
 {
-    type Item=T;
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -138,10 +137,10 @@ impl<A, B, C, T> Iterator for Either3<A, B, C>
 }
 
 impl<A, B, C> Clone for Either3<A, B, C>
-    where
-        A: Clone,
-        B: Clone,
-        C: Clone,
+where
+    A: Clone,
+    B: Clone,
+    C: Clone,
 {
     fn clone(&self) -> Self {
         match self {
@@ -160,7 +159,10 @@ pub fn str_to_json(s: &str) -> json::Value {
 pub fn parse_provider_name(s: &str) -> &str {
     // parse out the provider name, or if it's `request` or `response` get the second layer
     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
-    param_name_re.captures(s).unwrap()
-        .get(1).expect("invalid json path query")
+    param_name_re
+        .captures(s)
+        .unwrap()
+        .get(1)
+        .expect("invalid json path query")
         .as_str()
 }

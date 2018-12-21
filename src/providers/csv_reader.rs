@@ -1,16 +1,9 @@
-use crate::{
-    config,
-    util::str_to_json,
-};
+use crate::{config, util::str_to_json};
 use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
-use std::{
-    fs::File,
-    io,
-    iter::Iterator,
-};
+use std::{fs::File, io, iter::Iterator};
 
 pub struct CsvReader {
     positions: Vec<csv::Position>,
@@ -25,8 +18,7 @@ impl CsvReader {
         let file = File::open(&config.path)?;
         let csv = &config.csv;
         let mut builder = csv::ReaderBuilder::new();
-        builder.comment(csv.comment)
-            .escape(csv.escape);
+        builder.comment(csv.comment).escape(csv.escape);
         if let Some(delimiter) = csv.delimiter {
             builder.delimiter(delimiter);
         }
@@ -34,8 +26,8 @@ impl CsvReader {
             config::CsvHeader::Bool(b) => {
                 builder.has_headers(*b);
                 (*b, None)
-            },
-            config::CsvHeader::String(s) => (false, Some(s))
+            }
+            config::CsvHeader::String(s) => (false, Some(s)),
         };
         if let Some(double_quote) = csv.double_quote {
             builder.double_quote(double_quote);
@@ -48,7 +40,8 @@ impl CsvReader {
         }
         let mut reader = builder.from_reader(file);
         let headers = if let Some(headers) = explicit_headers {
-            let headers = builder.from_reader(headers.as_bytes())
+            let headers = builder
+                .from_reader(headers.as_bytes())
                 .headers()
                 .map_err(io::Error::from)?
                 .to_owned();
@@ -81,9 +74,9 @@ impl CsvReader {
                         if let Some(pos) = byte_record.position() {
                             cr.positions.push(pos.clone());
                         }
-                    },
+                    }
                     Ok(false) => break,
-                    Err(e) => return Err(e.into())
+                    Err(e) => return Err(e.into()),
                 }
             }
             let pos_index = if config.random && !cr.positions.is_empty() {
@@ -95,8 +88,7 @@ impl CsvReader {
                 0
             };
             if let Some(pos) = cr.positions.get(pos_index) {
-                cr.reader.seek(pos.clone())
-                    .map_err(io::Error::from)?;
+                cr.reader.seek(pos.clone()).map_err(io::Error::from)?;
             }
         } else if config.repeat {
             cr.positions.push(csv::Position::new());
@@ -125,39 +117,34 @@ impl Iterator for CsvReader {
                 self.positions.remove(i)
             };
             if let Err(e) = self.reader.seek(pos) {
-                return Some(Err(e.into()))
+                return Some(Err(e.into()));
             }
         }
         match (self.reader.read_record(&mut record), self.repeat) {
             (Err(e), _) => return Some(Err(e.into())),
-            (Ok(false), false) => {
-                return None
-            },
+            (Ok(false), false) => return None,
             (Ok(false), true) => {
                 if let Some(pos) = self.positions.first() {
                     if let Err(e) = self.reader.seek(pos.clone()) {
-                        return Some(Err(e.into()))
+                        return Some(Err(e.into()));
                     }
-                    return self.next()
+                    return self.next();
                 } else {
-                    return None
+                    return None;
                 }
             }
-            _ => ()
+            _ => (),
         }
         let json = if let Some(headers) = &self.headers {
             json::Value::Object(
-                headers.iter()
+                headers
+                    .iter()
                     .zip(record.iter())
                     .map(|(k, v)| (k.into(), str_to_json(v)))
-                    .collect()
+                    .collect(),
             )
         } else {
-            json::Value::Array(
-                record.into_iter()
-                    .map(|s| str_to_json(s))
-                    .collect()
-            )
+            json::Value::Array(record.into_iter().map(|s| str_to_json(s)).collect())
         };
         Some(Ok(json))
     }
@@ -170,31 +157,25 @@ mod tests {
 
     use std::io::Write;
 
-    const CSV_LINES: &[&str] = &[
-        "a,b,c",
-        "d,e,f",
-        r#""[1,2,3]",99,14"#
-    ];
+    const CSV_LINES: &[&str] = &["a,b,c", "d,e,f", r#""[1,2,3]",99,14"#];
 
     #[test]
     fn csv_reader_basics_works() {
         let mut fp = config::FileProvider::default();
         fp.format = config::FileFormat::Csv;
 
-        let expect = vec!(
+        let expect = vec![
             json::json!(["a", "b", "c"]),
             json::json!(["d", "e", "f"]),
-            json::json!([[1,2,3], 99, 14]),
-        );
-        
+            json::json!([[1, 2, 3], 99, 14]),
+        ];
+
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", CSV_LINES.join(line_ending)).unwrap();
             fp.path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = CsvReader::new(&fp).unwrap()
-                .map(|r| r.unwrap())
-                .collect();
+            let values: Vec<_> = CsvReader::new(&fp).unwrap().map(|r| r.unwrap()).collect();
 
             assert_eq!(values, expect);
         }

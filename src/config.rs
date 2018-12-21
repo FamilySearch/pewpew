@@ -1,19 +1,12 @@
 mod select_parser;
 
 pub use self::select_parser::{
-    REQUEST_STARTLINE,
-    REQUEST_HEADERS,
-    REQUEST_BODY,
-    REQUEST_URL,
-    RESPONSE_STARTLINE,
-    RESPONSE_HEADERS,
-    RESPONSE_BODY,
-    STATS,
-    Select,
+    Select, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY,
+    RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 
 use crate::channel::Limit;
-use crate::mod_interval::{LinearBuilder, HitsPer};
+use crate::mod_interval::{HitsPer, LinearBuilder};
 use crate::request::DeclareProvider;
 use crate::template::json_value_to_string;
 
@@ -21,19 +14,13 @@ use hyper::Method;
 use regex::Regex;
 use serde::{
     de::{Error as DeError, Unexpected},
-    Deserialize,
-    Deserializer,
+    Deserialize, Deserializer,
 };
 use serde_derive::Deserialize;
 use serde_json as json;
 use tuple_vec_map;
 
-use std::{
-    collections::BTreeMap,
-    env,
-    num::NonZeroU16,
-    time::Duration,
-};
+use std::{collections::BTreeMap, env, num::NonZeroU16, time::Duration};
 
 #[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
@@ -59,7 +46,7 @@ pub enum LoadPattern {
 impl LoadPattern {
     pub fn duration(&self) -> Duration {
         match self {
-            LoadPattern::Linear(lb) => lb.duration
+            LoadPattern::Linear(lb) => lb.duration,
         }
     }
 }
@@ -104,7 +91,7 @@ impl Default for FileFormat {
 #[derive(Deserialize)]
 pub enum CsvHeader {
     Bool(bool),
-    String(String)
+    String(String),
 }
 
 impl Default for CsvHeader {
@@ -167,7 +154,7 @@ struct LoggerPreProcessed {
     select: Option<json::Value>,
     #[serde(default)]
     for_each: Vec<String>,
-    #[serde(default, rename="where")]
+    #[serde(default, rename = "where")]
     where_clause: Option<String>,
     to: String,
     #[serde(default)]
@@ -183,7 +170,7 @@ struct LogsPreProcessed {
     select: json::Value,
     #[serde(default)]
     for_each: Vec<String>,
-    #[serde(default, rename="where")]
+    #[serde(default, rename = "where")]
     where_clause: Option<String>,
 }
 
@@ -239,7 +226,8 @@ impl EndpointProvidesSendOptions {
             EndpointProvidesSendOptions::Block => "block",
             EndpointProvidesSendOptions::Force => "force",
             EndpointProvidesSendOptions::IfNotFull => "if_not_full",
-        }.to_string()
+        }
+        .to_string()
     }
 }
 
@@ -257,7 +245,7 @@ pub struct EndpointProvidesPreProcessed {
     pub select: json::Value,
     #[serde(default)]
     pub for_each: Vec<String>,
-    #[serde(default, rename="where")]
+    #[serde(default, rename = "where")]
     pub where_clause: Option<String>,
 }
 
@@ -272,7 +260,7 @@ impl SummaryOutputFormats {
     pub fn is_pretty(self) -> bool {
         match self {
             SummaryOutputFormats::Pretty => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -315,7 +303,7 @@ impl Default for ClientConfig {
         ClientConfig {
             request_timeout: default_request_timeout(),
             headers: Vec::new(),
-            keepalive: default_keepalive()
+            keepalive: default_keepalive(),
         }
     }
 }
@@ -325,7 +313,10 @@ impl Default for ClientConfig {
 pub struct GeneralConfig {
     #[serde(default = "default_auto_buffer_start_size")]
     pub auto_buffer_start_size: usize,
-    #[serde(default = "default_bucket_size", deserialize_with = "deserialize_duration")]
+    #[serde(
+        default = "default_bucket_size",
+        deserialize_with = "deserialize_duration"
+    )]
     pub bucket_size: Duration,
     #[serde(default)]
     pub summary_output_format: SummaryOutputFormats,
@@ -336,7 +327,7 @@ impl Default for GeneralConfig {
         GeneralConfig {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(),
-            summary_output_format: SummaryOutputFormats::default()
+            summary_output_format: SummaryOutputFormats::default(),
         }
     }
 }
@@ -365,7 +356,8 @@ pub struct LoadTest {
 
 impl<'de> Deserialize<'de> for RangeProvider {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let rppp = RangeProviderPreProcessed::deserialize(deserializer)?;
         let start = rppp.start.unwrap_or(0);
@@ -377,7 +369,8 @@ impl<'de> Deserialize<'de> for RangeProvider {
 
 impl<'de> Deserialize<'de> for Logger {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let lpp = LoggerPreProcessed::deserialize(deserializer)?;
         let select = if let Some(select) = lpp.select {
@@ -401,20 +394,20 @@ impl<'de> Deserialize<'de> for Logger {
 
 impl<'de> Deserialize<'de> for DeclareProvider {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         // `collect(3, foo)` OR `collect(3, 5, foo)`
-        let collect_re = Regex::new(r"^collect\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?,\s*([^)\s]+?)\s*\)$").unwrap();
+        let collect_re =
+            Regex::new(r"^collect\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?,\s*([^)\s]+?)\s*\)$").unwrap();
         let dp = match collect_re.captures(&s) {
             Some(captures) => {
-                let min = captures.get(1).unwrap()
-                    .as_str().parse().unwrap();
+                let min = captures.get(1).unwrap().as_str().parse().unwrap();
                 let max = captures.get(2).and_then(|c| c.as_str().parse().ok());
-                let ident = captures.get(3).unwrap()
-                    .as_str().to_string();
+                let ident = captures.get(3).unwrap().as_str().to_string();
                 DeclareProvider::Collect(min, max, ident)
-            },
+            }
             None => DeclareProvider::Alias(s),
         };
         Ok(dp)
@@ -422,29 +415,31 @@ impl<'de> Deserialize<'de> for DeclareProvider {
 }
 impl<'de> Deserialize<'de> for Percent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
         let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").unwrap();
 
-        let captures = re.captures(&string)
-            .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&string), &"a percentage like `30%`"))?;
+        let captures = re.captures(&string).ok_or_else(|| {
+            DeError::invalid_value(Unexpected::Str(&string), &"a percentage like `30%`")
+        })?;
 
-        Ok(Percent(captures.get(1).unwrap()
-            .as_str().parse().unwrap()))
+        Ok(Percent(captures.get(1).unwrap().as_str().parse().unwrap()))
     }
 }
 
 impl<'de> Deserialize<'de> for HitsPer {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
         let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").unwrap();
-        let captures = re.captures(&string).ok_or_else(|| DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'"))?;
-        let n = captures.get(1)
-            .unwrap().as_str()
-            .parse().unwrap();
+        let captures = re.captures(&string).ok_or_else(|| {
+            DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
+        })?;
+        let n = captures.get(1).unwrap().as_str().parse().unwrap();
         if captures.get(2).unwrap().as_str()[0..1].eq_ignore_ascii_case("m") {
             Ok(HitsPer::Minute(n))
         } else {
@@ -455,21 +450,24 @@ impl<'de> Deserialize<'de> for HitsPer {
 
 impl<'de> Deserialize<'de> for Limit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
         if string == "auto" {
             Ok(Limit::auto())
         } else {
-            let n = string.parse::<usize>()
-                .map_err(|_| DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value"))?;
+            let n = string.parse::<usize>().map_err(|_| {
+                DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value")
+            })?;
             Ok(Limit::Integer(n))
         }
     }
 }
 
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let c: Option<char> = Option::deserialize(deserializer)?;
     let c = if let Some(c) = c {
@@ -478,7 +476,10 @@ fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Err
             let _ = c.encode_utf8(&mut b);
             Some(b[0])
         } else {
-            return Err(DeError::invalid_value(Unexpected::Char(c), &"a single-byte character"))
+            return Err(DeError::invalid_value(
+                Unexpected::Char(c),
+                &"a single-byte character",
+            ));
         }
     } else {
         None
@@ -487,30 +488,33 @@ fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Err
 }
 
 fn deserialize_environment<'de, D>(deserializer: D) -> Result<json::Value, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let var = String::deserialize(deserializer)?;
     let value = env::var(var)
         .map_err(DeError::custom)
-        .map(|s|
-            json::from_str(&s)
-                .unwrap_or_else(|_e| json::Value::String(s))
-        )?;
+        .map(|s| json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s)))?;
     Ok(value)
 }
 
 fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let res: Option<json::Value> = Option::deserialize(deserializer)?;
     Ok(res.as_ref().map(json_value_to_string))
 }
 
-fn deserialize_logs<'de, D> (deserializer: D) -> Result<Vec<(String, EndpointProvidesPreProcessed)>, D::Error>
-    where D: Deserializer<'de>
+fn deserialize_logs<'de, D>(
+    deserializer: D,
+) -> Result<Vec<(String, EndpointProvidesPreProcessed)>, D::Error>
+where
+    D: Deserializer<'de>,
 {
     let lpp: Vec<(String, LogsPreProcessed)> = tuple_vec_map::deserialize(deserializer)?;
-    let selects = lpp.into_iter()
+    let selects = lpp
+        .into_iter()
         .map(|(s, lpp)| {
             let eppp = EndpointProvidesPreProcessed {
                 send: EndpointProvidesSendOptions::Block,
@@ -524,35 +528,40 @@ fn deserialize_logs<'de, D> (deserializer: D) -> Result<Vec<(String, EndpointPro
     Ok(selects)
 }
 
-fn deserialize_providers<'de, D, T> (deserializer: D) -> Result<Vec<(String, T)>, D::Error>
-    where
-        D: Deserializer<'de>,
-        T: Deserialize<'de>,
+fn deserialize_providers<'de, D, T>(deserializer: D) -> Result<Vec<(String, T)>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
 {
     let map: Vec<(String, T)> = tuple_vec_map::deserialize(deserializer)?;
     for (k, _) in &map {
         if k == "request" || k == "response" || k == "for_each" || k == "stats" {
-            return Err(DeError::invalid_value(Unexpected::Str(&k), &"Use of reserved provider name"))
+            return Err(DeError::invalid_value(
+                Unexpected::Str(&k),
+                &"Use of reserved provider name",
+            ));
         }
     }
     Ok(map)
 }
 
-fn deserialize_duration<'de, D> (deserializer: D) -> Result<Duration, D::Error>
-    where D: Deserializer<'de>
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
 {
     let string = String::deserialize(deserializer)?;
     let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
     let sanity_re = Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).unwrap();
     if !sanity_re.is_match(&string) {
-        return Err(DeError::invalid_value(Unexpected::Str(&string), &"example '15m' or '2 hours'"))
+        return Err(DeError::invalid_value(
+            Unexpected::Str(&string),
+            &"example '15m' or '2 hours'",
+        ));
     }
     let mut total_secs = 0;
     let re = Regex::new(base_re).unwrap();
     for captures in re.captures_iter(&string) {
-        let n: u64 = captures.get(1)
-            .unwrap().as_str()
-            .parse().unwrap();
+        let n: u64 = captures.get(1).unwrap().as_str().parse().unwrap();
         let unit = &captures.get(2).unwrap().as_str()[0..1];
         let secs = if unit.eq_ignore_ascii_case("h") {
             n * 60 * 60 // hours
@@ -567,15 +576,19 @@ fn deserialize_duration<'de, D> (deserializer: D) -> Result<Duration, D::Error>
 }
 
 fn deserialize_method<'de, D>(deserializer: D) -> Result<Method, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let string = String::deserialize(deserializer)?;
     Method::from_bytes(&string.as_bytes())
         .map_err(|_| DeError::invalid_value(Unexpected::Str(&string), &"a valid HTTP method verb"))
 }
 
-fn deserialize_option_vec_load_pattern<'de, D>(deserializer: D) -> Result<Option<Vec<LoadPattern>>, D::Error>
-    where D: Deserializer<'de>
+fn deserialize_option_vec_load_pattern<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<LoadPattern>>, D::Error>
+where
+    D: Deserializer<'de>,
 {
     let ovlppp: Option<Vec<LoadPatternPreProcessed>> = Option::deserialize(deserializer)?;
     if let Some(vec) = ovlppp {
@@ -587,12 +600,14 @@ fn deserialize_option_vec_load_pattern<'de, D>(deserializer: D) -> Result<Option
                     let start = lbpp.from.map(|p| p.0 / 100f64).unwrap_or(last_end);
                     let end = lbpp.to.0 / 100f64;
                     last_end = end;
-                    ret.push(LoadPattern::Linear(LinearBuilder::new(start, end, lbpp.over)));
+                    ret.push(LoadPattern::Linear(LinearBuilder::new(
+                        start, end, lbpp.over,
+                    )));
                 }
             }
         }
-        return Ok(Some(ret))
+        return Ok(Some(ret));
     } else {
-        return Ok(None)
+        return Ok(None);
     }
 }

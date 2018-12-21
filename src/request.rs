@@ -1,49 +1,24 @@
-use futures::{
-    future::join_all,
-    Sink,
-    stream,
-    Stream,
-};
-use hyper::{
-    Body as HyperBody,
-    Method,
-    Response,
-    Request,
-};
+use futures::{future::join_all, stream, Sink, Stream};
+use hyper::{Body as HyperBody, Method, Request, Response};
 use rand::distributions::{Distribution, Uniform};
-use serde_json::{
-    self as json,
-    Value as JsonValue
-};
+use serde_json::{self as json, Value as JsonValue};
 use tokio::{
     prelude::*,
-    timer::{ Timeout, Error as TimerError }
+    timer::{Error as TimerError, Timeout},
 };
 
 use crate::channel;
 use crate::config::{
-    EndpointProvidesPreProcessed,
-    EndpointProvidesSendOptions,
-    REQUEST_STARTLINE,
-    REQUEST_HEADERS,
-    REQUEST_BODY,
-    REQUEST_URL,
-    RESPONSE_STARTLINE,
-    RESPONSE_HEADERS,
-    RESPONSE_BODY,
-    STATS,
-    Select,
+    EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, REQUEST_BODY,
+    REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    RESPONSE_STARTLINE, STATS,
 };
 use crate::for_each_parallel::ForEachParallel;
 use crate::load_test::LoadTest;
 use crate::providers;
 use crate::stats;
-use crate::template::{
-    json_value_to_string,
-    TemplateValues,
-    textify,
-};
-use crate::util::{ Either, Either3 };
+use crate::template::{json_value_to_string, textify, TemplateValues};
+use crate::util::{Either, Either3};
 use crate::zip_all::zip_all;
 
 use std::{
@@ -60,15 +35,17 @@ pub enum DeclareProvider {
 
 impl DeclareProvider {
     pub fn resolve(
-                &self,
-                ctx: &LoadTest,
-                name: &str,
-                outgoing: &mut Vec<(Select, channel::Sender<JsonValue>)>
-        ) -> impl Stream<Item=JsonValue, Error=()>
-    {
+        &self,
+        ctx: &LoadTest,
+        name: &str,
+        outgoing: &mut Vec<(Select, channel::Sender<JsonValue>)>,
+    ) -> impl Stream<Item = JsonValue, Error = ()> {
         match self {
             DeclareProvider::Alias(s) => {
-                let provider = ctx.providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
+                let provider = ctx
+                    .providers
+                    .get(s)
+                    .unwrap_or_else(|| panic!("unknown provider {}", s));
                 match provider {
                     providers::Kind::Value(provider) => {
                         if let Some(ar) = provider.auto_return {
@@ -81,12 +58,15 @@ impl DeclareProvider {
                             outgoing.push((select, provider.tx.clone()));
                         }
                         Either::A(provider.rx.clone())
-                    },
-                    _ => panic!("Invalid provider referened in declare section, `{}`", s)
+                    }
+                    _ => panic!("Invalid provider referened in declare section, `{}`", s),
                 }
-            },
+            }
             DeclareProvider::Collect(min, max, s) => {
-                let provider = ctx.providers.get(s).unwrap_or_else(|| panic!("unknown provider {}", s));
+                let provider = ctx
+                    .providers
+                    .get(s)
+                    .unwrap_or_else(|| panic!("unknown provider {}", s));
                 match provider {
                     providers::Kind::Value(provider) => {
                         if let Some(ar) = provider.auto_return {
@@ -114,28 +94,34 @@ impl DeclareProvider {
                                 Ok(Async::Ready(Some(v))) => {
                                     holder.push(v);
                                     if holder.len() == holder.capacity() {
-                                        let inner = JsonValue::Array(std::mem::replace(&mut holder, Vec::with_capacity(get_n())));
+                                        let inner = JsonValue::Array(std::mem::replace(
+                                            &mut holder,
+                                            Vec::with_capacity(get_n()),
+                                        ));
                                         Async::Ready(Some(inner))
                                     } else {
                                         Async::NotReady
                                     }
-                                },
+                                }
                                 Ok(Async::NotReady) => Async::NotReady,
                                 Ok(Async::Ready(None)) => Async::Ready(None),
-                                Err(_) => return Err(())
+                                Err(_) => return Err(()),
                             };
                             Ok(r)
                         });
                         Either::B(b)
-                    },
-                    _ => panic!("Invalid provider referened in declare section, `{}`", s)
+                    }
+                    _ => panic!("Invalid provider referened in declare section, `{}`", s),
                 }
             }
         }
     }
 }
 
-pub struct Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'static {
+pub struct Builder<T>
+where
+    T: Stream<Item = Instant, Error = TimerError> + Send + 'static,
+{
     body: Option<String>,
     declare: BTreeMap<String, DeclareProvider>,
     headers: Vec<(String, String)>,
@@ -158,8 +144,11 @@ enum StreamsReturn {
     TemplateValue((String, JsonValue)),
 }
 
-impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'static{
-    pub fn new (uri: String, start_stream: Option<T>) -> Self {
+impl<T> Builder<T>
+where
+    T: Stream<Item = Instant, Error = TimerError> + Send + 'static,
+{
+    pub fn new(uri: String, start_stream: Option<T>) -> Self {
         Builder {
             body: None,
             declare: BTreeMap::new(),
@@ -173,63 +162,83 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         }
     }
 
-    pub fn declare (mut self, providers: BTreeMap<String, DeclareProvider>) -> Self {
+    pub fn declare(mut self, providers: BTreeMap<String, DeclareProvider>) -> Self {
         self.declare.extend(providers);
         self
     }
 
-    pub fn provides (mut self, providers: Vec<(String, Select)>) -> Self {
+    pub fn provides(mut self, providers: Vec<(String, Select)>) -> Self {
         self.provides.extend(providers);
         self
     }
 
-    pub fn logs (mut self, logs: Vec<(String, Select)>) -> Self {
+    pub fn logs(mut self, logs: Vec<(String, Select)>) -> Self {
         self.logs.extend(logs);
         self
     }
 
-    pub fn method (mut self, method: Method) -> Self {
+    pub fn method(mut self, method: Method) -> Self {
         self.method = method;
         self
     }
 
-    pub fn headers (mut self, mut headers: Vec<(String, String)>) -> Self {
+    pub fn headers(mut self, mut headers: Vec<(String, String)>) -> Self {
         self.headers.append(&mut headers);
         self
     }
 
-    pub fn body (mut self, body: Option<String>) -> Self {
+    pub fn body(mut self, body: Option<String>) -> Self {
         self.body = body;
         self
     }
 
-    pub fn stats_id (mut self, stats_id: Option<BTreeMap<String, String>>) -> Self {
+    pub fn stats_id(mut self, stats_id: Option<BTreeMap<String, String>>) -> Self {
         self.stats_id = stats_id;
         self
     }
 
-    pub fn build (mut self, ctx: &mut LoadTest, endpoint_id: usize)
-        -> (impl Future<Item=(), Error=()> + Send) {
+    pub fn build(
+        mut self,
+        ctx: &mut LoadTest,
+        endpoint_id: usize,
+    ) -> (impl Future<Item = (), Error = ()> + Send) {
         let mut streams = Vec::new();
         if let Some(start_stream) = self.start_stream {
-            streams.push(
-                Either3::A(start_stream.map(StreamsReturn::Instant)
-                    .map_err(|e| panic!("error from interval stream {}\n", e)))
-            );
+            streams.push(Either3::A(
+                start_stream
+                    .map(StreamsReturn::Instant)
+                    .map_err(|e| panic!("error from interval stream {}\n", e)),
+            ));
         }
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
-        let uri = textify(self.uri, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers);
-        let headers: BTreeMap<_, _> = self.headers.into_iter()
+        let uri = textify(
+            self.uri,
+            ctx.handlebars.clone(),
+            &mut required_providers,
+            &ctx.static_providers,
+        );
+        let headers: BTreeMap<_, _> = self
+            .headers
+            .into_iter()
             .map(|(key, v)| {
-                let value = textify(v, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers);
+                let value = textify(
+                    v,
+                    ctx.handlebars.clone(),
+                    &mut required_providers,
+                    &ctx.static_providers,
+                );
                 (key.to_lowercase(), value)
-            }).collect();
+            })
+            .collect();
         let mut limits = Vec::new();
         let mut precheck_rr_providers = 0;
         let mut rr_providers = 0;
         let mut outgoing = Vec::new();
         for (k, v) in self.provides {
-            let provider = ctx.providers.get(&k).unwrap_or_else(|| panic!("undeclared provider `{}`", k));
+            let provider = ctx
+                .providers
+                .get(&k)
+                .unwrap_or_else(|| panic!("undeclared provider `{}`", k));
             let tx = match provider {
                 providers::Kind::Body(_) => panic!("response provider cannot feed a body provider"),
                 providers::Kind::Value(p) => p.tx.clone(),
@@ -243,7 +252,10 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             outgoing.push((v, tx));
         }
         for (k, v) in self.logs {
-            let (tx, select) = ctx.loggers.get(&k).unwrap_or_else(|| panic!("undeclared logger `{}`", k));
+            let (tx, select) = ctx
+                .loggers
+                .get(&k)
+                .unwrap_or_else(|| panic!("undeclared logger `{}`", k));
             if select.is_some() {
                 panic!("endpoint cannot explicitly log to global logger `{}`", k);
             }
@@ -252,30 +264,38 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
             required_providers.extend(v.get_providers().clone());
             outgoing.push((v, tx.clone()));
         }
-        outgoing.extend(
-            ctx.loggers.values()
-                .filter_map(|(tx, select)| {
-                    if let Some(select) = select {
-                        required_providers.extend(select.get_providers().clone());
-                        rr_providers |= select.get_special_providers();
-                        precheck_rr_providers |= select.get_where_clause_special_providers();
-                        Some((select.clone(), tx.clone()))
-                    } else {
-                        None
-                    }
-                })
-        );
-        let mut body = self.body.map(|body| textify(body, ctx.handlebars.clone(), &mut required_providers, &ctx.static_providers));
+        outgoing.extend(ctx.loggers.values().filter_map(|(tx, select)| {
+            if let Some(select) = select {
+                required_providers.extend(select.get_providers().clone());
+                rr_providers |= select.get_special_providers();
+                precheck_rr_providers |= select.get_where_clause_special_providers();
+                Some((select.clone(), tx.clone()))
+            } else {
+                None
+            }
+        }));
+        let mut body = self.body.map(|body| {
+            textify(
+                body,
+                ctx.handlebars.clone(),
+                &mut required_providers,
+                &ctx.static_providers,
+            )
+        });
         for (name, d) in &self.declare {
             required_providers.remove(name);
             let provider_stream = d.resolve(&ctx, name, &mut outgoing);
             let name = name.clone();
-            let provider_stream = Either3::B(provider_stream.map(move |v| StreamsReturn::TemplateValue((name.clone(), v))));
+            let provider_stream = Either3::B(
+                provider_stream.map(move |v| StreamsReturn::TemplateValue((name.clone(), v))),
+            );
             streams.push(provider_stream);
         }
         // go through the list of required providers and make sure we have them all
         for name in required_providers {
-            let kind = ctx.providers.get(&name)
+            let kind = ctx
+                .providers
+                .get(&name)
                 .unwrap_or_else(|| panic!("unknown provider `{}`", &name));
             let receiver = match kind {
                 providers::Kind::Body(_) =>
@@ -293,8 +313,11 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
                     s.rx.clone()
                 },
             };
-            let provider_stream = Either3::C(Stream::map(receiver, move |v| StreamsReturn::TemplateValue((name.clone(), v)))
-                .map_err(|_| panic!("error from provider"))
+            let provider_stream = Either3::C(
+                Stream::map(receiver, move |v| {
+                    StreamsReturn::TemplateValue((name.clone(), v))
+                })
+                .map_err(|_| panic!("error from provider")),
             );
             streams.push(provider_stream);
         }
@@ -305,8 +328,14 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
         let stats_id = self.stats_id.take();
 
         let test_timeout = ctx.test_timeout.clone();
-        let streams = zip_all(streams).map_err(|_| panic!("error from zip_all"))
-            .select(ctx.test_timeout.clone().into_stream().map(|_| unreachable!("timeouts only error")));
+        let streams = zip_all(streams)
+            .map_err(|_| panic!("error from zip_all"))
+            .select(
+                ctx.test_timeout
+                    .clone()
+                    .into_stream()
+                    .map(|_| unreachable!("timeouts only error")),
+            );
         let timeout = ctx.config.client.request_timeout;
         ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
@@ -564,22 +593,24 @@ impl<T> Builder<T> where T: Stream<Item=Instant, Error=TimerError> + Send + 'sta
     }
 }
 
-fn duration_to_nanos (d: &Duration) -> u128 {
+fn duration_to_nanos(d: &Duration) -> u128 {
     u128::from(d.as_secs()) * 1_000_000_000 + u128::from(d.subsec_nanos())
 }
 
 fn handle_response_requirements(
-        bitwise: u16,
-        response_fields_added: &mut u16,
-        rp: &mut json::map::Map<String, JsonValue>,
-        response: &Response<HyperBody>,
-    )
-{
+    bitwise: u16,
+    response_fields_added: &mut u16,
+    rp: &mut json::map::Map<String, JsonValue>,
+    response: &Response<HyperBody>,
+) {
     // check if we need the response startline and it hasn't already been set
     if ((bitwise & RESPONSE_STARTLINE) ^ (*response_fields_added & RESPONSE_STARTLINE)) != 0 {
         *response_fields_added |= RESPONSE_STARTLINE;
         let version = response.version();
-        rp.insert("start-line".into(), format!("{:?} {}", version, response.status()).into());
+        rp.insert(
+            "start-line".into(),
+            format!("{:?} {}", version, response.status()).into(),
+        );
     }
     // check if we need the response headers and it hasn't already been set
     if ((bitwise & RESPONSE_HEADERS) ^ (*response_fields_added & RESPONSE_HEADERS)) != 0 {
@@ -589,9 +620,10 @@ fn handle_response_requirements(
             headers_json.insert(
                 k.as_str().to_string(),
                 JsonValue::String(
-                    v.to_str().expect("could not parse HTTP response header as utf8 string")
-                        .to_string()
-                )
+                    v.to_str()
+                        .expect("could not parse HTTP response header as utf8 string")
+                        .to_string(),
+                ),
             );
         }
         rp.insert("headers".into(), JsonValue::Object(headers_json));

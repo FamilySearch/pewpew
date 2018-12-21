@@ -1,10 +1,5 @@
-use crate::{
-    config,
-    util::str_to_json,
-};
-use futures::{
-    Stream,
-};
+use crate::{config, util::str_to_json};
+use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
@@ -27,8 +22,8 @@ pub struct LineReader {
 impl LineReader {
     pub fn new(config: &config::FileProvider) -> Result<Self, io::Error> {
         let mut jr = LineReader {
-            buffer: String::with_capacity(8 * (1<<10)),
-            byte_buffer: vec![0; 8 * (1<<10)],
+            buffer: String::with_capacity(8 * (1 << 10)),
+            byte_buffer: vec![0; 8 * (1 << 10)],
             position: 0,
             positions: Vec::new(),
             random: None,
@@ -38,8 +33,9 @@ impl LineReader {
         if config.random {
             loop {
                 match jr.get_value(None) {
-                    Some(Ok((_, pos, length))) =>
-                        jr.positions.push((io::SeekFrom::Start(pos), length)),
+                    Some(Ok((_, pos, length))) => {
+                        jr.positions.push((io::SeekFrom::Start(pos), length))
+                    }
                     Some(Err(e)) => return Err(e),
                     None => break,
                 }
@@ -58,8 +54,10 @@ impl LineReader {
         Ok(jr)
     }
 
-    fn get_value(&mut self, size_hint: Option<usize>) -> Option<Result<(json::Value, u64, usize), io::Error>>
-    {
+    fn get_value(
+        &mut self,
+        size_hint: Option<usize>,
+    ) -> Option<Result<(json::Value, u64, usize), io::Error>> {
         let position = self.position;
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.byte_buffer.len());
@@ -69,14 +67,14 @@ impl LineReader {
             let buf = &mut self.byte_buffer[..hint];
             self.position += hint as u64;
             if let Err(e) = self.reader.read_exact(buf) {
-                return Some(Err(e))
+                return Some(Err(e));
             }
             self.buffer = String::from_utf8_lossy(buf).to_string();
         };
         let mut eof = false;
         loop {
             if eof && self.buffer.is_empty() {
-                return None
+                return None;
             }
             let new_line_index = self.buffer.find('\n');
             if new_line_index.is_some() || eof {
@@ -88,9 +86,9 @@ impl LineReader {
                 let value = raw_value.trim_end_matches(|c| c == '\n' || c == '\r');
                 let value = str_to_json(value);
                 self.buffer.replace_range(range, "");
-                return Some(Ok((value, position, length)))
+                return Some(Ok((value, position, length)));
             } else {
-                let mut buf = &mut self.byte_buffer[..8 * (1<<10)];
+                let mut buf = &mut self.byte_buffer[..8 * (1 << 10)];
                 match self.reader.read(&mut buf) {
                     Err(e) => return Some(Err(e)),
                     Ok(n) => {
@@ -133,7 +131,7 @@ impl Iterator for LineReader {
                 self.positions.remove(i)
             };
             if let Err(e) = self.seek(pos) {
-                return Some(Err(e))
+                return Some(Err(e));
             }
             Some(size)
         } else {
@@ -168,29 +166,27 @@ mod tests {
         "some bunch of text",
         "{",
         r#"  "foo": "bar""#,
-        "}"
+        "}",
     ];
 
     #[test]
     fn line_reader_basics_works() {
         let mut fp = config::FileProvider::default();
-        
-        let expect = vec!(
-            json::json!([1,2,3]),
+
+        let expect = vec![
+            json::json!([1, 2, 3]),
             json::json!("some bunch of text"),
             json::json!("{"),
             json::json!(r#"  "foo": "bar""#),
             json::json!("}"),
-        );
+        ];
 
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", LINES.join(line_ending)).unwrap();
             fp.path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = LineReader::new(&fp).unwrap()
-                .map(|r| r.unwrap())
-                .collect();
+            let values: Vec<_> = LineReader::new(&fp).unwrap().map(|r| r.unwrap()).collect();
 
             assert_eq!(values, expect);
         }

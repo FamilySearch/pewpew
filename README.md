@@ -419,7 +419,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare section](#declare)
 - **`headers`** <sub><sup>*Optional*</sup></sub> - See [headers](#headers)
-- **`body`** <sub><sup>*Optional*</sup></sub> - A string value indicating the body that should be sent with the request.
+- **`body`** <sub><sup>*Optional*</sup></sub> - A [template string](#template) indicating the body that should be sent with the request.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
 - **`peak_load`** <sub><sup>*Optional**</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
@@ -437,104 +437,12 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
-- **`url`** - A string value specifying the fully qualified url to the endpoint which will be requested.
+- **`url`** - A [template string](#template) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides section](#provides)
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
 
 #### Referencing Providers
-Providers can be referenced within an endpoint's `url` parameter, in the `headers` parameter in a value, in the `declare` parameter in a value, or within the `body` parameter. This is done by enclosing the name of a provider within double curly braces. For example, a `url` parameter of `https://localhost/robot/{{robotId}}` would interpolate a value from the provider `robotId` into the last path segment of the url.
-
-In addition to simply referencing a provider, the following helper functions can also be used within curly braces:
-
-<table>
-<thead>
-<tr>
-<th>Helper</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>encode *string* *encoding*</code>
-</td>
-<td>
-
-Encode a string with the given encoding.
-
-*string* - a reference to a provider value or one of its properties which is a string.<br/>
-*encoding* - The encoding to be used. Encoding must be one of the following (quotes are necessary):
-- `"percent"` - Percent encodes every character included in `"percent-query"` as well as  backtick (`` ` ``), question mark (`?`) and curly braces (`{` and `}`).
-- `"percent-path"` - Percent encodes every character included in `"percent"` as well as percent (`%`) and forward slash (`/`).
-- `"percent-query"` - Percent encodes every character included in `"percent-simple"` as well as space (` `), double quote (`"`), hash (`#`) and inequality qualifiers (`>` and `<`).
-- `"percent-simple"` - Percent encode every ASCII character less than hexidecimal 20 and greater than 7E.
-- `"percent-userinfo"` - Percent encodes every character included in `"percent-path"` as well as colon (`:`), semi-colon (`;`), equality (`=`), at (`@`), backslash (`\`), square brackets (`[` and `]`), caret (`^`), and pipe (`|`)
-
-**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{encode baz "percent-userinfo"}}` would resolve to `https://localhost/abc?foo%3Dbar`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>epoch *unit*</code>
-</td>
-<td>
-
-Returns time since the unix epoch.
-
-*unit* - one of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds). Quotes are required for the unit.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>join *array*  *seperator*</code>
-</td>
-<td>
-
-Turns an array of values into a string.
-
-*array* - a reference to a provider value or one of its properties which is an array.<br/>
-*seperator* - a quoted string which will be used between each element in the array.
-
-**Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>start_pad (*string* &#124; *number*) *min_length* *pad_string*</code>
-</td>
-<td>
-
-Pads a string or number to be minimum length. Any added padding will be added to the start of the string.
-
-*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number.<br/>
-*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
-*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
-
-**Example**: with the value `83` from a provider named `foo`, then the string `id={{start_pad foo 6 "0"}}` would resolve to `id=000083`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>end_pad (*string* &#124; *number*) *min_length* *pad_string*</code>
-</td>
-<td>
-
-Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
-
-*string* &#124; *number* - a reference to a provider value or one of its properties which is a string or number.<br/>
-*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
-*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
-
-**Example**: with the value `"Jones"` from a provider named `lastName`, then the string `{{end_pad lastName 8 "-"}}` would resolve to `Jones---`.
-
-</td>
-</tr>
-</tbody>
-</table>
+Providers can be referenced anywhere [templates](#template) can be used and also in the `declare` parameter as a value.
 
 #### declare
 <pre>
@@ -742,7 +650,7 @@ The *logs_section* provides a means of sending data to a logger based on the res
   `4 hrs 15 mins` = 4 hours and 15 minutes
 
   As seen in the above examples, an optional space can be used to delimit the individual duration pieces.
-- <i id="headers">`Headers`</i> - Key/value string pairs which specify the headers which will be sent with a request. Values can be interpolated with names of providers.
+- <i id="headers">`Headers`</i> - Key/value pairs where the key is a string and the value is a [template string](#template) which specify the headers which will be sent with a request.
 
   For example:
 
@@ -753,3 +661,98 @@ The *logs_section* provides a means of sending data to a logger based on the res
       Authorization: Bearer {{sessionId}}
   ```
   specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".
+- <i id="template">`Template`</i> - Templates are special string values which can be interpolated with values from providers or by using helper functions. Interpolation is done by enclosing a provider name or helper function in double curly braces. For example: `{{foo}}-bar` creates a string where a value from a provider named foo is interpolated before the string value `-bar`. `{{join baz "."}}` uses the `join` helper (documented below) to create a string value which pulls from a provider named "baz". 
+
+  With helper functions the parameters are specified after the function name and are delimited with spaces. String literals arguments must use doublequotes.
+  
+  The following are the available helper functions:
+
+  <table>
+  <thead>
+  <tr>
+  <th>Helper</th>
+  <th>Description</th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr>
+  <td>
+  <code>encode <i>provider</i> <i>encoding</i></code>
+  </td>
+  <td>
+
+  Encode a string with the given encoding.
+
+  *provider* - a reference to a provider value or one of its properties which is a string.<br/>
+  *encoding* - The encoding to be used. Encoding must be one of the following string literals:
+  - `"percent-simple"` - Percent encode every ASCII character less than hexidecimal 20 and greater than 7E.
+  - `"percent-query"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
+  - `"percent"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
+  - `"percent-path"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
+  - `"percent-userinfo"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
+
+  **Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{encode baz "percent-userinfo"}}` would resolve to `https://localhost/abc?foo%3Dbar`.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <code>epoch <i>unit</i></code>
+  </td>
+  <td>
+
+  Returns time since the unix epoch.
+
+  *unit* - A string literal of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds).
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <code>join <i>provider</i> <i>separator</i></code>
+  </td>
+  <td>
+
+  Turns an array of values into a string.
+
+  *provider* - a reference to a provider value or one of its properties which is an array.<br/>
+  *separator* - a string literal which will be used between each element in the array.
+
+  **Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <code>start_pad <i>provider</i> <i>min_length</i> <i>pad_string</i></code>
+  </td>
+  <td>
+
+  Pads a string or number to be minimum length. Any added padding will be added to the start of the string.
+
+  *provider* - a reference to a provider value or one of its properties which is a string or number.<br/>
+  *min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+  *pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+  **Example**: with the value `83` from a provider named `foo`, then the string `id={{start_pad foo 6 "0"}}` would resolve to `id=000083`.
+
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <code>end_pad <i>provider</i> <i>min_length</i> <i>pad_string</i></code>
+  </td>
+  <td>
+
+  Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
+
+  *provider* - a reference to a provider value or one of its properties which is a string or number.<br/>
+  *min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+  *pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+  **Example**: with the value `"Jones"` from a provider named `lastName`, then the string `{{end_pad lastName 8 "-"}}` would resolve to `Jones---`.
+
+  </td>
+  </tr>
+  </tbody>
+  </table>

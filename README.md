@@ -685,11 +685,11 @@ The *logs_section* provides a means of sending data to a logger based on the res
 
   *provider* - a reference to a provider value or one of its properties which is a string.<br/>
   *encoding* - The encoding to be used. Encoding must be one of the following string literals:
-  - `"percent-simple"` - Percent encode every ASCII character less than hexidecimal 20 and greater than 7E.
-  - `"percent-query"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
-  - `"percent"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
-  - `"percent-path"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
-  - `"percent-userinfo"` - Percent encodes ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
+  - `"percent-simple"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E.
+  - `"percent-query"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
+  - `"percent"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
+  - `"percent-path"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
+  - `"percent-userinfo"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
 
   **Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{encode baz "percent-userinfo"}}` would resolve to `https://localhost/abc?foo%3Dbar`.
 

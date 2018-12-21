@@ -381,7 +381,10 @@ impl AggregateStats {
                     "method": method,
                     "url": url,
                     "callCount": calls_made,
-                    "statusCounts": self.status_counts,
+                    "statusCounts":
+                        self.status_counts.iter()
+                            .map(|(status, count)| json::json!({ "status": status, "count": count }))
+                            .collect::<Vec<(_)>>(),
                     "requestTimeouts": self.request_timeouts,
                     "connectionErrorCount":
                         self.connection_errors.iter()

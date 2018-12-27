@@ -4,7 +4,6 @@
 - Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
 - Clarify in the documentation where templates are used vs expressions
 - Log when a request is waiting for a provider
-- Logger enhancements: get rid of global logger restriction, and allow endpoints to send to it
 - Add ability to parse substring/strings out of a string with a regex. If no capture groups then just a single string will return if it matches. If there are capture groups and object will be provided with the capture group number or name as the key and the matche as the value. It should skip capture group 0.
 - Provide a means of terminating a test with a logger
 - Different endpoint parameters selected randomly based on percentages

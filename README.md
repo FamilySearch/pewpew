@@ -370,7 +370,7 @@ loggers:
 </pre>
 Loggers provide a means of logging data to a file, stderr or stdout. Any string can be used for *logger_name*.
 
-There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints.log` section, and global loggers which are evaluated for every endpoint response and cannot be explicitly specified within an `endpoints.log` section.
+There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints.log` section, and global loggers which are evaluated for every endpoint response.
 
 Loggers support the following parameters:
 - **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [`endpoints.provides` section](#provides) for details on how to define a *select_piece*.
@@ -384,7 +384,7 @@ Loggers support the following parameters:
 Example:
 ```yaml
 loggers:
-  http_errors:
+  httpErrors:
     select:
       request:
         - request["start-line"]
@@ -400,7 +400,7 @@ loggers:
     pretty: true
 ```
 
-Creates a global logger named "http_errors" which will log to the file "http_err.log" the request and response of the first five requests which have an HTTP status of 400 or greater.
+Creates a global logger named "httpErrors" which will log to the file "http_err.log" the request and response of the first five requests which have an HTTP status of 400 or greater.
 
 ### endpoints
 ---
@@ -628,7 +628,7 @@ logs:
     [for_each: <i>for_each_piece</i>]
     [where: <i>where_piece</i>]
 </pre>
-The *logs_section* provides a means of sending data to a logger based on the result of an HTTP response. *logger_name* is a reference to a logger which must be declared in the root [`logger` section](#loggers-optional). It is structured in the same way as the [*provides_section*](#provides) except there is no explicit *send* parameter. When data is sent to a logger it has the same behavior as `send: block`, which means logging data can potentially block further requests from happening if a logger were to get "backed up". This is unlikely to be a problem unless a large amount of data was consistently logged.
+The *logs_section* provides a means of sending data to a logger based on the result of an HTTP response. *logger_name* is a reference to a logger which must be declared in the root [`logger` section](#loggers-optional). It is structured in the same way as the [*provides_section*](#provides) except there is no explicit *send* parameter. When data is sent to a logger it has the same behavior as `send: block`, which means logging data can potentially block further requests from happening if a logger were to get "backed up". This is unlikely to be a problem unless a large amount of data was consistently logged. It is also possible to log to the same logger multiple times in a single endpoint by repeating the *logger_name* with a new `select`.
 
 - **`select`** - Determines the shape of the data sent into the logger.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays.

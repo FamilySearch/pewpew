@@ -255,13 +255,10 @@ where
             outgoing.push((v, tx));
         }
         for (k, v) in self.logs {
-            let (tx, select) = ctx
+            let (tx, _) = ctx
                 .loggers
                 .get(&k)
                 .unwrap_or_else(|| panic!("undeclared logger `{}`", k));
-            if select.is_some() {
-                panic!("endpoint cannot explicitly log to global logger `{}`", k);
-            }
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());

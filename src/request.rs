@@ -607,12 +607,8 @@ where
             Either::B(ret)
         } else {
             Either::A(
-                ret.select(
-                    ctx.test_killed_rx
-                        .clone()
-                        .then(|_| Ok::<_, ()>(()))
-                )
-                .then(|_| Ok(())),
+                ret.select(ctx.test_killed_rx.clone().then(|_| Ok::<_, ()>(())))
+                    .then(|_| Ok(())),
             )
         }
     }

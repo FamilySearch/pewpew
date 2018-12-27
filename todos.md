@@ -24,4 +24,3 @@
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
 - add in machine clustering. Machines should open up a secure connection using a PSK
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
-- add test monitoring. Possibly use tui for terminal output. Have webserver which will display a dashboard

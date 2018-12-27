@@ -10,6 +10,7 @@ use crate::mod_interval::{HitsPer, LinearBuilder};
 use crate::request::DeclareProvider;
 use crate::template::json_value_to_string;
 
+use handlebars::Handlebars;
 use hyper::Method;
 use regex::Regex;
 use serde::{
@@ -131,6 +132,7 @@ pub struct FileProvider {
     pub buffer: Limit,
     #[serde(default)]
     pub format: FileFormat,
+    #[serde(deserialize_with = "deserialize_path")]
     pub path: String,
     #[serde(default)]
     pub random: bool,
@@ -156,6 +158,7 @@ struct LoggerPreProcessed {
     for_each: Vec<String>,
     #[serde(default, rename = "where")]
     where_clause: Option<String>,
+    #[serde(deserialize_with = "deserialize_path")]
     to: String,
     #[serde(default)]
     pretty: bool,
@@ -467,6 +470,25 @@ impl<'de> Deserialize<'de> for Limit {
             Ok(Limit::Integer(n))
         }
     }
+}
+
+fn deserialize_path<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let template = String::deserialize(deserializer)?;
+    let vars: BTreeMap<_, _> = std::env::vars_os()
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().into_owned(),
+                v.to_string_lossy().into_owned(),
+            )
+        })
+        .collect();
+    let handlebars = Handlebars::new();
+    handlebars
+        .render_template(&template, &vars)
+        .map_err(DeError::custom)
 }
 
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>

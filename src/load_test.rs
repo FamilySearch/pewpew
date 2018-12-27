@@ -7,7 +7,11 @@ use crate::template::{encode_helper, epoch_helper, join_helper, pad_helper, stri
 use chrono::{Duration as ChronoDuration, Local};
 use futures::{
     future::{join_all, lazy, Shared},
-    sync::{mpsc as futures_channel, oneshot},
+    stream::StreamFuture,
+    sync::{
+        mpsc::{self as futures_channel, Receiver as FCReceiver},
+        oneshot,
+    },
 };
 use handlebars::Handlebars;
 pub use hyper::{client::HttpConnector, Body, Client};
@@ -42,6 +46,8 @@ pub struct LoadTest {
     pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
     // a trigger used to signal when the endpoints tasks finish (including sending their stats)
     test_ended_tx: oneshot::Sender<()>,
+    // channel that receives a message if the test is killed
+    pub test_killed_rx: Shared<StreamFuture<FCReceiver<()>>>,
     pub test_timeout: Shared<Box<dyn Future<Item = (), Error = ()> + Send>>,
 }
 
@@ -60,7 +66,10 @@ impl LoadTest {
         let mut static_providers = BTreeMap::new();
 
         let (test_ended_tx, test_ended_rx) = oneshot::channel::<()>();
-        let test_ended_rx = test_ended_rx.shared();
+        let test_ended_rx = test_ended_rx.into_future().shared();
+
+        let (test_killed_tx, test_killed_rx) = futures_channel::channel::<()>(0);
+        let test_killed_rx = test_killed_rx.into_future().shared();
 
         // build and register the providers
         let auto_size = config.config.general.auto_buffer_start_size;
@@ -107,7 +116,7 @@ impl LoadTest {
                 (
                     name,
                     (
-                        providers::logger(&template, test_ended_rx),
+                        providers::logger(&template, test_ended_rx, test_killed_tx.clone()),
                         template.select.map(eppp_to_select),
                     ),
                 )
@@ -160,10 +169,12 @@ impl LoadTest {
                 .logs(to_select_values(endpoint.logs));
             builders.push(builder);
         }
-
+        let test_ended_rx2 = test_ended_rx.clone();
         let test_timeout: Box<dyn Future<Item = (), Error = ()> + Send> =
             Box::new(lazy(move || {
-                timer::Delay::new(Instant::now() + duration).then(|_| Err::<(), ()>(()))
+                timer::Delay::new(Instant::now() + duration)
+                    .select(test_ended_rx2.then(|_| Ok(())))
+                    .then(|_| Err::<(), ()>(()))
             }));
 
         let test_timeout = test_timeout.shared();
@@ -177,7 +188,8 @@ impl LoadTest {
             Client::builder().build::<_, Body>(https)
         };
 
-        let (stats_tx, stats_rx_done) = create_stats_channel(test_ended_rx, &config.config.general);
+        let (stats_tx, stats_rx_done) =
+            create_stats_channel(test_ended_rx.clone(), &config.config.general);
         tokio::spawn(stats_rx_done);
 
         let mut load_test = LoadTest {
@@ -190,6 +202,7 @@ impl LoadTest {
             providers,
             static_providers,
             stats_tx,
+            test_killed_rx,
             test_ended_tx,
             test_timeout,
         };

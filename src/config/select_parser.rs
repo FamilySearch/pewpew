@@ -859,7 +859,6 @@ fn parse_complex_expression(
     let mut append_to_previous = false;
     for pair in pairs {
         let rule = pair.as_rule();
-        println!("rule {:?}", rule);
         match rule {
             Rule::simple_expression | Rule::group_expression => {
                 let new = match rule {

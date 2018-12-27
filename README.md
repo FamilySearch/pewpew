@@ -366,6 +366,7 @@ loggers:
     to: <i>filename</i> | stderr | stdout
     [pretty: <i>boolean</i>]
     [limit: <i>integer</i>]
+    [kill: <i>boolean</i>]
 </pre>
 Loggers provide a means of logging data to a file, stderr or stdout. Any string can be used for *logger_name*.
 
@@ -378,6 +379,7 @@ Loggers support the following parameters:
 - **`to`** - A string specifying where this logger will send its data. Values of "stderr" and "stdout" will log data to the respective process streams and any other string will log to a file with that name. Currently files are created in the current working directory where the pewpew process was launched from. When a file is specified, the file will be created if it does not exist or will be truncated if it already exists.
 - **`pretty`** <sub><sup>*Optional*</sup></sub> - A boolean that when `true` the value logged will have added whitespace for readability. Defaults to `false`.
 - **`limit`** <sub><sup>*Optional*</sup></sub> - An unsigned integer which indicates the logger will only log the first *n* values sent to it.
+- **`kill`** <sub><sup>*Optional*</sup></sub> - A boolen that when `true` the test will end when the `limit` is reached, or, if there is no limit, on the first message logged.
 
 Example:
 ```yaml

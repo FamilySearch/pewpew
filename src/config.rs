@@ -161,6 +161,8 @@ struct LoggerPreProcessed {
     pretty: bool,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    kill: bool,
 }
 
 #[serde(deny_unknown_fields)]
@@ -179,6 +181,7 @@ pub struct Logger {
     pub to: String,
     pub pretty: bool,
     pub limit: Option<usize>,
+    pub kill: bool,
 }
 
 #[serde(deny_unknown_fields)]
@@ -388,6 +391,7 @@ impl<'de> Deserialize<'de> for Logger {
             pretty: lpp.pretty,
             to: lpp.to,
             limit: lpp.limit,
+            kill: lpp.kill,
         })
     }
 }

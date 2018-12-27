@@ -8,7 +8,7 @@ use crate::channel::{self, Limit};
 use crate::config;
 use crate::util::Either3;
 
-use futures::{future::Shared, stream, Future, Stream};
+use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
 use serde_json as json;
 use tokio::{fs::File as TokioFile, prelude::*};
 use tokio_threadpool::blocking;
@@ -160,7 +160,11 @@ where
     })
 }
 
-pub fn logger<F>(template: &config::Logger, test_complete: F) -> channel::Sender<json::Value>
+pub fn logger<F>(
+    template: &config::Logger,
+    test_complete: F,
+    test_complete_tx: FCSender<()>,
+) -> channel::Sender<json::Value>
 where
     F: Future + Send + 'static,
 {
@@ -168,23 +172,28 @@ where
     let file_name = template.to.clone();
     let limit = template.limit;
     let pretty = template.pretty;
+    let kill = template.kill;
     let mut counter = 1;
     match template.to.as_str() {
         "stderr" => {
             let logger = rx
                 .for_each(move |v| {
-                    if let Some(limit) = limit {
-                        if counter > limit {
-                            return Err(());
-                        }
-                    }
                     counter += 1;
                     if pretty {
                         eprintln!("{:#}", v);
                     } else {
                         eprintln!("{}", v);
                     }
-                    Ok(())
+                    match limit {
+                        Some(limit) if kill && counter == limit => {
+                            Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                        }
+                        Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
+                        None if kill => {
+                            Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                        }
+                        _ => Either3::A(Ok(()).into_future()),
+                    }
                 })
                 .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
@@ -193,18 +202,22 @@ where
         "stdout" => {
             let logger = rx
                 .for_each(move |v| {
-                    if let Some(limit) = limit {
-                        if counter > limit {
-                            return Err(());
-                        }
-                    }
                     counter += 1;
                     if pretty {
                         println!("{:#}", v);
                     } else {
                         println!("{}", v);
                     }
-                    Ok(())
+                    match limit {
+                        Some(limit) if kill && counter == limit => {
+                            Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                        }
+                        Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
+                        None if kill => {
+                            Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                        }
+                        _ => Either3::A(Ok(()).into_future()),
+                    }
                 })
                 .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
@@ -215,18 +228,24 @@ where
                 .map_err(|_| ())
                 .and_then(move |mut file| {
                     rx.for_each(move |v| {
-                        if let Some(limit) = limit {
-                            if counter > limit {
-                                return Err(());
-                            }
-                        }
                         counter += 1;
-                        if pretty {
+                        let result = if pretty {
                             writeln!(file, "{:#}", v)
                         } else {
                             writeln!(file, "{}", v)
+                        };
+                        let result = result
+                            .map_err(|e| eprintln!("Error writing to `{}`, {}", file_name, e));
+                        match limit {
+                            Some(limit) if kill && counter == limit => {
+                                Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                            }
+                            Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
+                            None if kill => {
+                                Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
+                            }
+                            _ => Either3::A(result.into_future()),
                         }
-                        .map_err(|e| eprintln!("Error writing to `{}`, {}", file_name, e))
                     })
                 })
                 .select(test_complete.then(|_| Ok::<_, ()>(())))

@@ -119,6 +119,24 @@ where
     }
 }
 
+impl<A, B, C> Future for Either3<A, B, C>
+where
+    A: Future,
+    B: Future<Item = A::Item, Error = A::Error>,
+    C: Future<Item = A::Item, Error = A::Error>,
+{
+    type Item = A::Item;
+    type Error = A::Error;
+
+    fn poll(&mut self) -> Poll<A::Item, A::Error> {
+        match *self {
+            Either3::A(ref mut a) => a.poll(),
+            Either3::B(ref mut b) => b.poll(),
+            Either3::C(ref mut b) => b.poll(),
+        }
+    }
+}
+
 impl<A, B, C, T> Iterator for Either3<A, B, C>
 where
     A: Iterator<Item = T>,

@@ -203,13 +203,16 @@ where
         endpoint_id: usize,
     ) -> (impl Future<Item = (), Error = ()> + Send) {
         let mut streams = Vec::new();
-        if let Some(start_stream) = self.start_stream {
+        let has_start_stream = if let Some(start_stream) = self.start_stream {
             streams.push(Either3::A(
                 start_stream
                     .map(StreamsReturn::Instant)
                     .map_err(|e| panic!("error from interval stream {}\n", e)),
             ));
-        }
+            true
+        } else {
+            false
+        };
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
         let uri = textify(
             self.uri,
@@ -336,8 +339,20 @@ where
                     .into_stream()
                     .map(|_| unreachable!("timeouts only error")),
             );
+        let streams = if has_start_stream {
+            let mut test_killed = ctx.test_killed_rx.clone();
+            Either::A(streams.take_while(move |_| {
+                if let Ok(Async::Ready(_)) = test_killed.poll() {
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }))
+        } else {
+            Either::B(streams)
+        };
         let timeout = ctx.config.client.request_timeout;
-        ForEachParallel::new(limits, streams, move |values| {
+        let ret = ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
             let mut body_stream = None;
             for tv in values {
@@ -588,8 +603,21 @@ where
                         })
                 // all error cases should have been handled before catching them here
                 }).then(|_| Ok(()))
-        // should only get to this `or_else` due to test timeout
-        }).or_else(|_| Ok(()))
+        })
+        // errors should only propogate this far due to test timeout
+        .then(|_| Ok(()));
+        if has_start_stream {
+            Either::B(ret)
+        } else {
+            Either::A(
+                ret.select(
+                    ctx.test_killed_rx
+                        .clone()
+                        .then(|_| Ok::<_, ()>(()))
+                )
+                .then(|_| Ok(())),
+            )
+        }
     }
 }
 

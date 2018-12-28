@@ -23,6 +23,7 @@ use tokio::{prelude::*, timer};
 use std::{
     cmp,
     collections::BTreeMap,
+    path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
@@ -52,7 +53,7 @@ pub struct LoadTest {
 }
 
 impl LoadTest {
-    pub fn new(config: config::LoadTest) -> Self {
+    pub fn new(config: config::LoadTest, config_path: PathBuf) -> Self {
         let mut handlebars = Handlebars::new();
         handlebars.register_helper("epoch", Box::new(epoch_helper));
         handlebars.register_helper("join", Box::new(join_helper));
@@ -83,7 +84,7 @@ impl LoadTest {
                             limit.store(auto_size, Ordering::Relaxed);
                         }
                     }
-                    providers::file(template, test_ended_rx)
+                    providers::file(template, test_ended_rx, &config_path)
                 }
                 config::Provider::Range(range) => providers::range(range, test_ended_rx),
                 config::Provider::Response(template) => {
@@ -111,13 +112,19 @@ impl LoadTest {
         let loggers = config
             .loggers
             .into_iter()
-            .map(|(name, template)| {
+            .map(|(name, mut template)| {
                 let test_ended_rx = test_ended_rx.clone();
+                let select = template.select.take().map(eppp_to_select);
                 (
                     name,
                     (
-                        providers::logger(&template, test_ended_rx, test_killed_tx.clone()),
-                        template.select.map(eppp_to_select),
+                        providers::logger(
+                            template,
+                            test_ended_rx,
+                            test_killed_tx.clone(),
+                            &config_path,
+                        ),
+                        select,
                     ),
                 )
             })

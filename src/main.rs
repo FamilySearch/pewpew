@@ -12,7 +12,7 @@ mod template;
 mod util;
 mod zip_all;
 
-use std::fs::File;
+use std::{fs::File, path::PathBuf};
 
 use crate::load_test::LoadTest;
 use clap::{crate_version, App, Arg};
@@ -34,11 +34,11 @@ fn main() {
                 .default_value("loadtest.yaml"),
         )
         .get_matches();
-    let load_test_config_file = matches.value_of("CONFIG").unwrap().to_string();
+    let load_test_config_file: PathBuf = matches.value_of("CONFIG").unwrap().into();
     tokio::run(lazy(move || {
         let file = File::open(&load_test_config_file)
-            .unwrap_or_else(|_| panic!("error opening `{}`", load_test_config_file));
-        let config: config::LoadTest = serde_yaml::from_reader(file).expect("couldn't parse yaml");
-        LoadTest::new(config).run()
+            .unwrap_or_else(|_| panic!("error opening `{:?}`", load_test_config_file));
+        let config = serde_yaml::from_reader(file).expect("couldn't parse yaml");
+        LoadTest::new(config, load_test_config_file).run()
     }));
 }

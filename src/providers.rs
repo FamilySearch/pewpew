@@ -13,7 +13,7 @@ use serde_json as json;
 use tokio::{fs::File as TokioFile, prelude::*};
 use tokio_threadpool::blocking;
 
-use std::io;
+use std::{io, path::PathBuf};
 
 pub enum Kind {
     Body(Provider<channel::Receiver<Vec<u8>>>),
@@ -26,12 +26,21 @@ pub struct Provider<T> {
     pub rx: channel::Receiver<T>,
 }
 
-pub fn file<F>(template: config::FileProvider, test_complete: Shared<F>) -> Kind
+fn tweak_path(rest: &mut String, base: &PathBuf) {
+    *rest = base.with_file_name(&rest).to_string_lossy().into();
+}
+
+pub fn file<F>(
+    mut template: config::FileProvider,
+    test_complete: Shared<F>,
+    config_path: &PathBuf,
+) -> Kind
 where
     F: Future + Send + 'static,
     <F as Future>::Error: Send + Sync,
     <F as Future>::Item: Send + Sync,
 {
+    tweak_path(&mut template.path, config_path);
     let file = template.path.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
@@ -161,14 +170,16 @@ where
 }
 
 pub fn logger<F>(
-    template: &config::Logger,
+    mut template: config::Logger,
     test_complete: F,
     test_complete_tx: FCSender<()>,
+    config_path: &PathBuf,
 ) -> channel::Sender<json::Value>
 where
     F: Future + Send + 'static,
 {
     let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
+    tweak_path(&mut template.to, config_path);
     let file_name = template.to.clone();
     let limit = template.limit;
     let pretty = template.pretty;
@@ -224,8 +235,9 @@ where
             tokio::spawn(logger);
         }
         _ => {
+            let file_name2 = file_name.clone();
             let logger = TokioFile::create(file_name.clone())
-                .map_err(|_| ())
+                .map_err(move |e| eprintln!("Error creating logger file `{:?}`, {}", file_name2, e))
                 .and_then(move |mut file| {
                     rx.for_each(move |v| {
                         counter += 1;

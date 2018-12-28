@@ -598,7 +598,7 @@ provides:
     select:
       name: for_each[0]
     for_each:
-      - json_path("request.body.*.name")
+      - json_path("response.body.*.name")
 ```
 
 The `names` provider would be sent the following values: `{ "name": "Luke Skywalker" }`, `{ "name": "Darth Vader" }`, `{ "name": "R2-D2" }`.
@@ -615,7 +615,7 @@ provides:
       id: for_each[0]
       count: for_each[0].friends.length
     for_each:
-      - json_path("request.body.*")
+      - json_path("response.body.*")
 ```
 
 The `friendsCount` provider would be sent the following values: `{ "id": 1000, "count": 4 }`, `{ "id": 1001, "count": 1 }`, `{ "id": 2001, "count": 3 }`.

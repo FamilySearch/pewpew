@@ -1,11 +1,10 @@
 # TODOs
 - Make declare section use expressions. Make sure collect can only be used in declare
 - Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
-- Provide a means of having different provider parameters based on condition (eg. for "beta" I want files x, password y). Allow templates in file path to reference environment variables
+- Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
 - Clarify in the documentation where templates are used vs expressions
 - Log when a request is waiting for a provider
 - Add ability to parse substring/strings out of a string with a regex. If no capture groups then just a single string will return if it matches. If there are capture groups and object will be provided with the capture group number or name as the key and the matche as the value. It should skip capture group 0.
-- Provide a means of terminating a test with a logger
 - Different endpoint parameters selected randomly based on percentages
 - Allow mathematical expressions in template
 - Allow repeat to be a random number within a range
@@ -13,7 +12,6 @@
 - Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.
 - Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand
 - Create a Visual Studio Code language extension for the loadtest file schema
-- Make files referenced by a file provider relative to the configuraton file. Also allow absolute paths (not sure if it currently works)
 - Add cli option for results
 - every minute we print stats to console, also write those results to disk, overwriting the previous file every minute
 - add `files` body provider

@@ -1,5 +1,6 @@
 # TODOs
 - Make declare section use expressions. Make sure collect can only be used in declare
+- Get rid of handlebars. Change all template interpolation from `{{}}` syntax to `${}`. Interpolation will use standard expressions
 - Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
 - Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
 - Clarify in the documentation where templates are used vs expressions

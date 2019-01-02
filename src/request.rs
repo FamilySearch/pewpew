@@ -376,7 +376,7 @@ where
                 match response {
                     ProviderResponse::Channel(_) => unimplemented!(),
                     ProviderResponse::Value(v) => {
-                        let body = json_value_to_string(&v);
+                        let body = json_value_to_string(&v).into_owned();
                         if rr_providers & REQUEST_BODY != 0 {
                             body_value = Some(body.clone());
                         }

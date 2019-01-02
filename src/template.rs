@@ -7,6 +7,7 @@ use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -62,7 +63,7 @@ pub enum TextifyReturn {
 impl TextifyReturn {
     pub fn to_string(&self, value: &json::Value) -> String {
         match self {
-            TextifyReturn::Trf(t) => json_value_to_string(&t(value)),
+            TextifyReturn::Trf(t) => json_value_to_string(&t(value)).into_owned(),
             TextifyReturn::String(s) => s.clone(),
         }
     }
@@ -248,15 +249,18 @@ pub fn join_helper(
     let json = h.param(0).expect("missing join param").value();
     let joiner = json_value_to_string(h.param(1).expect("missing join param").value());
     let output = match json {
-        json::Value::Array(v) => v
-            .iter()
-            .map(json_value_to_string)
-            .collect::<Vec<_>>()
-            .as_slice()
-            .join(&joiner),
+        json::Value::Array(v) => {
+            let string = v
+                .iter()
+                .map(|v| json_value_to_string(v).into_owned())
+                .collect::<Vec<_>>()
+                .as_slice()
+                .join(&joiner);
+            Cow::Owned(string)
+        }
         _ => json_value_to_string(json),
     };
-    out.write(&output)?;
+    out.write(output.as_str())?;
     Ok(())
 }
 
@@ -267,28 +271,24 @@ pub fn pad_helper(
     _: &mut RenderContext<'_>,
     out: &mut dyn Output,
 ) -> HelperResult {
-    let mut string_to_pad =
-        json_value_to_string(&h.param(0).expect("missing start_pad param").value());
+    let string_to_pad = json_value_to_string(&h.param(0).expect("missing start_pad param").value());
     let desired_length = h
         .param(1)
         .expect("missing start_pad param")
         .value()
         .as_u64()
         .expect("invalid start_pad param") as usize;
-    let pad_str = json_value_to_string(&h.param(2).expect("missing start_pad param").value());
-    let str_len = string_to_pad.as_str().graphemes(true).count();
+    let pad_cow = json_value_to_string(&h.param(2).expect("missing start_pad param").value());
+    let pad_str = pad_cow.as_str();
+    let str_len = string_to_pad.graphemes(true).count();
     let diff = desired_length.saturating_sub(str_len);
-    let mut pad_str: String = pad_str
-        .as_str()
-        .graphemes(true)
-        .cycle()
-        .take(diff)
-        .collect();
+    let mut pad_str: String = pad_str.graphemes(true).cycle().take(diff).collect();
     let output = if h.name() == "start_pad" {
         pad_str.push_str(&string_to_pad);
         pad_str
     } else {
-        string_to_pad.push_str(&pad_str);
+        let mut string_to_pad = string_to_pad.into_owned();
+        string_to_pad.push_str(pad_str.as_str());
         string_to_pad
     };
     out.write(&output)?;
@@ -343,10 +343,10 @@ pub fn encode_helper(
     Ok(())
 }
 
-pub fn json_value_to_string(v: &json::Value) -> String {
+pub fn json_value_to_string(v: &json::Value) -> Cow<'_, String> {
     match v {
-        json::Value::String(s) => s.clone(),
-        _ => v.to_string(),
+        json::Value::String(s) => Cow::Borrowed(s),
+        _ => Cow::Owned(v.to_string()),
     }
 }
 
@@ -359,15 +359,15 @@ mod tests {
     fn json_value_to_string_works() {
         let expect = r#"{"foo":123}"#;
         let json = json!({"foo": 123});
-        assert_eq!(json_value_to_string(&json), expect);
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
 
         let expect = r#"asdf " foo"#;
         let json = expect.to_string().into();
-        assert_eq!(json_value_to_string(&json), expect);
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
 
         let expect = r#"["foo",1,2,3,null]"#;
         let json = json!(["foo", 1, 2, 3, null]);
-        assert_eq!(json_value_to_string(&json), expect);
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
     }
 
     #[test]

@@ -533,10 +533,84 @@ The request object has the properties `start-line`, `method`, `url`, `headers` a
 
 While boolean style expressions are especially useful in a `where` expression they can be used in `select` and `for_each` expressions as well. Additionally there are special functions which are especially helpful in a `for_each` expression but can be used elsewhere.
 
-Function | Description
---- | ---
-<code>json_path(*query*)</code> | Provides the ability to execute a json path expression against an object and returns an array of values. The query must be quoted. Example: `json_path("response.body.ships.*.ids")`
-<code>repeat(*n*)</code> | Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times. Example: `repeat(10)`
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>json_path(<i>query</i>)</code>
+</td>
+<td>
+
+Provides the ability to execute a json path expression against an object and returns an array of values. The query must be a string literal.
+
+**Example**: `json_path("response.body.ships.*.ids")`
+
+</td>
+</tr>
+<tr>
+<td>
+<code>repeat(<i>n</i>)</code>
+</td>
+<td>
+
+Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times.
+
+**Example**: `repeat(10)`
+
+</td>
+</tr>
+<tr>
+<td>
+<code>match(<i>string</i>, <i>regex</i>)</code>
+</td>
+<td>
+
+Allows matching a string against a regex. Returns an object with the matches from the regex. Named matches are supported though any unnamed matches will be a number based on their position. Match `0` is always the portion of the string which the regex matched against. If the regex does not match `null` is returned.
+
+If the first parameter is not a string it will be coerced into a string.
+
+Regex look arounds are not supported.
+
+**Example**:
+
+If a response body were the following:
+
+```
+<html>
+<body>
+Hello, Jean! Today's date is 2038-01-19. So glad you made it!
+</body>
+</html>
+```
+
+Then the following expression:
+
+```
+match("response.body", "Hello, (?P<name>\w+).*(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")
+```
+
+Would return:
+
+```
+{
+  "0": "Jean! Today's date is 2038-01-19",
+  "name": Jean",
+  "y": "2038",
+  "m": "01",
+  "d": "19"
+}
+```
+
+</td>
+</tr>
+</tbody>
+</table>
 
 ##### Example 1
 With an HTTP response with the following body

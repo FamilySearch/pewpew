@@ -9,6 +9,7 @@ use pest::{
     Parser as PestParser,
 };
 use pest_derive::Parser;
+use regex::Regex;
 use serde_json as json;
 
 use std::{
@@ -18,32 +19,78 @@ use std::{
     sync::Arc,
 };
 
+struct MatchHelper {
+    capture_names: Vec<String>,
+    regex: Regex,
+}
+
+impl MatchHelper {
+    fn new(regex_str: &str) -> Result<Self, regex::Error> {
+        let regex = Regex::new(regex_str)?;
+        let capture_names = regex
+            .capture_names()
+            .enumerate()
+            .map(|(i, n)| n.map(|s| s.into()).unwrap_or_else(|| i.to_string()))
+            .collect();
+        Ok(MatchHelper {
+            capture_names,
+            regex,
+        })
+    }
+
+    fn run(&self, search_str: &str) -> json::Value {
+        if let Some(captures) = self.regex.captures(search_str) {
+            let map: json::Map<String, json::Value> = self
+                .capture_names
+                .iter()
+                .zip(captures.iter())
+                .map(|(name, capture)| {
+                    let key = name.clone();
+                    let value = capture
+                        .map(|c| c.as_str().into())
+                        .unwrap_or(json::Value::Null);
+                    (key, value)
+                })
+                .collect();
+            map.into()
+        } else {
+            json::Value::Null
+        }
+    }
+}
+
 #[derive(Clone)]
 enum FunctionArg {
     FunctionCall(FunctionCall),
     Value(Value),
 }
 
+impl FunctionArg {
+    fn evaluate<'a, 'b: 'a>(&'b self, d: &'a json::Value) -> Cow<'a, json::Value> {
+        match self {
+            FunctionArg::FunctionCall(fc) => Cow::Owned(fc.evaluate(d)),
+            FunctionArg::Value(v) => v.evaluate(d),
+        }
+    }
+}
+
 #[derive(Clone)]
 enum FunctionCall {
     JsonPath(Arc<jsonpath::Selector>),
+    Match(Arc<(FunctionArg, MatchHelper)>),
     Repeat(usize),
 }
 
 impl FunctionCall {
     fn new(
         ident: &str,
-        args: &[FunctionArg],
+        args: Vec<FunctionArg>,
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Either<Self, json::Value> {
         if ident == "json_path" {
-            match (args.len(), args.first()) {
-                // TODO: if there's ever another function which returns a string, modify this to allow a nested function
-                (
-                    1,
-                    Some(FunctionArg::Value(Value::Json(false, json::Value::String(json_path)))),
-                ) => {
+            match args.as_slice() {
+                [FunctionArg::Value(Value::Json(false, json::Value::String(json_path)))] => {
                     let provider = parse_provider_name(&json_path);
                     // jsonpath requires the query to start with `$.`, so add it in
                     let json_path = format!("$.{}", json_path);
@@ -62,27 +109,62 @@ impl FunctionCall {
                 _ => panic!("invalid arguments for json_path"),
             }
         } else if ident == "repeat" {
-            match (args.len(), args.first()) {
-                (1, Some(FunctionArg::Value(Value::Json(false, json::Value::Number(n)))))
-                    if n.is_u64() =>
-                {
+            match args.as_slice() {
+                [FunctionArg::Value(Value::Json(false, json::Value::Number(n)))] if n.is_u64() => {
                     Either::A(FunctionCall::Repeat(n.as_u64().unwrap() as usize))
                 }
                 _ => panic!("invalid arguments for repeat"),
+            }
+        } else if ident == "match" {
+            match args.as_slice() {
+                [FunctionArg::Value(_), FunctionArg::Value(Value::Json(false, json::Value::String(regex_str)))] =>
+                {
+                    let m = MatchHelper::new(regex_str).unwrap();
+                    Either::A(FunctionCall::Match(Arc::new((
+                        args.into_iter().nth(0).unwrap(),
+                        m,
+                    ))))
+                }
+                _ => panic!("invalid arguments for match"),
             }
         } else {
             panic!("unknown function reference `{}`", ident);
         }
     }
 
-    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item = json::Value> + Clone {
-        match &self {
+    fn evaluate(&self, d: &json::Value) -> json::Value {
+        match self {
             FunctionCall::JsonPath(jp) => {
                 let result = jp.find(d);
                 let v: Vec<_> = result.cloned().collect();
-                Either::A(v.into_iter())
+                json::Value::Array(v)
             }
-            FunctionCall::Repeat(n) => Either::B(iter::repeat(json::Value::Null).take(*n)),
+            FunctionCall::Match(m) => {
+                let d = m.0.evaluate(d);
+                m.1.run(&json_value_to_string(&d))
+            }
+            FunctionCall::Repeat(n) => {
+                json::Value::Array(iter::repeat(json::Value::Null).take(*n).collect())
+            }
+        }
+    }
+
+    fn evaluate_as_iter<'a>(
+        &self,
+        d: &'a json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
+        match self {
+            FunctionCall::JsonPath(jp) => {
+                let result = jp.find(d);
+                let v: Vec<_> = result.cloned().collect();
+                Either3::A(v.into_iter())
+            }
+            FunctionCall::Match(m) => {
+                let d = m.0.evaluate(d);
+                let json = m.1.run(&json_value_to_string(&d));
+                Either3::B(iter::once(json))
+            }
+            FunctionCall::Repeat(n) => Either3::C(iter::repeat(json::Value::Null).take(*n)),
         }
     }
 }
@@ -140,11 +222,14 @@ struct JsonPath {
 }
 
 impl JsonPath {
-    fn evaluate<'a>(&self, d: &'a json::Value) -> impl Iterator<Item = json::Value> + Clone {
+    fn evaluate_as_iter<'a>(
+        &self,
+        d: &'a json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
         match &self.start {
             JsonPathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
-                Either::A(fnc.evaluate(d).map(move |j| index_json2(&j, &rest)))
+                Either::A(fnc.evaluate_as_iter(d).map(move |j| index_json2(&j, &rest)))
             }
             JsonPathStart::JsonIdent(s) => {
                 let j = index_json(d, Either::B(s));
@@ -246,7 +331,7 @@ impl Value {
     fn evaluate<'a, 'b: 'a>(&'b self, d: &'a json::Value) -> Cow<'a, json::Value> {
         let (not, v) = match self {
             Value::JsonPath(not, path) => {
-                let mut v: Vec<_> = path.evaluate(d).collect();
+                let mut v: Vec<_> = path.evaluate_as_iter(d).collect();
                 let c = if v.is_empty() {
                     unreachable!("path should never return no elements");
                 } else if v.len() == 1 {
@@ -276,7 +361,7 @@ impl Value {
                     Either3::C(iter::once(false.into()))
                 } else {
                     Either3::A(
-                        path.evaluate(d)
+                        path.evaluate_as_iter(d)
                             .map(|v| {
                                 if let json::Value::Array(v) = v {
                                     Either::A(v.into_iter())
@@ -323,7 +408,7 @@ impl JsonPathSegment {
         match self {
             JsonPathSegment::Number(n) => Either::B(*n),
             JsonPathSegment::String(s) => Either::A(s.clone()),
-            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d))),
+            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d)).into_owned()),
         }
     }
 }
@@ -659,7 +744,7 @@ fn parse_function_call(
             r => unreachable!("unexpected rule for function call, `{:?}`", r),
         }
     }
-    FunctionCall::new(ident.unwrap(), &args, providers, static_providers)
+    FunctionCall::new(ident.unwrap(), args, providers, static_providers)
 }
 
 fn parse_indexed_property(
@@ -1009,7 +1094,7 @@ mod tests {
     fn select() {
         let data = json::json!({
             "a": 3,
-            "b": { "foo": "bar", "e": [5, 6, 7, 8] },
+            "b": { "foo": "bar", "some:thing": "else", "e": [5, 6, 7, 8] },
             "c": [
                 { "d": 1 },
                 { "d": 2 },
@@ -1034,6 +1119,21 @@ mod tests {
             ),
             (json::json!("c.length"), vec![json::json!(3)]),
             (json::json!("b.e.length"), vec![json::json!(4)]),
+            (json::json!(r#"b["some:thing"]"#), vec![json::json!("else")]),
+            (json::json!("b['some:thing']"), vec![json::json!("else")]),
+            (json::json!("b[`some:thing`]"), vec![json::json!("else")]),
+            (
+                json::json!("match(b.foo, '^b([a-z])r$')"),
+                vec![json::json!({"0": "bar", "1": "a"})],
+            ),
+            (
+                json::json!("match(b.foo, '^(?P<first>b)([a-z])(?P<last>r)$')"),
+                vec![json::json!({"0": "bar", "first": "b", "2": "a", "last": "r"})],
+            ),
+            (
+                json::json!("match(b.foo, '^b([a-z])r$')['1']"),
+                vec![json::json!("a")],
+            ),
             (json::json!(r#""foo-bar""#), vec![json::json!("foo-bar")]),
             (json::json!("'foo-bar'"), vec![json::json!("foo-bar")]),
             (

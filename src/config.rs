@@ -529,7 +529,7 @@ where
     D: Deserializer<'de>,
 {
     let res: Option<json::Value> = Option::deserialize(deserializer)?;
-    Ok(res.as_ref().map(json_value_to_string))
+    Ok(res.as_ref().map(|v| json_value_to_string(v).into_owned()))
 }
 
 fn deserialize_logs<'de, D>(

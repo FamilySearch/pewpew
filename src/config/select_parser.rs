@@ -1,7 +1,11 @@
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
+use crate::channel;
+use crate::config;
+use crate::providers;
 use crate::template::{json_value_to_string, textify, TextifyReturn, TextifyReturnFn};
 use crate::util::{parse_provider_name, Either, Either3};
 
+use futures::{future, stream, Future, IntoFuture, Stream};
 use handlebars::Handlebars;
 use itertools::Itertools;
 use pest::{
@@ -9,6 +13,7 @@ use pest::{
     Parser as PestParser,
 };
 use pest_derive::Parser;
+use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
 
@@ -18,6 +23,17 @@ use std::{
     iter,
     sync::Arc,
 };
+
+pub type AutoReturn = (
+    config::EndpointProvidesSendOptions,
+    channel::Sender<json::Value>,
+    Vec<json::Value>,
+);
+
+enum DeclareError {
+    ProviderEnded(String),
+    UnknownProvider(String),
+}
 
 struct MatchHelper {
     capture_names: Vec<String>,
@@ -72,13 +88,29 @@ impl FunctionArg {
             FunctionArg::Value(v) => v.evaluate(d),
         }
     }
+
+    fn evaluate_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> Box<dyn Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> + Sync + Send>
+    {
+        let f = match self {
+            FunctionArg::FunctionCall(fc) => Either::A(fc.evaluate_as_future(providers)),
+            FunctionArg::Value(v) => Either::B(v.evaluate_as_future(providers)),
+        };
+        // boxed to prevent recursive impl Future
+        Box::new(f)
+    }
 }
+
+type GetN = Box<Fn() -> u64 + Send + Sync>;
 
 #[derive(Clone)]
 enum FunctionCall {
-    JsonPath(Arc<jsonpath::Selector>),
+    Collect(Arc<(FunctionArg, GetN)>),
+    JsonPath(Arc<(String, jsonpath::Selector)>),
     Match(Arc<(FunctionArg, MatchHelper)>),
-    Repeat(usize),
+    Repeat(Arc<GetN>),
 }
 
 impl FunctionCall {
@@ -88,63 +120,131 @@ impl FunctionCall {
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Either<Self, json::Value> {
-        if ident == "json_path" {
-            match args.as_slice() {
-                [FunctionArg::Value(Value::Json(false, json::Value::String(json_path)))] => {
-                    let provider = parse_provider_name(&json_path);
-                    // jsonpath requires the query to start with `$.`, so add it in
-                    let json_path = format!("$.{}", json_path);
-                    let json_path = jsonpath::Selector::new(&json_path).unwrap_or_else(|e| {
-                        panic!("invalid json path query, {}\n{:?}", json_path, e)
-                    });
-                    let ret = if let Some(v) = static_providers.get(provider) {
-                        let r = json_path.find(v);
-                        Either::B(json::Value::Array(r.cloned().collect()))
-                    } else {
-                        Either::A(FunctionCall::JsonPath(Arc::new(json_path)))
-                    };
-                    providers.insert(provider.into());
-                    ret
-                }
-                _ => panic!("invalid arguments for json_path"),
-            }
+        if ident == "collect" {
+            FunctionCall::new_collect(args)
+        } else if ident == "json_path" {
+            FunctionCall::new_json_path(args, providers, static_providers)
         } else if ident == "repeat" {
-            match args.as_slice() {
-                [FunctionArg::Value(Value::Json(false, json::Value::Number(n)))] if n.is_u64() => {
-                    Either::A(FunctionCall::Repeat(n.as_u64().unwrap() as usize))
-                }
-                _ => panic!("invalid arguments for repeat"),
-            }
+            FunctionCall::new_repeat(args)
         } else if ident == "match" {
-            match args.as_slice() {
-                [FunctionArg::Value(_), FunctionArg::Value(Value::Json(false, json::Value::String(regex_str)))] =>
-                {
-                    let m = MatchHelper::new(regex_str).unwrap();
-                    Either::A(FunctionCall::Match(Arc::new((
-                        args.into_iter().nth(0).unwrap(),
-                        m,
-                    ))))
-                }
-                _ => panic!("invalid arguments for match"),
-            }
+            FunctionCall::new_match(args)
         } else {
             panic!("unknown function reference `{}`", ident);
         }
     }
 
+    fn new_json_path(
+        args: Vec<FunctionArg>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Either<Self, json::Value> {
+        match args.as_slice() {
+            [FunctionArg::Value(Value::Json(false, json::Value::String(json_path)))] => {
+                let provider = parse_provider_name(&*json_path);
+                // jsonpath requires the query to start with `$.`, so add it in
+                let json_path = format!("$.{}", json_path);
+                let json_path = jsonpath::Selector::new(&*json_path)
+                    .unwrap_or_else(|e| panic!("invalid json path query, {}\n{:?}", json_path, e));
+                let ret = if let Some(v) = static_providers.get(provider) {
+                    let r = json_path.find(v);
+                    Either::B(json::Value::Array(r.cloned().collect()))
+                } else {
+                    Either::A(FunctionCall::JsonPath(Arc::new((
+                        provider.into(),
+                        json_path,
+                    ))))
+                };
+                providers.insert(provider.into());
+                ret
+            }
+            _ => panic!("invalid arguments for json_path"),
+        }
+    }
+
+    fn new_collect(mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+        let as_u64 = |fa| match fa {
+            FunctionArg::Value(Value::Json(false, json::Value::Number(ref n))) if n.is_u64() => {
+                n.as_u64().unwrap()
+            }
+            _ => panic!("invalid arguments for repeat"),
+        };
+        match args.len() {
+            2 | 3 => {
+                let second = as_u64(args.remove(1));
+                let first = args.remove(0);
+                let third = args.pop().map(|fa| {
+                    let max = as_u64(fa);
+                    Uniform::new_inclusive(second, max)
+                });
+                let func = move || -> u64 {
+                    if let Some(random) = third {
+                        random.sample(&mut rand::thread_rng())
+                    } else {
+                        second
+                    }
+                };
+                Either::A(FunctionCall::Collect(Arc::new((first, Box::new(func)))))
+            }
+            _ => panic!("invalid arguments for repeat"),
+        }
+    }
+
+    fn new_repeat(mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+        let as_u64 = |fa| match fa {
+            FunctionArg::Value(Value::Json(false, json::Value::Number(ref n))) if n.is_u64() => {
+                n.as_u64().unwrap()
+            }
+            _ => panic!("invalid arguments for repeat"),
+        };
+        match args.len() {
+            1 | 2 => {
+                let first = as_u64(args.remove(0));
+                let second = args.pop().map(|fa| {
+                    let max = as_u64(fa);
+                    Uniform::new_inclusive(first, max)
+                });
+                let func = move || -> u64 {
+                    if let Some(random) = second {
+                        random.sample(&mut rand::thread_rng())
+                    } else {
+                        first
+                    }
+                };
+                Either::A(FunctionCall::Repeat(Arc::new(Box::new(func))))
+            }
+            _ => panic!("invalid arguments for repeat"),
+        }
+    }
+
+    fn new_match(args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+        match args.as_slice() {
+            [FunctionArg::Value(_), FunctionArg::Value(Value::Json(false, json::Value::String(regex_str)))] =>
+            {
+                let m = MatchHelper::new(regex_str).unwrap();
+                Either::A(FunctionCall::Match(Arc::new((
+                    args.into_iter().nth(0).unwrap(),
+                    m,
+                ))))
+            }
+            _ => panic!("invalid arguments for match"),
+        }
+    }
+
     fn evaluate(&self, d: &json::Value) -> json::Value {
         match self {
+            FunctionCall::Collect(c) => c.0.evaluate(d).into_owned(),
             FunctionCall::JsonPath(jp) => {
-                let result = jp.find(d);
-                let v: Vec<_> = result.cloned().collect();
+                let result = jp.1.find(d);
+                let v = result.cloned().collect();
                 json::Value::Array(v)
             }
             FunctionCall::Match(m) => {
                 let d = m.0.evaluate(d);
                 m.1.run(&json_value_to_string(&d))
             }
-            FunctionCall::Repeat(n) => {
-                json::Value::Array(iter::repeat(json::Value::Null).take(*n).collect())
+            FunctionCall::Repeat(r) => {
+                let n = r();
+                json::Value::Array(iter::repeat(json::Value::Null).take(n as usize).collect())
             }
         }
     }
@@ -154,8 +254,9 @@ impl FunctionCall {
         d: &'a json::Value,
     ) -> impl Iterator<Item = json::Value> + Clone {
         match self {
+            FunctionCall::Collect(c) => Either3::B(iter::once(c.0.evaluate(d).into_owned())),
             FunctionCall::JsonPath(jp) => {
-                let result = jp.find(d);
+                let result = jp.1.find(d);
                 let v: Vec<_> = result.cloned().collect();
                 Either3::A(v.into_iter())
             }
@@ -164,7 +265,85 @@ impl FunctionCall {
                 let json = m.1.run(&json_value_to_string(&d));
                 Either3::B(iter::once(json))
             }
-            FunctionCall::Repeat(n) => Either3::C(iter::repeat(json::Value::Null).take(*n)),
+            FunctionCall::Repeat(r) => {
+                let n = r();
+                Either3::C(iter::repeat(json::Value::Null).take(n as usize))
+            }
+        }
+    }
+
+    fn evaluate_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+        match self {
+            FunctionCall::Collect(c) => {
+                let n = c.1();
+                let futures = (0..n).map(move |_| c.0.evaluate_as_future(providers));
+                let a = stream::futures_ordered(futures)
+                    .fold(
+                        (Vec::new(), Vec::new()),
+                        |(mut jsons, mut outgoing), (json, outgoing2)| {
+                            jsons.push(json);
+                            outgoing.extend(outgoing2);
+                            Ok((jsons, outgoing))
+                        },
+                    )
+                    .map(|(jsons, outgoing)| (jsons.into(), outgoing));
+                Either3::A(a)
+            }
+            FunctionCall::JsonPath(jp) => {
+                let b = providers
+                    .get(&jp.0)
+                    .map(move |p| {
+                        let jp = jp.clone();
+                        let jp2 = jp.clone();
+                        let jp3 = jp.clone();
+                        match p {
+                            providers::Kind::Value(provider) => {
+                                let auto_return = provider.auto_return;
+                                let tx = provider.tx.clone();
+                                provider
+                                    .rx
+                                    .clone()
+                                    .into_future()
+                                    .map_err(move |_| DeclareError::ProviderEnded(jp.0.clone()))
+                                    .and_then(move |(v, _)| {
+                                        v.ok_or_else(|| DeclareError::ProviderEnded(jp2.0.clone()))
+                                    })
+                                    .map(move |v| {
+                                        let v = json::json!({ &*jp3.0: v });
+                                        let result = jp3.1.find(&v);
+                                        let mut outgoing = Vec::new();
+                                        if let Some(ar) = auto_return {
+                                            outgoing.push((ar, tx, vec![v.clone()]));
+                                        }
+                                        let v2: Vec<_> = result.cloned().collect();
+                                        (v2.into(), outgoing)
+                                    })
+                            }
+                        }
+                    })
+                    .ok_or_else(|| DeclareError::UnknownProvider(jp.0.clone()))
+                    .into_future()
+                    .flatten();
+                Either3::B(b)
+            }
+            FunctionCall::Match(m) => {
+                let m = m.clone();
+                let c =
+                    m.0.evaluate_as_future(providers)
+                        .map(move |(d, returns)| (m.1.run(&json_value_to_string(&d)), returns));
+                Either3::C(Either::A(c))
+            }
+            FunctionCall::Repeat(r) => {
+                let n = r();
+                let c = stream::repeat(json::Value::Null)
+                    .take(n)
+                    .collect()
+                    .map(|v| (v.into(), Vec::new()));
+                Either3::C(Either::B(c))
+            }
         }
     }
 }
@@ -216,7 +395,7 @@ fn index_json2<'a>(mut json: &'a json::Value, indexes: &[JsonPathSegment]) -> js
 }
 
 #[derive(Clone)]
-struct JsonPath {
+pub struct JsonPath {
     start: JsonPathStart,
     rest: Vec<JsonPathSegment>,
 }
@@ -236,6 +415,58 @@ impl JsonPath {
                 Either::B(iter::once(index_json2(&j, &self.rest)))
             }
             JsonPathStart::Value(v) => Either::B(iter::once(v.clone())),
+        }
+    }
+
+    fn evaluate_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+        let rest = self.rest.clone();
+        match self.start.clone() {
+            JsonPathStart::FunctionCall(fnc) => Either3::A(
+                fnc.evaluate_as_future(providers)
+                    .map(move |(j, returns)| (index_json2(&j, &rest), returns)),
+            ),
+            JsonPathStart::JsonIdent(s) => {
+                let s = Arc::new(s);
+                let s2 = s.clone();
+                let b = providers
+                    .get(&*s2)
+                    .map(move |p| {
+                        let s = s2.clone();
+                        match p {
+                            providers::Kind::Value(provider) => {
+                                let auto_return = provider.auto_return;
+                                let tx = provider.tx.clone();
+                                provider
+                                    .rx
+                                    .clone()
+                                    .into_future()
+                                    .map_err(move |_| DeclareError::ProviderEnded((&*s).clone()))
+                                    .and_then(move |(v, _)| {
+                                        v.map(move |v| {
+                                            let mut outgoing = Vec::new();
+                                            if let Some(ar) = auto_return {
+                                                outgoing.push((ar, tx, vec![v.clone()]));
+                                            }
+                                            let v = index_json2(&v, &rest);
+                                            (v, outgoing)
+                                        })
+                                        .ok_or_else(|| DeclareError::ProviderEnded((&*s2).clone()))
+                                    })
+                            }
+                        }
+                    })
+                    .ok_or_else(move || DeclareError::UnknownProvider((&*s).clone()))
+                    .into_future()
+                    .flatten();
+                Either3::B(b)
+            }
+            JsonPathStart::Value(v) => {
+                let v = index_json2(&v, &rest);
+                Either3::C(future::ok((v, Vec::new())))
+            }
         }
     }
 }
@@ -262,12 +493,23 @@ fn f64_value(json: &json::Value) -> f64 {
 }
 
 #[derive(Clone)]
-enum ValueOrComplexExpression {
+pub enum ValueOrComplexExpression {
     V(Value),
     Ce(ComplexExpression),
 }
 
 impl ValueOrComplexExpression {
+    pub fn new(
+        expr: &str,
+        handlebars: &Arc<Handlebars>,
+        providers: &mut BTreeSet<String>,
+        static_providers: &BTreeMap<String, json::Value>,
+    ) -> Self {
+        let pairs = Select::parse(Rule::entry_point, expr).unwrap();
+        let value = parse_complex_expression(pairs, handlebars, providers, static_providers);
+        value.into()
+    }
+
     fn evaluate<'a, 'b: 'a>(&'b self, d: &'a json::Value) -> Cow<'a, json::Value> {
         match self {
             ValueOrComplexExpression::V(v) => v.evaluate(d),
@@ -283,6 +525,40 @@ impl ValueOrComplexExpression {
             ValueOrComplexExpression::V(v) => Either::A(v.evaluate_as_iter(d)),
             ValueOrComplexExpression::Ce(ce) => Either::B(iter::once(ce.execute(d).into())),
         }
+    }
+
+    pub fn into_stream(
+        self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = ()> {
+        let providers = providers.clone();
+        let this = Arc::new(self);
+        stream::repeat(())
+            .and_then(move |_| match &*this {
+                ValueOrComplexExpression::V(v) => Either::A(v.evaluate_as_future(&providers)),
+                ValueOrComplexExpression::Ce(ce) => Either::B(
+                    ce.execute_as_future(&providers)
+                        .map(|(b, returns)| (b.into(), returns)),
+                ),
+            })
+            .map(Either::A)
+            .or_else(|d| {
+                if let DeclareError::UnknownProvider(p) = d {
+                    panic!("Unknown provider `{}`", p);
+                }
+                Ok(Either::B(()))
+            })
+            .take_while(|v| {
+                if let Either::A(_) = v {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            })
+            .map(|v| match v {
+                Either::A(v) => v,
+                _ => unreachable!(),
+            })
     }
 }
 
@@ -308,10 +584,10 @@ impl From<ComplexExpression> for ValueOrComplexExpression {
 type Not = bool;
 
 #[derive(Clone)]
-enum Value {
+pub enum Value {
     JsonPath(Not, JsonPath),
     Json(Not, json::Value),
-    Template(Not, Arc<TextifyReturnFn>),
+    Template(Not, Arc<(BTreeSet<String>, Box<TextifyReturnFn>)>),
 }
 
 impl Value {
@@ -322,8 +598,12 @@ impl Value {
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Self {
-        match textify(s, handlebars, providers, static_providers) {
-            TextifyReturn::Trf(t) => Value::Template(not, t.into()),
+        let mut providers2 = BTreeSet::new();
+        match textify(s, handlebars, &mut providers2, static_providers) {
+            TextifyReturn::Trf(t) => {
+                providers.extend(providers2.clone());
+                Value::Template(not, (providers2, t).into())
+            }
             TextifyReturn::String(s) => Value::Json(not, s.into()),
         }
     }
@@ -342,7 +622,7 @@ impl Value {
                 (*not, c)
             }
             Value::Json(not, value) => (*not, Cow::Borrowed(value)),
-            Value::Template(not, t) => (*not, Cow::Owned(t(d))),
+            Value::Template(not, t) => (*not, Cow::Owned(t.1(d))),
         };
         if not {
             Cow::Owned(json::Value::Bool(!bool_value(&v)))
@@ -382,13 +662,87 @@ impl Value {
             }
         }
     }
+
+    fn evaluate_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+        let (not, f) = match self {
+            Value::JsonPath(not, path) => {
+                let f = Either3::A(path.evaluate_as_future(providers));
+                (*not, f)
+            }
+            Value::Json(not, value) => (*not, Either3::B(future::ok((value.clone(), Vec::new())))),
+            Value::Template(not, t) => {
+                let t = t.clone();
+                let futures = t.0.clone().into_iter().map(move |s| {
+                    providers
+                        .clone()
+                        .get(&s)
+                        .map(|p| {
+                            let s = Arc::new(s.clone());
+                            let s2 = s.clone();
+                            match p {
+                                providers::Kind::Value(provider) => {
+                                    let auto_return = provider.auto_return;
+                                    let tx = provider.tx.clone();
+                                    provider
+                                        .rx
+                                        .clone()
+                                        .into_future()
+                                        .map_err(move |_| {
+                                            DeclareError::ProviderEnded((&*s).clone())
+                                        })
+                                        .and_then(move |(v, _)| {
+                                            v.map(|v| {
+                                                let mut outgoing = Vec::new();
+                                                if let Some(ar) = auto_return {
+                                                    outgoing.push((ar, tx, vec![v.clone()]));
+                                                }
+                                                ((&*s2).clone(), v, outgoing)
+                                            })
+                                            .ok_or_else(|| {
+                                                DeclareError::ProviderEnded((&*s2).clone())
+                                            })
+                                        })
+                                }
+                            }
+                        })
+                        .ok_or_else(|| DeclareError::UnknownProvider(s.clone()))
+                        .into_future()
+                        .flatten()
+                });
+                let f = stream::futures_unordered(futures).collect().map(move |v| {
+                    let (map, returns) = v.into_iter().fold(
+                        (json::Map::new(), Vec::new()),
+                        |(mut map, mut returns), (key, value, returns2)| {
+                            map.insert(key, value);
+                            returns.extend(returns2);
+                            (map, returns)
+                        },
+                    );
+                    let json = map.into();
+                    (t.1(&json), returns)
+                });
+                (*not, Either3::C(f))
+            }
+        };
+        f.map(move |(v, returns)| {
+            let v = if not {
+                json::Value::Bool(!bool_value(&v))
+            } else {
+                v
+            };
+            (v, returns)
+        })
+    }
 }
 
 #[derive(Clone)]
 enum JsonPathSegment {
     Number(usize),
     String(String),
-    Template(Arc<TextifyReturnFn>),
+    Template(Arc<(BTreeSet<String>, Box<TextifyReturnFn>)>),
 }
 
 impl JsonPathSegment {
@@ -398,8 +752,12 @@ impl JsonPathSegment {
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Self {
-        match textify(s, handlebars, providers, static_providers) {
-            TextifyReturn::Trf(t) => JsonPathSegment::Template(t.into()),
+        let mut providers2 = BTreeSet::new();
+        match textify(s, handlebars, &mut providers2, static_providers) {
+            TextifyReturn::Trf(t) => {
+                providers.extend(providers2.clone());
+                JsonPathSegment::Template((providers2, t).into())
+            }
             TextifyReturn::String(s) => JsonPathSegment::String(s),
         }
     }
@@ -408,7 +766,7 @@ impl JsonPathSegment {
         match self {
             JsonPathSegment::Number(n) => Either::B(*n),
             JsonPathSegment::String(s) => Either::A(s.clone()),
-            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t(d)).into_owned()),
+            JsonPathSegment::Template(t) => Either::A(json_value_to_string(&t.1(d)).into_owned()),
         }
     }
 }
@@ -449,10 +807,22 @@ impl Expression {
             Expression::Simple(s) => s.execute(d),
         }
     }
+
+    fn execute_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> Box<dyn Future<Item = (bool, Vec<AutoReturn>), Error = DeclareError> + Send + Sync> {
+        let f = match self {
+            Expression::Complex(c) => Either::A(c.execute_as_future(providers)),
+            Expression::Simple(s) => Either::B(s.execute_as_future(providers)),
+        };
+        // boxed to prevent recursive impl Future
+        Box::new(f)
+    }
 }
 
 #[derive(Clone)]
-struct ComplexExpression {
+pub struct ComplexExpression {
     combiner: Combiner,
     pieces: Vec<Expression>,
 }
@@ -462,6 +832,45 @@ impl ComplexExpression {
         match self.combiner {
             Combiner::And => self.pieces.iter().all(|e| e.execute(d)),
             Combiner::Or => self.pieces.iter().any(|e| e.execute(d)),
+        }
+    }
+
+    fn execute_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (bool, Vec<AutoReturn>), Error = DeclareError> {
+        let futures = self
+            .pieces
+            .iter()
+            .map(move |e| e.execute_as_future(providers));
+        let stream = stream::futures_ordered(futures);
+        match self.combiner {
+            Combiner::And => {
+                let pieces_len = self.pieces.len();
+                let fut = stream
+                    .fold(
+                        (0, Vec::new()),
+                        |(mut count, mut returns), (b, returns2)| {
+                            returns.extend(returns2);
+                            if b {
+                                count += 1;
+                            }
+                            Ok((count, returns))
+                        },
+                    )
+                    .map(move |(count, returns)| (count == pieces_len, returns));
+                Either::A(fut)
+            }
+            Combiner::Or => Either::B(stream.fold(
+                (false, Vec::new()),
+                |(mut saw_true, mut returns), (b, returns2)| {
+                    returns.extend(returns2);
+                    if b {
+                        saw_true = true;
+                    }
+                    Ok((saw_true, returns))
+                },
+            )),
         }
     }
 }
@@ -487,6 +896,34 @@ impl SimpleExpression {
             }
         } else {
             bool_value(&left)
+        }
+    }
+
+    fn execute_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (bool, Vec<AutoReturn>), Error = DeclareError> {
+        let left = self.lhs.evaluate_as_future(providers);
+        if let Some((operator, right_value)) = self.rest.clone() {
+            let right = right_value.evaluate_as_future(providers);
+            let a =
+                left.join(right)
+                    .map(move |((left_val, mut returns), (right_val, returns2))| {
+                        returns.extend(returns2);
+                        let b = match operator {
+                            Operator::Eq => left_val.eq(&right_val),
+                            Operator::Gt => f64_value(&left_val) > f64_value(&right_val),
+                            Operator::Gte => f64_value(&left_val) >= f64_value(&right_val),
+                            Operator::Lt => f64_value(&left_val) < f64_value(&right_val),
+                            Operator::Lte => f64_value(&left_val) <= f64_value(&right_val),
+                            Operator::Ne => left_val.ne(&right_val),
+                        };
+                        (b, returns)
+                    });
+            Either::A(a)
+        } else {
+            let b = left.map(|(value, returns)| (bool_value(&value), returns));
+            Either::B(b)
         }
     }
 }
@@ -576,7 +1013,7 @@ impl Select {
     ) -> Self {
         let mut providers = BTreeSet::new();
         let mut special_providers = 0;
-        let join: Vec<_> = provides
+        let join = provides
             .for_each
             .iter()
             .map(|s| {
@@ -625,8 +1062,8 @@ impl Select {
         self.special_providers
     }
 
-    pub fn get_send_behavior(&self) -> &EndpointProvidesSendOptions {
-        &self.send_behavior
+    pub fn get_send_behavior(&self) -> EndpointProvidesSendOptions {
+        self.send_behavior
     }
 
     pub fn get_where_clause_special_providers(&self) -> u16 {
@@ -693,9 +1130,9 @@ fn parse_select(
         json::Value::Bool(b) => ParsedSelect::Bool(b),
         json::Value::Number(n) => ParsedSelect::Number(n),
         json::Value::String(s) => {
-            let pairs = Select::parse(Rule::entry_point, &s).unwrap();
-            let value = parse_complex_expression(pairs, handlebars, providers, static_providers);
-            ParsedSelect::Expression(value.into())
+            let expression =
+                ValueOrComplexExpression::new(&s, handlebars, providers, static_providers);
+            ParsedSelect::Expression(expression)
         }
         json::Value::Array(a) => {
             let new = a
@@ -818,9 +1255,9 @@ fn parse_json_path(
     }
     let start = start.unwrap();
     if let JsonPathStart::JsonIdent(start) = &start {
-        match (&start, rest.first()) {
+        match (start, rest.first()) {
             (start, Some(JsonPathSegment::String(next)))
-                if start.as_str() == "request" || start.as_str() == "response" =>
+                if &*start == "request" || &*start == "response" =>
             {
                 providers.insert(format!("{}.{}", start, next))
             }
@@ -1018,8 +1455,15 @@ fn parse_complex_expression(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers;
     use crate::template::join_helper;
+    use futures::{
+        future::{join_all, lazy},
+        sync::oneshot,
+    };
+    use maplit::btreemap;
     use serde_json as json;
+    use tokio::runtime::current_thread;
 
     fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
         let select = create_select(select);
@@ -1104,6 +1548,11 @@ mod tests {
 
         // (select json, expected out data)
         let check_table = vec![
+            (json::json!([1, 2, 3]), vec![json::json!([1, 2, 3])]),
+            (
+                json::json!([1, "repeat(2)", 3]),
+                vec![json::json!([1, [null, null], 3])],
+            ),
             (json::json!(4), vec![json::json!(4)]),
             (json::json!("true && false"), vec![false.into()]),
             (json::json!("((true || false))"), vec![true.into()]),
@@ -1144,6 +1593,11 @@ mod tests {
                 json::json!({"z": 42, "dees": r#"json_path("c.*.d")"#}),
                 vec![json::json!({"z": 42, "dees": [1, 2, 3]})],
             ),
+            (json::json!("collect(a, 3)"), vec![json::json!(3)]),
+            (
+                json::json!("collect(b.e, 39)"),
+                vec![json::json!([5, 6, 7, 8])],
+            ),
         ];
 
         for (i, (select, expect)) in check_table.into_iter().enumerate() {
@@ -1151,6 +1605,103 @@ mod tests {
             let s = json::json!({ "select": select });
             check_results(s, data, &expect, i);
         }
+    }
+
+    #[test]
+    fn voce_stream() {
+        let data = btreemap! {
+            "a" => json::json!(3),
+            "b" => json::json!({ "foo": "bar", "some:thing": "else", "e": [5, 6, 7, 8] }),
+            "c" => json::json!([
+                { "d": 1 },
+                { "d": 2 },
+                { "d": 3 },
+            ]),
+            "c2" => json::json!([[
+                { "d": 1 },
+                { "d": 2 },
+                { "d": 3 },
+            ]]),
+        };
+
+        let (tx, rx) = oneshot::channel::<()>();
+        let test_end = rx.shared();
+
+        current_thread::run(lazy(move || {
+            let providers = data
+                .into_iter()
+                .map(move |(k, v)| {
+                    let p = match v {
+                        json::Value::Array(v) => providers::literals(v, None, test_end.clone()),
+                        _ => providers::literals(vec![v], None, test_end.clone()),
+                    };
+                    (k.to_string(), p)
+                })
+                .collect::<BTreeMap<_, _>>()
+                .into();
+
+            let tests = vec![
+                (
+                    "collect(c, 3)",
+                    json::json!([
+                        { "d": 1 },
+                        { "d": 2 },
+                        { "d": 3 },
+                    ]),
+                ),
+                ("c", json::json!({ "d": 1 })),
+                ("collect(a, 3)", json::json!([3, 3, 3])),
+                ("repeat(2)", json::json!([null, null])),
+                ("true && false", false.into()),
+                ("((true || false))", true.into()),
+                ("c2[0].d", json::json!(1)),
+                ("(c2[0].d)", json::json!(1)),
+                (r#"json_path("c2.*.d")"#, json::json!([1, 2, 3])),
+                ("c2.length", json::json!(3)),
+                ("b.e.length", json::json!(4)),
+                (r#"b["some:thing"]"#, json::json!("else")),
+                ("b['some:thing']", json::json!("else")),
+                ("b[`some:thing`]", json::json!("else")),
+                (
+                    "match(b.foo, '^b([a-z])r$')",
+                    json::json!({"0": "bar", "1": "a"}),
+                ),
+                (
+                    "match(b.foo, '^(?P<first>b)([a-z])(?P<last>r)$')",
+                    json::json!({"0": "bar", "first": "b", "2": "a", "last": "r"}),
+                ),
+                ("match(b.foo, '^b([a-z])r$')['1']", json::json!("a")),
+                (r#""foo-bar""#, json::json!("foo-bar")),
+                ("'foo-bar'", json::json!("foo-bar")),
+                (r#"`{{join b.e "-"}}`"#, json::json!("5-6-7-8")),
+            ];
+
+            let mut handlebars = Handlebars::new();
+            handlebars.register_helper("join", Box::new(join_helper));
+            let handlebars = handlebars.into();
+            let mut required_providers = BTreeSet::new();
+            let static_providers = BTreeMap::new();
+            let mut futures = Vec::new();
+            for (i, (expr, expect)) in tests.into_iter().enumerate() {
+                let voce = ValueOrComplexExpression::new(
+                    expr,
+                    &handlebars,
+                    &mut required_providers,
+                    &static_providers,
+                );
+                let fut = voce
+                    .into_stream(&providers)
+                    .map(|(v, _)| v)
+                    .into_future()
+                    .map(move |(v, _)| {
+                        assert_eq!(v.unwrap(), expect, "index {}", i);
+                    });
+                futures.push(fut);
+            }
+            join_all(futures)
+                .then(move |_| tx.send(()))
+                .then(|_| Ok(()))
+        }));
     }
 
     #[test]

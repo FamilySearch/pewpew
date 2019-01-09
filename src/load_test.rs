@@ -17,7 +17,7 @@ use handlebars::Handlebars;
 pub use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
-use serde_json::Value as JsonValue;
+use serde_json as json;
 use tokio::{prelude::*, timer};
 
 use std::{
@@ -38,11 +38,11 @@ pub struct LoadTest {
     endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
     pub handlebars: Arc<Handlebars>,
     // a mapping of names to their prospective static (single value) providers
-    pub static_providers: BTreeMap<String, JsonValue>,
+    pub static_providers: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
-    pub providers: BTreeMap<String, providers::Kind>,
+    pub providers: Arc<BTreeMap<String, providers::Kind>>,
     // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, (channel::Sender<JsonValue>, Option<config::Select>)>,
+    pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
     // a trigger used to signal when the endpoints tasks finish (including sending their stats)
@@ -106,6 +106,7 @@ impl LoadTest {
             };
             providers.insert(name, provider);
         }
+        let providers = providers.into();
 
         let eppp_to_select = |eppp| config::Select::new(eppp, &handlebars, &static_providers);
 

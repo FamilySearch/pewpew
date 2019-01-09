@@ -22,6 +22,23 @@ Append the following to `/etc/security/limits.conf`:
 *               -       nofile         999999
 ```
 
+## Windows tuning
+Using the registry editor, navigate to the following path:
+
+`HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\`
+
+Add (or edit if it exists) the entry `MaxUserPort` as a `DWORD` type and set the value as `65534` (decimal).
+
+Alternatively, save the following as `port.reg` and run the file:
+
+```
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters]
+"MaxUserPort"=dword:0000fffe
+```
+
+
 ## Config file
 The pewpew executable requires a single parameter specifying the path to a load test config file. A config file is yaml with a particular schema. Here's a simple example:
 
@@ -86,7 +103,7 @@ load_pattern:
 
 \* If a root level `load_pattern` is not specified then each endpoint *must* specify its own `load_pattern`.
 
-This section defines the "shape" that the generated traffic will take over the course of the test. Individual endpoints can choose to specify their own `load_pattern` (see the [`endpoints` section](#endpoints)).
+This section defines the "shape" that the generated traffic will take over the course of the test. Individual endpoints can choose to specify their own `load_pattern` (see the [endpoints section](#endpoints)).
 
 `load_pattern` is an array of *load_pattern_type*s specifying how generated traffic for a segment of the test will scale up, down or remain steady. Currently the only *load_pattern_type* supported is `linear`.
 
@@ -360,9 +377,9 @@ In this case `foo` will provide the valuels `-50`, `-48`, `-46`, etc. until it y
 <pre>
 loggers:
   <i>logger_name</i>:
-    [select: <i>select_piece</i>]
-    [for_each: <i>for_each_piece</i>]
-    [where: <i>where_piece</i>]
+    [select: <i>select</i>]
+    [for_each: <i>for_each</i>]
+    [where: <i>expression</i>]
     to: <i>filename</i> | stderr | stdout
     [pretty: <i>boolean</i>]
     [limit: <i>integer</i>]
@@ -373,9 +390,9 @@ Loggers provide a means of logging data to a file, stderr or stdout. Any string 
 There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints.log` section, and global loggers which are evaluated for every endpoint response.
 
 Loggers support the following parameters:
-- **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [`endpoints.provides` section](#provides) for details on how to define a *select_piece*.
-- **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints.provides` section](#provides) for details on how to define a *for_each_piece*.
-- **`where`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [`endpoints.provides` section](#provides) for details on how to define a *where_piece*.
+- **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [endpoints.provides section](#provides) for details on how to define a *select*.
+- **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [endpoints.provides section](#provides) for details on how to define a *for_each*.
+- **`where`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [endpoints.provides section](#provides) for details on how to define a *expression*.
 - **`to`** - A [template](#Templates) specifying where this logger will send its data. Unlike templates which can be used elsewhere, only environment variables can be interopolated. Values of "stderr" and "stdout" will log data to the respective process streams and any other string will log to a file with that name. When a file is specified, the file will be created if it does not exist or will be truncated if it already exists. When a relative path is specified it is interpreted as relative to the config file. Absolute paths are supported though discouraged as they prevent the config file from being platform agnostic.
 - **`pretty`** <sub><sup>*Optional*</sup></sub> - A boolean that when `true` the value logged will have added whitespace for readability. Defaults to `false`.
 - **`limit`** <sub><sup>*Optional*</sup></sub> - An unsigned integer which indicates the logger will only log the first *n* values sent to it.
@@ -449,7 +466,7 @@ Providers can be referenced anywhere [templates](#Template) can be used and also
 #### declare
 <pre>
 declare:
-  <i>name</i>: <i>provider_name</i> | collect(<i>collect_args</i>)
+  <i>name</i>: <i>expression</i>
 </pre>
 A *declare_section* provides the ability to select multiple values from a single provider. Without using a *declare_section*, multiple references to a provider will only select a single value. For example, in:
 
@@ -462,15 +479,13 @@ endpoints:
 
 both references to the provider `shipId` will resolve to the same value, which in many cases is desired.
 
-The *declare_section* is in the format of key/value string pairs. Every key can function as a provider and can be interpolated just as a provider would be. Values can be in one of two formats:
-1) a string which is a reference to a provider
-2) a call to the `collect` function. The `collect` function "collects" multiple values from a provider into an array. `collect` can be called with two or three arguments in the format <code>collect(*n*, *provider_name*)</code> or <code>collect(*min*, *max*, *provider_name*)</code>. The two argument form creates an array of size *n* with values from a provider. The three argument form creates an array with a randomly selected size between *min* and *max* (both *min* and *max* are inclusive) with values from a provider.
+The *declare_section* is in the format of key/value pairs where the value is an expression. Every key can function as a provider and can be interpolated just as a provider would be.
 
 ##### Example 1
 ```yaml
 endpoints:
   - declare:
-      shipIds: collect(3, 5, shipId)
+      shipIds: collect(shipId, 3, 5)
     method: DELETE
     url: https://localhost/ships
     body: '{"shipIds":{{shipIds}}}'
@@ -493,36 +508,25 @@ Calls `PUT` on an endpoint where `shipId` and `destroyedShipId` are interpolated
 <pre>
 provides:
   <i>provider_name</i>:
-    select: <i>select_piece</i>
-    [for_each: <i>for_each_piece</i>]
-    [where: <i>where_piece</i>]
+    select: <i>select</i>
+    [for_each: <i>for_each</i>]
+    [where: <i>expression</i>]
     [send: block | force | if_not_full]
 </pre>
-The *provides_section* is how data can be sent to a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [`providers` section](#providers-optional). For every HTTP response that is received, zero or more values can be sent to the provider based upon the conditions specified.
+The *provides_section* is how data can be sent to a provider from an HTTP response. *provider_name* is a reference to a provider which must be declared in the root [providers section](#providers-optional). For every HTTP response that is received, zero or more values can be sent to the provider based upon the conditions specified.
 
-Sending data to a provider is done with a SQL-like syntax. The `select`, `for_each` and `where` sections can reference a provider in addition to the specially provided values "request", "response" and "stats". "request" provides a means of accessing data that was sent with the request, "response" provides a means of accessing data returned with the response and "stats" give access to measurements about the request (currently only `rtt` meaning round-trip time).
+Sending data to a provider is done with a SQL-like syntax. The `select`, `for_each` and `where` sections use [expressions](#Expressions) to reference providers in addition to the specially provided values "request", "response" and "stats". "request" provides a means of accessing data that was sent with the request, "response" provides a means of accessing data returned with the response and "stats" give access to measurements about the request (currently only `rtt` meaning round-trip time).
 
 The request object has the properties `start-line`, `method`, `url`, `headers` and `body` which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties `start-line`, `headers`, and `body` in addition to `status` which indicates the HTTP response status code. See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP messages for more details on the structure of HTTP requests and responses.
 
 `start-line` is a string and `headers` is represented as a JSON object with key/value string pairs. Currently, `body` in the request is always a string and `body` in the response is parsed as a JSON value, when possible, otherwise it is a string. `status` is a number. `method` is a string and `url` has the same properties as the web URL object (See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/API/URL)). 
 
-- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is expected to be an expression..
+- **`select`** - Determines the shape of the data sent to the provider. `select` is interpreted as a JSON object where any string value is evaluated as an [expression](#Expressions).
 
-- **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays. This is specified as an array of strings where each string is an expression. Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and `select` is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.
+- **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays. This is specified as an array of [expressions](#Expressions). Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and `select` is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.
 
   The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` just like accessing a value from a provider. Because `for_each` can be iterating over multiple arrays, each value can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
-- **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is a string expression which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
-
-  A `where` expression can be as simple as `response.status == 200` or more complex expressions can be formed using `&&` (boolean and), `||` (boolean or) and parenthesis to group sub-expressions. The following comparison operators are available:
-
-  Operator | Description
-  --- | --- 
-  `==` | Equal. Check that two values are equal to each other
-  `!=` | Not equal. Check that two values are not equal to each other
-  `>` | Greater than. Check that the left value is greater than the right
-  `<` | Less than. Check that the left value is less than the right
-  `>=` | Greater than or equal to. Check that the left value is greater than or equal to the right
-  `<=` | Less than or equal to. Check that the left value is less than or equal to the right
+- **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is an [expressions](#Expressions) which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
 - **`send`** <sub><sup>*Optional*</sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are `block`, `force`, and `if_not_full`.
 
   `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until there's room in the provider's buffer for the value.
@@ -532,85 +536,6 @@ The request object has the properties `start-line`, `method`, `url`, `headers` a
   `if_not_full` indicates that the value will be returned to the provider only if the provider is not full.
 
 While boolean style expressions are especially useful in a `where` expression they can be used in `select` and `for_each` expressions as well. Additionally there are special functions which are especially helpful in a `for_each` expression but can be used elsewhere.
-
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>json_path(<i>query</i>)</code>
-</td>
-<td>
-
-Provides the ability to execute a json path expression against an object and returns an array of values. The query must be a string literal.
-
-**Example**: `json_path("response.body.ships.*.ids")`
-
-</td>
-</tr>
-<tr>
-<td>
-<code>repeat(<i>n</i>)</code>
-</td>
-<td>
-
-Creates an array of null values with a length of *n*. This is useful when used within a `for_each` expression to have the `select` expression evaluated multiple times.
-
-**Example**: `repeat(10)`
-
-</td>
-</tr>
-<tr>
-<td>
-<code>match(<i>string</i>, <i>regex</i>)</code>
-</td>
-<td>
-
-Allows matching a string against a regex. Returns an object with the matches from the regex. Named matches are supported though any unnamed matches will be a number based on their position. Match `0` is always the portion of the string which the regex matched against. If the regex does not match `null` is returned.
-
-If the first parameter is not a string it will be coerced into a string.
-
-Regex look arounds are not supported.
-
-**Example**:
-
-If a response body were the following:
-
-```
-<html>
-<body>
-Hello, Jean! Today's date is 2038-01-19. So glad you made it!
-</body>
-</html>
-```
-
-Then the following expression:
-
-```
-match("response.body", "Hello, (?P<name>\w+).*(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")
-```
-
-Would return:
-
-```
-{
-  "0": "Jean! Today's date is 2038-01-19",
-  "name": Jean",
-  "y": "2038",
-  "m": "01",
-  "d": "19"
-}
-```
-
-</td>
-</tr>
-</tbody>
-</table>
 
 ##### Example 1
 With an HTTP response with the following body
@@ -698,11 +623,11 @@ The `friendsCount` provider would be sent the following values: `{ "id": 1000, "
 <pre>
 logs:
   <i>logger_name</i>:
-    select: <i>select_piece</i>
-    [for_each: <i>for_each_piece</i>]
-    [where: <i>where_piece</i>]
+    select: <i>select</i>
+    [for_each: <i>for_each</i>]
+    [where: <i>expression</i>]
 </pre>
-The *logs_section* provides a means of sending data to a logger based on the result of an HTTP response. *logger_name* is a reference to a logger which must be declared in the root [`logger` section](#loggers-optional). It is structured in the same way as the [*provides_section*](#provides) except there is no explicit *send* parameter. When data is sent to a logger it has the same behavior as `send: block`, which means logging data can potentially block further requests from happening if a logger were to get "backed up". This is unlikely to be a problem unless a large amount of data was consistently logged. It is also possible to log to the same logger multiple times in a single endpoint by repeating the *logger_name* with a new `select`.
+The *logs_section* provides a means of sending data to a logger based on the result of an HTTP response. *logger_name* is a reference to a logger which must be declared in the root [logger section](#loggers-optional). It is structured in the same way as the [*provides_section*](#provides) except there is no explicit *send* parameter. When data is sent to a logger it has the same behavior as `send: block`, which means logging data can potentially block further requests from happening if a logger were to get "backed up". This is unlikely to be a problem unless a large amount of data was consistently logged. It is also possible to log to the same logger multiple times in a single endpoint by repeating the *logger_name* with a new `select`.
 
 - **`select`** - Determines the shape of the data sent into the logger.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Evaluates `select` for each element in an array or arrays.
@@ -727,6 +652,120 @@ Examples:
 `4 hrs 15 mins` = 4 hours and 15 minutes
 
 As seen above an optional space can be used to delimit the individual duration pieces.
+
+#### Expressions
+Expressions are strings which provide a way to act on one or more providers' data. Expressions can be used to select sub-properties on an object, access elements in an array, acess the length of an array, evaluate boolean logic or use helper functions to act on data from a provider.
+
+The following operators can be used in boolean logic:
+
+Operator | Description
+--- | --- 
+`==` | Equal. Check that two values are equal to each other
+`!=` | Not equal. Check that two values are not equal to each other
+`>` | Greater than. Check that the left value is greater than the right
+`<` | Less than. Check that the left value is less than the right
+`>=` | Greater than or equal to. Check that the left value is greater than or equal to the right
+`<=` | Less than or equal to. Check that the left value is less than or equal to the right
+
+The following helper functions are also available:
+
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>collect(
+  [<i>item</i>, <i>n</i>] | [<i>item</i>, <i>min</i>, <i>max</i>]
+)
+</code>
+</td>
+<td>
+
+When used in a [declare](#declare) `collect` provides the special ability to "collect" multiple values from a provider into an array. `collect` can be called with two or three arguments. The two argument form creates an array of size *n*. The three argument form creates an array with a randomly selected size between *min* and *max* (both *min* and *max* are inclusive).
+
+When used outside a [declare](#declare), `collect` will simply return the *item*.
+
+See the [declare section](#declare) for an example.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>json_path(<i>query</i>)</code>
+</td>
+<td>
+
+Provides the ability to execute a [json path query](https://goessner.net/articles/JsonPath/index.html) against an object and returns an array of values. The query must be a string literal.
+
+**Example**: `json_path("response.body.ships.*.ids")`
+
+</td>
+</tr>
+<tr>
+<td>
+<code>match(<i>string</i>, <i>regex</i>)</code>
+</td>
+<td>
+
+Allows matching a string against a regex. Returns an object with the matches from the regex. Named matches are supported though any unnamed matches will be a number based on their position. Match `0` is always the portion of the string which the regex matched against. If the regex does not match `null` is returned.
+
+If the first parameter is not a string it will be coerced into a string.
+
+Regex look arounds are not supported.
+
+**Example**:
+
+If a response body were the following:
+
+```
+<html>
+<body>
+Hello, Jean! Today's date is 2038-01-19. So glad you made it!
+</body>
+</html>
+```
+
+Then the following expression:
+
+```
+match("response.body", "Hello, (?P<name>\w+).*(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")
+```
+
+Would return:
+
+```
+{
+  "0": "Jean! Today's date is 2038-01-19",
+  "name": Jean",
+  "y": "2038",
+  "m": "01",
+  "d": "19"
+}
+```
+
+</td>
+</tr>
+<tr>
+<td>
+<code>repeat(<i>n</i>)</code>
+</td>
+<td>
+
+Creates an array of null values with a length of *n*. This is useful when used within a `for_each` to have the `select` expression evaluated multiple times.
+
+**Example**: `repeat(10)`
+
+</td>
+</tr>
+</tbody>
+</table>
+
+#### Headers
 
 #### Headers
 Key/value pairs where the key is a string and the value is a [template string](#Template) which specify the headers which will be sent with a request.

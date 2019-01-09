@@ -430,6 +430,12 @@ mod tests {
 
         let checks = vec![
             ("foo{{bar}}", json::json!({"bar": "bar"}), "foobar", false),
+            // (
+            //     "foo{{bar.bar}}",
+            //     json::json!({"bar": {"bar": "bar"}}),
+            //     "foobar",
+            //     false,
+            // ),
             (
                 r#"epoch {{epoch "s"}}"#,
                 json::json!({}),

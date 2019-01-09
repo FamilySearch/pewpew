@@ -1,13 +1,12 @@
 mod select_parser;
 
 pub use self::select_parser::{
-    Select, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY,
-    RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+    AutoReturn, Select, ValueOrComplexExpression, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE,
+    REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 
 use crate::channel::Limit;
 use crate::mod_interval::{HitsPer, LinearBuilder};
-use crate::request::DeclareProvider;
 use crate::template::json_value_to_string;
 
 use handlebars::Handlebars;
@@ -191,7 +190,7 @@ pub struct Logger {
 #[derive(Deserialize)]
 pub struct Endpoint {
     #[serde(default)]
-    pub declare: BTreeMap<String, DeclareProvider>,
+    pub declare: BTreeMap<String, String>,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
     #[serde(default, deserialize_with = "deserialize_body")]
@@ -399,27 +398,6 @@ impl<'de> Deserialize<'de> for Logger {
     }
 }
 
-impl<'de> Deserialize<'de> for DeclareProvider {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        // `collect(3, foo)` OR `collect(3, 5, foo)`
-        let collect_re =
-            Regex::new(r"^collect\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?,\s*([^)\s]+?)\s*\)$").unwrap();
-        let dp = match collect_re.captures(&s) {
-            Some(captures) => {
-                let min = captures.get(1).unwrap().as_str().parse().unwrap();
-                let max = captures.get(2).and_then(|c| c.as_str().parse().ok());
-                let ident = captures.get(3).unwrap().as_str().to_string();
-                DeclareProvider::Collect(min, max, ident)
-            }
-            None => DeclareProvider::Alias(s),
-        };
-        Ok(dp)
-    }
-}
 impl<'de> Deserialize<'de> for Percent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

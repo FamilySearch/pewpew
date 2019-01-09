@@ -16,7 +16,7 @@ use tokio_threadpool::blocking;
 use std::{io, path::PathBuf};
 
 pub enum Kind {
-    Body(Provider<channel::Receiver<Vec<u8>>>),
+    // Body(Provider<channel::Receiver<Vec<u8>>>),
     Value(Provider<json::Value>),
 }
 
@@ -107,8 +107,9 @@ where
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let i = self.i;
         self.i = (self.i + 1) % self.values.len();
-        Ok(Async::Ready(Some(self.values[self.i].clone())))
+        Ok(Async::Ready(Some(self.values[i].clone())))
     }
 }
 

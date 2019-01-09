@@ -1,7 +1,6 @@
 use futures::{future::join_all, stream, Sink, Stream};
 use hyper::{Body as HyperBody, Method, Request, Response};
-use rand::distributions::{Distribution, Uniform};
-use serde_json::{self as json, Value as JsonValue};
+use serde_json as json;
 use tokio::{
     prelude::*,
     timer::{Error as TimerError, Timeout},
@@ -9,7 +8,7 @@ use tokio::{
 
 use crate::channel;
 use crate::config::{
-    EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, REQUEST_BODY,
+    self, EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, REQUEST_BODY,
     REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
     RESPONSE_STARTLINE, STATS,
 };
@@ -17,7 +16,7 @@ use crate::for_each_parallel::ForEachParallel;
 use crate::load_test::LoadTest;
 use crate::providers;
 use crate::stats;
-use crate::template::{json_value_to_string, textify, TemplateValues};
+use crate::template::{textify, TemplateValues};
 use crate::util::{Either, Either3};
 use crate::zip_all::zip_all;
 
@@ -28,93 +27,14 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-pub enum DeclareProvider {
-    Alias(String),
-    Collect(usize, Option<usize>, String),
+struct Outgoing {
+    select: Select,
+    tx: channel::Sender<json::Value>,
 }
 
-impl DeclareProvider {
-    pub fn resolve(
-        &self,
-        ctx: &LoadTest,
-        name: &str,
-        outgoing: &mut Vec<(Select, channel::Sender<JsonValue>)>,
-    ) -> impl Stream<Item = JsonValue, Error = ()> {
-        match self {
-            DeclareProvider::Alias(s) => {
-                let provider = ctx
-                    .providers
-                    .get(s)
-                    .unwrap_or_else(|| panic!("unknown provider {}", s));
-                match provider {
-                    providers::Kind::Value(provider) => {
-                        if let Some(ar) = provider.auto_return {
-                            let j = json::json!({
-                                "send": ar.to_string(),
-                                "select": name,
-                            });
-                            let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
-                            let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
-                            outgoing.push((select, provider.tx.clone()));
-                        }
-                        Either::A(provider.rx.clone())
-                    }
-                    _ => panic!("Invalid provider referened in declare section, `{}`", s),
-                }
-            }
-            DeclareProvider::Collect(min, max, s) => {
-                let provider = ctx
-                    .providers
-                    .get(s)
-                    .unwrap_or_else(|| panic!("unknown provider {}", s));
-                match provider {
-                    providers::Kind::Value(provider) => {
-                        if let Some(ar) = provider.auto_return {
-                            let j = json::json!({
-                                "send": ar.to_string(),
-                                "select": name,
-                            });
-                            let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
-                            let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
-                            outgoing.push((select, provider.tx.clone()));
-                        }
-                        let min = *min;
-                        let random = max.map(move |max| Uniform::new_inclusive(min, max));
-                        let get_n = move || {
-                            if let Some(random) = random {
-                                random.sample(&mut rand::thread_rng())
-                            } else {
-                                min
-                            }
-                        };
-                        let mut rx = provider.rx.clone();
-                        let mut holder = Vec::with_capacity(get_n());
-                        let b = stream::poll_fn(move || {
-                            let r = match rx.poll() {
-                                Ok(Async::Ready(Some(v))) => {
-                                    holder.push(v);
-                                    if holder.len() == holder.capacity() {
-                                        let inner = JsonValue::Array(std::mem::replace(
-                                            &mut holder,
-                                            Vec::with_capacity(get_n()),
-                                        ));
-                                        Async::Ready(Some(inner))
-                                    } else {
-                                        Async::NotReady
-                                    }
-                                }
-                                Ok(Async::NotReady) => Async::NotReady,
-                                Ok(Async::Ready(None)) => Async::Ready(None),
-                                Err(_) => return Err(()),
-                            };
-                            Ok(r)
-                        });
-                        Either::B(b)
-                    }
-                    _ => panic!("Invalid provider referened in declare section, `{}`", s),
-                }
-            }
-        }
+impl Outgoing {
+    fn new(select: Select, tx: channel::Sender<json::Value>) -> Self {
+        Outgoing { select, tx }
     }
 }
 
@@ -123,7 +43,7 @@ where
     T: Stream<Item = Instant, Error = TimerError> + Send + 'static,
 {
     body: Option<String>,
-    declare: BTreeMap<String, DeclareProvider>,
+    declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
     logs: Vec<(String, Select)>,
     method: Method,
@@ -133,15 +53,16 @@ where
     uri: String,
 }
 
-enum ProviderResponse {
-    Channel(channel::Receiver<Vec<u8>>),
-    Value(JsonValue),
-}
+// enum ProviderResponse {
+//     Channel(channel::Receiver<Vec<u8>>),
+//     Value(json::Value),
+// }
 
 enum StreamsReturn {
-    Body(ProviderResponse),
+    // Body(ProviderResponse),
+    Declare(String, json::Value, Vec<config::AutoReturn>),
     Instant(Instant),
-    TemplateValue((String, JsonValue)),
+    TemplateValue(String, json::Value),
 }
 
 impl<T> Builder<T>
@@ -162,7 +83,7 @@ where
         }
     }
 
-    pub fn declare(mut self, providers: BTreeMap<String, DeclareProvider>) -> Self {
+    pub fn declare(mut self, providers: BTreeMap<String, String>) -> Self {
         self.declare.extend(providers);
         self
     }
@@ -243,7 +164,7 @@ where
                 .get(&k)
                 .unwrap_or_else(|| panic!("undeclared provider `{}`", k));
             let tx = match provider {
-                providers::Kind::Body(_) => panic!("response provider cannot feed a body provider"),
+                // providers::Kind::Body(_) => panic!("response provider cannot feed a body provider"),
                 providers::Kind::Value(p) => p.tx.clone(),
             };
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
@@ -252,7 +173,7 @@ where
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
-            outgoing.push((v, tx));
+            outgoing.push(Outgoing::new(v, tx));
         }
         for (k, v) in self.logs {
             let (tx, _) = ctx
@@ -262,14 +183,14 @@ where
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
-            outgoing.push((v, tx.clone()));
+            outgoing.push(Outgoing::new(v, tx.clone()));
         }
         outgoing.extend(ctx.loggers.values().filter_map(|(tx, select)| {
             if let Some(select) = select {
                 required_providers.extend(select.get_providers().clone());
                 rr_providers |= select.get_special_providers();
                 precheck_rr_providers |= select.get_where_clause_special_providers();
-                Some((select.clone(), tx.clone()))
+                Some(Outgoing::new(select.clone(), tx.clone()))
             } else {
                 None
             }
@@ -282,14 +203,20 @@ where
                 &ctx.static_providers,
             )
         });
-        for (name, d) in &self.declare {
-            required_providers.remove(name);
-            let provider_stream = d.resolve(&ctx, name, &mut outgoing);
-            let name = name.clone();
-            let provider_stream = Either3::B(
-                provider_stream.map(move |v| StreamsReturn::TemplateValue((name.clone(), v))),
-            );
-            streams.push(provider_stream);
+        {
+            let mut required_providers = BTreeSet::new();
+            for (name, d) in self.declare {
+                let vce = config::ValueOrComplexExpression::new(
+                    &d,
+                    &ctx.handlebars,
+                    &mut required_providers,
+                    &ctx.static_providers,
+                );
+                let stream = vce
+                    .into_stream(&ctx.providers)
+                    .map(move |(v, returns)| StreamsReturn::Declare(name.clone(), v, returns));
+                streams.push(Either3::B(stream));
+            }
         }
         // go through the list of required providers and make sure we have them all
         for name in required_providers {
@@ -298,8 +225,8 @@ where
                 .get(&name)
                 .unwrap_or_else(|| panic!("unknown provider `{}`", &name));
             let receiver = match kind {
-                providers::Kind::Body(_) =>
-                    panic!("invalid provider inside template `{}`. Only value providers can be referenced within templates", &name),
+                // providers::Kind::Body(_) =>
+                //     panic!("invalid provider inside template `{}`. Only value providers can be referenced within templates", &name),
                 providers::Kind::Value(s) => {
                     if let Some(ar) = s.auto_return {
                         let j = json::json!({
@@ -308,14 +235,14 @@ where
                         });
                         let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
                         let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
-                        outgoing.push((select, s.tx.clone()));
+                        outgoing.push(Outgoing::new(select, s.tx.clone()));
                     }
                     s.rx.clone()
-                },
+                }
             };
             let provider_stream = Either3::C(
                 Stream::map(receiver, move |v| {
-                    StreamsReturn::TemplateValue((name.clone(), v))
+                    StreamsReturn::TemplateValue(name.clone(), v)
                 })
                 .map_err(|_| panic!("error from provider")),
             );
@@ -351,15 +278,19 @@ where
         let timeout = ctx.config.client.request_timeout;
         let ret = ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
-            let mut body_stream = None;
+            let mut auto_returns = Vec::new();
             for tv in values {
                 match tv {
-                    StreamsReturn::TemplateValue((name, value)) => {
+                    StreamsReturn::Declare(name, value, returns) => {
+                        template_values.insert(name, value);
+                        auto_returns.extend(returns);
+                    }
+                    StreamsReturn::TemplateValue(name, value) => {
                         template_values.insert(name, value);
                     },
-                    StreamsReturn::Body(channel) => {
-                        body_stream = Some(channel);
-                    },
+                    // StreamsReturn::Body(channel) => {
+                    //     body_stream = Some(channel);
+                    // },
                     StreamsReturn::Instant(_) => ()
                 };
             }
@@ -372,18 +303,7 @@ where
                 request.header(key.as_str(), value.as_str());
             }
             let mut body_value = None;
-            let body = if let Some(response) = body_stream {
-                match response {
-                    ProviderResponse::Channel(_) => unimplemented!(),
-                    ProviderResponse::Value(v) => {
-                        let body = json_value_to_string(&v).into_owned();
-                        if rr_providers & REQUEST_BODY != 0 {
-                            body_value = Some(body.clone());
-                        }
-                        body.into()
-                    },
-                }
-            } else if let Some(b) = body.as_mut() {
+            let body = if let Some(b) = body.as_mut() {
                 let body = b.to_string(template_values.as_json());
                 if rr_providers & REQUEST_BODY != 0 {
                     body_value = Some(body.clone());
@@ -433,13 +353,13 @@ where
                 for (k, v) in request.headers() {
                     headers_json.insert(
                         k.as_str().to_string(),
-                        JsonValue::String(
+                        json::Value::String(
                             v.to_str().expect("could not parse HTTP request header as utf8 string")
                                 .to_string()
                         )
                     );
                 }
-                request_obj.insert("headers".into(), JsonValue::Object(headers_json));
+                request_obj.insert("headers".into(), json::Value::Object(headers_json));
             }
             if rr_providers & REQUEST_BODY != 0 {
                 let body_string = body_value.unwrap_or_else(|| "".into());
@@ -506,13 +426,13 @@ where
                         template_values.get_mut("response").unwrap().as_object_mut().unwrap(),
                         &response
                     );
-                    let included_outgoing_indexes: Vec<_> = outgoing.iter().enumerate().filter_map(|(i, (select, _))| {
-                        let where_clause_special_providers = select.get_where_clause_special_providers();
+                    let included_outgoing_indexes: Vec<_> = outgoing.iter().enumerate().filter_map(|(i, o)| {
+                        let where_clause_special_providers = o.select.get_where_clause_special_providers();
                         if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
                             || where_clause_special_providers & STATS == STATS
-                            || select.execute_where(template_values.as_json()) {
+                            || o.select.execute_where(template_values.as_json()) {
                             handle_response_requirements(
-                                select.get_special_providers(),
+                                o.select.get_special_providers(),
                                 &mut response_fields_added,
                                 template_values.get_mut("response").unwrap().as_object_mut().unwrap(),
                                 &response
@@ -532,7 +452,7 @@ where
                                         let value = if let Ok(value) = json::from_str(s) {
                                             value
                                         } else {
-                                            JsonValue::String(s.into())
+                                            json::Value::String(s.into())
                                         };
                                         Ok(Some(value))
                                     })
@@ -557,28 +477,48 @@ where
                                             .insert("body".into(), body);
                                     }
                                     for i in included_outgoing_indexes.iter() {
-                                        let (v, tx) = outgoing.get(*i).unwrap();
-                                        let i = v.as_iter(template_values.as_json().clone());
-                                        match v.get_send_behavior() {
+                                        let o = outgoing.get(*i).unwrap();
+                                        let i = o.select.as_iter(template_values.as_json().clone());
+                                        match o.select.get_send_behavior() {
                                             EndpointProvidesSendOptions::Block => {
-                                                let fut = tx.clone().send_all(stream::iter_ok(i))
+                                                let fut = o.tx.clone().send_all(stream::iter_ok(i))
                                                     .map(|_| ())
                                                     .map_err(|_| panic!("provider channel should not yet be closed"))
                                                     .select(test_timeout.clone().then(|_| Ok(())))
                                                     .then(|_| Ok(()));
-                                                futures.push(Either::A(fut));
+                                                futures.push(Either3::A(fut));
                                             },
                                             EndpointProvidesSendOptions::Force =>
-                                                i.for_each(|v| tx.force_send(v)),
+                                                i.for_each(|v| o.tx.force_send(v)),
                                             EndpointProvidesSendOptions::IfNotFull =>
                                                 for v in i {
-                                                    if tx.try_send(v).is_err() {
+                                                    if o.tx.try_send(v).is_err() {
                                                         break
                                                     }
                                                 },
                                         }
                                     }
-                                    futures.push(Either::B(
+                                    for (send_option, channel, jsons) in auto_returns {
+                                        match send_option {
+                                            EndpointProvidesSendOptions::Block => {
+                                                let fut = channel.send_all(stream::iter_ok(jsons))
+                                                    .map(|_| ())
+                                                    .map_err(|_| panic!("provider channel should not yet be closed"))
+                                                    .select(test_timeout.clone().then(|_| Ok(())))
+                                                    .then(|_| Ok(()));
+                                                futures.push(Either3::B(fut));
+                                            },
+                                            EndpointProvidesSendOptions::Force =>
+                                                jsons.into_iter().for_each(|v| channel.force_send(v)),
+                                            EndpointProvidesSendOptions::IfNotFull =>
+                                                for v in jsons {
+                                                    if channel.try_send(v).is_err() {
+                                                        break
+                                                    }
+                                                },
+                                        }
+                                    }
+                                    futures.push(Either3::C(
                                         stats_tx.send(
                                             stats::ResponseStat {
                                                 endpoint_id,
@@ -621,7 +561,7 @@ fn duration_to_nanos(d: &Duration) -> u128 {
 fn handle_response_requirements(
     bitwise: u16,
     response_fields_added: &mut u16,
-    rp: &mut json::map::Map<String, JsonValue>,
+    rp: &mut json::map::Map<String, json::Value>,
     response: &Response<HyperBody>,
 ) {
     // check if we need the response startline and it hasn't already been set
@@ -640,14 +580,14 @@ fn handle_response_requirements(
         for (k, v) in response.headers() {
             headers_json.insert(
                 k.as_str().to_string(),
-                JsonValue::String(
+                json::Value::String(
                     v.to_str()
                         .expect("could not parse HTTP response header as utf8 string")
                         .to_string(),
                 ),
             );
         }
-        rp.insert("headers".into(), JsonValue::Object(headers_json));
+        rp.insert("headers".into(), json::Value::Object(headers_json));
     }
     // check if we need the response body and it hasn't already been set
     if ((bitwise & RESPONSE_BODY) ^ (*response_fields_added & RESPONSE_BODY)) != 0 {

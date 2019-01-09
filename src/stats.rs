@@ -400,7 +400,7 @@ impl AggregateStats {
                 let summary_type = if bucket_summary { "bucket" } else { "test" };
                 let output = json::json!({
                     "startTime": self.time,
-                    "time": self.time + self.duration,
+                    "timestamp": self.time + self.duration,
                     "summaryType": summary_type,
                     "method": method,
                     "url": url,

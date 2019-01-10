@@ -1,14 +1,11 @@
 # TODOs
-- Get rid of handlebars. Change all template interpolation from `{{}}` syntax to `${}`. Interpolation will use standard expressions
 - Make sure auto_returns are always sent back to the provider. This currently doesn't happen if the request fails.
 - Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
 - Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
-- Clarify in the documentation where templates are used vs expressions
 - Log when a request is waiting for a provider
 - Ensure a bucket summary doesn't get printed in the middle of the test summary
-- Add ability to parse substring/strings out of a string with a regex. If no capture groups then just a single string will return if it matches. If there are capture groups and object will be provided with the capture group number or name as the key and the matche as the value. It should skip capture group 0.
 - Different endpoint parameters selected randomly based on percentages
-- Allow mathematical expressions in template
+- Allow math in expressions
 - Allow repeat to be a random number within a range
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
 - Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.

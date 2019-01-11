@@ -8,24 +8,63 @@ use tokio::{
 
 use crate::channel;
 use crate::config::{
-    self, EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, REQUEST_BODY,
-    REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    self, EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, Template,
+    REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
     RESPONSE_STARTLINE, STATS,
 };
 use crate::for_each_parallel::ForEachParallel;
 use crate::load_test::LoadTest;
 use crate::providers;
 use crate::stats;
-use crate::template::{textify, TemplateValues};
 use crate::util::{Either, Either3};
 use crate::zip_all::zip_all;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ops::{Deref, DerefMut},
     str,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
+
+#[derive(Debug)]
+pub struct TemplateValues(json::Value);
+
+impl TemplateValues {
+    pub fn new() -> Self {
+        TemplateValues(json::Value::Object(json::Map::new()))
+    }
+
+    pub fn as_json(&self) -> &json::Value {
+        &self.0
+    }
+}
+
+impl Deref for TemplateValues {
+    type Target = json::Map<String, json::Value>;
+
+    fn deref(&self) -> &Self::Target {
+        match &self.0 {
+            json::Value::Object(o) => o,
+            _ => panic!("cannot deref json value as object"),
+        }
+    }
+}
+
+impl DerefMut for TemplateValues {
+    fn deref_mut(&mut self) -> &mut json::Map<String, json::Value> {
+        match &mut self.0 {
+            json::Value::Object(o) => o,
+            _ => panic!("cannot deref json value as object"),
+        }
+    }
+}
+
+impl From<json::Value> for TemplateValues {
+    fn from(map: json::Value) -> Self {
+        TemplateValues(map)
+    }
+}
 
 struct Outgoing {
     select: Select,
@@ -135,22 +174,14 @@ where
             false
         };
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
-        let uri = textify(
-            self.uri,
-            ctx.handlebars.clone(),
-            &mut required_providers,
-            &ctx.static_providers,
-        );
+        let uri = Template::new(&self.uri, &ctx.static_providers);
+        required_providers.extend(uri.get_providers().clone());
         let headers: BTreeMap<_, _> = self
             .headers
             .into_iter()
             .map(|(key, v)| {
-                let value = textify(
-                    v,
-                    ctx.handlebars.clone(),
-                    &mut required_providers,
-                    &ctx.static_providers,
-                );
+                let value = Template::new(&v, &ctx.static_providers);
+                required_providers.extend(value.get_providers().clone());
                 (key.to_lowercase(), value)
             })
             .collect();
@@ -196,19 +227,15 @@ where
             }
         }));
         let mut body = self.body.map(|body| {
-            textify(
-                body,
-                ctx.handlebars.clone(),
-                &mut required_providers,
-                &ctx.static_providers,
-            )
+            let value = Template::new(&body, &ctx.static_providers);
+            required_providers.extend(value.get_providers().clone());
+            value
         });
         {
             let mut required_providers = BTreeSet::new();
             for (name, d) in self.declare {
                 let vce = config::ValueOrComplexExpression::new(
                     &d,
-                    &ctx.handlebars,
                     &mut required_providers,
                     &ctx.static_providers,
                 );
@@ -234,7 +261,7 @@ where
                             "select": name,
                         });
                         let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
-                        let select = Select::new(eppp, &ctx.handlebars, &ctx.static_providers);
+                        let select = Select::new(eppp, &ctx.static_providers);
                         outgoing.push(Outgoing::new(select, s.tx.clone()));
                     }
                     s.rx.clone()
@@ -295,16 +322,16 @@ where
                 };
             }
             let mut request = Request::builder();
-            let url = uri.to_string(template_values.as_json());
+            let url = uri.evaluate(&template_values.0);
             request.uri(&url);
             request.method(method.clone());
             for (key, v) in &headers {
-                let value = v.to_string(template_values.as_json());
+                let value = v.evaluate(&template_values.0);
                 request.header(key.as_str(), value.as_str());
             }
             let mut body_value = None;
             let body = if let Some(b) = body.as_mut() {
-                let body = b.to_string(template_values.as_json());
+                let body = b.evaluate(&template_values.0);
                 if rr_providers & REQUEST_BODY != 0 {
                     body_value = Some(body.clone());
                 }

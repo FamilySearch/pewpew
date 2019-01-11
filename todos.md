@@ -1,6 +1,11 @@
 # TODOs
 - Make sure auto_returns are always sent back to the provider. This currently doesn't happen if the request fails.
+- Make the url sent with stats_id always have the "*"s by evaluating the template before the test run.
 - Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
+- Add a `range` function in expressions. It would create an array representing the range. Ex: `range(2, 5)` would create the array `[2, 3, 4, 5]`. Parameters can also be more than just number literals
+- Add a `min` and `max` function in expressions. It would choose the smaller or larger number respectively of the numbers in the arguments.
+- Allow option to support templates within static providers
+- Allow declare expressions to reference other declare variables as long as there's no recursive references
 - Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
 - Log when a request is waiting for a provider
 - Ensure a bucket summary doesn't get printed in the middle of the test summary

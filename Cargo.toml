@@ -1,6 +1,6 @@
 [package]
 name = "pewpew"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2018"
 
 [dependencies]
@@ -12,7 +12,6 @@ csv = "1"
 chrono = "0.4"
 fnv = "1"
 futures = "0.1"
-handlebars = "1"
 hdrhistogram = "6"
 hyper = "0.12"
 hyper-tls = "0.3"

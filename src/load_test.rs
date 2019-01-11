@@ -3,7 +3,6 @@ use crate::config;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, StatsMessage};
-use crate::template::{encode_helper, epoch_helper, join_helper, pad_helper, stringify_helper};
 use chrono::{Duration as ChronoDuration, Local};
 use futures::{
     future::{join_all, lazy, Shared},
@@ -13,7 +12,6 @@ use futures::{
         oneshot,
     },
 };
-use handlebars::Handlebars;
 pub use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
@@ -36,7 +34,6 @@ pub struct LoadTest {
     duration: Duration,
     // a list of futures for the endpoint tasks to run
     endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
-    pub handlebars: Arc<Handlebars>,
     // a mapping of names to their prospective static (single value) providers
     pub static_providers: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
@@ -54,15 +51,6 @@ pub struct LoadTest {
 
 impl LoadTest {
     pub fn new(config: config::LoadTest, config_path: PathBuf) -> Self {
-        let mut handlebars = Handlebars::new();
-        handlebars.register_helper("epoch", Box::new(epoch_helper));
-        handlebars.register_helper("join", Box::new(join_helper));
-        handlebars.register_helper("stringify", Box::new(stringify_helper));
-        handlebars.register_helper("start_pad", Box::new(pad_helper));
-        handlebars.register_helper("end_pad", Box::new(pad_helper));
-        handlebars.register_helper("encode", Box::new(encode_helper));
-        handlebars.set_strict_mode(true);
-        let handlebars = Arc::new(handlebars);
         let mut providers = BTreeMap::new();
         let mut static_providers = BTreeMap::new();
 
@@ -108,7 +96,7 @@ impl LoadTest {
         }
         let providers = providers.into();
 
-        let eppp_to_select = |eppp| config::Select::new(eppp, &handlebars, &static_providers);
+        let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
 
         let loggers = config
             .loggers
@@ -205,7 +193,6 @@ impl LoadTest {
             client: Arc::new(client),
             duration,
             endpoint_calls: Vec::new(),
-            handlebars,
             loggers,
             providers,
             static_providers,

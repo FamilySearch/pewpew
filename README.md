@@ -473,8 +473,8 @@ A *declare_section* provides the ability to select multiple values from a single
 ```yaml
 endpoints:
   - method: PUT
-    url: https://localhost/ship/{{shipId}}/speed
-    body: '{"shipId":"{{shipId}}","kesselRunTime":75}'
+    url: https://localhost/ship/${shipId}/speed
+    body: '{"shipId":"${shipId}","kesselRunTime":75}'
 ```
 
 both references to the provider `shipId` will resolve to the same value, which in many cases is desired.
@@ -488,7 +488,7 @@ endpoints:
       shipIds: collect(shipId, 3, 5)
     method: DELETE
     url: https://localhost/ships
-    body: '{"shipIds":{{shipIds}}}'
+    body: '{"shipIds":${shipIds}}'
 ```
 Calls the endpoint `DELETE /ships` where the body is interpolated with an array of ship ids. `shipIds` will have a length between three and five.
 
@@ -499,7 +499,7 @@ endpoints:
   - declare:
       destroyedShipId: shipId
     method: PUT
-    url: https://localhost/ship/{{shipId}}/destroys/{{destroyedShipId}}
+    url: https://localhost/ship/${shipId}/destroys/${destroyedShipId}
 ```
 Calls `PUT` on an endpoint where `shipId` and `destroyedShipId` are interpolated to different values.
 
@@ -597,7 +597,7 @@ provides:
     select:
       name: for_each[0]
     for_each:
-      - json_path("response.body.*.name")
+      - json_path("response.body.characters.*.name")
 ```
 
 The `names` provider would be sent the following values: `{ "name": "Luke Skywalker" }`, `{ "name": "Darth Vader" }`, `{ "name": "R2-D2" }`.
@@ -679,9 +679,12 @@ The following helper functions are also available:
 <tbody>
 <tr>
 <td>
-<code>collect(
-  [<i>item</i>, <i>n</i>] | [<i>item</i>, <i>min</i>, <i>max</i>]
-)
+
+<code>collect(<i>item</i>, <i>n</i>)</code>
+
+or
+
+<code>collect(<i>item</i>, <i>min</i>, <i>max</i>)</code>
 </code>
 </td>
 <td>
@@ -691,6 +694,69 @@ When used in a [declare](#declare) `collect` provides the special ability to "co
 When used outside a [declare](#declare), `collect` will simply return the *item*.
 
 See the [declare section](#declare) for an example.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>encode(<i>value</i>, <i>encoding</i>)</code>
+</td>
+<td>
+
+Encode a string with the given encoding.
+
+*value* - any expression. The result of the expression will be coerced to a string if needed and then encoded with the specified encoding.<br/>
+*encoding* - The encoding to be used. Encoding must be one of the following string literals:
+- `"percent-simple"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E.
+- `"percent-query"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
+- `"percent"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
+- `"percent-path"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
+- `"percent-userinfo"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
+
+**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?${encode(baz, "percent-userinfo"}` would resolve to `https://localhost/abc?foo%3Dbar`.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>end_pad(<i>value</i>, <i>min_length</i>, <i>pad_string</i>)</code>
+</td>
+<td>
+
+Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
+
+*value* - an expression whose value will be coerced to a string if needed.<br/>
+*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+**Example**: with the value `"Jones"` from a provider named `lastName`, then the string `${end_pad(lastName, 8, "-")}` would resolve to `Jones---`.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>epoch(<i>unit</i>)</code>
+</td>
+<td>
+
+Returns time since the unix epoch.
+
+*unit* - A string literal of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds).
+
+</td>
+</tr>
+<tr>
+<td>
+<code>join(<i>value</i>, <i>separator</i>)</code>
+</td>
+<td>
+
+Turns an array of values into a string.
+
+*value* - any expression. When the expression resolves to an array, the elements of the array are coerced to a string if needed and are then joined together to a single string using the specified separator. When *value* does not resolve to an array, it is coerced to a string and returned.<br/>
+*separator* - a string literal which will be used between each element in the array.
+
+**Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a=${join(qux, "-")}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
 
 </td>
 </tr>
@@ -752,13 +818,35 @@ Would return:
 </tr>
 <tr>
 <td>
+
 <code>repeat(<i>n</i>)</code>
+
+or
+
+<code>repeat(<i>min</i>, </i>max</i>)</code>
+
 </td>
 <td>
 
-Creates an array of null values with a length of *n*. This is useful when used within a `for_each` to have the `select` expression evaluated multiple times.
+Creates an array of `null` values. The single argument version creates an array with a length of *n*. The three argument form creates an array with a randomly selected size between min and max (both min and max are inclusive). This is mainly useful when used within a `for_each` to have the `select` expression evaluated multiple times.
 
 **Example**: `repeat(10)`
+
+</td>
+</tr>
+<tr>
+<td>
+<code>start_pad(<i>value</i>, <i>min_length</i>, <i>pad_string</i>)</code>
+</td>
+<td>
+
+Pads a string or number to be minimum length. Any added padding will be added to the start of the string.
+
+*value* - an expression whose value will be coerced to a string if needed.<br/>
+*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
+*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
+
+**Example**: with the value `83` from a provider named `foo`, then the string `id=${start_pad(foo, 6, "0")}` would resolve to `id=000083`.
 
 </td>
 </tr>
@@ -768,7 +856,7 @@ Creates an array of null values with a length of *n*. This is useful when used w
 #### Headers
 
 #### Headers
-Key/value pairs where the key is a string and the value is a [template string](#Template) which specify the headers which will be sent with a request.
+Key/value pairs where the key is a string and the value is a [template string](#Templates) which specify the headers which will be sent with a request.
 
 For example:
 
@@ -776,103 +864,9 @@ For example:
 endpoints:
   url: https://localhost/foo/bar
   headers:
-    Authorization: Bearer {{sessionId}}
+    Authorization: Bearer ${sessionId}
 ```
 specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".
 
 #### Templates
-Templates are special string values which can be interpolated with values from providers or by using helper functions. Interpolation is done by enclosing a provider name or helper function in double curly braces. For example: `{{foo}}-bar` creates a string where a value from a provider named foo is interpolated before the string value `-bar`. `{{join baz "."}}` uses the `join` helper (documented below) to create a string value which pulls from a provider named "baz". 
-
-With helper functions the parameters are specified after the function name and are delimited with spaces. String literals arguments must use doublequotes.
-
-The following are the available helper functions:
-
-<table>
-<thead>
-<tr>
-<th>Helper</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>encode <i>provider</i> <i>encoding</i></code>
-</td>
-<td>
-
-Encode a string with the given encoding.
-
-*provider* - a reference to a provider value or one of its properties which is a string.<br/>
-*encoding* - The encoding to be used. Encoding must be one of the following string literals:
-- `"percent-simple"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E.
-- `"percent-query"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
-- `"percent"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
-- `"percent-path"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
-- `"percent-userinfo"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
-
-**Example**: with the value `foo=bar` from a provider named `baz`, then the string `https://localhost/abc?{{encode baz "percent-userinfo"}}` would resolve to `https://localhost/abc?foo%3Dbar`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>epoch <i>unit</i></code>
-</td>
-<td>
-
-Returns time since the unix epoch.
-
-*unit* - A string literal of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds).
-
-</td>
-</tr>
-<tr>
-<td>
-<code>join <i>provider</i> <i>separator</i></code>
-</td>
-<td>
-
-Turns an array of values into a string.
-
-*provider* - a reference to a provider value or one of its properties which is an array.<br/>
-*separator* - a string literal which will be used between each element in the array.
-
-**Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a={{join qux "-"}}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>start_pad <i>provider</i> <i>min_length</i> <i>pad_string</i></code>
-</td>
-<td>
-
-Pads a string or number to be minimum length. Any added padding will be added to the start of the string.
-
-*provider* - a reference to a provider value or one of its properties which is a string or number.<br/>
-*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
-*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
-
-**Example**: with the value `83` from a provider named `foo`, then the string `id={{start_pad foo 6 "0"}}` would resolve to `id=000083`.
-
-</td>
-</tr>
-<tr>
-<td>
-<code>end_pad <i>provider</i> <i>min_length</i> <i>pad_string</i></code>
-</td>
-<td>
-
-Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
-
-*provider* - a reference to a provider value or one of its properties which is a string or number.<br/>
-*min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
-*pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
-
-**Example**: with the value `"Jones"` from a provider named `lastName`, then the string `{{end_pad lastName 8 "-"}}` would resolve to `Jones---`.
-
-</td>
-</tr>
-</tbody>
-</table>
+Templates are special string values which can be interpolated with [expressions](#Expressions). Interpolation is done by enclosing the [expression](#Expressions) in `${ }`. For example: `${foo}-bar` creates a string where a value from a provider named foo is interpolated before the string value `-bar`. `${join(baz, ".")}` uses the `join` helper to create a string value derived from a value coming from the provider "baz". 

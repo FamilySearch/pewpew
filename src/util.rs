@@ -3,11 +3,23 @@ use regex::Regex;
 use serde_json as json;
 use tokio::prelude::*;
 
-use std::{cmp::PartialEq, fmt};
+use std::{borrow::Cow, cmp::PartialEq, fmt};
 
 pub enum Either<A, B> {
     A(A),
     B(B),
+}
+
+impl<A, B> Either<A, B> {
+    pub fn map_a<F, R>(self, t_fn: F) -> Either<R, B>
+    where
+        F: FnOnce(A) -> R,
+    {
+        match self {
+            Either::A(a) => Either::A(t_fn(a)),
+            Either::B(b) => Either::B(b),
+        }
+    }
 }
 
 impl<A, B> Stream for Either<A, B>
@@ -173,7 +185,20 @@ pub fn str_to_json(s: &str) -> json::Value {
     json::from_str(s).unwrap_or_else(|_| json::Value::String(s.into()))
 }
 
-// TODO: make this more versatile so ['request'].body is parsed properly
+pub fn json_value_to_string(v: &json::Value) -> Cow<'_, String> {
+    match v {
+        json::Value::String(s) => Cow::Borrowed(s),
+        _ => Cow::Owned(v.to_string()),
+    }
+}
+
+pub fn json_value_into_string(v: json::Value) -> String {
+    match v {
+        json::Value::String(s) => s,
+        _ => v.to_string(),
+    }
+}
+
 pub fn parse_provider_name(s: &str) -> &str {
     // parse out the provider name, or if it's `request` or `response` get the second layer
     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
@@ -183,4 +208,24 @@ pub fn parse_provider_name(s: &str) -> &str {
         .get(1)
         .expect("invalid json path query")
         .as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_value_to_string_works() {
+        let expect = r#"{"foo":123}"#;
+        let json = json::json!({"foo": 123});
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
+
+        let expect = r#"asdf " foo"#;
+        let json = expect.to_string().into();
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
+
+        let expect = r#"["foo",1,2,3,null]"#;
+        let json = json::json!(["foo", 1, 2, 3, null]);
+        assert_eq!(json_value_to_string(&json).as_str(), expect);
+    }
 }

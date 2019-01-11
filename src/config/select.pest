@@ -54,7 +54,13 @@ boolean = { "true" | "false" }
 
 null = { "null" }
 
-entry_point = _ { SOI ~ complex_expression ~ EOI }
+entry_point = _{ SOI ~ complex_expression ~ EOI }
+
+template_not_expression = ${ (!"${" ~ (("\\" ~ ANY) | ANY))+ }
+
+template_expression = !{ "${" ~ complex_expression ~ "}" }
+
+template_entry_point = @{ SOI ~ ( template_expression | template_not_expression )* ~ EOI }
 
 complex_expression = _{
     (simple_expression | group_expression) ~

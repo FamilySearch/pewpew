@@ -1,15 +1,15 @@
+mod expression_functions;
 mod select_parser;
 
 pub use self::select_parser::{
-    AutoReturn, Select, ValueOrComplexExpression, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE,
-    REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+    AutoReturn, Select, Template, ValueOrComplexExpression, REQUEST_BODY, REQUEST_HEADERS,
+    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 
 use crate::channel::Limit;
 use crate::mod_interval::{HitsPer, LinearBuilder};
-use crate::template::json_value_to_string;
+use crate::util::json_value_into_string;
 
-use handlebars::Handlebars;
 use hyper::Method;
 use regex::Regex;
 use serde::{
@@ -459,14 +459,12 @@ where
         .map(|(k, v)| {
             (
                 k.to_string_lossy().into_owned(),
-                v.to_string_lossy().into_owned(),
+                v.to_string_lossy().into_owned().into(),
             )
         })
         .collect();
-    let handlebars = Handlebars::new();
-    handlebars
-        .render_template(&template, &vars)
-        .map_err(DeError::custom)
+    let template = Template::new(&template, &vars);
+    Ok(template.evaluate(&json::Value::Null))
 }
 
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
@@ -507,7 +505,7 @@ where
     D: Deserializer<'de>,
 {
     let res: Option<json::Value> = Option::deserialize(deserializer)?;
-    Ok(res.as_ref().map(|v| json_value_to_string(v).into_owned()))
+    Ok(res.map(json_value_into_string))
 }
 
 fn deserialize_logs<'de, D>(

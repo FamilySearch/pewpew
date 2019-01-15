@@ -318,13 +318,13 @@ fn create_date_diff(start: u64, end: u64) -> String {
         .with_timezone(&Local);
     let end = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp((end) as i64, 0), Utc)
         .with_timezone(&Local);
-    let fmt2 = "%R %-e-%b-%Y";
+    let fmt2 = "%T %-e-%b-%Y";
     let fmt = if start.date() == end.date() {
-        "%R"
+        "%T"
     } else {
         fmt2
     };
-    format!("{} to {}", start.format(&fmt), end.format(&fmt2))
+    format!("{} to {}", start.format(fmt), end.format(fmt2))
 }
 
 impl AggregateStats {
@@ -529,6 +529,19 @@ where
                 (cmp::min(a1, a2), cmp::max(b1, b2))
             });
         end += duration;
+        for (_, time_buckets) in stats.buckets.values() {
+            let end_time_secs = {
+                let mut bucket_values = time_buckets.values();
+                let first = bucket_values
+                    .next()
+                    .expect("bucket unexpectedly empty")
+                    .time;
+                bucket_values.next_back().map(|v| v.time).unwrap_or(first)
+            };
+            if end_time_secs > stats.last_print_time.get() {
+                stats.print_summary(end_time_secs, summary_output_format);
+            }
+        }
         for (i, (stats_id, time_buckets)) in stats.buckets.values().enumerate() {
             let mut summary = {
                 let (start_time_secs, mut end_time_secs) = {
@@ -542,9 +555,6 @@ where
                 };
                 if start_time_secs == end_time_secs {
                     end_time_secs += duration;
-                }
-                if end_time_secs > stats.last_print_time.get() {
-                    stats.print_summary(end_time_secs, summary_output_format);
                 }
                 let duration = Duration::from_secs(end_time_secs - start_time_secs);
                 AggregateStats::new(start_time_secs, duration)

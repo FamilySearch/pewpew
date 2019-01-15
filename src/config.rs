@@ -223,15 +223,6 @@ impl EndpointProvidesSendOptions {
             false
         }
     }
-
-    pub fn to_string(self) -> String {
-        match self {
-            EndpointProvidesSendOptions::Block => "block",
-            EndpointProvidesSendOptions::Force => "force",
-            EndpointProvidesSendOptions::IfNotFull => "if_not_full",
-        }
-        .to_string()
-    }
 }
 
 impl Default for EndpointProvidesSendOptions {

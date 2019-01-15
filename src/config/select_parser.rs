@@ -231,30 +231,26 @@ impl Path {
                 let s2 = s.clone();
                 let b = providers
                     .get(&*s2)
-                    .map(move |p| {
+                    .map(move |provider| {
                         let s = s2.clone();
-                        match p {
-                            providers::Kind::Value(provider) => {
-                                let auto_return = provider.auto_return;
-                                let tx = provider.tx.clone();
-                                provider
-                                    .rx
-                                    .clone()
-                                    .into_future()
-                                    .map_err(move |_| DeclareError::ProviderEnded((&*s).clone()))
-                                    .and_then(move |(v, _)| {
-                                        v.map(move |v| {
-                                            let mut outgoing = Vec::new();
-                                            if let Some(ar) = auto_return {
-                                                outgoing.push((ar, tx, vec![v.clone()]));
-                                            }
-                                            let v = index_json2(&v, &rest);
-                                            (v, outgoing)
-                                        })
-                                        .ok_or_else(|| DeclareError::ProviderEnded((&*s2).clone()))
-                                    })
-                            }
-                        }
+                        let auto_return = provider.auto_return;
+                        let tx = provider.tx.clone();
+                        provider
+                            .rx
+                            .clone()
+                            .into_future()
+                            .map_err(move |_| DeclareError::ProviderEnded((&*s).clone()))
+                            .and_then(move |(v, _)| {
+                                v.map(move |v| {
+                                    let mut outgoing = Vec::new();
+                                    if let Some(ar) = auto_return {
+                                        outgoing.push((ar, tx, vec![v.clone()]));
+                                    }
+                                    let v = index_json2(&v, &rest);
+                                    (v, outgoing)
+                                })
+                                .ok_or_else(|| DeclareError::ProviderEnded((&*s2).clone()))
+                            })
                     })
                     .ok_or_else(move || DeclareError::UnknownProvider((&*s).clone()))
                     .into_future()

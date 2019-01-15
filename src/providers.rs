@@ -15,10 +15,7 @@ use tokio_threadpool::blocking;
 
 use std::{io, path::PathBuf};
 
-pub enum Kind {
-    // Body(Provider<channel::Receiver<Vec<u8>>>),
-    Value(Provider<json::Value>),
-}
+pub type Kind = Provider<json::Value>;
 
 pub struct Provider<T> {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
@@ -77,11 +74,11 @@ where
         .then(|_| Ok(()));
 
     tokio::spawn(prime_tx);
-    Kind::Value(Provider {
+    Provider {
         auto_return: template.auto_return,
         rx,
         tx,
-    })
+    }
 }
 
 #[must_use = "streams do nothing unless polled"]
@@ -115,11 +112,11 @@ where
 
 pub fn response(template: config::ResponseProvider) -> Kind {
     let (tx, rx) = channel::channel(template.buffer);
-    Kind::Value(Provider {
+    Provider {
         auto_return: template.auto_return,
         tx,
         rx,
-    })
+    }
 }
 
 pub fn literals<F>(
@@ -142,11 +139,11 @@ where
         .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Kind::Value(Provider {
+    Provider {
         auto_return,
         tx,
         rx,
-    })
+    }
 }
 
 pub fn range<F>(range: config::RangeProvider, test_complete: Shared<F>) -> Kind
@@ -163,11 +160,11 @@ where
         .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Kind::Value(Provider {
+    Provider {
         auto_return: None,
         tx,
         rx,
-    })
+    }
 }
 
 pub fn logger<F>(

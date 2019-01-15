@@ -368,33 +368,29 @@ impl JsonPath {
         let jp2 = self.clone();
         providers
             .get(&self.provider)
-            .map(move |p| {
+            .map(move |provider| {
                 let jp2 = jp.clone();
                 let jp3 = jp.clone();
-                match p {
-                    providers::Kind::Value(provider) => {
-                        let auto_return = provider.auto_return;
-                        let tx = provider.tx.clone();
-                        provider
-                            .rx
-                            .clone()
-                            .into_future()
-                            .map_err(move |_| DeclareError::ProviderEnded(jp.provider.clone()))
-                            .and_then(move |(v, _)| {
-                                v.ok_or_else(|| DeclareError::ProviderEnded(jp2.provider.clone()))
-                            })
-                            .map(move |v| {
-                                let v = json::json!({ &*jp3.provider: v });
-                                let result = jp3.evaluate(&v);
-                                let outgoing = if let Some(ar) = auto_return {
-                                    vec![(ar, tx, vec![v.clone()])]
-                                } else {
-                                    Vec::new()
-                                };
-                                (result, outgoing)
-                            })
-                    }
-                }
+                let auto_return = provider.auto_return;
+                let tx = provider.tx.clone();
+                provider
+                    .rx
+                    .clone()
+                    .into_future()
+                    .map_err(move |_| DeclareError::ProviderEnded(jp.provider.clone()))
+                    .and_then(move |(v, _)| {
+                        v.ok_or_else(|| DeclareError::ProviderEnded(jp2.provider.clone()))
+                    })
+                    .map(move |v| {
+                        let v = json::json!({ &*jp3.provider: v });
+                        let result = jp3.evaluate(&v);
+                        let outgoing = if let Some(ar) = auto_return {
+                            vec![(ar, tx, vec![v.clone()])]
+                        } else {
+                            Vec::new()
+                        };
+                        (result, outgoing)
+                    })
             })
             .ok_or_else(move || DeclareError::UnknownProvider(jp2.provider.clone()))
             .into_future()

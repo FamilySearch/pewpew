@@ -8,13 +8,11 @@ use tokio::{
 
 use crate::channel;
 use crate::config::{
-    self, EndpointProvidesPreProcessed, EndpointProvidesSendOptions, Select, Template,
-    REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
-    RESPONSE_STARTLINE, STATS,
+    self, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
+    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 use crate::for_each_parallel::ForEachParallel;
 use crate::load_test::LoadTest;
-use crate::providers;
 use crate::stats;
 use crate::util::{Either, Either3};
 use crate::zip_all::zip_all;
@@ -101,7 +99,7 @@ enum StreamsReturn {
     // Body(ProviderResponse),
     Declare(String, json::Value, Vec<config::AutoReturn>),
     Instant(Instant),
-    TemplateValue(String, json::Value),
+    TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
 impl<T> Builder<T>
@@ -194,10 +192,7 @@ where
                 .providers
                 .get(&k)
                 .unwrap_or_else(|| panic!("undeclared provider `{}`", k));
-            let tx = match provider {
-                // providers::Kind::Body(_) => panic!("response provider cannot feed a body provider"),
-                providers::Kind::Value(p) => p.tx.clone(),
-            };
+            let tx = provider.tx.clone();
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
                 limits.push(tx.limit());
             }
@@ -248,29 +243,20 @@ where
         }
         // go through the list of required providers and make sure we have them all
         for name in required_providers {
-            let kind = ctx
+            let provider = ctx
                 .providers
                 .get(&name)
                 .unwrap_or_else(|| panic!("unknown provider `{}`", &name));
-            let receiver = match kind {
-                // providers::Kind::Body(_) =>
-                //     panic!("invalid provider inside template `{}`. Only value providers can be referenced within templates", &name),
-                providers::Kind::Value(s) => {
-                    if let Some(ar) = s.auto_return {
-                        let j = json::json!({
-                            "send": ar.to_string(),
-                            "select": name,
-                        });
-                        let eppp: EndpointProvidesPreProcessed = json::from_value(j).unwrap();
-                        let select = Select::new(eppp, &ctx.static_providers);
-                        outgoing.push(Outgoing::new(select, s.tx.clone()));
-                    }
-                    s.rx.clone()
-                }
-            };
+            let receiver = provider.rx.clone();
+            let ar = provider
+                .auto_return
+                .map(|send_option| (send_option, provider.tx.clone()));
             let provider_stream = Either3::C(
                 Stream::map(receiver, move |v| {
-                    StreamsReturn::TemplateValue(name.clone(), v)
+                    let ar = ar
+                        .clone()
+                        .map(|(send_option, tx)| (send_option, tx, vec![v.clone()]));
+                    StreamsReturn::TemplateValue(name.clone(), v, ar)
                 })
                 .map_err(|_| panic!("error from provider")),
             );
@@ -313,12 +299,12 @@ where
                         template_values.insert(name, value);
                         auto_returns.extend(returns);
                     }
-                    StreamsReturn::TemplateValue(name, value) => {
+                    StreamsReturn::TemplateValue(name, value, auto_return) => {
                         template_values.insert(name, value);
+                        if let Some(ar) = auto_return {
+                            auto_returns.push(ar);
+                        }
                     },
-                    // StreamsReturn::Body(channel) => {
-                    //     body_stream = Some(channel);
-                    // },
                     StreamsReturn::Instant(_) => ()
                 };
             }
@@ -405,6 +391,7 @@ where
             let method2 = method.clone();
             let outgoing = outgoing.clone();
             let test_timeout = test_timeout.clone();
+            let test_timeout2 = test_timeout.clone();
             let url2 = url.clone();
             let timeout_in_ms = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
             Timeout::new(response_future, timeout)
@@ -514,7 +501,7 @@ where
                                                     .map_err(|_| panic!("provider channel should not yet be closed"))
                                                     .select(test_timeout.clone().then(|_| Ok(())))
                                                     .then(|_| Ok(()));
-                                                futures.push(Either3::A(fut));
+                                                futures.push(Either::A(fut));
                                             },
                                             EndpointProvidesSendOptions::Force =>
                                                 i.for_each(|v| o.tx.force_send(v)),
@@ -526,27 +513,7 @@ where
                                                 },
                                         }
                                     }
-                                    for (send_option, channel, jsons) in auto_returns {
-                                        match send_option {
-                                            EndpointProvidesSendOptions::Block => {
-                                                let fut = channel.send_all(stream::iter_ok(jsons))
-                                                    .map(|_| ())
-                                                    .map_err(|_| panic!("provider channel should not yet be closed"))
-                                                    .select(test_timeout.clone().then(|_| Ok(())))
-                                                    .then(|_| Ok(()));
-                                                futures.push(Either3::B(fut));
-                                            },
-                                            EndpointProvidesSendOptions::Force =>
-                                                jsons.into_iter().for_each(|v| channel.force_send(v)),
-                                            EndpointProvidesSendOptions::IfNotFull =>
-                                                for v in jsons {
-                                                    if channel.try_send(v).is_err() {
-                                                        break
-                                                    }
-                                                },
-                                        }
-                                    }
-                                    futures.push(Either3::C(
+                                    futures.push(Either::B(
                                         stats_tx.send(
                                             stats::ResponseStat {
                                                 endpoint_id,
@@ -557,27 +524,48 @@ where
                                                 url,
                                             }.into()
                                         )
-                                        .and_then(|_| Ok(()))
+                                        .map(|_| ())
                                         .map_err(|e| panic!("unexpected error trying to send stats, {}", e))
                                     ));
                                 },
                                 Err(ref err) => eprint!("{}", format!("err getting body: {:?}\n took {}ms\n", err, rtt))
                             }
                             join_all(futures)
-                                .and_then(|_| Ok(()))
+                                .map(|_| ())
                         })
                 // all error cases should have been handled before catching them here
-                }).then(|_| Ok(()))
+                }).then(move |_| {
+                    let mut futures = Vec::new();
+                    for (send_option, channel, jsons) in auto_returns {
+                        match send_option {
+                            EndpointProvidesSendOptions::Block => {
+                                let fut = channel.send_all(stream::iter_ok(jsons))
+                                    .map(|_| ())
+                                    .map_err(|_| panic!("provider channel should not yet be closed"))
+                                    .select(test_timeout2.clone().then(|_| Ok(())))
+                                    .map(|_| ()).map_err(|_| ());
+                                futures.push(fut);
+                            },
+                            EndpointProvidesSendOptions::Force =>
+                                jsons.into_iter().for_each(|v| channel.force_send(v)),
+                            EndpointProvidesSendOptions::IfNotFull =>
+                                for v in jsons {
+                                    if channel.try_send(v).is_err() {
+                                        break
+                                    }
+                                },
+                        }
+                    }
+                join_all(futures).then(|_| Ok(()))
+            })
         })
         // errors should only propogate this far due to test timeout
         .then(|_| Ok(()));
         if has_start_stream {
-            Either::B(ret)
+            Either::A(ret)
         } else {
-            Either::A(
-                ret.select(ctx.test_killed_rx.clone().then(|_| Ok::<_, ()>(())))
-                    .then(|_| Ok(())),
-            )
+            let test_killed = ctx.test_killed_rx.clone().then(|_| Ok(()));
+            Either::B(ret.select(test_killed).map(|_| ()).map_err(|_| ()))
         }
     }
 }

@@ -20,7 +20,7 @@ use serde_derive::Deserialize;
 use serde_json as json;
 use tuple_vec_map;
 
-use std::{collections::BTreeMap, env, num::NonZeroU16, time::Duration};
+use std::{collections::BTreeMap, num::NonZeroU16, time::Duration};
 
 #[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
@@ -55,8 +55,6 @@ impl LoadPattern {
 #[derive(Deserialize)]
 pub enum Provider {
     File(FileProvider),
-    #[serde(deserialize_with = "deserialize_environment")]
-    Environment(json::Value),
     Range(RangeProvider),
     Response(ResponseProvider),
     Static(json::Value),
@@ -455,14 +453,7 @@ where
     D: Deserializer<'de>,
 {
     let template = String::deserialize(deserializer)?;
-    let vars: BTreeMap<_, _> = std::env::vars_os()
-        .map(|(k, v)| {
-            (
-                k.to_string_lossy().into_owned(),
-                v.to_string_lossy().into_owned().into(),
-            )
-        })
-        .collect();
+    let vars = BTreeMap::new();
     let template = Template::new(&template, &vars);
     Ok(template.evaluate(&json::Value::Null))
 }
@@ -487,17 +478,6 @@ where
         None
     };
     Ok(c)
-}
-
-fn deserialize_environment<'de, D>(deserializer: D) -> Result<json::Value, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let var = String::deserialize(deserializer)?;
-    let value = env::var(var)
-        .map_err(DeError::custom)
-        .map(|s| json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s)))?;
-    Ok(value)
 }
 
 fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>

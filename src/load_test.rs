@@ -84,9 +84,9 @@ impl LoadTest {
                     }
                     providers::response(template)
                 }
-                config::Provider::Static(value) | config::Provider::Environment(value) => {
-                    static_providers.insert(name.clone(), value.clone());
-                    providers::literals(vec![value], None, test_ended_rx)
+                config::Provider::Static(value) => {
+                    static_providers.insert(name, value);
+                    continue;
                 }
                 config::Provider::StaticList(values) => {
                     providers::literals(values, None, test_ended_rx)

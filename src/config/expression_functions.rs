@@ -10,7 +10,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    iter,
+    env, iter,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -314,14 +314,24 @@ impl JsonPath {
             [FunctionArg::Value(Value::Json(json::Value::String(json_path)))] => {
                 let provider = parse_provider_name(&*json_path);
                 // jsonpath requires the query to start with `$.`, so add it in
-                let json_path = format!("$.{}", json_path);
+                let json_path = if json_path.starts_with('[') {
+                    format!("${}", json_path)
+                } else {
+                    format!("$.{}", json_path)
+                };
                 let json_path = jsonpath::Selector::new(&*json_path)
                     .unwrap_or_else(|e| panic!("invalid json_path query, {}\n{:?}", json_path, e));
                 let j = JsonPath {
                     provider: provider.into(),
                     selector: json_path,
                 };
-                if let Some(v) = static_providers.get(provider) {
+                let v = match (provider.starts_with('$'), env::var(&provider[1..])) {
+                    (true, Ok(s)) => {
+                        Some(json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s)))
+                    }
+                    _ => static_providers.get(provider).cloned(),
+                };
+                if let Some(v) = v {
                     let v = json::json!({ provider: v });
                     let v = j.evaluate(&v);
                     Either::B(v)
@@ -918,7 +928,12 @@ mod tests {
                             Epoch::Nanoseconds => (epoch.as_nanos() / 1_000_000).to_string(),
                         };
                         let left = left.as_str().unwrap();
-                        assert!(left.starts_with(&right), "expected `{}` to start with `{}`", left, right);
+                        assert!(
+                            left.starts_with(&right),
+                            "expected `{}` to start with `{}`",
+                            left,
+                            right
+                        );
                     })
                 })
                 .collect();
@@ -1039,6 +1054,7 @@ mod tests {
 
     #[test]
     fn json_path_eval() {
+        std::env::set_var("ZED", "[26]");
         // constructor args, eval_arg, expect response, expect providers
         let checks = vec![
             (
@@ -1053,6 +1069,13 @@ mod tests {
                 j!([0, 1]),
                 btreeset!["a".to_string()],
             ),
+            // this should work but apparently the json_path library can't handle it
+            // (
+            //     j!("['$ZED'].*"),
+            //     j!(null),
+            //     j!([26]),
+            //     btreeset![],
+            // ),
         ];
         for do_static in [false, true].iter() {
             for (arg, eval, right, providers_expect) in checks.iter() {

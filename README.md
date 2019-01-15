@@ -342,9 +342,6 @@ providers:
 
 creates a `static_list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
 
-#### environment
-The `environment` *provider_type* behaves exactly like the `static` *provider_type* except the value comes from an environment variable. The value coming from the referenced environment variable will be parsed as JSON if possible, otherwise it will be a string.
-
 #### range
 The `range` *provider_type* provides an incrementing sequence of numbers in a given range. A `range` provider takes three optional parameters.
 
@@ -438,7 +435,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare section](#declare)
 - **`headers`** <sub><sup>*Optional*</sup></sub> - See [headers](#Headers)
-- **`body`** <sub><sup>*Optional*</sup></sub> - A [template string](#Template) indicating the body that should be sent with the request.
+- **`body`** <sub><sup>*Optional*</sup></sub> - A [template string](#Templates) indicating the body that should be sent with the request.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](#load_pattern-optional)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
 - **`peak_load`** <sub><sup>*Optional**</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents what a `load_pattern` value of `100%` represents for this endpoint. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
@@ -456,12 +453,12 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
-- **`url`** - A [template string](#Template) specifying the fully qualified url to the endpoint which will be requested.
+- **`url`** - A [template string](#Templates) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides section](#provides)
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
 
 #### Referencing Providers
-Providers can be referenced anywhere [templates](#Template) can be used and also in the `declare` parameter as a value.
+Providers can be referenced anywhere [templates](#Templates) can be used and also in the `declare` parameter as a value.
 
 #### declare
 <pre>
@@ -869,4 +866,8 @@ endpoints:
 specifies that an "Authorization" header will be sent with the request with a value of "Bearer " followed by a value coming from a provider named "sessionId".
 
 #### Templates
-Templates are special string values which can be interpolated with [expressions](#Expressions). Interpolation is done by enclosing the [expression](#Expressions) in `${ }`. For example: `${foo}-bar` creates a string where a value from a provider named foo is interpolated before the string value `-bar`. `${join(baz, ".")}` uses the `join` helper to create a string value derived from a value coming from the provider "baz". 
+Templates are special string values which can be interpolated with [expressions](#Expressions). Interpolation is done by enclosing the [expression](#Expressions) in `${ }`. For example: `${foo}-bar` creates a string where a value from a provider named foo is interpolated before the string value `-bar`. `${join(baz, ".")}` uses the `join` helper to create a string value derived from a value coming from the provider "baz".
+
+Templates also have the ability to pull from environment variables. Environment variables are referenced like providers except they start with a `$` character. If an environment variable does not exist with that name, then it is assumed to refer to a provider. For example: `${$FOO}` will pull from the environment variable "FOO" if it exists or a provider named "$FOO".
+
+When pulling from an environment variable, the value will be parsed as JSON and if not a valid JSON value will be interpreted as a string.

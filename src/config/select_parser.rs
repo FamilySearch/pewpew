@@ -18,7 +18,7 @@ use serde_json as json;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    iter,
+    env, iter,
     sync::Arc,
 };
 
@@ -1085,7 +1085,18 @@ fn parse_json_path(
             Rule::json_ident => {
                 let s = pair.as_str();
                 if start.is_none() {
-                    start = Some(PathStart::Ident(s.into()));
+                    start = match (
+                        s.starts_with('$'),
+                        env::var(&s[1..]),
+                        static_providers.get(s),
+                    ) {
+                        (true, Ok(s), _) => {
+                            let v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
+                            Some(PathStart::Value(v))
+                        }
+                        (_, _, Some(v)) => Some(PathStart::Value(v.clone())),
+                        _ => Some(PathStart::Ident(s.into())),
+                    };
                 } else {
                     let ps = PathSegment::from_str(pair.as_str(), providers, static_providers);
                     rest.push(ps);
@@ -1102,14 +1113,15 @@ fn parse_json_path(
         }
     }
     let start = start.unwrap();
-    if let PathStart::Ident(start) = &start {
-        match (start, rest.first()) {
-            (start, Some(PathSegment::String(next)))
-                if &*start == "request" || &*start == "response" =>
-            {
-                providers.insert(format!("{}.{}", start, next))
+    if let PathStart::Ident(s) = &start {
+        static_providers.get(s);
+        match rest.first() {
+            Some(PathSegment::String(next)) if &*s == "request" || &*s == "response" => {
+                providers.insert(format!("{}.{}", s, next));
             }
-            _ => providers.insert(start.clone()),
+            _ => {
+                providers.insert(s.clone());
+            }
         };
     }
     Path { start, rest }
@@ -1398,6 +1410,8 @@ mod tests {
             ]
         });
 
+        env::set_var("ZED", "26");
+
         // (select json, expected out data)
         let check_table = vec![
             (json::json!([1, 2, 3]), vec![json::json!([1, 2, 3])]),
@@ -1443,6 +1457,7 @@ mod tests {
                 vec![json::json!({"z": 42, "dees": [1, 2, 3]})],
             ),
             (json::json!("collect(a, 3)"), vec![json::json!(3)]),
+            (json::json!("$ZED"), vec![json::json!(26)]),
             (
                 json::json!("collect(b.e, 39)"),
                 vec![json::json!([5, 6, 7, 8])],

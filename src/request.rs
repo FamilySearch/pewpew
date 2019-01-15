@@ -232,11 +232,12 @@ where
             value
         });
         {
-            let mut required_providers = BTreeSet::new();
+            let mut required_providers2 = BTreeSet::new();
             for (name, d) in self.declare {
+                required_providers.remove(&name);
                 let vce = config::ValueOrComplexExpression::new(
                     &d,
-                    &mut required_providers,
+                    &mut required_providers2,
                     &ctx.static_providers,
                 );
                 let stream = vce

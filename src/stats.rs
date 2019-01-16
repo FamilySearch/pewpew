@@ -123,8 +123,7 @@ impl RollingAggregateStats {
         }
     }
 
-    fn append(&mut self, mut stat: ResponseStat) {
-        let key = stat.key.take();
+    fn append(&mut self, stat: ResponseStat) {
         let duration = self.duration;
         let time = to_epoch(stat.time) / duration * duration;
         let (stats_id, stats_map) = self.buckets.entry(stat.endpoint_id).or_insert_with(|| {
@@ -133,7 +132,7 @@ impl RollingAggregateStats {
                 time,
                 AggregateStats::new(time, Duration::from_secs(duration)),
             );
-            (key.unwrap_or_default(), stats_map)
+            ((*stat.key).clone().unwrap_or_default(), stats_map)
         });
         stats_id
             .entry("url".into())
@@ -444,7 +443,7 @@ type StatsKey = BTreeMap<String, String>;
 #[derive(Debug)]
 pub struct ResponseStat {
     pub endpoint_id: EndpointId,
-    pub key: Option<StatsKey>,
+    pub key: Arc<Option<StatsKey>>,
     pub method: Method,
     pub kind: StatKind,
     pub time: SystemTime,

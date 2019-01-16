@@ -156,7 +156,7 @@ where
     }
 
     pub fn build(
-        mut self,
+        self,
         ctx: &mut LoadTest,
         endpoint_id: usize,
     ) -> (impl Future<Item = (), Error = ()> + Send) {
@@ -265,8 +265,18 @@ where
         let outgoing = Arc::new(outgoing);
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
-        let method = self.method.clone();
-        let stats_id = self.stats_id.take();
+        let method = self.method;
+        let stats_id: Arc<_> = self.stats_id.map(|s| {
+            s.into_iter()
+                .map(|(k, v)| {
+                    let t = Template::new(&v, &ctx.static_providers);
+                    if !t.get_providers().is_empty() {
+                        panic!("stats_id can only reference static providers and environment variables")
+                    }
+                    (k, t.evaluate(&json::Value::Null))
+                })
+                .collect()
+        }).into();
 
         let test_timeout = ctx.test_timeout.clone();
         let streams = zip_all(streams)

@@ -450,7 +450,9 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-- **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string pairs indicating additional keys which will be added to an endpoint's stats identifier. A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the immutable parts of the url.
+- **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](#Templates) pairs indicating additional keys which will be added to an endpoint's stats identifier. Unlike templates in other places only static providers and environment variables can be interpolated.
+
+  A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the immutable parts of the url.
 
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
 - **`url`** - A [template string](#Templates) specifying the fully qualified url to the endpoint which will be requested.

@@ -606,6 +606,7 @@ mod tests {
     use super::super::select_parser::{Path, PathStart};
     use super::*;
     use crate::providers::literals;
+    use crate::util::json_value_into_string;
 
     use futures::{
         future::{join_all, lazy},
@@ -866,17 +867,25 @@ mod tests {
 
         for arg in checks.into_iter() {
             let e = Epoch::new(vec![arg.into()]);
-            let left = e.evaluate();
+            let left = json_value_into_string(e.evaluate())
+                .parse::<u128>()
+                .unwrap();
             let epoch = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards");
-            let right = match e {
-                Epoch::Seconds => epoch.as_secs().to_string(),
-                Epoch::Milliseconds => epoch.as_millis().to_string(),
-                Epoch::Microseconds => (epoch.as_micros() / 1_000).to_string(),
-                Epoch::Nanoseconds => (epoch.as_nanos() / 1_000_000).to_string(),
+            let (allowable_dif, right) = match e {
+                Epoch::Seconds => (1, u128::from(epoch.as_secs())),
+                Epoch::Milliseconds => (500, epoch.as_millis()),
+                Epoch::Microseconds => (500_000, epoch.as_micros()),
+                Epoch::Nanoseconds => (500_000_000, epoch.as_nanos()),
             };
-            assert!(left.as_str().unwrap().starts_with(&right));
+            assert!(
+                right - left < allowable_dif,
+                "right: {}, left: {}, allowable dif: {}",
+                right,
+                left,
+                allowable_dif
+            );
         }
     }
 
@@ -889,17 +898,25 @@ mod tests {
             let e = Epoch::new(vec![arg.into()]);
             let mut left: Vec<_> = e.evaluate_as_iter().collect();
             assert_eq!(left.len(), 1);
-            let left = left.pop().unwrap();
+            let left = json_value_into_string(left.pop().unwrap())
+                .parse::<u128>()
+                .unwrap();
             let epoch = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards");
-            let right = match e {
-                Epoch::Seconds => epoch.as_secs().to_string(),
-                Epoch::Milliseconds => epoch.as_millis().to_string(),
-                Epoch::Microseconds => (epoch.as_micros() / 1_000).to_string(),
-                Epoch::Nanoseconds => (epoch.as_nanos() / 1_000_000).to_string(),
+            let (allowable_dif, right) = match e {
+                Epoch::Seconds => (1, u128::from(epoch.as_secs())),
+                Epoch::Milliseconds => (500, epoch.as_millis()),
+                Epoch::Microseconds => (500_000, epoch.as_micros()),
+                Epoch::Nanoseconds => (500_000_000, epoch.as_nanos()),
             };
-            assert!(left.as_str().unwrap().starts_with(&right));
+            assert!(
+                right - left < allowable_dif,
+                "right: {}, left: {}, allowable dif: {}",
+                right,
+                left,
+                allowable_dif
+            );
         }
     }
 
@@ -917,18 +934,19 @@ mod tests {
                         let epoch = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Time went backwards");
-                        let right = match e {
-                            Epoch::Seconds => epoch.as_secs().to_string(),
-                            Epoch::Milliseconds => epoch.as_millis().to_string(),
-                            Epoch::Microseconds => (epoch.as_micros() / 1_000).to_string(),
-                            Epoch::Nanoseconds => (epoch.as_nanos() / 1_000_000).to_string(),
+                        let (allowable_dif, right) = match e {
+                            Epoch::Seconds => (1, u128::from(epoch.as_secs())),
+                            Epoch::Milliseconds => (500, epoch.as_millis()),
+                            Epoch::Microseconds => (500_000, epoch.as_micros()),
+                            Epoch::Nanoseconds => (500_000_000, epoch.as_nanos()),
                         };
-                        let left = left.as_str().unwrap();
+                        let left = json_value_into_string(left).parse::<u128>().unwrap();
                         assert!(
-                            left.starts_with(&right),
-                            "expected `{}` to start with `{}`",
+                            right - left < allowable_dif,
+                            "right: {}, left: {}, allowable dif: {}",
+                            right,
                             left,
-                            right
+                            allowable_dif
                         );
                     })
                 })

@@ -266,18 +266,16 @@ where
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
         let method = self.method;
-        let stats_id: Arc<_> = self.stats_id.map(|s| {
-            s.into_iter()
-                .map(|(k, v)| {
-                    let t = Template::new(&v, &ctx.static_providers);
-                    if !t.get_providers().is_empty() {
-                        panic!("stats_id can only reference static providers and environment variables")
-                    }
-                    (k, t.evaluate(&json::Value::Null))
-                })
-                .collect()
-        }).into();
-
+        let mut stats_id = self.stats_id.unwrap_or_default();
+        for v in stats_id.values_mut() {
+            let t = Template::new(&v, &ctx.static_providers);
+            if !t.get_providers().is_empty() {
+                panic!("stats_id can only reference static providers and environment variables")
+            }
+            *v = t.evaluate(&json::Value::Null);
+        }
+        stats_id.insert("url".into(), uri.evaluate_with_star());
+        stats_id.insert("method".into(), method.to_string());
         let test_timeout = ctx.test_timeout.clone();
         let streams = zip_all(streams)
             .map_err(|_| panic!("error from zip_all"))
@@ -300,7 +298,19 @@ where
             Either::B(streams)
         };
         let timeout = ctx.config.client.request_timeout;
-        let ret = ForEachParallel::new(limits, streams, move |values| {
+        let init_stats = stats_tx
+            .clone()
+            .send(
+                stats::StatsInit {
+                    endpoint_id,
+                    time: SystemTime::now(),
+                    stats_id,
+                }
+                .into(),
+            )
+            .then(|_| Ok(()));
+        tokio::spawn(init_stats);
+        let work = ForEachParallel::new(limits, streams, move |values| {
             let mut template_values = TemplateValues::new();
             let mut auto_returns = Vec::new();
             for tv in values {
@@ -393,16 +403,11 @@ where
             template_values.insert("request".into(), request_provider);
             let response_future = client.request(request);
             let now = Instant::now();
-            let stats_id = stats_id.clone();
-            let stats_id2 = stats_id.clone();
             let stats_tx = stats_tx.clone();
             let stats_tx2 = stats_tx.clone();
-            let method = method.clone();
-            let method2 = method.clone();
             let outgoing = outgoing.clone();
             let test_timeout = test_timeout.clone();
             let test_timeout2 = test_timeout.clone();
-            let url2 = url.clone();
             let timeout_in_ms = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
             Timeout::new(response_future, timeout)
                 .map_err(move |err| {
@@ -417,11 +422,8 @@ where
                         let task = stats_tx2.send(
                             stats::ResponseStat {
                                 endpoint_id,
-                                key: stats_id2,
                                 kind: stats::StatKind::ConnectionError(description),
-                                method: method2,
                                 time: SystemTime::now(),
-                                url: url2,
                             }.into()
                         ).then(|_| Ok(()));
                         tokio::spawn(task);
@@ -429,11 +431,8 @@ where
                         let task = stats_tx2.send(
                             stats::ResponseStat {
                                 endpoint_id,
-                                key: stats_id2,
                                 kind: stats::StatKind::Timeout(timeout_in_ms),
-                                method: method2,
                                 time: SystemTime::now(),
-                                url: url2,
                             }.into()
                         ).then(|_| Ok(()));
                         tokio::spawn(task);
@@ -527,11 +526,8 @@ where
                                         stats_tx.send(
                                             stats::ResponseStat {
                                                 endpoint_id,
-                                                key: stats_id,
                                                 kind: stats::StatKind::Rtt((rtt, status)),
-                                                method,
                                                 time: SystemTime::now(),
-                                                url,
                                             }.into()
                                         )
                                         .map(|_| ())
@@ -572,10 +568,10 @@ where
         // errors should only propogate this far due to test timeout
         .then(|_| Ok(()));
         if has_start_stream {
-            Either::A(ret)
+            Either::A(work)
         } else {
             let test_killed = ctx.test_killed_rx.clone().then(|_| Ok(()));
-            Either::B(ret.select(test_killed).map(|_| ()).map_err(|_| ()))
+            Either::B(work.select(test_killed).map(|_| ()).map_err(|_| ()))
         }
     }
 }

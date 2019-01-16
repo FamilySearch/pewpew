@@ -33,7 +33,7 @@ pub(super) enum DeclareError {
     UnknownProvider(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) enum FunctionArg {
     FunctionCall(FunctionCall),
     Value(Value),
@@ -61,7 +61,7 @@ impl FunctionArg {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) enum FunctionCall {
     Collect(Arc<Collect>),
     Encode(Arc<Encode>),
@@ -192,13 +192,22 @@ fn index_json2<'a>(mut json: &'a json::Value, indexes: &[PathSegment]) -> json::
     json.clone()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Path {
     pub(super) start: PathStart,
     pub(super) rest: Vec<PathSegment>,
 }
 
 impl Path {
+    fn evaluate(&self, d: &json::Value) -> json::Value {
+        let v = match &self.start {
+            PathStart::FunctionCall(f) => Cow::Owned(f.evaluate(d)),
+            PathStart::Ident(s) => index_json(d, Either::B(s)),
+            PathStart::Value(v) => Cow::Borrowed(v),
+        };
+        index_json2(&*v, &self.rest)
+    }
+
     fn evaluate_as_iter<'a>(
         &self,
         d: &'a json::Value,
@@ -286,7 +295,7 @@ fn f64_value(json: &json::Value) -> f64 {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ValueOrComplexExpression {
     V(Value),
     Ce(ComplexExpression),
@@ -383,7 +392,7 @@ impl From<ComplexExpression> for ValueOrComplexExpression {
 
 type Not = bool;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Path(Not, Path),
     Json(json::Value),
@@ -476,7 +485,7 @@ impl Value {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) enum PathSegment {
     Number(usize),
     String(String),
@@ -508,20 +517,20 @@ impl PathSegment {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) enum PathStart {
     FunctionCall(FunctionCall),
     Ident(String),
     Value(json::Value),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Combiner {
     And,
     Or,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Operator {
     Eq,
     Gt,
@@ -531,7 +540,7 @@ enum Operator {
     Ne,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Expression {
     Complex(ComplexExpression),
     Simple(SimpleExpression),
@@ -558,7 +567,7 @@ impl Expression {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ComplexExpression {
     combiner: Combiner,
     pieces: Vec<Expression>,
@@ -630,7 +639,7 @@ impl ComplexExpression {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SimpleExpression {
     lhs: Value,
     rest: Option<(Operator, Value)>,
@@ -728,13 +737,13 @@ pub const REQUEST_URL: u16 = 0b100_000_000;
 #[derive(Parser)]
 struct Parser;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum TemplatePiece {
     Expression(ValueOrComplexExpression),
     NotExpression(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Template {
     pieces: Vec<TemplatePiece>,
     providers: BTreeSet<String>,
@@ -812,6 +821,16 @@ impl Template {
                     let v = voce.evaluate(d);
                     json_value_to_string(&*v).into_owned()
                 }
+                TemplatePiece::NotExpression(s) => s.clone(),
+            })
+            .join("")
+    }
+
+    pub fn evaluate_with_star(&self) -> String {
+        self.pieces
+            .iter()
+            .map(|piece| match piece {
+                TemplatePiece::Expression(_) => '*'.to_string(),
                 TemplatePiece::NotExpression(s) => s.clone(),
             })
             .join("")
@@ -1062,14 +1081,15 @@ fn parse_json_path(
     pair: Pair<Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
-) -> Path {
+) -> Either<json::Value, Path> {
     let mut start = None;
     let mut rest = Vec::new();
+    let mut providers2 = BTreeSet::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::function_call => {
                 if start.is_none() {
-                    let jps = match parse_function_call(pair, providers, static_providers) {
+                    let jps = match parse_function_call(pair, &mut providers2, static_providers) {
                         Either::A(fc) => PathStart::FunctionCall(fc),
                         Either::B(v) => PathStart::Value(v),
                     };
@@ -1094,7 +1114,8 @@ fn parse_json_path(
                         _ => Some(PathStart::Ident(s.into())),
                     };
                 } else {
-                    let ps = PathSegment::from_str(pair.as_str(), providers, static_providers);
+                    let ps =
+                        PathSegment::from_str(pair.as_str(), &mut providers2, static_providers);
                     rest.push(ps);
                 }
             }
@@ -1102,7 +1123,11 @@ fn parse_json_path(
                 if start.is_none() {
                     unreachable!("encountered unexpected indexed property");
                 } else {
-                    rest.push(parse_indexed_property(pair, providers, static_providers));
+                    rest.push(parse_indexed_property(
+                        pair,
+                        &mut providers2,
+                        static_providers,
+                    ));
                 }
             }
             r => unreachable!("unexpected rule for json path, `{:?}`", r),
@@ -1110,17 +1135,23 @@ fn parse_json_path(
     }
     let start = start.unwrap();
     if let PathStart::Ident(s) = &start {
-        static_providers.get(s);
         match rest.first() {
             Some(PathSegment::String(next)) if &*s == "request" || &*s == "response" => {
-                providers.insert(format!("{}.{}", s, next));
+                providers2.insert(format!("{}.{}", s, next));
             }
             _ => {
-                providers.insert(s.clone());
+                providers2.insert(s.clone());
             }
         };
     }
-    Path { start, rest }
+    let p = Path { start, rest };
+    match p.start {
+        PathStart::Value(_) if providers2.is_empty() => Either::A(p.evaluate(&json::Value::Null)),
+        _ => {
+            providers.extend(providers2);
+            Either::B(p)
+        }
+    }
 }
 
 fn parse_value(
@@ -1152,9 +1183,17 @@ fn parse_value(
                     return Value::Json(json::Value::Null);
                 }
             }
-            Rule::json_path => {
-                return Value::Path(not, parse_json_path(pair, providers, static_providers));
-            }
+            Rule::json_path => match parse_json_path(pair, providers, static_providers) {
+                Either::A(v) => {
+                    if not {
+                        let b = !bool_value(&v);
+                        return Value::Json(b.into());
+                    } else {
+                        return Value::Json(v);
+                    }
+                }
+                Either::B(p) => return Value::Path(not, p),
+            },
             Rule::string => {
                 let template = Template::new(pair.as_str(), static_providers);
                 match template.simplify_to_string() {
@@ -1334,7 +1373,6 @@ mod tests {
     }
 
     fn create_select(json: json::Value) -> Select {
-        println!("{:?}", json);
         let eppp = json::from_value(json).unwrap();
         Select::new(eppp, &Default::default())
     }

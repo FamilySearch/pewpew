@@ -5,13 +5,11 @@ use chrono::{DateTime, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
 use futures::{sync::mpsc as futures_channel, Future, Stream};
 use hdrhistogram::Histogram;
-use hyper::Method;
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use tokio::{fs::File as TokioFile, timer::Interval};
-use url::Url;
 
 use std::{
     cell::Cell,
@@ -123,60 +121,27 @@ impl RollingAggregateStats {
         }
     }
 
+    fn init(&mut self, time: SystemTime, endpoint_id: usize, stats_id: StatsId) {
+        if !stats_id.contains_key("url") || !stats_id.contains_key("method") {
+            panic!("stats_id missing `url` and/or `method`. {:?}", stats_id);
+        }
+        let duration = self.duration;
+        let time = to_epoch(time) / duration * duration;
+        let mut stats_map = BTreeMap::new();
+        stats_map.insert(
+            time,
+            AggregateStats::new(time, Duration::from_secs(duration)),
+        );
+        self.buckets.insert(endpoint_id, (stats_id, stats_map));
+    }
+
     fn append(&mut self, stat: ResponseStat) {
         let duration = self.duration;
         let time = to_epoch(stat.time) / duration * duration;
-        let (stats_id, stats_map) = self.buckets.entry(stat.endpoint_id).or_insert_with(|| {
-            let mut stats_map = BTreeMap::new();
-            stats_map.insert(
-                time,
-                AggregateStats::new(time, Duration::from_secs(duration)),
-            );
-            ((*stat.key).clone().unwrap_or_default(), stats_map)
-        });
-        stats_id
-            .entry("url".into())
-            .and_modify(|url| {
-                let mut url_a = Url::parse(url).expect("invalid url");
-                let url_b = Url::parse(&stat.url).expect("invalid url");
-                let mut path = String::new();
-                for (a, b) in url_a
-                    .path_segments()
-                    .expect("invalid url")
-                    .zip(url_b.path_segments().expect("invalid url"))
-                {
-                    if a != b {
-                        path.push_str("/*");
-                    } else {
-                        path.push_str(&format!("/{}", a));
-                    }
-                }
-                url_a.set_path(&path);
-                let mut query_params: BTreeMap<String, String> = url_a
-                    .query_pairs()
-                    .map(|(k, v)| (k.into(), v.into()))
-                    .collect();
-                for (k, v) in url_b.query_pairs() {
-                    query_params
-                        .entry(k.into())
-                        .and_modify(|v2| {
-                            if v != v2.as_str() {
-                                *v2 = "*".into();
-                            }
-                        })
-                        .or_insert_with(|| v.into());
-                }
-                if !query_params.is_empty() {
-                    let mut query_params: Vec<_> = query_params.iter().collect();
-                    query_params.sort_unstable_by_key(|t| t.0);
-                    url_a.query_pairs_mut().clear().extend_pairs(query_params);
-                }
-                *url = url_a.into_string();
-            })
-            .or_insert_with(|| stat.url.clone());
-        stats_id
-            .entry("method".into())
-            .or_insert_with(|| stat.method.to_string());
+        let (_, stats_map) = self
+            .buckets
+            .get_mut(&stat.endpoint_id)
+            .expect("Unintialized bucket");
         let current = stats_map
             .entry(time)
             .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
@@ -434,20 +399,22 @@ impl AggregateStats {
 }
 
 pub enum StatsMessage {
+    Init(StatsInit),
     ResponseStat(ResponseStat),
     EndTime(Instant),
 }
 
-type StatsKey = BTreeMap<String, String>;
+pub struct StatsInit {
+    pub endpoint_id: EndpointId,
+    pub stats_id: StatsId,
+    pub time: SystemTime,
+}
 
 #[derive(Debug)]
 pub struct ResponseStat {
     pub endpoint_id: EndpointId,
-    pub key: Arc<Option<StatsKey>>,
-    pub method: Method,
     pub kind: StatKind,
     pub time: SystemTime,
-    pub url: String,
 }
 
 #[derive(Debug)]
@@ -460,6 +427,12 @@ pub enum StatKind {
 impl From<ResponseStat> for StatsMessage {
     fn from(rs: ResponseStat) -> Self {
         StatsMessage::ResponseStat(rs)
+    }
+}
+
+impl From<StatsInit> for StatsMessage {
+    fn from(si: StatsInit) -> Self {
+        StatsMessage::Init(si)
     }
 }
 
@@ -500,6 +473,7 @@ where
     let receiver = Stream::for_each(rx, move |datum| {
         let mut stats = stats.lock();
         match datum {
+            StatsMessage::Init(init) => stats.init(init.time, init.endpoint_id, init.stats_id),
             StatsMessage::EndTime(end_time) => stats.end_time.set(Some(end_time)),
             StatsMessage::ResponseStat(rs) => stats.append(rs),
         }

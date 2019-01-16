@@ -10,11 +10,12 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env, iter,
+    env, fmt, iter,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[derive(Debug)]
 pub(super) struct Collect {
     arg: FunctionArg,
     min: u64,
@@ -81,7 +82,7 @@ impl Collect {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Encoding {
     PercentSimple,
     PercentQuery,
@@ -131,6 +132,7 @@ impl From<&str> for Encoding {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Encode {
     arg: FunctionArg,
     encoding: Encoding,
@@ -182,7 +184,7 @@ impl Encode {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(super) enum Epoch {
     Seconds,
     Milliseconds,
@@ -235,6 +237,7 @@ impl From<&str> for Epoch {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Join {
     arg: FunctionArg,
     sep: String,
@@ -302,6 +305,12 @@ impl Join {
 pub(super) struct JsonPath {
     provider: String,
     selector: jsonpath::Selector,
+}
+
+impl fmt::Debug for JsonPath {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "JsonPath {{ provider: {} }}", self.provider)
+    }
 }
 
 impl JsonPath {
@@ -398,6 +407,7 @@ impl JsonPath {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Match {
     arg: FunctionArg,
     capture_names: Vec<String>,
@@ -472,6 +482,7 @@ impl Match {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Pad {
     start: bool,
     arg: FunctionArg,
@@ -555,6 +566,7 @@ impl Pad {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Repeat {
     min: u64,
     random: Option<Uniform<u64>>,

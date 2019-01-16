@@ -24,18 +24,12 @@ pub(super) struct Collect {
 
 impl Collect {
     pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
-        let as_u64 = |fa| match fa {
-            FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
-                n.as_u64().unwrap()
-            }
-            _ => panic!("invalid arguments for repeat"),
-        };
         match args.len() {
             2 | 3 => {
-                let second = as_u64(args.remove(1));
+                let second = as_u64(&args.remove(1)).expect("invalid arguments for repeat");
                 let first = args.remove(0);
                 let third = args.pop().map(|fa| {
-                    let max = as_u64(fa);
+                    let max = as_u64(&fa).expect("invalid arguments for repeat");
                     Uniform::new_inclusive(second, max)
                 });
                 Collect {
@@ -245,16 +239,9 @@ pub(super) struct Join {
 
 impl Join {
     pub(super) fn new(mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
-        let into_string = |fa| {
-            if let FunctionArg::Value(Value::Json(json::Value::String(s))) = fa {
-                s
-            } else {
-                panic!("invalid arguments for repeat")
-            }
-        };
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::String(_)))] => {
-                let two = into_string(args.pop().unwrap());
+                let two = into_string(args.pop().unwrap()).expect("invalid arguments for join");
                 let one = args.pop().unwrap();
                 let j = Join { arg: one, sep: two };
                 if let FunctionArg::Value(Value::Json(json)) = &j.arg {
@@ -498,17 +485,10 @@ impl Pad {
             }
             _ => panic!("invalid arguments for repeat"),
         };
-        let into_string = |fa| {
-            if let FunctionArg::Value(Value::Json(json::Value::String(s))) = fa {
-                s
-            } else {
-                panic!("invalid arguments for repeat")
-            }
-        };
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::Number(_))), FunctionArg::Value(Value::Json(json::Value::String(_)))] =>
             {
-                let third = into_string(args.pop().unwrap());
+                let third = into_string(args.pop().unwrap()).expect("invalid arguments for pad");
                 let second = as_usize(args.pop().unwrap());
                 let first = args.pop().unwrap();
                 let p = Pad {
@@ -566,6 +546,114 @@ impl Pad {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct ReversibleRange {
+    range: std::ops::Range<u64>,
+    reverse: bool,
+}
+
+impl ReversibleRange {
+    fn new(first: u64, second: u64) -> Self {
+        let reverse = first > second;
+        let range = if reverse {
+            #[allow(clippy::range_plus_one)]
+            {
+                second + 1..first + 1
+            }
+        } else {
+            first..second
+        };
+        ReversibleRange { range, reverse }
+    }
+
+    fn into_iter(self) -> impl Iterator<Item = json::Value> + Clone {
+        let i = if self.reverse {
+            Either::A(self.range.rev())
+        } else {
+            Either::B(self.range)
+        };
+        i.map(|n| n.into())
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum Range {
+    Args(FunctionArg, FunctionArg),
+    Range(ReversibleRange),
+}
+
+impl Range {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
+        if args.len() == 2 {
+            let second = args.pop().unwrap();
+            let first = args.pop().unwrap();
+            match (&first, &second) {
+                (FunctionArg::Value(Value::Json(_)), FunctionArg::Value(Value::Json(_))) => {
+                    let first = as_u64(&first).expect("invalid arguments for range");
+                    let second = as_u64(&second).expect("invalid arguments for range");
+                    Range::Range(ReversibleRange::new(first, second))
+                }
+                _ => Range::Args(first, second),
+            }
+        } else {
+            panic!("invalid arguments for range")
+        }
+    }
+
+    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
+        json::Value::Array(self.evaluate_as_iter(d).collect())
+    }
+
+    pub(super) fn evaluate_as_iter(
+        &self,
+        d: &json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
+        let r = match self {
+            Range::Args(first, second) => {
+                let first = first
+                    .evaluate(d)
+                    .as_u64()
+                    .expect("invalid arguments for range");
+                let second = second
+                    .evaluate(d)
+                    .as_u64()
+                    .expect("invalid arguments for range");
+                ReversibleRange::new(first, second)
+            }
+            Range::Range(r) => r.clone(),
+        };
+        r.into_iter()
+    }
+
+    pub(super) fn evaluate_as_future(
+        &self,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+        match self {
+            Range::Args(first, second) => {
+                let a = first
+                    .evaluate_as_future(providers)
+                    .join(second.evaluate_as_future(providers))
+                    .map(|((first, mut returns), (second, returns2))| {
+                        let first = first.as_u64().expect("invalid arguments for range");
+                        let second = second.as_u64().expect("invalid arguments for range");
+                        let v = json::Value::Array(
+                            ReversibleRange::new(first, second).into_iter().collect(),
+                        );
+                        returns.extend(returns2);
+                        (v, returns)
+                    });
+                Either::A(a)
+            }
+            Range::Range(..) => {
+                let v = self.evaluate(&json::Value::Null);
+                let b = future::ok((v, Vec::new()));
+                Either::B(b)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Repeat {
     min: u64,
@@ -574,17 +662,11 @@ pub(super) struct Repeat {
 
 impl Repeat {
     pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
-        let as_u64 = |fa| match fa {
-            FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
-                n.as_u64().unwrap()
-            }
-            _ => panic!("invalid arguments for repeat"),
-        };
         match args.len() {
             1 | 2 => {
-                let min = as_u64(args.remove(0));
+                let min = as_u64(&args.remove(0)).expect("invalid arguments for repeat");
                 let random = args.pop().map(|fa| {
-                    let max = as_u64(fa);
+                    let max = as_u64(&fa).expect("invalid arguments for repeat");
                     Uniform::new_inclusive(min, max)
                 });
                 Repeat { min, random }
@@ -610,6 +692,21 @@ impl Repeat {
         &self,
     ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
         future::ok((self.evaluate(), Vec::new()))
+    }
+}
+
+fn into_string(fa: FunctionArg) -> Option<String> {
+    if let FunctionArg::Value(Value::Json(json::Value::String(s))) = fa {
+        Some(s)
+    } else {
+        None
+    }
+}
+
+fn as_u64(fa: &FunctionArg) -> Option<u64> {
+    match fa {
+        FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n.as_u64(),
+        _ => None,
     }
 }
 
@@ -1466,6 +1563,88 @@ mod tests {
                             })
                     }
                     _ => unreachable!(),
+                })
+                .collect();
+            join_all(futures)
+                .then(move |_| tx.send(()))
+                .then(|_| Ok(()))
+        }));
+    }
+
+    #[test]
+    fn range_eval() {
+        let data = j!({
+            "a": 1,
+            "b": 5
+        });
+        // constructor args, expect
+        let checks = vec![
+            (vec![j!(5).into(), j!(1).into()], j!([5, 4, 3, 2])),
+            (vec![j!(1).into(), j!(5).into()], j!([1, 2, 3, 4])),
+            (vec!["b".into(), "a".into()], j!([5, 4, 3, 2])),
+            (vec!["a".into(), "b".into()], j!([1, 2, 3, 4])),
+        ];
+
+        for (args, right) in checks.into_iter() {
+            let r = Range::new(args);
+            let left = r.evaluate(&data);
+            assert_eq!(left, right);
+        }
+    }
+
+    #[test]
+    fn range_eval_iter() {
+        let data = j!({
+            "a": 1,
+            "b": 5
+        });
+        // constructor args, expect
+        let checks = vec![
+            (vec![j!(5).into(), j!(1).into()], j!([5, 4, 3, 2])),
+            (vec![j!(1).into(), j!(5).into()], j!([1, 2, 3, 4])),
+            (vec!["b".into(), "a".into()], j!([5, 4, 3, 2])),
+            (vec!["a".into(), "b".into()], j!([1, 2, 3, 4])),
+        ];
+
+        for (args, right) in checks.into_iter() {
+            let r = Range::new(args);
+            let left: Vec<_> = r.evaluate_as_iter(&data).collect();
+            let right = if let json::Value::Array(v) = right {
+                v
+            } else {
+                unreachable!()
+            };
+            assert_eq!(left, right);
+        }
+    }
+
+    #[test]
+    fn range_eval_future() {
+        // constructor args, expect
+        let checks = vec![
+            (vec![j!(5).into(), j!(1).into()], j!([5, 4, 3, 2])),
+            (vec![j!(1).into(), j!(5).into()], j!([1, 2, 3, 4])),
+            (vec!["b".into(), "a".into()], j!([5, 4, 3, 2])),
+            (vec!["a".into(), "b".into()], j!([1, 2, 3, 4])),
+        ];
+
+        current_thread::run(lazy(move || {
+            let (tx, rx) = oneshot::channel::<()>();
+            let test_end = rx.shared();
+
+            let providers = btreemap!(
+                "a".to_string() => literals(vec!(j!(1)), None, test_end.clone()),
+                "b".to_string() => literals(vec!(j!(5)), None, test_end.clone()),
+            );
+
+            let providers = providers.into();
+            let futures: Vec<_> = checks
+                .into_iter()
+                .map(move |(args, right)| {
+                    let r = Range::new(args);
+                    r.evaluate_as_future(&providers).map(move |(left, _)| {
+                        assert_eq!(left, right);
+                    })
                 })
                 .collect();
             join_all(futures)

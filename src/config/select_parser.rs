@@ -1,4 +1,6 @@
-use super::expression_functions::{Collect, Encode, Epoch, Join, JsonPath, Match, Pad, Repeat};
+use super::expression_functions::{
+    Collect, Encode, Epoch, Join, JsonPath, Match, Pad, Range, Repeat,
+};
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
 use crate::channel;
@@ -70,6 +72,7 @@ pub(super) enum FunctionCall {
     JsonPath(Arc<JsonPath>),
     Match(Arc<Match>),
     Pad(Arc<Pad>),
+    Range(Arc<Range>),
     Repeat(Arc<Repeat>),
 }
 
@@ -92,6 +95,7 @@ impl FunctionCall {
                 .unwrap()
                 .map_a(|a| FunctionCall::Match(a.into())),
             "start_pad" => Pad::new(true, args).map_a(|a| FunctionCall::Pad(a.into())),
+            "range" => Either::A(FunctionCall::Range(Range::new(args).into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args).into())),
             _ => panic!("unknown function reference `{}`", ident),
         }
@@ -105,6 +109,7 @@ impl FunctionCall {
             FunctionCall::JsonPath(j) => j.evaluate(d),
             FunctionCall::Match(m) => m.evaluate(d),
             FunctionCall::Pad(p) => p.evaluate(d),
+            FunctionCall::Range(r) => r.evaluate(d),
             FunctionCall::Repeat(r) => r.evaluate(),
         }
     }
@@ -117,10 +122,11 @@ impl FunctionCall {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(d))),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_iter(d))),
             FunctionCall::Epoch(e) => Either3::A(Either3::C(e.evaluate_as_iter())),
-            FunctionCall::Join(j) => Either3::B(Either::A(j.evaluate_as_iter(d))),
-            FunctionCall::JsonPath(j) => Either3::B(Either::B(j.evaluate_as_iter(d))),
-            FunctionCall::Match(m) => Either3::C(Either3::A(m.evaluate_as_iter(d))),
-            FunctionCall::Pad(p) => Either3::C(Either3::B(p.evaluate_as_iter(d))),
+            FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(d))),
+            FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
+            FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(d))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(p.evaluate_as_iter(d))),
+            FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(d))),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_iter())),
         }
     }
@@ -133,14 +139,17 @@ impl FunctionCall {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_future(providers))),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_future(providers))),
             FunctionCall::Epoch(e) => Either3::A(Either3::C(e.evaluate_as_future())),
-            FunctionCall::Join(j) => Either3::B(Either::A(j.clone().evaluate_as_future(providers))),
+            FunctionCall::Join(j) => {
+                Either3::B(Either3::A(j.clone().evaluate_as_future(providers)))
+            }
             FunctionCall::JsonPath(j) => {
-                Either3::B(Either::B(j.clone().evaluate_as_future(providers)))
+                Either3::B(Either3::B(j.clone().evaluate_as_future(providers)))
             }
             FunctionCall::Match(m) => {
-                Either3::C(Either3::A(m.clone().evaluate_as_future(providers)))
+                Either3::B(Either3::C(m.clone().evaluate_as_future(providers)))
             }
-            FunctionCall::Pad(p) => Either3::C(Either3::B(p.clone().evaluate_as_future(providers))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(p.clone().evaluate_as_future(providers))),
+            FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_future(providers))),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_future())),
         }
     }

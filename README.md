@@ -724,7 +724,7 @@ Encode a string with the given encoding.
 
 Pads a string or number to be minimum length. Any added padding will be added to the end of the string.
 
-*value* - an expression whose value will be coerced to a string if needed.<br/>
+*value* - An expression whose value will be coerced to a string if needed.<br/>
 *min_length* - the minimum length, as a positive integer, that the returned string should be. If the first parameter in string format is less than this amount then padding will be added to it.<br/>
 *pad_string* - The padding string to use. If the amount of padding needed is less than the length of this string then it will be truncated from the right. If the needed padding is more than the length of this string, then this string is repeated until it is long enough.
 
@@ -812,6 +812,28 @@ Would return:
   "d": "19"
 }
 ```
+
+</td>
+</tr>
+<tr>
+<td>
+
+<code>range(<i>start</i>, </i>end</i>)</code>
+
+</td>
+<td>
+
+Creates an array of numeric values in the specified range.
+
+*start* - any expression resolving to a whole number. Represents the starting number for the range (inclusive).
+
+*end* - any expression resolving to a whole number. Represents the end number for the range (exclusive).
+
+**Examples**:
+
+`range(1, 10)`
+
+`range(50, 1)`
 
 </td>
 </tr>

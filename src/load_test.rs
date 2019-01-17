@@ -29,7 +29,11 @@ use std::{
 pub struct LoadTest {
     pub config: config::Config,
     // the http client
-    pub client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>>>,
+    pub client: Arc<
+        Client<
+            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
+        >,
+    >,
     // how long the test will run for (can go longer due to waiting for responses)
     duration: Duration,
     // a list of futures for the endpoint tasks to run
@@ -181,7 +185,7 @@ impl LoadTest {
             http.set_reuse_address(true);
             http.enforce_http(false);
             let https = HttpsConnector::from((http, TlsConnector::new().unwrap()));
-            Client::builder().build::<_, Body>(https)
+            Client::builder().set_host(false).build::<_, Body>(https)
         };
 
         let (stats_tx, stats_rx_done) =

@@ -1,5 +1,8 @@
 use futures::{future::join_all, stream, Sink, Stream};
-use hyper::{Body as HyperBody, Method, Request, Response};
+use hyper::{
+    header::{HeaderValue, HOST},
+    Body as HyperBody, Method, Request, Response,
+};
 use serde_json as json;
 use tokio::{
     prelude::*,
@@ -346,12 +349,14 @@ where
             } else {
                 HyperBody::empty()
             };
-            let request = request.body(body).unwrap();
+            let mut request = request.body(body).unwrap();
+            let url = url::Url::parse(&url).unwrap();
+            // add the host header
+            request.headers_mut().insert(HOST, HeaderValue::from_str(url.host_str().expect("invalid url")).unwrap());
             let mut request_provider = json::json!({});
             let request_obj = request_provider.as_object_mut().unwrap();
             if rr_providers & REQUEST_URL == REQUEST_URL {
                 // add in the url
-                let url = url::Url::parse(&url).unwrap();
                 let mut protocol: String = url.scheme().into();
                 if !protocol.is_empty() {
                     protocol = format!("{}:", protocol);

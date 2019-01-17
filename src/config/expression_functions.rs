@@ -495,18 +495,25 @@ impl MinMax {
         }
     }
 
-    fn eval_iter<'a, I: Iterator<Item = Cow<'a, json::Value>>>(&self, iter: I) -> (Cow<'a, json::Value>, usize) {
-        let (count, v) = iter
-            .fold((0, Cow::Owned(json::Value::Null)), |(count, left), right| {
+    fn eval_iter<'a, I: Iterator<Item = Cow<'a, json::Value>>>(
+        &self,
+        iter: I,
+    ) -> (Cow<'a, json::Value>, usize) {
+        let (count, v) = iter.fold(
+            (0, Cow::Owned(json::Value::Null)),
+            |(count, left), right| {
                 let l = f64_value(&left);
                 let r = f64_value(&right);
                 let v = match (l.partial_cmp(&r), self.min, l.is_finite()) {
-                    (Some(Ordering::Less), true, _) | (Some(Ordering::Greater), false, _) | (None, _, true) => left,
+                    (Some(Ordering::Less), true, _)
+                    | (Some(Ordering::Greater), false, _)
+                    | (None, _, true) => left,
                     _ if r.is_finite() => right,
                     _ => Cow::Owned(json::Value::Null),
                 };
                 (count + 1, v)
-            });
+            },
+        );
         (v, count)
     }
 

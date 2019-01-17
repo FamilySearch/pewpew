@@ -901,7 +901,7 @@ Pads a string or number to be minimum length. Any added padding will be added to
 #### Headers
 
 #### Headers
-Key/value pairs where the key is a string and the value is a [template string](#Templates) which specify the headers which will be sent with a request.
+Key/value pairs where the key is a string and the value is a [template string](#Templates) which specify the headers which will be sent with a request. Note that the `host` header is added automatically to every request and cannot be overwritten.
 
 For example:
 

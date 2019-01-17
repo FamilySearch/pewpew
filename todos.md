@@ -1,17 +1,14 @@
 # TODOs
-- Make the url sent with stats_id always have the "*"s by evaluating the template before the test run.
-- Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for depenedent providers
-- Add a `range` function in expressions. It would create an array representing the range. Ex: `range(2, 5)` would create the array `[2, 3, 4, 5]`. Parameters can also be more than just number literals
-- Add a `min` and `max` function in expressions. It would choose the smaller or larger number respectively of the numbers in the arguments.
+- Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for dependent providers. Create a dependency graph for providers (make sure dependencies in declare sections are included). In the case of having a dependency on a `response` provider, any endpoint which can feed the provider should receive a score based on how many endpoints it depends on and the endpoint with the lowest score wins. All buffer sizes should be limited to 1. Full endpoint logging should be enabled for every endpoint called, including the rtt. Disable aggregate stats.
 - Allow option to support templates within static providers
 - Allow declare expressions to reference other declare variables as long as there's no recursive references
+- Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
+- Add a `values` function in expressions which iterates over the key/value pairs in an object
 - Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
 - Log when a request is waiting for a provider
-- Different endpoint parameters selected randomly based on percentages
+- Add a max_connection config option
 - Allow math in expressions
-- Allow repeat to be a random number within a range
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
-- Update endpoint bodys to be an enum of string or json. Json string values are an enum of a string or reference. Strings can be templates make sure the stringify helper is publicly accessible.
 - Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand
 - Create a Visual Studio Code language extension for the loadtest file schema
 - Add cli option for results

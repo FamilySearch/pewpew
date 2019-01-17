@@ -1,4 +1,4 @@
-use super::select_parser::{AutoReturn, DeclareError, FunctionArg, Value};
+use super::select_parser::{f64_value, AutoReturn, DeclareError, FunctionArg, Value};
 use crate::providers;
 use crate::util::{json_value_to_string, parse_provider_name, Either};
 
@@ -9,6 +9,8 @@ use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
 
 use std::{
+    borrow::Cow,
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     env, fmt, iter,
     sync::Arc,
@@ -470,6 +472,78 @@ impl Match {
 }
 
 #[derive(Debug)]
+pub(super) struct MinMax {
+    args: Vec<FunctionArg>,
+    min: bool,
+}
+
+impl MinMax {
+    pub(super) fn new(min: bool, args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+        let m = MinMax { args, min };
+        let iter = m.args.iter().filter_map(|fa| {
+            if let FunctionArg::Value(Value::Json(json)) = fa {
+                Some(Cow::Borrowed(json))
+            } else {
+                None
+            }
+        });
+        let (v, count) = m.eval_iter(iter);
+        if count == m.args.len() {
+            Either::B(v.into_owned())
+        } else {
+            Either::A(m)
+        }
+    }
+
+    fn eval_iter<'a, I: Iterator<Item = Cow<'a, json::Value>>>(&self, iter: I) -> (Cow<'a, json::Value>, usize) {
+        let (count, v) = iter
+            .fold((0, Cow::Owned(json::Value::Null)), |(count, left), right| {
+                let l = f64_value(&left);
+                let r = f64_value(&right);
+                let v = match (l.partial_cmp(&r), self.min, l.is_finite()) {
+                    (Some(Ordering::Less), true, _) | (Some(Ordering::Greater), false, _) | (None, _, true) => left,
+                    _ if r.is_finite() => right,
+                    _ => Cow::Owned(json::Value::Null),
+                };
+                (count + 1, v)
+            });
+        (v, count)
+    }
+
+    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
+        let iter = self.args.iter().map(|fa| fa.evaluate(d));
+        self.eval_iter(iter).0.into_owned()
+    }
+
+    pub(super) fn evaluate_as_iter(
+        &self,
+        d: &json::Value,
+    ) -> impl Iterator<Item = json::Value> + Clone {
+        iter::once(self.evaluate(d))
+    }
+
+    pub(super) fn evaluate_as_future(
+        self: Arc<Self>,
+        providers: &Arc<BTreeMap<String, providers::Kind>>,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+        let futures = self.args.iter().map(|fa| fa.evaluate_as_future(providers));
+        stream::futures_unordered(futures)
+            .collect()
+            .map(move |values| {
+                let iter = values.iter().map(|v| Cow::Borrowed(&v.0));
+                let v = self.eval_iter(iter).0.into_owned();
+                let returns = values
+                    .into_iter()
+                    .fold(Vec::new(), |mut returns, (_, returns2)| {
+                        returns.extend(returns2);
+                        returns
+                    });
+                (v, returns)
+            })
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct Pad {
     start: bool,
     arg: FunctionArg,
@@ -706,6 +780,9 @@ fn into_string(fa: FunctionArg) -> Option<String> {
 fn as_u64(fa: &FunctionArg) -> Option<u64> {
     match fa {
         FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n.as_u64(),
+        FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_f64() => {
+            n.as_f64().map(|n| n as u64)
+        }
         _ => None,
     }
 }
@@ -1402,6 +1479,127 @@ mod tests {
                             })
                     }
                     _ => unreachable!(),
+                })
+                .collect();
+            join_all(futures)
+                .then(move |_| tx.send(()))
+                .then(|_| Ok(()))
+        }));
+    }
+
+    #[test]
+    fn min_max_eval() {
+        // min, constructor args, eval_arg, expect
+        let checks = vec![
+            (
+                true,
+                vec![j!(0.0).into(), j!(10).into(), j!(9).into()],
+                None,
+                j!(0.0),
+            ),
+            (
+                false,
+                vec![j!(0).into(), j!(10.0).into(), j!(9).into()],
+                None,
+                j!(10.0),
+            ),
+            (
+                true,
+                vec![j!(0).into(), j!(10).into(), j!("foo").into()],
+                None,
+                j!(0),
+            ),
+            (
+                false,
+                vec![j!(0).into(), j!(10).into(), j!("foo").into()],
+                None,
+                j!(10),
+            ),
+            (
+                true,
+                vec!["a".into(), j!(9).into(), "b".into()],
+                Some(j!({ "a": 0, "b": 10 })),
+                j!(0),
+            ),
+            (
+                false,
+                vec!["a".into(), j!(9).into(), "b".into()],
+                Some(j!({ "a": 0, "b": 10 })),
+                j!(10),
+            ),
+            (true, vec![j!("foo").into()], None, j!(null)),
+            (false, vec![j!("foo").into()], None, j!(null)),
+        ];
+
+        for (min, args, eval, right) in checks.into_iter() {
+            match (eval, MinMax::new(min, args)) {
+                (Some(eval), Either::A(m)) => {
+                    let left = m.evaluate(&eval);
+                    assert_eq!(left, right)
+                }
+                (None, Either::B(left)) => assert_eq!(left, right),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn min_max_eval_iter() {
+        // min, constructor args, eval_arg, expect
+        let checks = vec![
+            (
+                true,
+                vec!["a".into(), j!(9).into(), "b".into()],
+                j!({ "a": 0.0, "b": 10 }),
+                j!(0.0),
+            ),
+            (
+                false,
+                vec!["a".into(), j!(9).into(), "b".into()],
+                j!({ "a": 0, "b": 10.0 }),
+                j!(10.0),
+            ),
+        ];
+
+        for (min, args, eval, right) in checks.into_iter() {
+            if let Either::A(m) = MinMax::new(min, args) {
+                let left: Vec<_> = m.evaluate_as_iter(&eval).collect();
+                assert_eq!(left, vec!(right))
+            } else {
+                unreachable!();
+            }
+        }
+    }
+
+    #[test]
+    fn min_max_eval_future() {
+        // min, constructor args, expect
+        let checks = vec![
+            (true, vec!["a".into(), j!(9).into(), "b".into()], j!(0.0)),
+            (false, vec!["a".into(), j!(9).into(), "b".into()], j!(10)),
+        ];
+
+        current_thread::run(lazy(move || {
+            let (tx, rx) = oneshot::channel::<()>();
+            let test_end = rx.shared();
+
+            let providers = btreemap!(
+                "a".to_string() => literals(vec!(j!(0.0)), None, test_end.clone()),
+                "b".to_string() => literals(vec!(j!(10)), None, test_end.clone()),
+            );
+
+            let providers = providers.into();
+            let futures: Vec<_> = checks
+                .into_iter()
+                .map(|(min, args, right)| {
+                    if let Either::A(m) = MinMax::new(min, args) {
+                        let m = Arc::new(m);
+                        m.evaluate_as_future(&providers).map(move |(left, _)| {
+                            assert_eq!(left, right);
+                        })
+                    } else {
+                        unreachable!()
+                    }
                 })
                 .collect();
             join_all(futures)

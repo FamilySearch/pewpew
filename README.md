@@ -818,6 +818,30 @@ Would return:
 <tr>
 <td>
 
+<code>max(<i>...number</i>)</code>
+
+</td>
+<td>
+
+Selects the largest number out of a sequence of numbers. Each argument should be an expression which resolves to a number otherwise it will not be considered in determining the min. If no arguments are provided, or if none of the arguments resolve to a number, then `null` will be returned.
+
+</td>
+</tr>
+<tr>
+<td>
+
+<code>min(<i>...number</i>)</code>
+
+</td>
+<td>
+
+Selects the smallest number out of a sequence of numbers. Each argument should be an expression which resolves to a number otherwise it will not be considered in determining the max. If no arguments are provided, or if none of the arguments resolve to a number, then `null` will be returned.
+
+</td>
+</tr>
+<tr>
+<td>
+
 <code>range(<i>start</i>, </i>end</i>)</code>
 
 </td>

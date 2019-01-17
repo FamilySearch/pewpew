@@ -1,5 +1,5 @@
 use super::expression_functions::{
-    Collect, Encode, Epoch, Join, JsonPath, Match, Pad, Range, Repeat,
+    Collect, Encode, Epoch, Join, JsonPath, Match, MinMax, Pad, Range, Repeat,
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
@@ -71,6 +71,7 @@ pub(super) enum FunctionCall {
     Join(Arc<Join>),
     JsonPath(Arc<JsonPath>),
     Match(Arc<Match>),
+    MinMax(Arc<MinMax>),
     Pad(Arc<Pad>),
     Range(Arc<Range>),
     Repeat(Arc<Repeat>),
@@ -94,6 +95,8 @@ impl FunctionCall {
             "match" => Match::new(args)
                 .unwrap()
                 .map_a(|a| FunctionCall::Match(a.into())),
+            "max" => MinMax::new(false, args).map_a(|a| FunctionCall::MinMax(a.into())),
+            "min" => MinMax::new(true, args).map_a(|a| FunctionCall::MinMax(a.into())),
             "start_pad" => Pad::new(true, args).map_a(|a| FunctionCall::Pad(a.into())),
             "range" => Either::A(FunctionCall::Range(Range::new(args).into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args).into())),
@@ -108,6 +111,7 @@ impl FunctionCall {
             FunctionCall::Join(j) => j.evaluate(d),
             FunctionCall::JsonPath(j) => j.evaluate(d),
             FunctionCall::Match(m) => m.evaluate(d),
+            FunctionCall::MinMax(m) => m.evaluate(d),
             FunctionCall::Pad(p) => p.evaluate(d),
             FunctionCall::Range(r) => r.evaluate(d),
             FunctionCall::Repeat(r) => r.evaluate(),
@@ -125,7 +129,8 @@ impl FunctionCall {
             FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(d))),
             FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
             FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(d))),
-            FunctionCall::Pad(p) => Either3::C(Either3::A(p.evaluate_as_iter(d))),
+            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either::A(m.evaluate_as_iter(d)))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(Either::B(p.evaluate_as_iter(d)))),
             FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(d))),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_iter())),
         }
@@ -148,7 +153,12 @@ impl FunctionCall {
             FunctionCall::Match(m) => {
                 Either3::B(Either3::C(m.clone().evaluate_as_future(providers)))
             }
-            FunctionCall::Pad(p) => Either3::C(Either3::A(p.clone().evaluate_as_future(providers))),
+            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either::A(
+                m.clone().evaluate_as_future(providers),
+            ))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(Either::B(
+                p.clone().evaluate_as_future(providers),
+            ))),
             FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_future(providers))),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_future())),
         }
@@ -296,7 +306,7 @@ fn bool_value(json: &json::Value) -> bool {
     }
 }
 
-fn f64_value(json: &json::Value) -> f64 {
+pub(super) fn f64_value(json: &json::Value) -> f64 {
     if let Some(f) = json.as_f64() {
         f
     } else {

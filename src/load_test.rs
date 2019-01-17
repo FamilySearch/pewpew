@@ -29,7 +29,7 @@ use std::{
 pub struct LoadTest {
     pub config: config::Config,
     // the http client
-    pub client: Arc<Client<HttpsConnector<HttpConnector>>>,
+    pub client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>>>,
     // how long the test will run for (can go longer due to waiting for responses)
     duration: Duration,
     // a list of futures for the endpoint tasks to run
@@ -176,7 +176,7 @@ impl LoadTest {
         let test_timeout = test_timeout.shared();
 
         let client = {
-            let mut http = HttpConnector::new(4);
+            let mut http = HttpConnector::new_with_tokio_threadpool_resolver();
             http.set_keepalive(Some(config.config.client.keepalive));
             http.set_reuse_address(true);
             http.enforce_http(false);

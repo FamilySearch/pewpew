@@ -9,6 +9,7 @@ use tokio::{
     timer::{Error as TimerError, Timeout},
 };
 
+use crate::body_reader;
 use crate::channel;
 use crate::config::{
     self, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
@@ -471,29 +472,37 @@ where
                             None
                         }
                     }).collect();
-                    let body_stream =
-                        if response_fields_added & RESPONSE_BODY != 0 {
-                            Either::A(
-                                response.into_body()
-                                    .concat2()
-                                    .and_then(|body| {
-                                        let s = str::from_utf8(&body).expect("error parsing body as utf8");
-                                        let value = if let Ok(value) = json::from_str(s) {
-                                            value
-                                        } else {
-                                            json::Value::String(s.into())
-                                        };
-                                        Ok(Some(value))
-                                    })
-                            )
-                        } else {
+                    let ce_header = response.headers().get("content-encoding")
+                        .map(|h| h.to_str().unwrap())
+                        .unwrap_or("");
+                    let body_stream = match (response_fields_added & RESPONSE_BODY != 0, body_reader::Compression::try_from(ce_header)) {
+                        (true, Some(ce)) => {
+                            let mut br = body_reader::BodyReader::new(ce);
+                            let a = response.into_body()
+                                .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
+                                    br.decode(chunks.into_bytes(), &mut out_bytes).unwrap();
+                                    Ok::<_, hyper::Error>(out_bytes)
+                                })
+                                .and_then(|body| {
+                                    let s = str::from_utf8(&body).expect("error parsing body as utf8");
+                                    let value = if let Ok(value) = json::from_str(s) {
+                                        value
+                                    } else {
+                                        json::Value::String(s.into())
+                                    };
+                                    Ok(Some(value))
+                                });
+                            Either::A(a)
+                        },
+                        _ => {
                             // if we don't need the body, skip parsing it
                             Either::B(
                                 response.into_body()
                                     .for_each(|_| Ok(()))
                                     .and_then(|_| Ok(None))
                             )
-                        };
+                        }
+                    };
                     body_stream
                         .then(move |result| {
                             let rtt = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;

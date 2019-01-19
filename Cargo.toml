@@ -1,11 +1,13 @@
 [package]
 name = "pewpew"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2018"
 
 [dependencies]
 ansi_term = "0.11"
 base64 = "0.10"
+bytes = "0.4"
+brotli-decompressor = "2"
 clap = "2"
 crossbeam = "0.6"
 csv = "1"
@@ -17,6 +19,7 @@ hyper = "0.12"
 hyper-tls = "0.3"
 itertools = "0.8"
 jsonpath = "0.1"
+libflate = "0.1"
 native-tls = "0.2"
 percent-encoding = "1"
 pest = "2"

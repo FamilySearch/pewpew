@@ -1,5 +1,6 @@
 #![feature(drain_filter, no_more_cas)]
 
+mod body_reader;
 mod channel;
 mod config;
 mod for_each_parallel;

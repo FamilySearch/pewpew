@@ -1,15 +1,14 @@
 # TODOs
 - Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for dependent providers. Create a dependency graph for providers (make sure dependencies in declare sections are included). In the case of having a dependency on a `response` provider, any endpoint which can feed the provider should receive a score based on how many endpoints it depends on and the endpoint with the lowest score wins. All buffer sizes should be limited to 1. Full endpoint logging should be enabled for every endpoint called, including the rtt. Disable aggregate stats.
+- Get rid of all `panic!`s, `unwrap`s, `expect`s, `unreachable`s, etc. which users may encounter. Pieces which may fail prior to the test running should return results and end the test early. Pieces which may fail during a test run should either kill the test (with nice error message) or log an error. This is a prerequisite to having a server which runs load tests on demand
 - Allow option to support templates within static providers
 - Allow declare expressions to reference other declare variables as long as there's no recursive references
 - Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
 - Add a `values` function in expressions which iterates over the key/value pairs in an object
-- Handle response bodies which are compressed. This should be evident by the content-encoding response header. gzip, brotli, deflate
-- Log when a request is waiting for a provider
-- Add a max_connection config option
+- Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
+- Add a max_connection config option. Will require implementing a custom client and thread pool. Log number of open connections.
 - Allow math in expressions
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
-- Get rid of all panics, unreachable, etc. Instead there should be a means of killing the test in those cases. This is a prerequisite to having a server which runs load tests on demand
 - Create a Visual Studio Code language extension for the loadtest file schema
 - Add cli option for results
 - every minute we print stats to console, also write those results to disk, overwriting the previous file every minute

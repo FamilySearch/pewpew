@@ -1,6 +1,7 @@
-use super::select_parser::{f64_value, AutoReturn, DeclareError, FunctionArg, Value};
+use super::select_parser::{f64_value, AutoReturn, FunctionArg, Value};
+use crate::error::TestError;
 use crate::providers;
-use crate::util::{json_value_to_string, parse_provider_name, Either};
+use crate::util::{json_value_to_string, Either};
 
 use futures::{future, stream, Future, IntoFuture, Stream};
 use rand::distributions::{Distribution, Uniform};
@@ -25,40 +26,45 @@ pub(super) struct Collect {
 }
 
 impl Collect {
-    pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Result<Self, TestError> {
         match args.len() {
             2 | 3 => {
-                let second = as_u64(&args.remove(1)).expect("invalid arguments for repeat");
+                let second = as_u64(&args.remove(1))
+                    .ok_or_else(|| TestError::InvalidArguments("collect".into()))?;
                 let first = args.remove(0);
-                let third = args.pop().map(|fa| {
-                    let max = as_u64(&fa).expect("invalid arguments for repeat");
-                    Uniform::new_inclusive(second, max)
-                });
-                Collect {
+                let third = args
+                    .pop()
+                    .map(|fa| {
+                        let max = as_u64(&fa)
+                            .ok_or_else(|| TestError::InvalidArguments("collect".into()));
+                        Ok::<_, TestError>(Uniform::new_inclusive(second, max?))
+                    })
+                    .transpose()?;
+                Ok(Collect {
                     arg: first,
                     min: second,
                     random: third,
-                }
+                })
             }
-            _ => panic!("invalid arguments for repeat"),
+            _ => Err(TestError::InvalidArguments("collect".into())),
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        self.arg.evaluate(d).into_owned()
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d).map(|v| v.into_owned())
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(d)?))
     }
 
     pub(super) fn evaluate_as_future(
         &self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let n = if let Some(r) = self.random {
             r.sample(&mut rand::thread_rng())
         } else {
@@ -71,9 +77,10 @@ impl Collect {
                 |(mut jsons, mut outgoing), (json, outgoing2)| {
                     jsons.push(json);
                     outgoing.extend(outgoing2);
-                    Ok((jsons, outgoing))
+                    Ok::<_, TestError>((jsons, outgoing))
                 },
             )
+            // .fold(1, |_, _| Ok(1))
             .map(|(jsons, outgoing)| (jsons.into(), outgoing))
     }
 }
@@ -113,17 +120,15 @@ impl Encoding {
             }
         }
     }
-}
 
-impl From<&str> for Encoding {
-    fn from(s: &str) -> Encoding {
+    fn try_from(s: &str) -> Result<Encoding, TestError> {
         match s {
-            "percent-simple" => Encoding::PercentSimple,
-            "percent-query" => Encoding::PercentQuery,
-            "percent" => Encoding::Percent,
-            "percent-path" => Encoding::PercentPath,
-            "percent-userinfo" => Encoding::PercentUserinfo,
-            _ => panic!("unknown encoding `{}`", s),
+            "percent-simple" => Ok(Encoding::PercentSimple),
+            "percent-query" => Ok(Encoding::PercentQuery),
+            "percent" => Ok(Encoding::Percent),
+            "percent-path" => Ok(Encoding::PercentPath),
+            "percent-userinfo" => Ok(Encoding::PercentUserinfo),
+            _ => Err(TestError::InvalidEncoding(s.into())),
         }
     }
 }
@@ -135,21 +140,21 @@ pub(super) struct Encode {
 }
 
 impl Encode {
-    pub(super) fn new(mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::String(encoding)))] => {
-                let encoding = encoding.as_str().into();
+                let encoding = Encoding::try_from(encoding.as_str())?;
                 let e = Encode {
                     arg: args.remove(0),
                     encoding,
                 };
                 if let FunctionArg::Value(Value::Json(json)) = &e.arg {
-                    Either::B(e.evaluate_with_arg(json))
+                    Ok(Either::B(e.evaluate_with_arg(json)))
                 } else {
-                    Either::A(e)
+                    Ok(Either::A(e))
                 }
             }
-            _ => panic!("invalid arguments for encode"),
+            _ => Err(TestError::InvalidArguments("encode".into())),
         }
     }
 
@@ -157,22 +162,21 @@ impl Encode {
         self.encoding.encode(d).into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        let v = self.arg.evaluate(d);
-        self.evaluate_with_arg(&*v)
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d).map(|v| self.evaluate_with_arg(&*v))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(d)?))
     }
 
     pub(super) fn evaluate_as_future(
         &self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let encoding = self.encoding;
         self.arg
             .evaluate_as_future(providers)
@@ -189,47 +193,44 @@ pub(super) enum Epoch {
 }
 
 impl Epoch {
-    pub(super) fn new(args: Vec<FunctionArg>) -> Self {
+    pub(super) fn new(args: Vec<FunctionArg>) -> Result<Self, TestError> {
         match args.as_slice() {
-            [FunctionArg::Value(Value::Json(json::Value::String(unit)))] => unit.as_str().into(),
-            _ => panic!("invalid arguments for epoch"),
+            [FunctionArg::Value(Value::Json(json::Value::String(unit)))] => match unit.as_str() {
+                "s" => Ok(Epoch::Seconds),
+                "ms" => Ok(Epoch::Milliseconds),
+                "mu" => Ok(Epoch::Microseconds),
+                "ns" => Ok(Epoch::Nanoseconds),
+                _ => Err(TestError::InvalidArguments("epoch".into())),
+            },
+            _ => Err(TestError::InvalidArguments("epoch".into())),
         }
     }
 
-    pub(super) fn evaluate(self) -> json::Value {
+    pub(super) fn evaluate(self) -> Result<json::Value, TestError> {
         let start = SystemTime::now();
         let since_the_epoch = start
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
+            .map_err(|_| TestError::TimeSkew)?;
         let n = match self {
             Epoch::Seconds => u128::from(since_the_epoch.as_secs()),
             Epoch::Milliseconds => since_the_epoch.as_millis(),
             Epoch::Microseconds => since_the_epoch.as_micros(),
             Epoch::Nanoseconds => since_the_epoch.as_nanos(),
         };
-        n.to_string().into()
+        Ok(n.to_string().into())
     }
 
-    pub(super) fn evaluate_as_iter(self) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate())
+    pub(super) fn evaluate_as_iter(
+        self,
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate()?))
     }
 
     pub(super) fn evaluate_as_future(
         self,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
-        future::ok((self.evaluate(), Vec::new()))
-    }
-}
-
-impl From<&str> for Epoch {
-    fn from(s: &str) -> Epoch {
-        match s {
-            "s" => Epoch::Seconds,
-            "ms" => Epoch::Milliseconds,
-            "mu" => Epoch::Microseconds,
-            "ns" => Epoch::Nanoseconds,
-            _ => panic!("unknown epoch format `{}`", s),
-        }
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let r = self.evaluate().map(|v| (v, Vec::new()));
+        future::result(r)
     }
 }
 
@@ -240,19 +241,20 @@ pub(super) struct Join {
 }
 
 impl Join {
-    pub(super) fn new(mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::String(_)))] => {
-                let two = into_string(args.pop().unwrap()).expect("invalid arguments for join");
-                let one = args.pop().unwrap();
+                let two = into_string(args.pop().expect("join should have two args"))
+                    .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
+                let one = args.pop().expect("join should have two args");
                 let j = Join { arg: one, sep: two };
                 if let FunctionArg::Value(Value::Json(json)) = &j.arg {
-                    Either::B(j.evaluate_with_arg(json))
+                    Ok(Either::B(j.evaluate_with_arg(json)))
                 } else {
-                    Either::A(j)
+                    Ok(Either::A(j))
                 }
             }
-            _ => panic!("invalid arguments for join"),
+            _ => Err(TestError::InvalidArguments("join".into())),
         }
     }
 
@@ -269,22 +271,21 @@ impl Join {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        let d = self.arg.evaluate(d);
-        self.evaluate_with_arg(&*d)
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(d)?))
     }
 
     pub(super) fn evaluate_as_future(
         self: Arc<Self>,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         self.arg
             .evaluate_as_future(providers)
             .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
@@ -307,18 +308,27 @@ impl JsonPath {
         args: Vec<FunctionArg>,
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
-    ) -> Either<Self, json::Value> {
+    ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
             [FunctionArg::Value(Value::Json(json::Value::String(json_path)))] => {
-                let provider = parse_provider_name(&*json_path);
+                let provider = {
+                    // parse out the provider name, or if it's `request` or `response` get the second layer
+                    let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
+                    param_name_re
+                        .captures(&*json_path)
+                        .ok_or_else(|| TestError::InvalidJsonPathQuery(json_path.clone()))?
+                        .get(1)
+                        .expect("should have capture group")
+                        .as_str()
+                };
                 // jsonpath requires the query to start with `$.`, so add it in
-                let json_path = if json_path.starts_with('[') {
+                let json_path2 = if json_path.starts_with('[') {
                     format!("${}", json_path)
                 } else {
                     format!("$.{}", json_path)
                 };
-                let json_path = jsonpath::Selector::new(&*json_path)
-                    .unwrap_or_else(|e| panic!("invalid json_path query, {}\n{:?}", json_path, e));
+                let json_path = jsonpath::Selector::new(&json_path2)
+                    .map_err(move |_| TestError::InvalidJsonPathQuery(json_path.clone()))?;
                 let j = JsonPath {
                     provider: provider.into(),
                     selector: json_path,
@@ -332,13 +342,13 @@ impl JsonPath {
                 if let Some(v) = v {
                     let v = json::json!({ provider: v });
                     let v = j.evaluate(&v);
-                    Either::B(v)
+                    Ok(Either::B(v))
                 } else {
                     providers.insert(provider.into());
-                    Either::A(j)
+                    Ok(Either::A(j))
                 }
             }
-            _ => panic!("invalid arguments for json_path",),
+            _ => Err(TestError::InvalidArguments("json_path".into())),
         }
     }
 
@@ -361,7 +371,7 @@ impl JsonPath {
     pub(super) fn evaluate_as_future(
         self: Arc<Self>,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let jp = self.clone();
         let jp2 = self.clone();
         providers
@@ -375,9 +385,9 @@ impl JsonPath {
                     .rx
                     .clone()
                     .into_future()
-                    .map_err(move |_| DeclareError::ProviderEnded(jp.provider.clone()))
+                    .map_err(move |_| TestError::ProviderEnded(Some(jp.provider.clone())))
                     .and_then(move |(v, _)| {
-                        v.ok_or_else(|| DeclareError::ProviderEnded(jp2.provider.clone()))
+                        v.ok_or_else(|| TestError::ProviderEnded(Some(jp2.provider.clone())))
                     })
                     .map(move |v| {
                         let v = json::json!({ &*jp3.provider: v });
@@ -390,7 +400,7 @@ impl JsonPath {
                         (result, outgoing)
                     })
             })
-            .ok_or_else(move || DeclareError::UnknownProvider(jp2.provider.clone()))
+            .ok_or_else(move || TestError::UnknownProvider(jp2.provider.clone()))
             .into_future()
             .flatten()
     }
@@ -404,17 +414,17 @@ pub(super) struct Match {
 }
 
 impl Match {
-    pub(super) fn new(args: Vec<FunctionArg>) -> Result<Either<Self, json::Value>, regex::Error> {
+    pub(super) fn new(args: Vec<FunctionArg>) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::String(regex_str)))] => {
-                let regex = Regex::new(regex_str)?;
+                let regex = Regex::new(regex_str).map_err(TestError::RegexErr)?;
                 let capture_names = regex
                     .capture_names()
                     .enumerate()
                     .map(|(i, n)| n.map(|s| s.into()).unwrap_or_else(|| i.to_string()))
                     .collect();
                 let m = Match {
-                    arg: args.into_iter().nth(0).unwrap(),
+                    arg: args.into_iter().nth(0).expect("match should have two args"),
                     capture_names,
                     regex,
                 };
@@ -424,7 +434,7 @@ impl Match {
                     Ok(Either::A(m))
                 }
             }
-            _ => panic!("invalid arguments for match"),
+            _ => Err(TestError::InvalidArguments("match".into())),
         }
     }
 
@@ -449,22 +459,21 @@ impl Match {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        let d = self.arg.evaluate(d);
-        self.evaluate_with_arg(&*d)
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(d)?))
     }
 
     pub(super) fn evaluate_as_future(
         self: Arc<Self>,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         self.arg
             .evaluate_as_future(providers)
             .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
@@ -478,32 +487,36 @@ pub(super) struct MinMax {
 }
 
 impl MinMax {
-    pub(super) fn new(min: bool, args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+    pub(super) fn new(
+        min: bool,
+        args: Vec<FunctionArg>,
+    ) -> Result<Either<Self, json::Value>, TestError> {
         let m = MinMax { args, min };
         let iter = m.args.iter().filter_map(|fa| {
             if let FunctionArg::Value(Value::Json(json)) = fa {
-                Some(Cow::Borrowed(json))
+                Some(Ok(Cow::Borrowed(json)))
             } else {
                 None
             }
         });
-        let (v, count) = m.eval_iter(iter);
+        let (v, count) = m.eval_iter(iter)?;
         if count == m.args.len() {
-            Either::B(v.into_owned())
+            Ok(Either::B(v.into_owned()))
         } else {
-            Either::A(m)
+            Ok(Either::A(m))
         }
     }
 
-    fn eval_iter<'a, I: Iterator<Item = Cow<'a, json::Value>>>(
+    fn eval_iter<'a, I: Iterator<Item = Result<Cow<'a, json::Value>, TestError>>>(
         &self,
-        iter: I,
-    ) -> (Cow<'a, json::Value>, usize) {
-        let (count, v) = iter.fold(
-            (0, Cow::Owned(json::Value::Null)),
-            |(count, left), right| {
-                let l = f64_value(&left);
-                let r = f64_value(&right);
+        mut iter: I,
+    ) -> Result<(Cow<'a, json::Value>, usize), TestError> {
+        iter.try_fold(
+            (Cow::Owned(json::Value::Null), 0),
+            |(left, count), right| {
+                let right = right?;
+                let l = f64_value(&*left);
+                let r = f64_value(&*right);
                 let v = match (l.partial_cmp(&r), self.min, l.is_finite()) {
                     (Some(Ordering::Less), true, _)
                     | (Some(Ordering::Greater), false, _)
@@ -511,41 +524,40 @@ impl MinMax {
                     _ if r.is_finite() => right,
                     _ => Cow::Owned(json::Value::Null),
                 };
-                (count + 1, v)
+                Ok((v, count + 1))
             },
-        );
-        (v, count)
+        )
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
         let iter = self.args.iter().map(|fa| fa.evaluate(d));
-        self.eval_iter(iter).0.into_owned()
+        self.eval_iter(iter).map(|d| d.0.into_owned())
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        self.evaluate(d).map(iter::once)
     }
 
     pub(super) fn evaluate_as_future(
         self: Arc<Self>,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let futures = self.args.iter().map(|fa| fa.evaluate_as_future(providers));
         stream::futures_unordered(futures)
             .collect()
-            .map(move |values| {
-                let iter = values.iter().map(|v| Cow::Borrowed(&v.0));
-                let v = self.eval_iter(iter).0.into_owned();
+            .and_then(move |values| {
+                let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
+                let v = self.eval_iter(iter)?.0.into_owned();
                 let returns = values
                     .into_iter()
                     .fold(Vec::new(), |mut returns, (_, returns2)| {
                         returns.extend(returns2);
                         returns
                     });
-                (v, returns)
+                Ok((v, returns))
             })
     }
 }
@@ -559,19 +571,24 @@ pub(super) struct Pad {
 }
 
 impl Pad {
-    pub(super) fn new(start: bool, mut args: Vec<FunctionArg>) -> Either<Self, json::Value> {
+    pub(super) fn new(
+        start: bool,
+        mut args: Vec<FunctionArg>,
+    ) -> Result<Either<Self, json::Value>, TestError> {
         let as_usize = |fa| match fa {
-            FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
-                n.as_u64().unwrap() as usize
-            }
-            _ => panic!("invalid arguments for repeat"),
+            FunctionArg::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n
+                .as_u64()
+                .map(|n| n as usize)
+                .ok_or_else(|| TestError::InvalidArguments("pad".into())),
+            _ => Err(TestError::InvalidArguments("pad".into())),
         };
         match args.as_slice() {
             [_, FunctionArg::Value(Value::Json(json::Value::Number(_))), FunctionArg::Value(Value::Json(json::Value::String(_)))] =>
             {
-                let third = into_string(args.pop().unwrap()).expect("invalid arguments for pad");
-                let second = as_usize(args.pop().unwrap());
-                let first = args.pop().unwrap();
+                let third = into_string(args.pop().expect("pad should have three args"))
+                    .ok_or_else(|| TestError::InvalidArguments("pad".into()))?;
+                let second = as_usize(args.pop().expect("pad should have three args"))?;
+                let first = args.pop().expect("pad should have three args");
                 let p = Pad {
                     start,
                     arg: first,
@@ -579,12 +596,12 @@ impl Pad {
                     padding: third,
                 };
                 if let FunctionArg::Value(Value::Json(json)) = &p.arg {
-                    Either::B(p.evaluate_with_arg(json))
+                    Ok(Either::B(p.evaluate_with_arg(json)))
                 } else {
-                    Either::A(p)
+                    Ok(Either::A(p))
                 }
             }
-            _ => panic!("invalid arguments for pad"),
+            _ => Err(TestError::InvalidArguments("pad".into())),
         }
     }
 
@@ -605,22 +622,21 @@ impl Pad {
         output.into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        let d = self.arg.evaluate(d);
-        self.evaluate_with_arg(&*d)
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        iter::once(self.evaluate(d))
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(d)?))
     }
 
     pub(super) fn evaluate_as_future(
         self: Arc<Self>,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         self.arg
             .evaluate_as_future(providers)
             .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
@@ -664,72 +680,77 @@ pub(super) enum Range {
 }
 
 impl Range {
-    pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Result<Self, TestError> {
         if args.len() == 2 {
-            let second = args.pop().unwrap();
-            let first = args.pop().unwrap();
+            let second = args.pop().expect("range should have two args");
+            let first = args.pop().expect("range should have two args");
             match (&first, &second) {
                 (FunctionArg::Value(Value::Json(_)), FunctionArg::Value(Value::Json(_))) => {
-                    let first = as_u64(&first).expect("invalid arguments for range");
-                    let second = as_u64(&second).expect("invalid arguments for range");
-                    Range::Range(ReversibleRange::new(first, second))
+                    let first = as_u64(&first)
+                        .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
+                    let second = as_u64(&second)
+                        .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
+                    Ok(Range::Range(ReversibleRange::new(first, second)))
                 }
-                _ => Range::Args(first, second),
+                _ => Ok(Range::Args(first, second)),
             }
         } else {
-            panic!("invalid arguments for range")
+            Err(TestError::InvalidArguments("range".into()))
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        json::Value::Array(self.evaluate_as_iter(d).collect())
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        Ok(json::Value::Array(self.evaluate_as_iter(d)?.collect()))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
         let r = match self {
             Range::Args(first, second) => {
                 let first = first
-                    .evaluate(d)
+                    .evaluate(d)?
                     .as_u64()
-                    .expect("invalid arguments for range");
+                    .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 let second = second
-                    .evaluate(d)
+                    .evaluate(d)?
                     .as_u64()
-                    .expect("invalid arguments for range");
+                    .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 ReversibleRange::new(first, second)
             }
             Range::Range(r) => r.clone(),
         };
-        r.into_iter()
+        Ok(r.into_iter())
     }
 
     pub(super) fn evaluate_as_future(
         &self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             Range::Args(first, second) => {
                 let a = first
                     .evaluate_as_future(providers)
                     .join(second.evaluate_as_future(providers))
-                    .map(|((first, mut returns), (second, returns2))| {
-                        let first = first.as_u64().expect("invalid arguments for range");
-                        let second = second.as_u64().expect("invalid arguments for range");
+                    .and_then(|((first, mut returns), (second, returns2))| {
+                        let first = first
+                            .as_u64()
+                            .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
+                        let second = second
+                            .as_u64()
+                            .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                         let v = json::Value::Array(
                             ReversibleRange::new(first, second).into_iter().collect(),
                         );
                         returns.extend(returns2);
-                        (v, returns)
+                        Ok((v, returns))
                     });
                 Either::A(a)
             }
             Range::Range(..) => {
-                let v = self.evaluate(&json::Value::Null);
-                let b = future::ok((v, Vec::new()));
-                Either::B(b)
+                let r = self.evaluate(&json::Value::Null).map(|v| (v, Vec::new()));
+                Either::B(future::result(r))
             }
         }
     }
@@ -742,17 +763,22 @@ pub(super) struct Repeat {
 }
 
 impl Repeat {
-    pub(super) fn new(mut args: Vec<FunctionArg>) -> Self {
+    pub(super) fn new(mut args: Vec<FunctionArg>) -> Result<Self, TestError> {
         match args.len() {
             1 | 2 => {
-                let min = as_u64(&args.remove(0)).expect("invalid arguments for repeat");
-                let random = args.pop().map(|fa| {
-                    let max = as_u64(&fa).expect("invalid arguments for repeat");
-                    Uniform::new_inclusive(min, max)
-                });
-                Repeat { min, random }
+                let min = as_u64(&args.remove(0))
+                    .ok_or_else(|| TestError::InvalidArguments("repeat".into()))?;
+                let random = args
+                    .pop()
+                    .map(|fa| {
+                        let max =
+                            as_u64(&fa).ok_or_else(|| TestError::InvalidArguments("repeat".into()));
+                        Ok::<_, TestError>(Uniform::new_inclusive(min, max?))
+                    })
+                    .transpose()?;
+                Ok(Repeat { min, random })
             }
-            _ => panic!("invalid arguments for repeat"),
+            _ => Err(TestError::InvalidArguments("repeat".into())),
         }
     }
 
@@ -771,7 +797,7 @@ impl Repeat {
 
     pub(super) fn evaluate_as_future(
         &self,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = DeclareError> {
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         future::ok((self.evaluate(), Vec::new()))
     }
 }
@@ -837,8 +863,8 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(|j| j.into()).collect();
-            let c = Collect::new(args);
-            let left = c.evaluate(&json::Value::Null);
+            let c = Collect::new(args).unwrap();
+            let left = c.evaluate(&json::Value::Null).unwrap();
             assert_eq!(left, right);
         }
     }
@@ -853,8 +879,8 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(|j| j.into()).collect();
-            let c = Collect::new(args);
-            let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null).collect();
+            let c = Collect::new(args).unwrap();
+            let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null).unwrap().collect();
             assert_eq!(left, right);
         }
     }
@@ -884,7 +910,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right, range)| {
-                    let c = Collect::new(args);
+                    let c = Collect::new(args).unwrap();
                     c.evaluate_as_future(&providers).map(move |(left, _)| {
                         if let Some((min, max)) = range {
                             if let json::Value::Array(v) = left {
@@ -955,9 +981,9 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match (eval, Encode::new(args)) {
+            match (eval, Encode::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval);
+                    let left = e.evaluate(&eval).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -993,9 +1019,9 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match Encode::new(args) {
+            match Encode::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
                     assert_eq!(left, right)
                 }
                 Either::B(_) => unreachable!(),
@@ -1040,7 +1066,7 @@ mod tests {
 
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match Encode::new(args) {
+                .map(|(args, right)| match Encode::new(args).unwrap() {
                     Either::A(e) => e
                         .evaluate_as_future(&providers)
                         .map(move |(left, _)| assert_eq!(left, right)),
@@ -1059,13 +1085,11 @@ mod tests {
         let checks = vec![j!("s"), j!("ms"), j!("mu"), j!("ns")];
 
         for arg in checks.into_iter() {
-            let e = Epoch::new(vec![arg.into()]);
-            let left = json_value_into_string(e.evaluate())
+            let e = Epoch::new(vec![arg.into()]).unwrap();
+            let left = json_value_into_string(e.evaluate().unwrap())
                 .parse::<u128>()
                 .unwrap();
-            let epoch = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards");
+            let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             let (allowable_dif, right) = match e {
                 Epoch::Seconds => (1, u128::from(epoch.as_secs())),
                 Epoch::Milliseconds => (500, epoch.as_millis()),
@@ -1088,15 +1112,13 @@ mod tests {
         let checks = vec![j!("s"), j!("ms"), j!("mu"), j!("ns")];
 
         for arg in checks.into_iter() {
-            let e = Epoch::new(vec![arg.into()]);
-            let mut left: Vec<_> = e.evaluate_as_iter().collect();
+            let e = Epoch::new(vec![arg.into()]).unwrap();
+            let mut left: Vec<_> = e.evaluate_as_iter().unwrap().collect();
             assert_eq!(left.len(), 1);
             let left = json_value_into_string(left.pop().unwrap())
                 .parse::<u128>()
                 .unwrap();
-            let epoch = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards");
+            let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             let (allowable_dif, right) = match e {
                 Epoch::Seconds => (1, u128::from(epoch.as_secs())),
                 Epoch::Milliseconds => (500, epoch.as_millis()),
@@ -1122,11 +1144,9 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|arg| {
-                    let e = Epoch::new(vec![arg.into()]);
+                    let e = Epoch::new(vec![arg.into()]).unwrap();
                     e.evaluate_as_future().map(move |(left, _)| {
-                        let epoch = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Time went backwards");
+                        let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                         let (allowable_dif, right) = match e {
                             Epoch::Seconds => (1, u128::from(epoch.as_secs())),
                             Epoch::Milliseconds => (500, epoch.as_millis()),
@@ -1181,9 +1201,9 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match (eval, Join::new(args)) {
+            match (eval, Join::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval);
+                    let left = e.evaluate(&eval).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -1210,9 +1230,9 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match Join::new(args) {
+            match Join::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 Either::B(_) => unreachable!(),
@@ -1242,7 +1262,7 @@ mod tests {
             let providers = providers.into();
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match Join::new(args) {
+                .map(|(args, right)| match Join::new(args).unwrap() {
                     Either::A(j) => {
                         Arc::new(j)
                             .evaluate_as_future(&providers)
@@ -1294,7 +1314,8 @@ mod tests {
                 };
                 match (
                     *do_static,
-                    JsonPath::new(vec![arg.clone().into()], &mut providers, &static_providers),
+                    JsonPath::new(vec![arg.clone().into()], &mut providers, &static_providers)
+                        .unwrap(),
                 ) {
                     (false, Either::A(j)) => {
                         assert_eq!(&providers, providers_expect);
@@ -1331,7 +1352,7 @@ mod tests {
         for (arg, eval, right, providers_expect) in checks.into_iter() {
             let mut providers = BTreeSet::new();
             let static_providers = BTreeMap::new();
-            match JsonPath::new(vec![arg.into()], &mut providers, &static_providers) {
+            match JsonPath::new(vec![arg.into()], &mut providers, &static_providers).unwrap() {
                 Either::A(j) => {
                     assert_eq!(providers, providers_expect);
                     let left: Vec<_> = j.evaluate_as_iter(&eval).collect();
@@ -1365,7 +1386,9 @@ mod tests {
                 .map(|(arg, right, providers_expect)| {
                     let mut providers2 = BTreeSet::new();
                     let static_providers = BTreeMap::new();
-                    match JsonPath::new(vec![arg.into()], &mut providers2, &static_providers) {
+                    match JsonPath::new(vec![arg.into()], &mut providers2, &static_providers)
+                        .unwrap()
+                    {
                         Either::A(j) => {
                             assert_eq!(providers2, providers_expect);
                             Arc::new(j)
@@ -1416,7 +1439,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Match::new(args)) {
                 (Some(eval), Ok(Either::A(e))) => {
-                    let left = e.evaluate(&eval);
+                    let left = e.evaluate(&eval).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Ok(Either::B(left))) => assert_eq!(left, right),
@@ -1444,7 +1467,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Match::new(args) {
                 Ok(Either::A(e)) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -1539,9 +1562,9 @@ mod tests {
         ];
 
         for (min, args, eval, right) in checks.into_iter() {
-            match (eval, MinMax::new(min, args)) {
+            match (eval, MinMax::new(min, args).unwrap()) {
                 (Some(eval), Either::A(m)) => {
-                    let left = m.evaluate(&eval);
+                    let left = m.evaluate(&eval).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -1569,8 +1592,8 @@ mod tests {
         ];
 
         for (min, args, eval, right) in checks.into_iter() {
-            if let Either::A(m) = MinMax::new(min, args) {
-                let left: Vec<_> = m.evaluate_as_iter(&eval).collect();
+            if let Either::A(m) = MinMax::new(min, args).unwrap() {
+                let left: Vec<_> = m.evaluate_as_iter(&eval).unwrap().collect();
                 assert_eq!(left, vec!(right))
             } else {
                 unreachable!();
@@ -1599,7 +1622,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(min, args, right)| {
-                    if let Either::A(m) = MinMax::new(min, args) {
+                    if let Either::A(m) = MinMax::new(min, args).unwrap() {
                         let m = Arc::new(m);
                         m.evaluate_as_future(&providers).map(move |(left, _)| {
                             assert_eq!(left, right);
@@ -1670,9 +1693,9 @@ mod tests {
         ];
 
         for (start, args, eval, right) in checks.into_iter() {
-            match (eval, Pad::new(start, args)) {
+            match (eval, Pad::new(start, args).unwrap()) {
                 (Some(eval), Either::A(p)) => {
-                    let left = p.evaluate(&eval);
+                    let left = p.evaluate(&eval).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -1712,9 +1735,9 @@ mod tests {
         ];
 
         for (start, args, eval, right) in checks.into_iter() {
-            match Pad::new(start, args) {
+            match Pad::new(start, args).unwrap() {
                 Either::A(p) => {
-                    let left: Vec<_> = p.evaluate_as_iter(&eval).collect();
+                    let left: Vec<_> = p.evaluate_as_iter(&eval).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -1759,16 +1782,18 @@ mod tests {
             let providers = providers.into();
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(start, args, right)| match Pad::new(start, args) {
-                    Either::A(p) => {
-                        Arc::new(p)
-                            .evaluate_as_future(&providers)
-                            .map(move |(left, _)| {
-                                assert_eq!(left, right);
-                            })
-                    }
-                    _ => unreachable!(),
-                })
+                .map(
+                    |(start, args, right)| match Pad::new(start, args).unwrap() {
+                        Either::A(p) => {
+                            Arc::new(p)
+                                .evaluate_as_future(&providers)
+                                .map(move |(left, _)| {
+                                    assert_eq!(left, right);
+                                })
+                        }
+                        _ => unreachable!(),
+                    },
+                )
                 .collect();
             join_all(futures)
                 .then(move |_| tx.send(()))
@@ -1791,8 +1816,8 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let r = Range::new(args);
-            let left = r.evaluate(&data);
+            let r = Range::new(args).unwrap();
+            let left = r.evaluate(&data).unwrap();
             assert_eq!(left, right);
         }
     }
@@ -1812,8 +1837,8 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let r = Range::new(args);
-            let left: Vec<_> = r.evaluate_as_iter(&data).collect();
+            let r = Range::new(args).unwrap();
+            let left: Vec<_> = r.evaluate_as_iter(&data).unwrap().collect();
             let right = if let json::Value::Array(v) = right {
                 v
             } else {
@@ -1846,7 +1871,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(move |(args, right)| {
-                    let r = Range::new(args);
+                    let r = Range::new(args).unwrap();
                     r.evaluate_as_future(&providers).map(move |(left, _)| {
                         assert_eq!(left, right);
                     })
@@ -1867,7 +1892,7 @@ mod tests {
         ];
 
         for (args, count) in checks.into_iter() {
-            let r = Repeat::new(args);
+            let r = Repeat::new(args).unwrap();
             let v = if let json::Value::Array(v) = r.evaluate() {
                 v
             } else {
@@ -1891,7 +1916,7 @@ mod tests {
         ];
 
         for (args, count) in checks.into_iter() {
-            let r = Repeat::new(args);
+            let r = Repeat::new(args).unwrap();
             let v: Vec<_> = r.evaluate_as_iter().collect();
             assert!(v.iter().all(|v| *v == json::Value::Null));
             let len = v.len();
@@ -1914,7 +1939,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, count)| {
-                    let r = Repeat::new(args);
+                    let r = Repeat::new(args).unwrap();
                     r.evaluate_as_future().map(move |(v, _)| {
                         let v = if let json::Value::Array(v) = v {
                             v

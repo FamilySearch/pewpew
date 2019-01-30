@@ -1,9 +1,16 @@
+use super::print_test_error_to_console;
 use crate::config;
+use crate::error::TestError;
 use crate::load_test;
+
 use ansi_term::{Color, Style};
 use chrono::{DateTime, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
-use futures::{sync::mpsc as futures_channel, Future, Stream};
+use futures::{
+    future::Shared,
+    sync::mpsc::{self as futures_channel, Sender as FCSender},
+    Future, Sink, Stream,
+};
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -121,23 +128,32 @@ impl RollingAggregateStats {
         }
     }
 
-    fn init(&mut self, time: SystemTime, endpoint_id: usize, stats_id: StatsId) {
+    fn init(
+        &mut self,
+        time: SystemTime,
+        endpoint_id: usize,
+        stats_id: StatsId,
+    ) -> Result<(), TestError> {
         if !stats_id.contains_key("url") || !stats_id.contains_key("method") {
-            panic!("stats_id missing `url` and/or `method`. {:?}", stats_id);
+            return Err(TestError::Internal(format!(
+                "stats_id missing `url` and/or `method`. {:?}",
+                stats_id
+            )));
         }
         let duration = self.duration;
-        let time = to_epoch(time) / duration * duration;
+        let time = to_epoch(time)? / duration * duration;
         let mut stats_map = BTreeMap::new();
         stats_map.insert(
             time,
             AggregateStats::new(time, Duration::from_secs(duration)),
         );
         self.buckets.insert(endpoint_id, (stats_id, stats_map));
+        Ok(())
     }
 
-    fn append(&mut self, stat: ResponseStat) {
+    fn append(&mut self, stat: ResponseStat) -> Result<(), TestError> {
         let duration = self.duration;
-        let time = to_epoch(stat.time) / duration * duration;
+        let time = to_epoch(stat.time)? / duration * duration;
         let (_, stats_map) = self
             .buckets
             .get_mut(&stat.endpoint_id)
@@ -145,10 +161,11 @@ impl RollingAggregateStats {
         let current = stats_map
             .entry(time)
             .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
-        *current += stat;
+        current.append_response_stat(stat)?;
+        Ok(())
     }
 
-    fn persist(&self) -> impl Future<Item = (), Error = ()> {
+    fn persist(&self) -> impl Future<Item = (), Error = TestError> {
         let stats = self.clone();
         TokioFile::create(format!("stats-{}.json", self.time))
             .and_then(move |mut file| {
@@ -178,10 +195,10 @@ impl RollingAggregateStats {
         }
         for (stats_id, stats_map) in self.buckets.values() {
             if let Some(stats) = stats_map.get(&time) {
-                if !printed {
+                let did_print = stats.print_summary(stats_id, summary_output_format, true);
+                if !printed && did_print {
                     printed = true;
                 }
-                stats.print_summary(stats_id, summary_output_format, true);
             }
         }
         if is_pretty_format {
@@ -213,35 +230,6 @@ pub struct AggregateStats {
     time: u64, // epoch in seconds, when the bucket time begins
 }
 
-impl AddAssign<ResponseStat> for AggregateStats {
-    fn add_assign(&mut self, rhs: ResponseStat) {
-        let time = to_epoch(rhs.time);
-        if self.start_time == 0 {
-            self.start_time = time;
-        }
-        self.end_time = cmp::max(self.end_time, time);
-        match rhs.kind {
-            StatKind::ConnectionError(description) => {
-                self.connection_errors
-                    .entry(description)
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-            }
-            StatKind::Rtt((rtt, status)) => {
-                self.rtt_histogram += rtt;
-                self.status_counts
-                    .entry(status)
-                    .and_modify(|n| *n += 1)
-                    .or_insert(1);
-            }
-            StatKind::Timeout(to) => {
-                self.rtt_histogram += to;
-                self.request_timeouts += 1
-            }
-        }
-    }
-}
-
 impl AddAssign<&AggregateStats> for AggregateStats {
     fn add_assign(&mut self, rhs: &AggregateStats) {
         self.time = cmp::min(self.time, rhs.time);
@@ -264,17 +252,17 @@ impl AddAssign<&AggregateStats> for AggregateStats {
     }
 }
 
-fn get_epoch() -> u64 {
+fn get_epoch() -> Result<u64, TestError> {
     UNIX_EPOCH
         .elapsed()
-        .expect("error in system time. Time skew.")
-        .as_secs()
+        .map(|d| d.as_secs())
+        .map_err(|_| TestError::TimeSkew)
 }
 
-fn to_epoch(time: SystemTime) -> u64 {
+fn to_epoch(time: SystemTime) -> Result<u64, TestError> {
     time.duration_since(UNIX_EPOCH)
-        .expect("error in system time. Time skew.")
-        .as_secs()
+        .map(|d| d.as_secs())
+        .map_err(|_| TestError::TimeSkew)
 }
 
 fn create_date_diff(start: u64, end: u64) -> String {
@@ -305,13 +293,44 @@ impl AggregateStats {
         }
     }
 
+    fn append_response_stat(&mut self, rhs: ResponseStat) -> Result<(), TestError> {
+        let time = to_epoch(rhs.time)?;
+        if self.start_time == 0 {
+            self.start_time = time;
+        }
+        self.end_time = cmp::max(self.end_time, time);
+        match rhs.kind {
+            StatKind::ConnectionError(description) => {
+                self.connection_errors
+                    .entry(description)
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+            }
+            StatKind::Rtt((rtt, status)) => {
+                self.rtt_histogram += rtt;
+                self.status_counts
+                    .entry(status)
+                    .and_modify(|n| *n += 1)
+                    .or_insert(1);
+            }
+            StatKind::Timeout(to) => {
+                self.rtt_histogram += to;
+                self.request_timeouts += 1
+            }
+        }
+        Ok(())
+    }
+
     fn print_summary(
         &self,
         stats_id: &StatsId,
         format: config::SummaryOutputFormats,
         bucket_summary: bool,
-    ) {
-        let calls_made = self.rtt_histogram.len() + self.request_timeouts;
+    ) -> bool {
+        let calls_made = self.rtt_histogram.len();
+        if calls_made == 0 {
+            return false;
+        }
         let method = stats_id.get("method").expect("stats_id missing `method`");
         let url = stats_id.get("url").expect("stats_id missing `url`");
         let p50 = self.rtt_histogram.value_at_quantile(0.5);
@@ -395,6 +414,7 @@ impl AggregateStats {
                 eprint!("{}", format!("{}\n", output));
             }
         }
+        true
     }
 }
 
@@ -437,18 +457,22 @@ impl From<StatsInit> for StatsMessage {
 }
 
 pub fn create_stats_channel<F>(
-    test_complete: F,
+    test_complete: Shared<F>,
+    test_killer: FCSender<Result<(), TestError>>,
     config: &config::GeneralConfig,
-) -> (
-    futures_channel::UnboundedSender<StatsMessage>,
-    impl Future<Item = (), Error = ()> + Send,
-)
+) -> Result<
+    (
+        futures_channel::UnboundedSender<StatsMessage>,
+        impl Future<Item = (), Error = ()> + Send,
+    ),
+    TestError,
+>
 where
-    F: Future + Send + 'static,
+    F: Future<Item = (), Error = TestError> + Send + 'static,
 {
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
-    let start_sec = get_epoch();
+    let start_sec = get_epoch()?;
     let bucket_size = config.bucket_size;
     let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
     let next_bucket =
@@ -463,27 +487,38 @@ where
     let summary_output_format = config.summary_output_format;
     let is_pretty_format = summary_output_format.is_pretty();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
-        .map_err(|_| ())
+        .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
             let stats = stats4.lock();
-            let prev_time = get_epoch() / stats.duration * stats.duration - stats.duration;
+            let epoch = match get_epoch() {
+                Ok(e) => e,
+                Err(e) => return Err(e),
+            };
+            let prev_time = epoch / stats.duration * stats.duration - stats.duration;
             stats.print_summary(prev_time, summary_output_format);
             Ok(())
         });
-    let receiver = Stream::for_each(rx, move |datum| {
-        let mut stats = stats.lock();
-        match datum {
-            StatsMessage::Init(init) => stats.init(init.time, init.endpoint_id, init.stats_id),
-            StatsMessage::EndTime(end_time) => stats.end_time.set(Some(end_time)),
-            StatsMessage::ResponseStat(rs) => stats.append(rs),
-        }
-        Ok(())
-    })
+    let receiver = Stream::for_each(
+        rx.map_err(|_| TestError::ProviderEnded(None)),
+        move |datum| {
+            let mut stats = stats.lock();
+            match datum {
+                StatsMessage::Init(init) => {
+                    return stats.init(init.time, init.endpoint_id, init.stats_id);
+                }
+                StatsMessage::EndTime(end_time) => stats.end_time.set(Some(end_time)),
+                StatsMessage::ResponseStat(rs) => stats.append(rs)?,
+            }
+            Ok(())
+        },
+    )
     .join(print_stats)
     .map(|_| ())
-    .select(test_complete.then(|_| Ok(())))
-    .then(move |_| stats2.lock().persist())
-    .then(move |_| {
+    .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
+    .select(test_complete.map(|_| ()).map_err(|e| (&*e).clone()))
+    .map_err(|e| e.0)
+    .and_then(move |_| stats2.lock().persist())
+    .then(move |result| {
         let stats = stats3.lock();
         let duration = stats.duration;
         let (start, mut end) = stats
@@ -545,7 +580,10 @@ where
             }
             summary.print_summary(stats_id, summary_output_format, false);
         }
+        if let Err(e) = result {
+            print_test_error_to_console(e);
+        }
         Ok(())
     });
-    (tx, receiver)
+    Ok((tx, receiver))
 }

@@ -1,13 +1,17 @@
-use futures::{future::join_all, stream, Sink, Stream};
+use futures::{
+    future::{join_all, Shared},
+    stream,
+    sync::mpsc as futures_channel,
+    Sink, Stream,
+};
 use hyper::{
+    client::HttpConnector,
     header::{HeaderValue, HOST},
-    Body as HyperBody, Method, Request, Response,
+    Body as HyperBody, Client, Method, Request, Response,
 };
+use hyper_tls::HttpsConnector;
 use serde_json as json;
-use tokio::{
-    prelude::*,
-    timer::{Error as TimerError, Timeout},
-};
+use tokio::{prelude::*, timer::Timeout};
 
 use crate::body_reader;
 use crate::channel;
@@ -15,14 +19,16 @@ use crate::config::{
     self, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
+use crate::error::TestError;
 use crate::for_each_parallel::ForEachParallel;
-use crate::load_test::LoadTest;
+use crate::providers;
 use crate::stats;
 use crate::util::{Either, Either3};
 use crate::zip_all::zip_all;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    error::Error as StdError,
     ops::{Deref, DerefMut},
     str,
     sync::Arc,
@@ -48,7 +54,7 @@ impl Deref for TemplateValues {
     fn deref(&self) -> &Self::Target {
         match &self.0 {
             json::Value::Object(o) => o,
-            _ => panic!("cannot deref json value as object"),
+            _ => unreachable!("cannot deref json value as object"),
         }
     }
 }
@@ -57,7 +63,7 @@ impl DerefMut for TemplateValues {
     fn deref_mut(&mut self) -> &mut json::Map<String, json::Value> {
         match &mut self.0 {
             json::Value::Object(o) => o,
-            _ => panic!("cannot deref json value as object"),
+            _ => unreachable!("cannot deref json value as object"),
         }
     }
 }
@@ -79,38 +85,46 @@ impl Outgoing {
     }
 }
 
-pub struct Builder<T>
+type StartStream = Box<dyn Stream<Item = Instant, Error = TestError> + Send>;
+
+pub struct BuilderContext<F>
 where
-    T: Stream<Item = Instant, Error = TimerError> + Send + 'static,
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
 {
+    pub config: config::Config,
+    // the http client
+    pub client: Arc<
+        Client<
+            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
+        >,
+    >,
+    // a mapping of names to their prospective static (single value) providers
+    pub static_providers: BTreeMap<String, json::Value>,
+    // a mapping of names to their prospective providers
+    pub providers: Arc<BTreeMap<String, providers::Kind>>,
+    // a mapping of names to their prospective loggers
+    pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
+    // channel that receives and aggregates stats for the test
+    pub stats_tx: StatsTx,
+    pub test_ended: Shared<F>,
+}
+
+pub struct Builder {
     body: Option<String>,
     declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
     logs: Vec<(String, Select)>,
     method: Method,
-    start_stream: Option<T>,
+    start_stream: Option<StartStream>,
     provides: Vec<(String, Select)>,
     stats_id: Option<BTreeMap<String, String>>,
-    uri: String,
+    url: String,
 }
 
-// enum ProviderResponse {
-//     Channel(channel::Receiver<Vec<u8>>),
-//     Value(json::Value),
-// }
-
-enum StreamsReturn {
-    // Body(ProviderResponse),
-    Declare(String, json::Value, Vec<config::AutoReturn>),
-    Instant(Instant),
-    TemplateValue(String, json::Value, Option<config::AutoReturn>),
-}
-
-impl<T> Builder<T>
-where
-    T: Stream<Item = Instant, Error = TimerError> + Send + 'static,
-{
-    pub fn new(uri: String, start_stream: Option<T>) -> Self {
+impl Builder {
+    pub fn new(url: String, start_stream: Option<StartStream>) -> Self {
         Builder {
             body: None,
             declare: BTreeMap::new(),
@@ -120,7 +134,7 @@ where
             start_stream,
             provides: Vec::new(),
             stats_id: None,
-            uri,
+            url,
         }
     }
 
@@ -159,34 +173,32 @@ where
         self
     }
 
-    pub fn build(
+    pub fn build<F>(
         self,
-        ctx: &mut LoadTest,
+        ctx: &mut BuilderContext<F>,
         endpoint_id: usize,
-    ) -> (impl Future<Item = (), Error = ()> + Send) {
+    ) -> Result<Endpoint<F>, TestError>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Error: Send + Sync,
+        <F as Future>::Item: Send + Sync,
+    {
         let mut streams = Vec::new();
-        let has_start_stream = if let Some(start_stream) = self.start_stream {
-            streams.push(Either3::A(
-                start_stream
-                    .map(StreamsReturn::Instant)
-                    .map_err(|e| panic!("error from interval stream {}\n", e)),
-            ));
-            true
-        } else {
-            false
+        if let Some(start_stream) = self.start_stream {
+            streams.push(Either3::A(start_stream.map(StreamItem::Instant)));
         };
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
-        let uri = Template::new(&self.uri, &ctx.static_providers);
-        required_providers.extend(uri.get_providers().clone());
+        let url = Template::new(&self.url, &ctx.static_providers)?;
+        required_providers.extend(url.get_providers().clone());
         let headers: BTreeMap<_, _> = self
             .headers
             .into_iter()
             .map(|(key, v)| {
-                let value = Template::new(&v, &ctx.static_providers);
+                let value = Template::new(&v, &ctx.static_providers)?;
                 required_providers.extend(value.get_providers().clone());
-                (key.to_lowercase(), value)
+                Ok::<_, TestError>((key.to_lowercase(), value))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         let mut limits = Vec::new();
         let mut precheck_rr_providers = 0;
         let mut rr_providers = 0;
@@ -195,7 +207,7 @@ where
             let provider = ctx
                 .providers
                 .get(&k)
-                .unwrap_or_else(|| panic!("undeclared provider `{}`", k));
+                .ok_or_else(|| TestError::UnknownProvider(k))?;
             let tx = provider.tx.clone();
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
                 limits.push(tx.limit());
@@ -209,7 +221,7 @@ where
             let (tx, _) = ctx
                 .loggers
                 .get(&k)
-                .unwrap_or_else(|| panic!("undeclared logger `{}`", k));
+                .ok_or_else(|| TestError::UnknownLogger(k))?;
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
@@ -225,11 +237,14 @@ where
                 None
             }
         }));
-        let mut body = self.body.map(|body| {
-            let value = Template::new(&body, &ctx.static_providers);
-            required_providers.extend(value.get_providers().clone());
-            value
-        });
+        let body = self
+            .body
+            .map(|body| {
+                let value = Template::new(&body, &ctx.static_providers)?;
+                required_providers.extend(value.get_providers().clone());
+                Ok::<_, TestError>(value)
+            })
+            .transpose()?;
         {
             let mut required_providers2 = BTreeSet::new();
             for (name, d) in self.declare {
@@ -238,10 +253,10 @@ where
                     &d,
                     &mut required_providers2,
                     &ctx.static_providers,
-                );
+                )?;
                 let stream = vce
                     .into_stream(&ctx.providers)
-                    .map(move |(v, returns)| StreamsReturn::Declare(name.clone(), v, returns));
+                    .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
                 streams.push(Either3::B(stream));
             }
         }
@@ -250,7 +265,7 @@ where
             let provider = ctx
                 .providers
                 .get(&name)
-                .unwrap_or_else(|| panic!("unknown provider `{}`", &name));
+                .ok_or_else(|| TestError::UnknownProvider(name.clone()))?;
             let receiver = provider.rx.clone();
             let ar = provider
                 .auto_return
@@ -260,9 +275,9 @@ where
                     let ar = ar
                         .clone()
                         .map(|(send_option, tx)| (send_option, tx, vec![v.clone()]));
-                    StreamsReturn::TemplateValue(name.clone(), v, ar)
+                    StreamItem::TemplateValue(name.clone(), v, ar)
                 })
-                .map_err(|_| panic!("error from provider")),
+                .map_err(|_| TestError::Internal("Unexpected error from receiver".into())),
             );
             streams.push(provider_stream);
         }
@@ -272,321 +287,639 @@ where
         let method = self.method;
         let mut stats_id = self.stats_id.unwrap_or_default();
         for v in stats_id.values_mut() {
-            let t = Template::new(&v, &ctx.static_providers);
-            if !t.get_providers().is_empty() {
-                panic!("stats_id can only reference static providers and environment variables")
+            let t = Template::new(&v, &ctx.static_providers)?;
+            if let Some(r) = t.get_providers().iter().nth(0) {
+                return Err(TestError::InvalidStatsIdReference(r.clone()));
             }
-            *v = t.evaluate(&json::Value::Null);
+            *v = t.evaluate(&json::Value::Null)?;
         }
-        stats_id.insert("url".into(), uri.evaluate_with_star());
+        stats_id.insert("url".into(), url.evaluate_with_star());
         stats_id.insert("method".into(), method.to_string());
-        let test_timeout = ctx.test_timeout.clone();
-        let streams = zip_all(streams)
-            .map_err(|_| panic!("error from zip_all"))
-            .select(
-                ctx.test_timeout
-                    .clone()
-                    .into_stream()
-                    .map(|_| unreachable!("timeouts only error")),
-            );
-        let streams = if has_start_stream {
-            let mut test_killed = ctx.test_killed_rx.clone();
-            Either::A(streams.take_while(move |_| {
-                if let Ok(Async::Ready(_)) = test_killed.poll() {
-                    Ok(false)
-                } else {
-                    Ok(true)
-                }
-            }))
-        } else {
-            Either::B(streams)
-        };
+        let stream = Box::new(zip_all(streams));
+        // using existential types here to avoid the box causes ICE https://github.com/rust-lang/rust/issues/54899
         let timeout = ctx.config.client.request_timeout;
-        let init_stats = stats_tx
-            .clone()
-            .send(
-                stats::StatsInit {
-                    endpoint_id,
-                    time: SystemTime::now(),
-                    stats_id,
-                }
-                .into(),
-            )
-            .then(|_| Ok(()));
-        tokio::spawn(init_stats);
-        let work = ForEachParallel::new(limits, streams, move |values| {
-            let mut template_values = TemplateValues::new();
-            let mut auto_returns = Vec::new();
-            for tv in values {
-                match tv {
-                    StreamsReturn::Declare(name, value, returns) => {
-                        template_values.insert(name, value);
-                        auto_returns.extend(returns);
+        Ok(Endpoint {
+            body,
+            client,
+            endpoint_id,
+            headers,
+            limits,
+            method,
+            outgoing,
+            precheck_rr_providers,
+            rr_providers,
+            stats_id,
+            stats_tx,
+            stream,
+            url,
+            test_ended: ctx.test_ended.clone(),
+            timeout,
+        })
+    }
+}
+
+// enum ProviderResponse {
+//     Channel(channel::Receiver<Vec<u8>>),
+//     Value(json::Value),
+// }
+
+enum StreamItem {
+    // Body(ProviderResponse),
+    Declare(String, json::Value, Vec<config::AutoReturn>),
+    Instant(Instant),
+    TemplateValue(String, json::Value, Option<config::AutoReturn>),
+}
+
+type EndpointStream = Box<Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
+pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
+
+pub struct Endpoint<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    body: Option<Template>,
+    client: Arc<
+        Client<
+            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
+        >,
+    >,
+    endpoint_id: usize,
+    headers: BTreeMap<String, Template>,
+    limits: Vec<channel::Limit>,
+    method: Method,
+    outgoing: Arc<Vec<Outgoing>>,
+    precheck_rr_providers: u16,
+    rr_providers: u16,
+    stats_id: BTreeMap<String, String>,
+    stats_tx: StatsTx,
+    stream: EndpointStream,
+    test_ended: Shared<F>,
+    timeout: Duration,
+    url: Template,
+}
+
+// This returns a boxed future because otherwise the type system runs out of memory for the type
+impl<F> Endpoint<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    pub fn into_future(self) -> Box<Future<Item = (), Error = TestError> + Send> {
+        Box::new(
+            self.stats_tx
+                .clone()
+                .send(
+                    stats::StatsInit {
+                        endpoint_id: self.endpoint_id,
+                        time: SystemTime::now(),
+                        stats_id: self.stats_id.clone(),
                     }
-                    StreamsReturn::TemplateValue(name, value, auto_return) => {
-                        template_values.insert(name, value);
-                        if let Some(ar) = auto_return {
-                            auto_returns.push(ar);
-                        }
-                    },
-                    StreamsReturn::Instant(_) => ()
-                };
-            }
-            let mut request = Request::builder();
-            let url = uri.evaluate(&template_values.0);
-            request.uri(&url);
-            request.method(method.clone());
-            for (key, v) in &headers {
-                let value = v.evaluate(&template_values.0);
-                request.header(key.as_str(), value.as_str());
-            }
-            let mut body_value = None;
-            let body = if let Some(b) = body.as_mut() {
-                let body = b.evaluate(&template_values.0);
-                if rr_providers & REQUEST_BODY != 0 {
-                    body_value = Some(body.clone());
-                }
-                body.into()
-            } else {
-                HyperBody::empty()
-            };
-            let mut request = request.body(body).unwrap();
-            let url = url::Url::parse(&url).unwrap();
-            // add the host header
-            request.headers_mut().insert(HOST, HeaderValue::from_str(url.host_str().expect("invalid url")).unwrap());
-            let mut request_provider = json::json!({});
-            let request_obj = request_provider.as_object_mut().unwrap();
-            if rr_providers & REQUEST_URL == REQUEST_URL {
-                // add in the url
-                let mut protocol: String = url.scheme().into();
-                if !protocol.is_empty() {
-                    protocol = format!("{}:", protocol);
-                }
-                let search_params: json::Map<String, json::Value> = url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned().into())).collect();
-                request_obj.insert(
-                    "url".into(),
-                    json::json!({
-                        "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
-                        "host": url.host_str().unwrap_or(""),
-                        "hostname": url.domain().unwrap_or(""),
-                        "href": url.as_str(),
-                        "origin": url.origin().unicode_serialization(),
-                        "password": url.password().unwrap_or(""),
-                        "pathname": url.path(),
-                        "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
-                        "protocol": protocol,
-                        "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
-                        "searchParams": search_params,
-                        "username": url.username(),
+                    .into(),
+                )
+                .map_err(|_| TestError::Other("could not send init stats".to_string()))
+                .and_then(move |_| {
+                    let rm = RequestMaker {
+                        url: self.url,
+                        method: self.method,
+                        headers: self.headers,
+                        body: self.body,
+                        rr_providers: self.rr_providers,
+                        client: self.client,
+                        stats_tx: self.stats_tx,
+                        outgoing: self.outgoing,
+                        test_ended: self.test_ended,
+                        precheck_rr_providers: self.precheck_rr_providers,
+                        endpoint_id: self.endpoint_id,
+                        timeout: self.timeout,
+                    };
+                    ForEachParallel::new(self.limits, self.stream, move |values| {
+                        rm.send_requests(values)
                     })
+                }),
+        )
+    }
+}
+
+struct RequestMaker<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    url: Template,
+    method: Method,
+    headers: BTreeMap<String, Template>,
+    body: Option<Template>,
+    rr_providers: u16,
+    client: Arc<
+        Client<
+            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
+        >,
+    >,
+    stats_tx: StatsTx,
+    outgoing: Arc<Vec<Outgoing>>,
+    test_ended: Shared<F>,
+    precheck_rr_providers: u16,
+    endpoint_id: usize,
+    timeout: Duration,
+}
+
+impl<F> RequestMaker<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    fn send_requests(&self, values: Vec<StreamItem>) -> impl Future<Item = (), Error = TestError> {
+        let mut template_values = TemplateValues::new();
+        let mut auto_returns = Vec::new();
+        for tv in values {
+            match tv {
+                StreamItem::Declare(name, value, returns) => {
+                    template_values.insert(name, value);
+                    auto_returns.extend(returns);
+                }
+                StreamItem::TemplateValue(name, value, auto_return) => {
+                    template_values.insert(name, value);
+                    if let Some(ar) = auto_return {
+                        auto_returns.push(ar);
+                    }
+                }
+                StreamItem::Instant(_) => (),
+            };
+        }
+        let mut request = Request::builder();
+        let url = match self.url.evaluate(&template_values.0) {
+            Ok(u) => u,
+            Err(e) => return Either::B(Err(e).into_future()),
+        };
+        request.uri(&url);
+        let url = match url::Url::parse(&url) {
+            Ok(u) => u,
+            Err(_) => return Either::B(Err(TestError::InvalidUrl(url)).into_future()),
+        };
+        request.method(self.method.clone());
+        for (key, v) in &self.headers {
+            let value = match v.evaluate(&template_values.0) {
+                Ok(v) => v,
+                Err(e) => return Either::B(Err(e).into_future()),
+            };
+            request.header(key.as_str(), value.as_str());
+        }
+        let mut body_value = None;
+        let body = if let Some(b) = self.body.clone().as_mut() {
+            let body = match b.evaluate(&template_values.0) {
+                Ok(b) => b,
+                Err(e) => return Either::B(Err(e).into_future()),
+            };
+            if self.rr_providers & REQUEST_BODY != 0 {
+                body_value = Some(body.clone());
+            }
+            body.into()
+        } else {
+            HyperBody::empty()
+        };
+        let mut request = match request.body(body) {
+            Ok(b) => b,
+            Err(e) => return Either::B(Err(TestError::RequestBuilderErr(e.into())).into_future()),
+        };
+        // add the host header
+        request.headers_mut().insert(
+            HOST,
+            HeaderValue::from_str(url.host_str().expect("should be a valid url"))
+                .expect("url should be a valid string"),
+        );
+        let mut request_provider = json::json!({});
+        let request_obj = request_provider
+            .as_object_mut()
+            .expect("should be a json object");
+        if self.rr_providers & REQUEST_URL == REQUEST_URL {
+            // add in the url
+            let mut protocol: String = url.scheme().into();
+            if !protocol.is_empty() {
+                protocol = format!("{}:", protocol);
+            }
+            let search_params: json::Map<String, json::Value> = url
+                .query_pairs()
+                .map(|(k, v)| (k.into_owned(), v.into_owned().into()))
+                .collect();
+            request_obj.insert(
+                "url".into(),
+                json::json!({
+                    "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
+                    "host": url.host_str().unwrap_or(""),
+                    "hostname": url.domain().unwrap_or(""),
+                    "href": url.as_str(),
+                    "origin": url.origin().unicode_serialization(),
+                    "password": url.password().unwrap_or(""),
+                    "pathname": url.path(),
+                    "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
+                    "protocol": protocol,
+                    "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
+                    "searchParams": search_params,
+                    "username": url.username(),
+                }),
+            );
+        }
+        if self.rr_providers & REQUEST_STARTLINE != 0 {
+            let url_path_and_query = request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or("/");
+            let version = request.version();
+            request_obj.insert(
+                "start-line".into(),
+                format!("{} {} {:?}", self.method, url_path_and_query, version).into(),
+            );
+        }
+        if self.rr_providers & REQUEST_HEADERS != 0 {
+            let mut headers_json = json::Map::new();
+            for (k, v) in request.headers() {
+                headers_json.insert(
+                    k.as_str().to_string(),
+                    json::Value::String(
+                        v.to_str()
+                            .expect("could not parse HTTP request header as utf8 string")
+                            .to_string(),
+                    ),
                 );
             }
-            if rr_providers & REQUEST_STARTLINE != 0 {
-                let uri_path_and_query = request.uri().path_and_query()
-                    .map(|pq| pq.as_str())
-                    .unwrap_or("/");
-                let version = request.version();
-                request_obj.insert("start-line".into(), format!("{} {} {:?}", method, uri_path_and_query, version).into());
-            }
-            if rr_providers & REQUEST_HEADERS != 0 {
-                let mut headers_json = json::Map::new();
-                for (k, v) in request.headers() {
-                    headers_json.insert(
-                        k.as_str().to_string(),
-                        json::Value::String(
-                            v.to_str().expect("could not parse HTTP request header as utf8 string")
-                                .to_string()
-                        )
-                    );
-                }
-                request_obj.insert("headers".into(), json::Value::Object(headers_json));
-            }
-            if rr_providers & REQUEST_BODY != 0 {
-                let body_string = body_value.unwrap_or_else(|| "".into());
-                request_obj.insert("body".into(), body_string.into());
-            }
-            request_obj.insert("method".into(), method.as_str().into());
-            template_values.insert("request".into(), request_provider);
-            let response_future = client.request(request);
-            let now = Instant::now();
-            let stats_tx = stats_tx.clone();
-            let stats_tx2 = stats_tx.clone();
-            let outgoing = outgoing.clone();
-            let test_timeout = test_timeout.clone();
-            let test_timeout2 = test_timeout.clone();
-            let timeout_in_ms = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
-            Timeout::new(response_future, timeout)
-                .map_err(move |err| {
-                    if let Some(err) = err.into_inner() {
-                        let mut description = None;
-                        if let Some(io_error_maybe) = err.cause2() {
-                            if let Some(io_error) = io_error_maybe.downcast_ref::<std::io::Error>() {
-                                description = Some(format!("{}", io_error));
+            request_obj.insert("headers".into(), json::Value::Object(headers_json));
+        }
+        if self.rr_providers & REQUEST_BODY != 0 {
+            let body_string = body_value.unwrap_or_else(|| "".into());
+            request_obj.insert("body".into(), body_string.into());
+        }
+        request_obj.insert("method".into(), self.method.as_str().into());
+        template_values.insert("request".into(), request_provider);
+        let response_future = self.client.request(request);
+        let now = Instant::now();
+        let stats_tx = self.stats_tx.clone();
+        let stats_tx2 = stats_tx.clone();
+        let outgoing = self.outgoing.clone();
+        let test_ended = self.test_ended.clone();
+        let test_ended2 = test_ended.clone();
+        let timeout_in_ms = (duration_to_nanos(&self.timeout) / 1_000_000) as u64;
+        let precheck_rr_providers = self.precheck_rr_providers;
+        let endpoint_id = self.endpoint_id;
+        let a = Timeout::new(response_future, self.timeout)
+            .map_err(move |err| {
+                if let Some(err) = err.into_inner() {
+                    let err: Arc<StdError + Send + Sync> =
+                        if let Some(io_error_maybe) = err.source() {
+                            if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
+                                let io_error = err.into_cause().expect("should have a cause error");
+                                Arc::new(
+                                    *io_error
+                                        .downcast::<std::io::Error>()
+                                        .expect("should downcast as io error"),
+                                )
+                            } else {
+                                Arc::new(err)
                             }
-                        }
-                        let description = description.unwrap_or_else(|| format!("{}", err));
-                        let task = stats_tx2.send(
+                        } else {
+                            Arc::new(err)
+                        };
+                    TestError::ConnectionErr(SystemTime::now(), err)
+                } else {
+                    TestError::Timeout(SystemTime::now())
+                }
+            })
+            .and_then(move |response| {
+                let rh = ResponseHandler {
+                    template_values,
+                    precheck_rr_providers,
+                    outgoing,
+                    now,
+                    stats_tx,
+                    test_ended,
+                    endpoint_id,
+                };
+                rh.handle(response)
+            })
+            .or_else(move |te| match te {
+                TestError::ConnectionErr(time, e) => {
+                    let task = stats_tx2
+                        .send(
                             stats::ResponseStat {
                                 endpoint_id,
-                                kind: stats::StatKind::ConnectionError(description),
-                                time: SystemTime::now(),
-                            }.into()
-                        ).then(|_| Ok(()));
-                        tokio::spawn(task);
-                    } else {
-                        let task = stats_tx2.send(
+                                kind: stats::StatKind::ConnectionError(format!("{}", e)),
+                                time,
+                            }
+                            .into(),
+                        )
+                        .then(|_| Ok(()));
+                    Either3::A(task)
+                }
+                TestError::Timeout(time) => {
+                    let task = stats_tx2
+                        .send(
                             stats::ResponseStat {
                                 endpoint_id,
                                 kind: stats::StatKind::Timeout(timeout_in_ms),
-                                time: SystemTime::now(),
-                            }.into()
-                        ).then(|_| Ok(()));
-                        tokio::spawn(task);
-                    }
-                })
-                .and_then(move |response| {
-                    let status_code = response.status();
-                    let status = status_code.as_u16();
-                    let response_provider = json::json!({ "status": status });
-                    template_values.insert("response".into(), response_provider);
-                    let mut response_fields_added = 0b000_111;
-                    handle_response_requirements(
-                        precheck_rr_providers,
-                        &mut response_fields_added,
-                        template_values.get_mut("response").unwrap().as_object_mut().unwrap(),
-                        &response
-                    );
-                    let included_outgoing_indexes: Vec<_> = outgoing.iter().enumerate().filter_map(|(i, o)| {
-                        let where_clause_special_providers = o.select.get_where_clause_special_providers();
-                        if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
-                            || where_clause_special_providers & STATS == STATS
-                            || o.select.execute_where(template_values.as_json()) {
-                            handle_response_requirements(
-                                o.select.get_special_providers(),
-                                &mut response_fields_added,
-                                template_values.get_mut("response").unwrap().as_object_mut().unwrap(),
-                                &response
-                            );
-                            Some(i)
-                        } else {
-                            None
-                        }
-                    }).collect();
-                    let ce_header = response.headers().get("content-encoding")
-                        .map(|h| h.to_str().unwrap())
-                        .unwrap_or("");
-                    let body_stream = match (response_fields_added & RESPONSE_BODY != 0, body_reader::Compression::try_from(ce_header)) {
-                        (true, Some(ce)) => {
-                            let mut br = body_reader::BodyReader::new(ce);
-                            let a = response.into_body()
-                                .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
-                                    br.decode(chunks.into_bytes(), &mut out_bytes).unwrap();
-                                    Ok::<_, hyper::Error>(out_bytes)
-                                })
-                                .and_then(|body| {
-                                    let s = str::from_utf8(&body).expect("error parsing body as utf8");
-                                    let value = if let Ok(value) = json::from_str(s) {
-                                        value
-                                    } else {
-                                        json::Value::String(s.into())
-                                    };
-                                    Ok(Some(value))
-                                });
-                            Either::A(a)
-                        },
-                        _ => {
-                            // if we don't need the body, skip parsing it
-                            Either::B(
-                                response.into_body()
-                                    .for_each(|_| Ok(()))
-                                    .and_then(|_| Ok(None))
-                            )
-                        }
-                    };
-                    body_stream
-                        .then(move |result| {
-                            let rtt = (duration_to_nanos(&now.elapsed()) / 1_000_000) as u64;
-                            let mut futures = Vec::new();
-                            template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
-                            match result {
-                                Ok(body) => {
-                                    if let Some(body) = body {
-                                        template_values.get_mut("response").unwrap().as_object_mut().unwrap()
-                                            .insert("body".into(), body);
-                                    }
-                                    for i in included_outgoing_indexes.iter() {
-                                        let o = outgoing.get(*i).unwrap();
-                                        let i = o.select.as_iter(template_values.as_json().clone());
-                                        match o.select.get_send_behavior() {
-                                            EndpointProvidesSendOptions::Block => {
-                                                let fut = o.tx.clone().send_all(stream::iter_ok(i))
-                                                    .map(|_| ())
-                                                    .map_err(|_| panic!("provider channel should not yet be closed"))
-                                                    .select(test_timeout.clone().then(|_| Ok(())))
-                                                    .then(|_| Ok(()));
-                                                futures.push(Either::A(fut));
-                                            },
-                                            EndpointProvidesSendOptions::Force =>
-                                                i.for_each(|v| o.tx.force_send(v)),
-                                            EndpointProvidesSendOptions::IfNotFull =>
-                                                for v in i {
-                                                    if o.tx.try_send(v).is_err() {
-                                                        break
-                                                    }
-                                                },
-                                        }
-                                    }
-                                    futures.push(Either::B(
-                                        stats_tx.send(
-                                            stats::ResponseStat {
-                                                endpoint_id,
-                                                kind: stats::StatKind::Rtt((rtt, status)),
-                                                time: SystemTime::now(),
-                                            }.into()
-                                        )
-                                        .map(|_| ())
-                                        .map_err(|e| panic!("unexpected error trying to send stats, {}", e))
-                                    ));
-                                },
-                                Err(ref err) => eprint!("{}", format!("err getting body: {:?}\n took {}ms\n", err, rtt))
+                                time,
                             }
-                            join_all(futures)
+                            .into(),
+                        )
+                        .then(|_| Ok(()));
+                    Either3::B(task)
+                }
+                _ => Either3::C(Err(te).into_future()),
+            })
+            .and_then(move |_| {
+                let mut futures = Vec::new();
+                for (send_option, channel, jsons) in auto_returns {
+                    match send_option {
+                        EndpointProvidesSendOptions::Block => {
+                            let fut = channel
+                                .send_all(stream::iter_ok(jsons))
                                 .map(|_| ())
-                        })
-                // all error cases should have been handled before catching them here
-                }).then(move |_| {
-                    let mut futures = Vec::new();
-                    for (send_option, channel, jsons) in auto_returns {
-                        match send_option {
-                            EndpointProvidesSendOptions::Block => {
-                                let fut = channel.send_all(stream::iter_ok(jsons))
-                                    .map(|_| ())
-                                    .map_err(|_| panic!("provider channel should not yet be closed"))
-                                    .select(test_timeout2.clone().then(|_| Ok(())))
-                                    .map(|_| ()).map_err(|_| ());
-                                futures.push(fut);
-                            },
-                            EndpointProvidesSendOptions::Force =>
-                                jsons.into_iter().for_each(|v| channel.force_send(v)),
-                            EndpointProvidesSendOptions::IfNotFull =>
-                                for v in jsons {
-                                    if channel.try_send(v).is_err() {
-                                        break
-                                    }
-                                },
+                                .map_err(|_e| TestError::ProviderEnded(None))
+                                .select(test_ended2.clone().then(|_| Ok(())))
+                                .map(|v| v.0)
+                                .map_err(|e| e.0);
+                            futures.push(fut);
+                        }
+                        EndpointProvidesSendOptions::Force => {
+                            jsons.into_iter().for_each(|v| channel.force_send(v))
+                        }
+                        EndpointProvidesSendOptions::IfNotFull => {
+                            for v in jsons {
+                                if channel.try_send(v).is_err() {
+                                    break;
+                                }
+                            }
                         }
                     }
-                join_all(futures).then(|_| Ok(()))
+                }
+                join_all(futures).map(|_| ())
+            });
+        Either::A(a)
+    }
+}
+
+struct ResponseHandler<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    template_values: TemplateValues,
+    precheck_rr_providers: u16,
+    outgoing: Arc<Vec<Outgoing>>,
+    now: Instant,
+    stats_tx: StatsTx,
+    test_ended: Shared<F>,
+    endpoint_id: usize,
+}
+
+impl<F> ResponseHandler<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    fn handle(
+        self,
+        response: hyper::Response<HyperBody>,
+    ) -> impl Future<Item = (), Error = TestError> {
+        let status_code = response.status();
+        let status = status_code.as_u16();
+        let response_provider = json::json!({ "status": status });
+        let mut template_values = self.template_values;
+        template_values.insert("response".into(), response_provider);
+        let mut response_fields_added = 0b000_111;
+        handle_response_requirements(
+            self.precheck_rr_providers,
+            &mut response_fields_added,
+            template_values
+                .get_mut("response")
+                .expect("template_values should have `response`")
+                .as_object_mut()
+                .expect("`response` in template_values should be an object"),
+            &response,
+        );
+        let included_outgoing_indexes: Result<Vec<_>, _> = self
+            .outgoing
+            .iter()
+            .enumerate()
+            .map(|(i, o)| {
+                let where_clause_special_providers = o.select.get_where_clause_special_providers();
+                if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
+                    || where_clause_special_providers & STATS == STATS
+                    || o.select.execute_where(template_values.as_json())?
+                {
+                    handle_response_requirements(
+                        o.select.get_special_providers(),
+                        &mut response_fields_added,
+                        template_values
+                            .get_mut("response")
+                            .expect("template_values should have `response`")
+                            .as_object_mut()
+                            .expect("`response` in template_values should be an object"),
+                        &response,
+                    );
+                    Ok(Some(i))
+                } else {
+                    Ok(None)
+                }
             })
-        })
-        // errors should only propogate this far due to test timeout
-        .then(|_| Ok(()));
-        if has_start_stream {
-            Either::A(work)
-        } else {
-            let test_killed = ctx.test_killed_rx.clone().then(|_| Ok(()));
-            Either::B(work.select(test_killed).map(|_| ()).map_err(|_| ()))
+            .filter_map(|v| v.transpose())
+            .collect();
+        let included_outgoing_indexes = match included_outgoing_indexes {
+            Ok(v) => v,
+            Err(e) => return Either::B(Err(e).into_future()),
+        };
+        let ce_header = response.headers().get("content-encoding").map(|h| {
+            Ok::<_, TestError>(h.to_str().map_err(|_| {
+                TestError::Internal(
+                    "content-encoding header should be able to be cast to str".into(),
+                )
+            })?)
+        });
+        let ce_header = match ce_header {
+            Some(Err(e)) => return Either::B(Err(e).into_future()),
+            Some(Ok(s)) => s,
+            None => "",
+        };
+        let body_stream = match (
+            response_fields_added & RESPONSE_BODY != 0,
+            body_reader::Compression::try_from(ce_header),
+        ) {
+            (true, Some(ce)) => {
+                let mut br = body_reader::BodyReader::new(ce);
+                let a = response
+                    .into_body()
+                    .map_err(|e| TestError::BodyErr(Arc::new(e)))
+                    .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
+                        br.decode(chunks.into_bytes(), &mut out_bytes)
+                            .map_err(|e| TestError::BodyErr(Arc::new(e)))?;
+                        Ok::<_, TestError>(out_bytes)
+                    })
+                    .and_then(|body| {
+                        let s = match str::from_utf8(&body) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                return Either::A(
+                                    Err(TestError::BodyErr(Arc::new(e))).into_future(),
+                                );
+                            }
+                        };
+                        let value = if let Ok(value) = json::from_str(s) {
+                            value
+                        } else {
+                            json::Value::String(s.into())
+                        };
+                        Either::B(Ok(Some(value)).into_future())
+                    });
+                Either::A(a)
+            }
+            _ => {
+                // if we don't need the body, skip parsing it
+                Either::B(
+                    response
+                        .into_body()
+                        .map_err(|e| TestError::BodyErr(Arc::new(e)))
+                        .for_each(|_| Ok(()))
+                        .and_then(|_| Ok(None)),
+                )
+            }
+        };
+        let now = self.now;
+        let outgoing = self.outgoing;
+        let test_ended = self.test_ended;
+        let stats_tx = self.stats_tx;
+        let endpoint_id = self.endpoint_id;
+        let bh = BodyHandler {
+            now,
+            template_values,
+            included_outgoing_indexes,
+            outgoing,
+            test_ended,
+            endpoint_id,
+            stats_tx,
+            status,
+        };
+        let a = body_stream.then(move |result| bh.handle(result));
+        Either::A(a)
+    }
+}
+
+struct BodyHandler<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    now: Instant,
+    template_values: TemplateValues,
+    included_outgoing_indexes: Vec<usize>,
+    outgoing: Arc<Vec<Outgoing>>,
+    test_ended: Shared<F>,
+    endpoint_id: usize,
+    stats_tx: StatsTx,
+    status: u16,
+}
+
+impl<F> BodyHandler<F>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    fn handle(
+        self,
+        result: Result<Option<json::Value>, TestError>,
+    ) -> impl Future<Item = (), Error = TestError> {
+        let rtt = (duration_to_nanos(&self.now.elapsed()) / 1_000_000) as u64;
+        let mut template_values = self.template_values;
+        let mut futures = Vec::new();
+        template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
+        match result {
+            Ok(body) => {
+                if let Some(body) = body {
+                    template_values
+                        .get_mut("response")
+                        .expect("template_values should have `response`")
+                        .as_object_mut()
+                        .expect("`response` in template_values should be an object")
+                        .insert("body".into(), body);
+                }
+                for i in self.included_outgoing_indexes.iter() {
+                    let o = self
+                        .outgoing
+                        .get(*i)
+                        .expect("outgoing element at index should exist");
+                    let i = match o.select.as_iter(template_values.as_json().clone()) {
+                        Ok(v) => v,
+                        Err(e) => return Either::B(Err(e).into_future()),
+                    };
+                    match o.select.get_send_behavior() {
+                        EndpointProvidesSendOptions::Block => {
+                            let tx = o.tx.clone();
+                            let fut = stream::iter_result(i)
+                                .for_each(move |v| {
+                                    tx.clone()
+                                        .send(v)
+                                        .map(|_| ())
+                                        .map_err(|_| TestError::ProviderEnded(None))
+                                })
+                                .select(self.test_ended.clone().then(|_| Ok(())))
+                                .map(|v| v.0)
+                                .map_err(|e| e.0);
+                            futures.push(Either::A(fut));
+                        }
+                        EndpointProvidesSendOptions::Force => {
+                            for v in i {
+                                let v = match v {
+                                    Ok(v) => v,
+                                    Err(e) => return Either::B(Err(e).into_future()),
+                                };
+                                o.tx.force_send(v);
+                            }
+                        }
+                        EndpointProvidesSendOptions::IfNotFull => {
+                            for v in i {
+                                let v = match v {
+                                    Ok(v) => v,
+                                    Err(e) => return Either::B(Err(e).into_future()),
+                                };
+                                if o.tx.try_send(v).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                futures.push(Either::B(
+                    self.stats_tx
+                        .send(
+                            stats::ResponseStat {
+                                endpoint_id: self.endpoint_id,
+                                kind: stats::StatKind::Rtt((rtt, self.status)),
+                                time: SystemTime::now(),
+                            }
+                            .into(),
+                        )
+                        .map(|_| ())
+                        .map_err(|e| {
+                            TestError::Internal(format!(
+                                "unexpected error trying to send stats, {}",
+                                e
+                            ))
+                        }),
+                ));
+            }
+            Err(ref err) => eprint!(
+                "{}",
+                format!("err getting body: {:?}\n took {}ms\n", err, rtt)
+            ),
         }
+        Either::A(join_all(futures).map(|_| ()))
     }
 }
 

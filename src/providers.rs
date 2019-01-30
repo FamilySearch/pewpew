@@ -6,6 +6,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 
 use crate::channel::{self, Limit};
 use crate::config;
+use crate::error::TestError;
 use crate::util::Either3;
 
 use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
@@ -13,7 +14,7 @@ use serde_json as json;
 use tokio::{fs::File as TokioFile, prelude::*};
 use tokio_threadpool::blocking;
 
-use std::{io, path::PathBuf};
+use std::{io, path::PathBuf, sync::Arc};
 
 pub type Kind = Provider<json::Value>;
 
@@ -30,8 +31,9 @@ fn tweak_path(rest: &mut String, base: &PathBuf) {
 pub fn file<F>(
     mut template: config::FileProvider,
     test_complete: Shared<F>,
+    test_killer: FCSender<Result<(), TestError>>,
     config_path: &PathBuf,
-) -> Kind
+) -> Result<Kind, TestError>
 where
     F: Future + Send + 'static,
     <F as Future>::Error: Send + Sync,
@@ -42,43 +44,47 @@ where
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
             CsvReader::new(&template)
-                .unwrap_or_else(|e| {
-                    panic!("error creating file reader with file `{}`. {}", file, e)
-                })
+                .map_err(|e| {
+                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                })?
                 .into_stream(),
         ),
         config::FileFormat::Json => Either3::B(
             JsonReader::new(&template)
-                .unwrap_or_else(|e| {
-                    panic!("error creating file reader with file `{}`. {}", file, e)
-                })
+                .map_err(|e| {
+                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                })?
                 .into_stream(),
         ),
         config::FileFormat::Line => Either3::C(
             LineReader::new(&template)
-                .unwrap_or_else(|e| {
-                    panic!("error creating file reader with file `{}`. {}", file, e)
-                })
+                .map_err(|e| {
+                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                })?
                 .into_stream(),
         ),
     };
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
     let prime_tx = stream
-        .map_err(move |e| println!("file reading error with file `{}`. {}", file, e))
-        .forward(tx2)
+        .map_err(move |e| TestError::Other(format!("reading file `{}`: {}", file, e)))
+        .for_each(move |v| {
+            tx2.clone()
+                .send(v)
+                .map(|_| ())
+                .map_err(|_| TestError::ProviderEnded(None))
+        })
+        .or_else(move |e| test_killer.send(Err(e)).then(|_| Ok(())))
         .map(|_| ())
-        // Error propagate here when sender channel closes at test conclusion
-        .map_err(|_| ())
-        .select(test_complete.then(|_| Ok(())))
+        .select(test_complete.then(|_| Ok::<(), ()>(())))
         .then(|_| Ok(()));
 
     tokio::spawn(prime_tx);
-    Provider {
+    Ok(Provider {
         auto_return: template.auto_return,
         rx,
         tx,
-    }
+    })
 }
 
 #[must_use = "streams do nothing unless polled"]
@@ -89,9 +95,6 @@ struct RepeaterStream<T> {
 
 impl<T> RepeaterStream<T> {
     fn new(values: Vec<T>) -> Self {
-        if values.is_empty() {
-            panic!("repeater stream must have at least one value");
-        }
         RepeaterStream { i: 0, values }
     }
 }
@@ -105,8 +108,8 @@ where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let i = self.i;
-        self.i = (self.i + 1) % self.values.len();
-        Ok(Async::Ready(Some(self.values[i].clone())))
+        self.i = (self.i + 1).checked_rem(self.values.len()).unwrap_or(0);
+        Ok(Async::Ready(self.values.get(i).cloned()))
     }
 }
 
@@ -170,7 +173,7 @@ where
 pub fn logger<F>(
     mut template: config::Logger,
     test_complete: F,
-    test_complete_tx: FCSender<()>,
+    test_killer: FCSender<Result<(), TestError>>,
     config_path: &PathBuf,
 ) -> channel::Sender<json::Value>
 where
@@ -178,12 +181,12 @@ where
 {
     let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
     tweak_path(&mut template.to, config_path);
-    let file_name = template.to.clone();
+    let file_name = Arc::new(template.to);
     let limit = template.limit;
     let pretty = template.pretty;
     let kill = template.kill;
     let mut counter = 1;
-    match template.to.as_str() {
+    match file_name.as_str() {
         "stderr" => {
             let logger = rx
                 .for_each(move |v| {
@@ -194,13 +197,18 @@ where
                         eprintln!("{}", v);
                     }
                     match limit {
-                        Some(limit) if kill && counter == limit => {
-                            Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                        }
-                        Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
-                        None if kill => {
-                            Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                        }
+                        Some(limit) if kill && counter >= limit => Either3::B(
+                            test_killer
+                                .clone()
+                                .send(Err(TestError::KilledByLogger))
+                                .then(|_| Ok(())),
+                        ),
+                        None if kill => Either3::C(
+                            test_killer
+                                .clone()
+                                .send(Err(TestError::KilledByLogger))
+                                .then(|_| Ok(())),
+                        ),
                         _ => Either3::A(Ok(()).into_future()),
                     }
                 })
@@ -218,13 +226,18 @@ where
                         println!("{}", v);
                     }
                     match limit {
-                        Some(limit) if kill && counter == limit => {
-                            Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                        }
-                        Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
-                        None if kill => {
-                            Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                        }
+                        Some(limit) if kill && counter >= limit => Either3::B(
+                            test_killer
+                                .clone()
+                                .send(Err(TestError::KilledByLogger))
+                                .then(|_| Ok(())),
+                        ),
+                        None if kill => Either3::C(
+                            test_killer
+                                .clone()
+                                .send(Err(TestError::KilledByLogger))
+                                .then(|_| Ok(())),
+                        ),
                         _ => Either3::A(Ok(()).into_future()),
                     }
                 })
@@ -234,30 +247,42 @@ where
         }
         _ => {
             let file_name2 = file_name.clone();
-            let logger = TokioFile::create(file_name.clone())
-                .map_err(move |e| eprintln!("Error creating logger file `{:?}`, {}", file_name2, e))
-                .and_then(move |mut file| {
-                    rx.for_each(move |v| {
-                        counter += 1;
-                        let result = if pretty {
-                            writeln!(file, "{:#}", v)
-                        } else {
-                            writeln!(file, "{}", v)
-                        };
-                        let result = result
-                            .map_err(|e| eprintln!("Error writing to `{}`, {}", file_name, e));
-                        match limit {
-                            Some(limit) if kill && counter == limit => {
-                                Either3::B(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                            }
-                            Some(limit) if counter > limit => Either3::A(Err(()).into_future()),
-                            None if kill => {
-                                Either3::C(test_complete_tx.clone().send(()).then(|_| Ok(())))
-                            }
-                            _ => Either3::A(result.into_future()),
-                        }
-                    })
+            let test_killer2 = test_killer.clone();
+            let logger = TokioFile::create((&*file_name).clone())
+                .map_err(move |e| {
+                    TestError::Other(format!("creating logger file `{:?}`: {}", file_name2, e))
                 })
+                .and_then(move |mut file| {
+                    rx.map_err(|_| TestError::ProviderEnded(None))
+                        .for_each(move |v| {
+                            let file_name = file_name.clone();
+                            counter += 1;
+                            let result = if pretty {
+                                writeln!(file, "{:#}", v)
+                            } else {
+                                writeln!(file, "{}", v)
+                            };
+                            let result = result.into_future().map_err(move |e| {
+                                TestError::Other(format!("writing to file `{}`: {}", file_name, e))
+                            });
+                            match limit {
+                                Some(limit) if kill && counter >= limit => Either3::B(
+                                    test_killer
+                                        .clone()
+                                        .send(Err(TestError::KilledByLogger))
+                                        .then(|_| Ok::<_, TestError>(())),
+                                ),
+                                None if kill => Either3::C(
+                                    test_killer
+                                        .clone()
+                                        .send(Err(TestError::KilledByLogger))
+                                        .then(|_| Ok::<_, TestError>(())),
+                                ),
+                                _ => Either3::A(result),
+                            }
+                        })
+                })
+                .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok::<_, ()>(())))
                 .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
             tokio::spawn(logger);

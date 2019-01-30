@@ -112,7 +112,10 @@ impl Iterator for CsvReader {
             }
             let i = random.sample(&mut rand::thread_rng()) % self.positions.len();
             let pos = if self.repeat {
-                self.positions.get(i).cloned().unwrap()
+                self.positions
+                    .get(i)
+                    .cloned()
+                    .expect("should have the position")
             } else {
                 self.positions.remove(i)
             };

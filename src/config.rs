@@ -2,8 +2,9 @@ mod expression_functions;
 mod select_parser;
 
 pub use self::select_parser::{
-    AutoReturn, Select, Template, ValueOrComplexExpression, REQUEST_BODY, REQUEST_HEADERS,
-    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+    AutoReturn, Rule as ParserRule, Select, Template, ValueOrComplexExpression, REQUEST_BODY,
+    REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    RESPONSE_STARTLINE, STATS,
 };
 
 use crate::channel::Limit;
@@ -282,7 +283,7 @@ fn default_auto_buffer_start_size() -> usize {
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct ClientConfig {
     #[serde(default = "default_request_timeout")]
     pub request_timeout: Duration,
@@ -303,7 +304,7 @@ impl Default for ClientConfig {
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct GeneralConfig {
     #[serde(default = "default_auto_buffer_start_size")]
     pub auto_buffer_start_size: usize,
@@ -327,7 +328,7 @@ impl Default for GeneralConfig {
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub client: ClientConfig,
@@ -393,13 +394,20 @@ impl<'de> Deserialize<'de> for Percent {
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").unwrap();
+        let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").expect("should be a valid regex");
 
         let captures = re.captures(&string).ok_or_else(|| {
             DeError::invalid_value(Unexpected::Str(&string), &"a percentage like `30%`")
         })?;
 
-        Ok(Percent(captures.get(1).unwrap().as_str().parse().unwrap()))
+        Ok(Percent(
+            captures
+                .get(1)
+                .expect("should have capture group")
+                .as_str()
+                .parse()
+                .expect("should be valid digits for percent"),
+        ))
     }
 }
 
@@ -409,12 +417,19 @@ impl<'de> Deserialize<'de> for HitsPer {
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").unwrap();
+        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
         let captures = re.captures(&string).ok_or_else(|| {
             DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
         })?;
-        let n = captures.get(1).unwrap().as_str().parse().unwrap();
-        if captures.get(2).unwrap().as_str()[0..1].eq_ignore_ascii_case("m") {
+        let n = captures
+            .get(1)
+            .expect("should have capture group")
+            .as_str()
+            .parse()
+            .expect("should be valid digits for HitsPer");
+        if captures.get(2).expect("should have capture group").as_str()[0..1]
+            .eq_ignore_ascii_case("m")
+        {
             Ok(HitsPer::Minute(n))
         } else {
             Ok(HitsPer::Second(n))
@@ -445,8 +460,10 @@ where
 {
     let template = String::deserialize(deserializer)?;
     let vars = BTreeMap::new();
-    let template = Template::new(&template, &vars);
-    Ok(template.evaluate(&json::Value::Null))
+    let template = Template::new(&template, &vars).map_err(DeError::custom)?;
+    Ok(template
+        .evaluate(&json::Value::Null)
+        .map_err(DeError::custom)?)
 }
 
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
@@ -524,7 +541,8 @@ where
 {
     let string = String::deserialize(deserializer)?;
     let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
-    let sanity_re = Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).unwrap();
+    let sanity_re =
+        Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
     if !sanity_re.is_match(&string) {
         return Err(DeError::invalid_value(
             Unexpected::Str(&string),
@@ -532,10 +550,15 @@ where
         ));
     }
     let mut total_secs = 0;
-    let re = Regex::new(base_re).unwrap();
+    let re = Regex::new(base_re).expect("should be a valid regex");
     for captures in re.captures_iter(&string) {
-        let n: u64 = captures.get(1).unwrap().as_str().parse().unwrap();
-        let unit = &captures.get(2).unwrap().as_str()[0..1];
+        let n: u64 = captures
+            .get(1)
+            .expect("should have capture group")
+            .as_str()
+            .parse()
+            .expect("should parse into u64 for duration");
+        let unit = &captures.get(2).expect("should have capture group").as_str()[0..1];
         let secs = if unit.eq_ignore_ascii_case("h") {
             n * 60 * 60 // hours
         } else if unit.eq_ignore_ascii_case("m") {

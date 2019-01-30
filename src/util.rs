@@ -1,5 +1,4 @@
 use futures::{Poll, Stream};
-use regex::Regex;
 use serde_json as json;
 use tokio::prelude::*;
 
@@ -61,6 +60,19 @@ where
         match self {
             Either::A(a) => a.next(),
             Either::B(b) => b.next(),
+        }
+    }
+}
+
+impl<A, B> fmt::Display for Either<A, B>
+where
+    A: fmt::Display,
+    B: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Either::A(a) => write!(f, "{}", a),
+            Either::B(b) => write!(f, "{}", b),
         }
     }
 }
@@ -181,6 +193,36 @@ where
     }
 }
 
+impl<A, B, C> fmt::Debug for Either3<A, B, C>
+where
+    A: fmt::Debug,
+    B: fmt::Debug,
+    C: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Either3::A(a) => write!(f, "Either::A({:?})", a),
+            Either3::B(b) => write!(f, "Either::B({:?})", b),
+            Either3::C(c) => write!(f, "Either::C({:?})", c),
+        }
+    }
+}
+
+impl<A, B, C> fmt::Display for Either3<A, B, C>
+where
+    A: fmt::Display,
+    B: fmt::Display,
+    C: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Either3::A(a) => write!(f, "{}", a),
+            Either3::B(b) => write!(f, "{}", b),
+            Either3::C(c) => write!(f, "{}", c),
+        }
+    }
+}
+
 pub fn str_to_json(s: &str) -> json::Value {
     json::from_str(s).unwrap_or_else(|_| json::Value::String(s.into()))
 }
@@ -197,17 +239,6 @@ pub fn json_value_into_string(v: json::Value) -> String {
         json::Value::String(s) => s,
         _ => v.to_string(),
     }
-}
-
-pub fn parse_provider_name(s: &str) -> &str {
-    // parse out the provider name, or if it's `request` or `response` get the second layer
-    let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
-    param_name_re
-        .captures(s)
-        .unwrap()
-        .get(1)
-        .expect("invalid json path query")
-        .as_str()
 }
 
 #[cfg(test)]

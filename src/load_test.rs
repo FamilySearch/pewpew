@@ -1,22 +1,22 @@
 use crate::channel;
 use crate::config;
+use crate::error::TestError;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, StatsMessage};
+use crate::util::Either;
+
 use chrono::{Duration as ChronoDuration, Local};
 use futures::{
-    future::{join_all, lazy, Shared},
-    stream::StreamFuture,
-    sync::{
-        mpsc::{self as futures_channel, Receiver as FCReceiver},
-        oneshot,
-    },
+    future::{join_all, lazy, poll_fn},
+    sink::Sink,
+    stream,
+    sync::mpsc::{self as futures_channel, Sender as FCSender},
+    Async, Future, IntoFuture, Stream,
 };
 pub use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
-use serde_json as json;
-use tokio::{prelude::*, timer};
 
 use std::{
     cmp,
@@ -26,43 +26,34 @@ use std::{
     time::{Duration, Instant},
 };
 
+type EndpointCalls = Box<Future<Item = (), Error = ()> + Send + 'static>;
+
 pub struct LoadTest {
-    pub config: config::Config,
-    // the http client
-    pub client: Arc<
-        Client<
-            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
-        >,
-    >,
     // how long the test will run for (can go longer due to waiting for responses)
     duration: Duration,
     // a list of futures for the endpoint tasks to run
-    endpoint_calls: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
-    // a mapping of names to their prospective static (single value) providers
-    pub static_providers: BTreeMap<String, json::Value>,
-    // a mapping of names to their prospective providers
-    pub providers: Arc<BTreeMap<String, providers::Kind>>,
-    // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
-    // channel that receives and aggregates stats for the test
-    pub stats_tx: futures_channel::UnboundedSender<StatsMessage>,
-    // a trigger used to signal when the endpoints tasks finish (including sending their stats)
-    test_ended_tx: oneshot::Sender<()>,
-    // channel that receives a message if the test is killed
-    pub test_killed_rx: Shared<StreamFuture<FCReceiver<()>>>,
-    pub test_timeout: Shared<Box<dyn Future<Item = (), Error = ()> + Send>>,
+    endpoint_calls: EndpointCalls,
+    // channel to send stats related data
+    stats_tx: request::StatsTx,
+    // channel to kill the test
+    test_killer: FCSender<Result<(), TestError>>,
 }
 
 impl LoadTest {
-    pub fn new(config: config::LoadTest, config_path: PathBuf) -> Self {
+    pub fn new(config: config::LoadTest, config_path: PathBuf) -> Result<Self, TestError> {
         let mut providers = BTreeMap::new();
         let mut static_providers = BTreeMap::new();
 
-        let (test_ended_tx, test_ended_rx) = oneshot::channel::<()>();
-        let test_ended_rx = test_ended_rx.into_future().shared();
-
-        let (test_killed_tx, test_killed_rx) = futures_channel::channel::<()>(0);
-        let test_killed_rx = test_killed_rx.into_future().shared();
+        let (test_ended_tx, test_ended_rx) = futures_channel::channel::<Result<(), TestError>>(0);
+        let mut test_ended_rx = test_ended_rx
+            .into_future()
+            .then(|v| match v {
+                Ok((Some(r), _)) => r,
+                _ => Err(TestError::Internal(
+                    "test_ended should not error at this point".into(),
+                )),
+            })
+            .shared();
 
         // build and register the providers
         let auto_size = config.config.general.auto_buffer_start_size;
@@ -76,7 +67,7 @@ impl LoadTest {
                             limit.store(auto_size, Ordering::Relaxed);
                         }
                     }
-                    providers::file(template, test_ended_rx, &config_path)
+                    providers::file(template, test_ended_rx, test_ended_tx.clone(), &config_path)?
                 }
                 config::Provider::Range(range) => providers::range(range, test_ended_rx),
                 config::Provider::Response(template) => {
@@ -102,26 +93,27 @@ impl LoadTest {
 
         let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
 
+        // create the loggers
         let loggers = config
             .loggers
             .into_iter()
             .map(|(name, mut template)| {
                 let test_ended_rx = test_ended_rx.clone();
-                let select = template.select.take().map(eppp_to_select);
-                (
+                let select = template.select.take().map(eppp_to_select).transpose()?;
+                Ok::<_, TestError>((
                     name,
                     (
                         providers::logger(
                             template,
                             test_ended_rx,
-                            test_killed_tx.clone(),
+                            test_ended_tx.clone(),
                             &config_path,
                         ),
                         select,
                     ),
-                )
+                ))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         let global_load_pattern = config.load_pattern;
         let mut duration = Duration::new(0, 0);
@@ -129,18 +121,19 @@ impl LoadTest {
         // create the endpoints
         for endpoint in config.endpoints {
             let mut mod_interval = None;
-            let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>| -> Vec<(String, config::Select)> {
-                v.into_iter().map(|(s, eppp)| (s, eppp_to_select(eppp)))
+            let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>| -> Result<Vec<(String, config::Select)>, TestError> {
+                v.into_iter().map(|(s, eppp)| Ok((s, eppp_to_select(eppp)?)))
                     .collect()
             };
-            let provides = to_select_values(endpoint.provides);
+            let provides = to_select_values(endpoint.provides)?;
             if let Some(peak_load) = endpoint.peak_load {
                 let load_pattern = endpoint
                     .load_pattern
                     .as_ref()
-                    .unwrap_or_else(|| global_load_pattern.as_ref().expect("missing load_pattern"));
-                let start: Box<dyn Stream<Item = Instant, Error = timer::Error> + Send> =
-                    Box::new(stream::empty::<Instant, timer::Error>());
+                    .or_else(|| global_load_pattern.as_ref())
+                    .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
+                let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
+                    Box::new(stream::empty::<Instant, TestError>());
                 let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
                     config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
                 });
@@ -150,12 +143,14 @@ impl LoadTest {
                     .fold(Duration::new(0, 0), |left, right| left + right.duration());
                 duration = cmp::max(duration, duration2);
             } else if provides.is_empty() {
-                panic!("endpoint without peak_load must have `provides`");
+                return Err(TestError::Other(
+                    "endpoint without peak_load must have `provides`".into(),
+                ));
             } else if provides
                 .iter()
                 .all(|(_, p)| p.get_send_behavior().is_if_not_full())
             {
-                panic!("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`");
+                return Err(TestError::Other("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`".into()));
             }
             let mut headers: Vec<_> = config.config.client.headers.clone();
             headers.extend(endpoint.headers);
@@ -166,69 +161,92 @@ impl LoadTest {
                 .method(endpoint.method)
                 .headers(headers)
                 .provides(provides)
-                .logs(to_select_values(endpoint.logs));
+                .logs(to_select_values(endpoint.logs)?);
             builders.push(builder);
         }
-        let test_ended_rx2 = test_ended_rx.clone();
-        let test_timeout: Box<dyn Future<Item = (), Error = ()> + Send> =
-            Box::new(lazy(move || {
-                timer::Delay::new(Instant::now() + duration)
-                    .select(test_ended_rx2.then(|_| Ok(())))
-                    .then(|_| Err::<(), ()>(()))
-            }));
-
-        let test_timeout = test_timeout.shared();
 
         let client = {
             let mut http = HttpConnector::new_with_tokio_threadpool_resolver();
             http.set_keepalive(Some(config.config.client.keepalive));
             http.set_reuse_address(true);
             http.enforce_http(false);
-            let https = HttpsConnector::from((http, TlsConnector::new().unwrap()));
+            let https = HttpsConnector::from((
+                http,
+                TlsConnector::new().map_err(|e| {
+                    TestError::Other(format!("could not create ssl connector: {}", e))
+                })?,
+            ));
             Client::builder().set_host(false).build::<_, Body>(https)
         };
 
-        let (stats_tx, stats_rx_done) =
-            create_stats_channel(test_ended_rx.clone(), &config.config.general);
-        tokio::spawn(stats_rx_done);
+        let (stats_tx, stats_rx) = create_stats_channel(
+            test_ended_rx.clone(),
+            test_ended_tx.clone(),
+            &config.config.general,
+        )?;
+        tokio::spawn(stats_rx);
 
-        let mut load_test = LoadTest {
+        let mut builder_ctx = request::BuilderContext {
             config: config.config,
             client: Arc::new(client),
-            duration,
-            endpoint_calls: Vec::new(),
             loggers,
             providers,
             static_providers,
-            stats_tx,
-            test_killed_rx,
-            test_ended_tx,
-            test_timeout,
+            stats_tx: stats_tx.clone(),
+            test_ended: test_ended_rx.clone(),
         };
 
-        for (i, builder) in builders.into_iter().enumerate() {
-            let endpoint = builder.build(&mut load_test, i);
-            load_test.endpoint_calls.push(Box::new(endpoint));
-        }
+        let endpoint_calls =
+            builders.into_iter().enumerate().map(move |(i, builder)| {
+                match builder.build(&mut builder_ctx, i) {
+                    Ok(e) => Either::A(e.into_future()),
+                    Err(e) => Either::B(Err(e).into_future()),
+                }
+            });
 
-        load_test
+        let test_ended_tx2 = test_ended_tx.clone();
+        let endpoint_calls: EndpointCalls = Box::new(
+            join_all(endpoint_calls)
+                .map(|_r| ())
+                .select(lazy(move || {
+                    let test_end = Instant::now() + duration;
+                    poll_fn(
+                        move || match (test_ended_rx.poll(), Instant::now() >= test_end) {
+                            (Ok(Async::NotReady), false) => Ok(Async::NotReady),
+                            (Ok(Async::Ready(_)), _) | (Ok(Async::NotReady), true) => {
+                                Ok(Async::Ready(()))
+                            }
+                            (Err(e), _) => Err((&*e).clone()),
+                        },
+                    )
+                }))
+                .map(|_| ())
+                .map_err(|e| e.0)
+                .then(move |r| test_ended_tx2.send(r).then(|_| Ok(()))),
+        );
+
+        Ok(LoadTest {
+            endpoint_calls,
+            duration,
+            stats_tx,
+            test_killer: test_ended_tx,
+        })
     }
 
     pub fn run(self) -> impl Future<Item = (), Error = ()> {
-        let test_ended = self.test_ended_tx;
-        // drop this client reference otherwise the event loop will not close
-        drop(self.client);
         let test_end_message = duration_till_end_to_pretty_string(self.duration);
-        tokio::spawn(
-            self.stats_tx
-                .send(StatsMessage::EndTime(Instant::now() + self.duration))
-                .then(|_| Ok(())),
-        );
-        eprint!("{}", format!("Starting load test. {}\n", test_end_message));
-        join_all(self.endpoint_calls)
-            .map_err(|_| unreachable!("endpoint errors should not propagate this far"))
-            .and_then(move |_| test_ended.send(()))
-            .map_err(|_| unreachable!("errors should not propagate this far"))
+        let endpoint_calls = self.endpoint_calls;
+        let test_killer = self.test_killer;
+        self.stats_tx
+            .send(StatsMessage::EndTime(Instant::now() + self.duration))
+            .map_err(|_| TestError::ProviderEnded(None))
+            .then(move |r| match r {
+                Ok(_) => {
+                    eprint!("{}", format!("Starting load test. {}\n", test_end_message));
+                    Either::A(endpoint_calls)
+                }
+                Err(e) => Either::B(test_killer.send(Err(e)).then(|_| Ok(()))),
+            })
     }
 }
 

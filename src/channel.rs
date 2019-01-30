@@ -41,7 +41,6 @@ impl Clone for Limit {
 
 pub struct Sender<T> {
     inner: Arc<SegQueue<T>>,
-    len: Arc<AtomicUsize>,
     limit: Limit,
     parked_receivers: Arc<SegQueue<task::Task>>,
     parked_senders: Arc<SegQueue<task::Task>>,
@@ -54,34 +53,22 @@ impl<T> Sender<T> {
     }
 
     pub fn try_send(&self, item: T) -> Result<(), T> {
-        let res = self.len.fetch_update(
-            |n| {
-                if n < self.limit.get() {
-                    Some(n + 1)
-                } else {
-                    None
-                }
-            },
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-        );
-        let ret = if res.is_ok() {
+        let ret = if self.inner.len() < self.limit.get() {
             self.inner.push(item);
             Ok(())
         } else {
             self.parked_senders.push(task::current());
             Err(item)
         };
-        while let Some(task) = self.parked_receivers.try_pop() {
+        while let Ok(task) = self.parked_receivers.pop() {
             task.notify();
         }
         ret
     }
 
     pub fn force_send(&self, item: T) {
-        self.len.fetch_add(1, Ordering::Relaxed);
         self.inner.push(item);
-        while let Some(task) = self.parked_receivers.try_pop() {
+        while let Ok(task) = self.parked_receivers.pop() {
             task.notify();
         }
     }
@@ -92,7 +79,6 @@ impl<T> Clone for Sender<T> {
         self.sender_count.fetch_add(1, Ordering::Relaxed);
         Sender {
             inner: self.inner.clone(),
-            len: self.len.clone(),
             limit: self.limit.clone(),
             parked_receivers: self.parked_receivers.clone(),
             parked_senders: self.parked_senders.clone(),
@@ -104,7 +90,7 @@ impl<T> Clone for Sender<T> {
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         if self.sender_count.fetch_sub(1, Ordering::Relaxed) == 1 {
-            while let Some(task) = self.parked_receivers.try_pop() {
+            while let Ok(task) = self.parked_receivers.pop() {
                 task.notify();
             }
         }
@@ -130,7 +116,6 @@ impl<T> Sink for Sender<T> {
 #[derive(Clone)]
 pub struct Receiver<T> {
     inner: Arc<SegQueue<T>>,
-    len: Arc<AtomicUsize>,
     limit: Limit,
     parked_receivers: Arc<SegQueue<task::Task>>,
     parked_senders: Arc<SegQueue<task::Task>>,
@@ -142,17 +127,16 @@ impl<T> Stream for Receiver<T> {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let msg = self.inner.try_pop();
+        let msg = self.inner.pop().ok();
         if msg.is_some() {
-            let n = self.len.fetch_sub(1, Ordering::Relaxed);
-            if n == 1 {
+            if self.inner.len() == 1 {
                 // if there's an "auto" limit and we've emptied the buffer,
                 // increment the limit
                 if let Limit::Auto(a) = &self.limit {
                     a.fetch_add(1, Ordering::Relaxed);
                 }
             }
-            while let Some(task) = self.parked_senders.try_pop() {
+            while let Ok(task) = self.parked_senders.pop() {
                 task.notify();
             }
             Ok(Async::Ready(msg))
@@ -160,7 +144,7 @@ impl<T> Stream for Receiver<T> {
             Ok(Async::Ready(None))
         } else {
             self.parked_receivers.push(task::current());
-            while let Some(task) = self.parked_senders.try_pop() {
+            while let Ok(task) = self.parked_senders.pop() {
                 task.notify();
             }
             Ok(Async::NotReady)
@@ -170,13 +154,11 @@ impl<T> Stream for Receiver<T> {
 
 pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(SegQueue::new());
-    let len = Arc::new(AtomicUsize::new(0));
     let parked_receivers = Arc::new(SegQueue::new());
     let parked_senders = Arc::new(SegQueue::new());
     let sender_count = Arc::new(AtomicUsize::new(1));
     let receiver = Receiver {
         inner: inner.clone(),
-        len: len.clone(),
         limit: limit.clone(),
         parked_receivers: parked_receivers.clone(),
         parked_senders: parked_senders.clone(),
@@ -184,7 +166,6 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     };
     let sender = Sender {
         inner,
-        len,
         limit,
         parked_receivers,
         parked_senders,

@@ -1,8 +1,7 @@
+use crate::error::TestError;
+
 use futures::try_ready;
-use tokio::{
-    prelude::*,
-    timer::{Delay, Error as TimerError},
-};
+use tokio::{prelude::*, timer::Delay};
 
 use std::{
     cmp,
@@ -138,7 +137,7 @@ where
     T: ScaleFn + Send,
 {
     type Item = Instant;
-    type Error = TimerError;
+    type Error = TestError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // deadline represents a time when the next item will be provided from the stream

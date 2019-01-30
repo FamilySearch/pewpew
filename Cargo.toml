@@ -1,6 +1,6 @@
 [package]
 name = "pewpew"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2018"
 
 [dependencies]
@@ -9,7 +9,7 @@ base64 = "0.10"
 bytes = "0.4"
 brotli-decompressor = "2"
 clap = "2"
-crossbeam = "0.6"
+crossbeam = "0.7"
 csv = "1"
 chrono = "0.4"
 fnv = "1"

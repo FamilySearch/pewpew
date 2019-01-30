@@ -4,29 +4,33 @@ use crate::channel::Limit;
 
 use std::cmp;
 
-/// A stream combinator which executes a unit closure over each item on a
-/// stream in parallel.
-#[must_use = "streams do nothing unless polled"]
-pub struct ForEachParallel<St, If, Fm, F>
+/// A stream combinator which executes a closure over each item on a
+/// stream in parallel. If the stream or any of the futures returned from
+/// the closure return an error, the first error will be the result of the
+/// future.
+#[must_use = "futures do nothing unless polled"]
+pub struct ForEachParallel<St, If, Fm, F, E>
 where
-    St: Stream,
+    St: Stream<Error = E>,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
-    F: Future<Item = (), Error = ()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
+    F: Future<Item = (), Error = St::Error> + Send + 'static,
+    E: Send + 'static,
 {
     f: Fm,
-    futures: Vec<oneshot::Receiver<()>>,
+    futures: Vec<oneshot::Receiver<St::Error>>,
     limits: Vec<Limit>,
     stream: Option<St>,
-    stream_errored: bool,
+    error: Option<St::Error>,
 }
 
-impl<St, If, Fm, F> ForEachParallel<St, If, Fm, F>
+impl<St, If, Fm, F, E> ForEachParallel<St, If, Fm, F, E>
 where
-    St: Stream,
+    St: Stream<Error = E>,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
-    F: Future<Item = (), Error = ()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
+    F: Future<Item = (), Error = St::Error> + Send + 'static,
+    E: Send + 'static,
 {
     pub fn new(limits: Vec<Limit>, stream: St, f: Fm) -> Self {
         ForEachParallel {
@@ -34,20 +38,21 @@ where
             f,
             futures: Vec::new(),
             stream: Some(stream),
-            stream_errored: false,
+            error: None,
         }
     }
 }
 
-impl<St, If, Fm, F> Future for ForEachParallel<St, If, Fm, F>
+impl<St, If, Fm, F, E> Future for ForEachParallel<St, If, Fm, F, E>
 where
-    St: Stream,
+    St: Stream<Error = E>,
     Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = F::Error>,
-    F: Future<Item = (), Error = ()> + Send + 'static,
+    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
+    F: Future<Item = (), Error = St::Error> + Send + 'static,
+    E: Send + 'static,
 {
     type Item = ();
-    type Error = ();
+    type Error = F::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let limit = self
@@ -63,33 +68,47 @@ where
                         Ok(Async::Ready(Some(elem))) => {
                             made_progress_this_iter = true;
                             let (tx, rx) = oneshot::channel();
-                            let next_future =
-                                (self.f)(elem).into_future().then(move |_| tx.send(()));
+                            let next_future = (self.f)(elem).into_future().map_err(move |e| {
+                                let _ = tx.send(e);
+                            });
                             tokio::spawn(next_future);
                             self.futures.push(rx);
                         }
                         Ok(Async::Ready(None)) => self.stream = None,
                         Ok(Async::NotReady) => (),
-                        Err(_) => {
-                            self.stream_errored = true;
+                        Err(e) => {
+                            self.error = Some(e);
+                            self.futures.clear();
                             self.stream = None;
                         }
                     }
                 }
             }
 
-            self.futures.drain_filter(|fut| {
-                if let Ok(Async::NotReady) = fut.poll() {
-                    false
-                } else {
+            let mut error = self.error.take();
+            self.futures.drain_filter(|fut| match fut.poll() {
+                Ok(Async::NotReady) => false,
+                Ok(Async::Ready(e)) => {
+                    error = Some(e);
+                    made_progress_this_iter = true;
+                    true
+                }
+                _ => {
                     made_progress_this_iter = true;
                     true
                 }
             });
+            self.error = error;
+            if self.error.is_some() {
+                self.futures.clear();
+                self.stream = None;
+            }
 
-            if self.futures.is_empty() && self.stream.is_none() {
-                if self.stream_errored {
-                    return Err(());
+            if self.futures.is_empty() && self.stream.is_none() || self.error.is_some() {
+                if let Some(e) = self.error.take() {
+                    self.futures.clear();
+                    self.stream = None;
+                    return Err(e);
                 }
                 return Ok(Async::Ready(()));
             } else if !made_progress_this_iter {

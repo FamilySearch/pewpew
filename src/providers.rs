@@ -7,7 +7,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 use crate::channel::{self, Limit};
 use crate::config;
 use crate::error::TestError;
-use crate::util::Either3;
+use crate::util::{json_value_into_string, Either3};
 
 use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
 use serde_json as json;
@@ -191,10 +191,10 @@ where
             let logger = rx
                 .for_each(move |v| {
                     counter += 1;
-                    if pretty {
+                    if pretty && !v.is_string() {
                         eprintln!("{:#}", v);
                     } else {
-                        eprintln!("{}", v);
+                        eprintln!("{}", json_value_into_string(v));
                     }
                     match limit {
                         Some(limit) if kill && counter >= limit => Either3::B(
@@ -220,10 +220,10 @@ where
             let logger = rx
                 .for_each(move |v| {
                     counter += 1;
-                    if pretty {
+                    if pretty && !v.is_string() {
                         println!("{:#}", v);
                     } else {
-                        println!("{}", v);
+                        println!("{}", json_value_into_string(v));
                     }
                     match limit {
                         Some(limit) if kill && counter >= limit => Either3::B(

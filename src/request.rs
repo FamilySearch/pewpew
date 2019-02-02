@@ -5,8 +5,9 @@ use futures::{
     Sink, Stream,
 };
 use hyper::{
+    body::Payload,
     client::HttpConnector,
-    header::{HeaderValue, HOST},
+    header::{HeaderValue, CONTENT_LENGTH, HOST},
     Body as HyperBody, Client, Method, Request, Response,
 };
 use hyper_tls::HttpsConnector;
@@ -143,8 +144,8 @@ impl Builder {
         self
     }
 
-    pub fn provides(mut self, providers: Vec<(String, Select)>) -> Self {
-        self.provides.extend(providers);
+    pub fn provides(mut self, provides: Vec<(String, Select)>) -> Self {
+        self.provides = provides;
         self
     }
 
@@ -165,6 +166,11 @@ impl Builder {
 
     pub fn body(mut self, body: Option<String>) -> Self {
         self.body = body;
+        self
+    }
+
+    pub fn start_stream(mut self, start_stream: Option<StartStream>) -> Self {
+        self.start_stream = start_stream;
         self
     }
 
@@ -245,31 +251,30 @@ impl Builder {
                 Ok::<_, TestError>(value)
             })
             .transpose()?;
-        {
-            let mut required_providers2 = BTreeSet::new();
-            for (name, d) in self.declare {
-                required_providers.remove(&name);
-                let vce = config::ValueOrComplexExpression::new(
-                    &d,
-                    &mut required_providers2,
-                    &ctx.static_providers,
-                )?;
-                let stream = vce
-                    .into_stream(&ctx.providers)
-                    .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
-                streams.push(Either3::B(stream));
-            }
+        let mut required_providers2 = BTreeSet::new();
+        for (name, d) in self.declare {
+            required_providers.remove(&name);
+            let vce = config::ValueOrComplexExpression::new(
+                &d,
+                &mut required_providers2,
+                &ctx.static_providers,
+            )?;
+            let stream = vce
+                .into_stream(&ctx.providers)
+                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
+            streams.push(Either3::B(stream));
         }
         // go through the list of required providers and make sure we have them all
-        for name in required_providers {
+        for name in &required_providers {
             let provider = ctx
                 .providers
-                .get(&name)
+                .get(name)
                 .ok_or_else(|| TestError::UnknownProvider(name.clone()))?;
             let receiver = provider.rx.clone();
             let ar = provider
                 .auto_return
                 .map(|send_option| (send_option, provider.tx.clone()));
+            let name = name.clone();
             let provider_stream = Either3::C(
                 Stream::map(receiver, move |v| {
                     let ar = ar
@@ -281,6 +286,7 @@ impl Builder {
             );
             streams.push(provider_stream);
         }
+        required_providers.extend(required_providers2);
         let outgoing = Arc::new(outgoing);
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
@@ -307,6 +313,7 @@ impl Builder {
             method,
             outgoing,
             precheck_rr_providers,
+            required_providers,
             rr_providers,
             stats_id,
             stats_tx,
@@ -352,6 +359,7 @@ where
     outgoing: Arc<Vec<Outgoing>>,
     precheck_rr_providers: u16,
     rr_providers: u16,
+    pub required_providers: BTreeSet<String>,
     stats_id: BTreeMap<String, String>,
     stats_tx: StatsTx,
     stream: EndpointStream,
@@ -367,7 +375,7 @@ where
     <F as Future>::Error: Send + Sync,
     <F as Future>::Item: Send + Sync,
 {
-    pub fn into_future(self) -> Box<Future<Item = (), Error = TestError> + Send> {
+    pub fn into_future(self) -> Box<dyn Future<Item = (), Error = TestError> + Send> {
         Box::new(
             self.stats_tx
                 .clone()
@@ -456,9 +464,14 @@ where
             Ok(u) => u,
             Err(e) => return Either::B(Err(e).into_future()),
         };
-        request.uri(&url);
         let url = match url::Url::parse(&url) {
-            Ok(u) => u,
+            Ok(u) => {
+                // set the request url from the parsed url because it will have
+                // some characters percent encoded automatically which otherwise
+                // cause hyper to error
+                request.uri(u.as_str());
+                u
+            }
             Err(_) => return Either::B(Err(TestError::InvalidUrl(url)).into_future()),
         };
         request.method(self.method.clone());
@@ -492,6 +505,14 @@ where
             HeaderValue::from_str(url.host_str().expect("should be a valid url"))
                 .expect("url should be a valid string"),
         );
+        // add the content-lengh header, if needed
+        // (hyper adds it automatically but we need to add it manually here so it shows up in the logs)
+        match request.body().content_length() {
+            Some(n) if n > 0 => {
+                request.headers_mut().insert(CONTENT_LENGTH, n.into());
+            }
+            _ => (),
+        }
         let mut request_provider = json::json!({});
         let request_obj = request_provider
             .as_object_mut()

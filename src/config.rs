@@ -189,6 +189,8 @@ pub struct Logger {
 #[derive(Deserialize)]
 pub struct Endpoint {
     #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default)]
     pub declare: BTreeMap<String, String>,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,

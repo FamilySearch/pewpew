@@ -20,6 +20,7 @@ hyper-tls = "0.3"
 itertools = "0.8"
 jsonpath = "0.1"
 libflate = "0.1"
+maplit = "1"
 native-tls = "0.2"
 percent-encoding = "1"
 pest = "2"
@@ -38,7 +39,6 @@ unicode-segmentation = "1"
 url = "1"
 
 [dev-dependencies]
-maplit = "1"
 tempfile = "3"
 
 [profile.release]

@@ -1,10 +1,10 @@
 # TODOs
-- Add a way to run an endpoint a single time for testing purposes and print out the raw http data (request and response). This should be smart enough to handle calling any other endpoints which may be needed for dependent providers. Create a dependency graph for providers (make sure dependencies in declare sections are included). In the case of having a dependency on a `response` provider, any endpoint which can feed the provider should receive a score based on how many endpoints it depends on and the endpoint with the lowest score wins. All buffer sizes should be limited to 1. Full endpoint logging should be enabled for every endpoint called, including the rtt. Disable aggregate stats.
-- Get rid of all `panic!`s, `unwrap`s, `expect`s, `unreachable`s, etc. which users may encounter. Pieces which may fail prior to the test running should return results and end the test early. Pieces which may fail during a test run should either kill the test (with nice error message) or log an error. This is a prerequisite to having a server which runs load tests on demand
+- Add `if` expression function which returns the second argument if the first is true or the third if the first is false
 - Allow option to support templates within static providers
 - Allow declare expressions to reference other declare variables as long as there's no recursive references
-- Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
 - Add a `values` function in expressions which iterates over the key/value pairs in an object
+- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer). For `run` stats output format (currently in config.general.summary_output_format-- remove that option). *Breaking change*.
+- Create a try run viewer
 - Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
 - Add a max_connection config option. Will require implementing a custom client and thread pool. Log number of open connections.
 - Allow math in expressions
@@ -19,3 +19,4 @@
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
 - add in machine clustering. Machines should open up a secure connection using a PSK
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
+- Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces

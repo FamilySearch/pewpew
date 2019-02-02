@@ -1,10 +1,9 @@
 use super::print_test_error_to_console;
 use crate::config;
 use crate::error::TestError;
-use crate::load_test;
 
 use ansi_term::{Color, Style};
-use chrono::{DateTime, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
 use futures::{
     future::Shared,
@@ -207,8 +206,7 @@ impl RollingAggregateStats {
             }
             if let Some(et) = self.end_time.get() {
                 if et > Instant::now() {
-                    let test_end_msg =
-                        load_test::duration_till_end_to_pretty_string(et - Instant::now());
+                    let test_end_msg = duration_till_end_to_pretty_string(et - Instant::now());
                     eprint!("{}", format!("\n{}\n", test_end_msg));
                 }
             }
@@ -419,9 +417,12 @@ impl AggregateStats {
 }
 
 pub enum StatsMessage {
+    // every endpoint sends init so the stats buckets are initialized
     Init(StatsInit),
+    // every time a response is received
     ResponseStat(ResponseStat),
-    EndTime(Instant),
+    // sent at the beginning of the test
+    Start(Duration),
 }
 
 pub struct StatsInit {
@@ -454,6 +455,91 @@ impl From<StatsInit> for StatsMessage {
     fn from(si: StatsInit) -> Self {
         StatsMessage::Init(si)
     }
+}
+
+fn duration_till_end_to_pretty_string(duration: Duration) -> String {
+    let long_form = duration_to_pretty_long_form(duration);
+    let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
+        format!("{} {}", s, long_form)
+    } else {
+        long_form
+    };
+    format!("Test will end {}", msg)
+}
+
+fn duration_to_pretty_short_form(duration: Duration) -> Option<String> {
+    if let Ok(duration) = ChronoDuration::from_std(duration) {
+        let now = Local::now();
+        let end = now + duration;
+        Some(format!("around {}", end.format("%T %-e-%b-%Y")))
+    } else {
+        None
+    }
+}
+
+fn duration_to_pretty_long_form(duration: Duration) -> String {
+    const SECOND: u64 = 1;
+    const MINUTE: u64 = 60;
+    const HOUR: u64 = MINUTE * 60;
+    const DAY: u64 = HOUR * 24;
+    let mut secs = duration.as_secs();
+    let mut builder: Vec<_> = vec![
+        (DAY, "day"),
+        (HOUR, "hour"),
+        (MINUTE, "minute"),
+        (SECOND, "second"),
+    ]
+    .into_iter()
+    .filter_map(move |(unit, name)| {
+        let count = secs / unit;
+        if count > 0 {
+            secs -= count * unit;
+            if count > 1 {
+                Some(format!("{} {}s", count, name))
+            } else {
+                Some(format!("{} {}", count, name))
+            }
+        } else {
+            None
+        }
+    })
+    .collect();
+    let long_time = if let Some(last) = builder.pop() {
+        let mut ret = builder.join(", ");
+        if ret.is_empty() {
+            last
+        } else {
+            ret.push_str(&format!(" and {}", last));
+            ret
+        }
+    } else {
+        "0 seconds".to_string()
+    };
+    format!("in approximately {}", long_time)
+}
+
+// essentially does nothing, but gives a place for stats to be sent
+// during a try run
+pub fn create_try_run_stats_channel<F>(
+    test_complete: Shared<F>,
+) -> (
+    futures_channel::UnboundedSender<StatsMessage>,
+    impl Future<Item = (), Error = ()> + Send,
+)
+where
+    F: Future<Item = (), Error = TestError> + Send + 'static,
+{
+    let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
+    let f = Stream::for_each(rx, |_| Ok(()))
+        .then(|_| Ok(()))
+        .join(
+            test_complete
+                .then(|r| r)
+                .map_err(|e| print_test_error_to_console((&*e).clone()))
+                .map(|_| ()),
+        )
+        .then(|_| Ok(()));
+    (tx, f)
 }
 
 pub fn create_stats_channel<F>(
@@ -506,7 +592,11 @@ where
                 StatsMessage::Init(init) => {
                     return stats.init(init.time, init.endpoint_id, init.stats_id);
                 }
-                StatsMessage::EndTime(end_time) => stats.end_time.set(Some(end_time)),
+                StatsMessage::Start(d) => {
+                    stats.end_time.set(Some(Instant::now() + d));
+                    let test_end_message = duration_till_end_to_pretty_string(d);
+                    eprint!("{}", format!("Starting load test. {}\n", test_end_message));
+                }
                 StatsMessage::ResponseStat(rs) => stats.append(rs)?,
             }
             Ok(())

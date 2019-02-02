@@ -58,7 +58,7 @@ impl fmt::Display for TestError {
             InvalidUrl(u) => write!(f, "invalid url `{}`", u),
             KilledByLogger => write!(f, "killed by logger"),
             Other(s) => write!(f, "{}", s),
-            PestParseErr(err) => write!(f, "parsing expression: `{}`", err),
+            PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),
             ProviderEnded(p) => write!(
                 f,
                 "provider `{}` unexpectedly ended",

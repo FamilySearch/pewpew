@@ -238,6 +238,7 @@ impl Epoch {
 pub(super) struct Join {
     arg: FunctionArg,
     sep: String,
+    sep2: Option<String>,
 }
 
 impl Join {
@@ -247,7 +248,29 @@ impl Join {
                 let two = into_string(args.pop().expect("join should have two args"))
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
-                let j = Join { arg: one, sep: two };
+                let j = Join {
+                    arg: one,
+                    sep: two,
+                    sep2: None,
+                };
+                if let FunctionArg::Value(Value::Json(json)) = &j.arg {
+                    Ok(Either::B(j.evaluate_with_arg(json)))
+                } else {
+                    Ok(Either::A(j))
+                }
+            }
+            [_, FunctionArg::Value(Value::Json(json::Value::String(_))), FunctionArg::Value(Value::Json(json::Value::String(_)))] =>
+            {
+                let three = into_string(args.pop().expect("join should have two args"))
+                    .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
+                let two = into_string(args.pop().expect("join should have two args"))
+                    .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
+                let one = args.pop().expect("join should have two args");
+                let j = Join {
+                    arg: one,
+                    sep: two,
+                    sep2: Some(three),
+                };
                 if let FunctionArg::Value(Value::Json(json)) = &j.arg {
                     Ok(Either::B(j.evaluate_with_arg(json)))
                 } else {
@@ -259,10 +282,17 @@ impl Join {
     }
 
     fn evaluate_with_arg(&self, d: &json::Value) -> json::Value {
-        match d {
-            json::Value::Array(v) => v
+        match (d, &self.sep2) {
+            (json::Value::Array(v), _) => v
                 .iter()
                 .map(|v| json_value_to_string(v).into_owned())
+                .collect::<Vec<_>>()
+                .as_slice()
+                .join(&self.sep)
+                .into(),
+            (json::Value::Object(m), Some(sep2)) => m
+                .iter()
+                .map(|(k, v)| format!("{}{}{}", k, sep2, json_value_to_string(v)))
                 .collect::<Vec<_>>()
                 .as_slice()
                 .join(&self.sep)
@@ -1197,6 +1227,11 @@ mod tests {
                 vec!["a".into(), j!("&").into()],
                 Some(j!({ "a": ["foo", null, "baz"] })),
                 j!("foo&null&baz"),
+            ),
+            (
+                vec!["a".into(), j!("\n").into(), j!(": ").into()],
+                Some(j!({ "a": { "b": "c", "d": "e" } })),
+                j!("b: c\nd: e"),
             ),
         ];
 

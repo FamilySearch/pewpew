@@ -746,16 +746,35 @@ Returns time since the unix epoch.
 </tr>
 <tr>
 <td>
+
+
 <code>join(<i>value</i>, <i>separator</i>)</code>
+
+or
+
+<code>join(<i>value</i>, <i>separator</i>, <i>separator2</i>)</code>
+
 </td>
 <td>
 
-Turns an array of values into a string.
+Turns an array of values into a string or turns an object into a string.
 
-*value* - any expression. When the expression resolves to an array, the elements of the array are coerced to a string if needed and are then joined together to a single string using the specified separator. When *value* does not resolve to an array, it is coerced to a string and returned.<br/>
-*separator* - a string literal which will be used between each element in the array.
+*value* - any expression. When the expression resolves to an array, the elements of the array are coerced to a string if needed and are then joined together to a single string using the specified separator. When the *value* resolves to an object and the three argument variant is used then the object will be turned into a string with the specified separators. In any other case *value* is coerced to a string and returned.<br/>
+*separator* - a string literal which will be used between each element in the array. In the case of the three argument variant when the first argument is an object *separator* is used to separate key/value pairs.<br/>
+*separator2* - a string literal which is used to separate keys and values in an object.
 
-**Example**: with the value `["foo", "bar", "baz"]` from a provider named `qux`, then the string `https://localhost/some/thing?a=${join(qux, "-")}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+**Examples**
+
+With the value `["foo", "bar", "baz"]` from a provider named `qux`, then the template `https://localhost/some/thing?a=${join(qux, "-")}` would resolve to `https://localhost/some/thing?a=foo-bar-baz`.
+
+With the value `{"a": 1, "b": 2}` from a provider named `foo`, then the expression `join(foo, "\n", ": ")` would resolve to the following string:
+
+```
+a: 1
+b: 2
+```
+
+or for an alternative, json-ified view: `"a: 1\nb: 2"`
 
 </td>
 </tr>

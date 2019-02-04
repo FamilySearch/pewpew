@@ -25,16 +25,14 @@ indexed_property = !{ "[" ~ (string_outer | integer) ~ "]" }
 
 function_ident = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
-function_call = {
+function_call = !{
 	function_ident ~
 	"(" ~
-    WHITESPACE* ~
-    (function_arg ~ (WHITESPACE* ~ "," ~ WHITESPACE* ~ function_arg)*)? ~
-    WHITESPACE* ~
+    (function_arg ~ ("," ~ function_arg)*)? ~
     ")"
 }
 
-function_arg = _{ function_call | value }
+function_arg = { complex_expression }
 
 QUOTATION_MARK = _{ "\"" | "'" | "`" }
 

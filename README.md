@@ -749,6 +749,20 @@ Returns time since the unix epoch.
 </td>
 </tr>
 <tr>
+<td><code>if(<i>check</i>, <i>true_value</i>, <i>false_value</i>)</code></td>
+<td>
+
+Does a boolean check against the first argument, if true the second argument is returned otherwise the third argument is returned.
+
+*check* - An expression which will be coerced to a boolean if needed.<br/>
+*true_value* - The value that is returned if `check` evaluates to true.<br/>
+*false_value* - The value that is returned if `check` evaluates to false.<br/>
+
+**Example**: `if(true, 1, 2)` would always resolve to `1`.
+
+</td>
+</tr>
+<tr>
 <td>
 
 

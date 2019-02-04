@@ -1,5 +1,5 @@
 use super::expression_functions::{
-    Collect, Encode, Epoch, Join, JsonPath, Match, MinMax, Pad, Range, Repeat,
+    Collect, Encode, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Range, Repeat,
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
@@ -32,38 +32,11 @@ pub type AutoReturn = (
 );
 
 #[derive(Clone, Debug)]
-pub(super) enum FunctionArg {
-    FunctionCall(FunctionCall),
-    Value(Value),
-}
-
-impl FunctionArg {
-    pub(super) fn evaluate<'a, 'b: 'a>(
-        &'b self,
-        d: &'a json::Value,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
-        match self {
-            FunctionArg::FunctionCall(fc) => Ok(Cow::Owned(fc.evaluate(d)?)),
-            FunctionArg::Value(v) => Ok(v.evaluate(d)?),
-        }
-    }
-
-    pub(super) fn evaluate_as_future(
-        &self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        match self {
-            FunctionArg::FunctionCall(fc) => Either::A(fc.evaluate_as_future(providers)),
-            FunctionArg::Value(v) => Either::B(v.evaluate_as_future(providers)),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 pub(super) enum FunctionCall {
     Collect(Arc<Collect>),
     Encode(Arc<Encode>),
     Epoch(Epoch),
+    If(Arc<If>),
     Join(Arc<Join>),
     JsonPath(Arc<JsonPath>),
     Match(Arc<Match>),
@@ -76,7 +49,7 @@ pub(super) enum FunctionCall {
 impl FunctionCall {
     fn new(
         ident: &str,
-        args: Vec<FunctionArg>,
+        args: Vec<ValueOrComplexExpression>,
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
@@ -85,6 +58,7 @@ impl FunctionCall {
             "encode" => Encode::new(args)?.map_a(|a| FunctionCall::Encode(a.into())),
             "end_pad" => Pad::new(false, args)?.map_a(|a| FunctionCall::Pad(a.into())),
             "epoch" => Either::A(FunctionCall::Epoch(Epoch::new(args)?)),
+            "if" => If::new(args)?.map_a(|i| FunctionCall::If(i.into())),
             "join" => Join::new(args)?.map_a(|a| FunctionCall::Join(a.into())),
             "json_path" => JsonPath::new(args, providers, static_providers)?
                 .map_a(|a| FunctionCall::JsonPath(a.into())),
@@ -103,6 +77,7 @@ impl FunctionCall {
             FunctionCall::Collect(c) => c.evaluate(d),
             FunctionCall::Encode(e) => e.evaluate(d),
             FunctionCall::Epoch(e) => e.evaluate(),
+            FunctionCall::If(i) => i.evaluate(d),
             FunctionCall::Join(j) => j.evaluate(d),
             FunctionCall::JsonPath(j) => Ok(j.evaluate(d)),
             FunctionCall::Match(m) => m.evaluate(d),
@@ -120,7 +95,8 @@ impl FunctionCall {
         let r = match self {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(d)?)),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_iter(d)?)),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(e.evaluate_as_iter()?)),
+            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.evaluate_as_iter()?))),
+            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(i.evaluate_as_iter(d)?))),
             FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(d)?)),
             FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
             FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(d)?)),
@@ -140,7 +116,10 @@ impl FunctionCall {
         let f = match self {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_future(providers))),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_future(providers))),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(e.evaluate_as_future())),
+            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.evaluate_as_future()))),
+            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(
+                i.clone().evaluate_as_future(providers),
+            ))),
             FunctionCall::Join(j) => {
                 Either3::B(Either3::A(j.clone().evaluate_as_future(providers)))
             }
@@ -306,7 +285,7 @@ impl Path {
     }
 }
 
-fn bool_value(json: &json::Value) -> Result<bool, TestError> {
+pub(super) fn bool_value(json: &json::Value) -> Result<bool, TestError> {
     let r = match json {
         json::Value::Null => false,
         json::Value::Bool(b) => *b,
@@ -349,7 +328,7 @@ impl ValueOrComplexExpression {
         Ok(value.into())
     }
 
-    fn evaluate<'a, 'b: 'a>(
+    pub(super) fn evaluate<'a, 'b: 'a>(
         &'b self,
         d: &'a json::Value,
     ) -> Result<Cow<'a, json::Value>, TestError> {
@@ -359,7 +338,7 @@ impl ValueOrComplexExpression {
         }
     }
 
-    fn evaluate_as_iter<'a>(
+    pub(super) fn evaluate_as_iter<'a>(
         &self,
         d: &'a json::Value,
     ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
@@ -371,7 +350,7 @@ impl ValueOrComplexExpression {
         }
     }
 
-    fn evaluate_as_future(
+    pub(super) fn evaluate_as_future(
         &self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
     ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
@@ -1126,16 +1105,11 @@ fn parse_function_call(
             Rule::function_ident => {
                 ident = Some(pair.as_str());
             }
-            Rule::function_call => match parse_function_call(pair, providers, static_providers)? {
-                Either::A(fc) => args.push(FunctionArg::FunctionCall(fc)),
-                Either::B(v) => args.push(FunctionArg::Value(Value::Json(v))),
-            },
-            Rule::value => {
-                args.push(FunctionArg::Value(parse_value(
-                    pair.into_inner(),
-                    providers,
-                    static_providers,
-                )?));
+            Rule::function_arg => {
+                args.push(
+                    parse_complex_expression(pair.into_inner(), providers, static_providers)?
+                        .into(),
+                );
             }
             r => {
                 return Err(TestError::Internal(format!(

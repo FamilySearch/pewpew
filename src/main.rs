@@ -1,4 +1,4 @@
-#![feature(drain_filter, no_more_cas)]
+#![feature(bind_by_move_pattern_guards, drain_filter, no_more_cas)]
 
 mod body_reader;
 mod channel;

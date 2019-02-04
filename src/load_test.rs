@@ -120,15 +120,13 @@ impl LoadTest {
                           ========================================\n\
                           ${request['start-line']}\n\
                           ${join(request.headers, '\n', ': ')}\n\
-                          \n\
-                          ${request.body}\n\
+                          ${if(request.body != '', '\n${request.body}', '')}\n\
                           \n\
                           Response (RTT: ${stats.rtt}ms)\n\
                           ========================================\n\
                           ${response['start-line']}\n\
                           ${join(response.headers, '\n', ': ')}\n\
-                          \n\
-                          ${response.body}\n`";
+                          ${if(response.body != '', '\n${response.body}', '')}\n`";
             let logger = json::json!({
                 "select": select,
                 "to": "stdout",

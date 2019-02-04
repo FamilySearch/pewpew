@@ -30,6 +30,7 @@ use crate::zip_all::zip_all;
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error as StdError,
+    num::NonZeroUsize,
     ops::{Deref, DerefMut},
     str,
     sync::Arc,
@@ -117,6 +118,7 @@ pub struct Builder {
     declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
     logs: Vec<(String, Select)>,
+    max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     start_stream: Option<StartStream>,
     provides: Vec<(String, Select)>,
@@ -131,6 +133,7 @@ impl Builder {
             declare: BTreeMap::new(),
             headers: Vec::new(),
             logs: Vec::new(),
+            max_parallel_requests: None,
             method: Method::GET,
             start_stream,
             provides: Vec::new(),
@@ -151,6 +154,11 @@ impl Builder {
 
     pub fn logs(mut self, logs: Vec<(String, Select)>) -> Self {
         self.logs.extend(logs);
+        self
+    }
+
+    pub fn max_parallel_requests(mut self, max_parallel_requests: Option<NonZeroUsize>) -> Self {
+        self.max_parallel_requests = max_parallel_requests;
         self
     }
 
@@ -310,6 +318,7 @@ impl Builder {
             endpoint_id,
             headers,
             limits,
+            max_parallel_requests: self.max_parallel_requests,
             method,
             outgoing,
             precheck_rr_providers,
@@ -355,6 +364,7 @@ where
     endpoint_id: usize,
     headers: BTreeMap<String, Template>,
     limits: Vec<channel::Limit>,
+    max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     outgoing: Arc<Vec<Outgoing>>,
     precheck_rr_providers: u16,
@@ -403,9 +413,12 @@ where
                         endpoint_id: self.endpoint_id,
                         timeout: self.timeout,
                     };
-                    ForEachParallel::new(self.limits, self.stream, move |values| {
-                        rm.send_requests(values)
-                    })
+                    ForEachParallel::new(
+                        self.limits,
+                        self.max_parallel_requests,
+                        self.stream,
+                        move |values| rm.send_requests(values),
+                    )
                 }),
         )
     }

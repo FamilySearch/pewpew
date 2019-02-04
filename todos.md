@@ -2,11 +2,10 @@
 - Add `if` expression function which returns the second argument if the first is true or the third if the first is false
 - Allow option to support templates within static providers
 - Allow declare expressions to reference other declare variables as long as there's no recursive references
-- Add a `values` function in expressions which iterates over the key/value pairs in an object
-- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer). For `run` stats output format (currently in config.general.summary_output_format-- remove that option). *Breaking change*.
-- Create a try run viewer
+- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer). For `run` stats output format (currently in config.general.summary_output_format-- remove that option). *Breaking change*. Version 0.5.
+- Create a try run viewer. Version 0.5.
+- Merge `stats_id` and `alias`. New property `id`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run you could specify key/value pairs which could select 1 or more endpoints. *Breaking change*. Version 0.5.
 - Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
-- Add a max_connection config option. Will require implementing a custom client and thread pool. Log number of open connections.
 - Allow math in expressions
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
 - Create a Visual Studio Code language extension for the loadtest file schema

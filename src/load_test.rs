@@ -230,6 +230,7 @@ impl LoadTest {
                 .declare(endpoint.declare)
                 .body(endpoint.body)
                 .stats_id(endpoint.stats_id)
+                .max_parallel_requests(endpoint.max_parallel_requests)
                 .method(endpoint.method)
                 .headers(headers)
                 .provides(provides)

@@ -2,7 +2,7 @@ use futures::{sync::oneshot, Async, Future, IntoFuture, Poll, Stream};
 
 use crate::channel::Limit;
 
-use std::cmp;
+use std::{cmp, num::NonZeroUsize};
 
 /// A stream combinator which executes a closure over each item on a
 /// stream in parallel. If the stream or any of the futures returned from
@@ -17,6 +17,7 @@ where
     F: Future<Item = (), Error = St::Error> + Send + 'static,
     E: Send + 'static,
 {
+    cap: Option<NonZeroUsize>,
     f: Fm,
     futures: Vec<oneshot::Receiver<St::Error>>,
     limits: Vec<Limit>,
@@ -32,8 +33,9 @@ where
     F: Future<Item = (), Error = St::Error> + Send + 'static,
     E: Send + 'static,
 {
-    pub fn new(limits: Vec<Limit>, stream: St, f: Fm) -> Self {
+    pub fn new(limits: Vec<Limit>, cap: Option<NonZeroUsize>, stream: St, f: Fm) -> Self {
         ForEachParallel {
+            cap,
             limits,
             f,
             futures: Vec::new(),
@@ -55,10 +57,17 @@ where
     type Error = F::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let limit = self
+        let mut limit = self
             .limits
             .iter()
             .fold(0, |prev, l| cmp::max(prev, l.get()));
+        if let Some(n) = self.cap {
+            limit = if limit == 0 {
+                n.get()
+            } else {
+                limit.min(n.get())
+            }
+        }
         loop {
             let mut made_progress_this_iter = false;
             // Try and pull an item from the stream
@@ -142,7 +151,7 @@ mod tests {
         let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(vec![], s, move |_| {
+        let fep = ForEachParallel::new(vec![], None, s, move |_| {
             counter.fetch_add(1, Ordering::Relaxed);
             Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
         })
@@ -170,6 +179,7 @@ mod tests {
         let wait_time_ms = 250;
         let fep = ForEachParallel::new(
             vec![Limit::Integer(100), Limit::Integer(250)],
+            None,
             s,
             move |_| {
                 counter.fetch_add(1, Ordering::Relaxed);
@@ -188,5 +198,34 @@ mod tests {
             elapsed < Duration::from_millis(wait_time_ms * 3)
                 && elapsed > Duration::from_millis(wait_time_ms * 2)
         );
+    }
+
+    #[test]
+    fn honors_cap() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        // how many iterations to run
+        let n = 150;
+        let counter2 = counter.clone();
+        let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
+        // how long to wait before a parallel task finishes
+        let wait_time_ms = 250;
+        let fep = ForEachParallel::new(
+            vec![Limit::Integer(100), Limit::Integer(250)],
+            Some(NonZeroUsize::new(50).unwrap()),
+            s,
+            move |_| {
+                counter.fetch_add(1, Ordering::Relaxed);
+                Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
+            },
+        )
+        .then(|_| Ok(()));
+        let start = Instant::now();
+        tokio::run(fep);
+        let elapsed = start.elapsed();
+        // check that the function ran n times
+        assert_eq!(counter2.load(Ordering::Relaxed), n);
+        // check that the whole process ran in an acceptable time span (meaning the tasks went in parallel and
+        // with a certain limit of concurrent tasks)
+        assert!(elapsed < Duration::from_millis(800) && elapsed > Duration::from_millis(750));
     }
 }

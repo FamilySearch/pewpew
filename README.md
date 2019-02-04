@@ -431,6 +431,7 @@ endpoints:
     [provides: <i>provides_section</i>]
     [logs: <i>logs_section</i>]
     [alias: <i>string</i>]
+    [max_parallel_requests: <i>unsized integer</i>]
 </pre>
 The `endpoints` section declares what HTTP endpoints will be called during a test.
 
@@ -460,6 +461,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides section](#provides)
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
 - **`alias`** <sub><sup>*Optional*</sup></sub> - Gives this endpoint an alias for the purpose of "try runs". See the [running pewpew section](#Running-pewpew).
+- **`max_parallel_requests`** <sub><sup>*Optional*</sup></sub> - Limits how many requests can be "open" at any point for the endpoint. WARNING: this can cause coordinated omission making the stats from the test suspect.
 
 #### Referencing Providers
 Providers can be referenced anywhere [templates](#Templates) can be used and also in the `declare` parameter as a value.

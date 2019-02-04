@@ -21,7 +21,11 @@ use serde_derive::Deserialize;
 use serde_json as json;
 use tuple_vec_map;
 
-use std::{collections::BTreeMap, num::NonZeroU16, time::Duration};
+use std::{
+    collections::BTreeMap,
+    num::{NonZeroU16, NonZeroUsize},
+    time::Duration,
+};
 
 #[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
@@ -208,6 +212,8 @@ pub struct Endpoint {
     pub provides: Vec<(String, EndpointProvidesPreProcessed)>,
     #[serde(default, deserialize_with = "deserialize_logs")]
     pub logs: Vec<(String, EndpointProvidesPreProcessed)>,
+    #[serde(default)]
+    pub max_parallel_requests: Option<NonZeroUsize>,
 }
 
 #[serde(rename_all = "snake_case")]

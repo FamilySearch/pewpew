@@ -377,7 +377,7 @@ loggers:
     [select: <i>select</i>]
     [for_each: <i>for_each</i>]
     [where: <i>expression</i>]
-    to: <i>filename</i> | stderr | stdout
+    to: <i>template</i> | stderr | stdout
     [pretty: <i>boolean</i>]
     [limit: <i>integer</i>]
     [kill: <i>boolean</i>]
@@ -422,14 +422,15 @@ Creates a global logger named "httpErrors" which will log to the file "http_err.
 endpoints:
   - [declare: <i>declare_section</i>]
     [headers: <i>headers</i>]
-    [body: <i>body</i>]
+    [body: <i>template</i>]
     [load_pattern: <i>load_pattern_section</i>]
     [method: <i>method</i>]
     [peak_load: <i>peak_load</i>]
     [stats_id: <i>stats_id</i>]
-    url: <i>url</i>
+    url: <i>template</i>
     [provides: <i>provides_section</i>]
     [logs: <i>logs_section</i>]
+    [alias: <i>string</i>]
 </pre>
 The `endpoints` section declares what HTTP endpoints will be called during a test.
 

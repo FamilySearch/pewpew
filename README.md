@@ -458,6 +458,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`url`** - A [template string](#Templates) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides section](#provides)
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs section](#logs)
+- **`alias`** <sub><sup>*Optional*</sup></sub> - Gives this endpoint an alias for the purpose of "try runs". See the [running pewpew section](#Running-pewpew).
 
 #### Referencing Providers
 Providers can be referenced anywhere [templates](#Templates) can be used and also in the `declare` parameter as a value.
@@ -938,3 +939,27 @@ Templates are special string values which can be interpolated with [expressions]
 Templates also have the ability to pull from environment variables. Environment variables are referenced like providers except they start with a `$` character. If an environment variable does not exist with that name, then it is assumed to refer to a provider. For example: `${$FOO}` will pull from the environment variable "FOO" if it exists or a provider named "$FOO".
 
 When pulling from an environment variable, the value will be parsed as JSON and if not a valid JSON value will be interpreted as a string.
+
+### Running pewpew
+
+There are two ways that pewpew can execute a test from the command-line: either a full load test or a "try run". For reference here's the output of `pewpew --help`:
+
+```
+USAGE:
+    pewpew.exe <CONFIG> [TRY]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+ARGS:
+    <CONFIG>    the load test config file to use [default: loadtest.yaml]
+    <TRY>       the alias name of a single endpoint which will be run a single time with the raw http request and
+                response printed to STDOUT
+```
+
+In both cases a [config file](#Config-file) is specified. The try run option will run a single endpoint a single time and print out the raw HTTP request and response to stdout. This is useful for testing things out before running a full load test. Pewpew will automatically determine and execute any other endpoints needed to provide data for the desired endpoint.
+
+To execute a try run specify the config file and the alias for the endpoint to be run. By default every endpoint has an alias of its numerical index in the config file, starting with endpoint `1`. An explicit alias can also be provided to an endpoint by using the optional `alias` property within the [endpoint's definition](#endpoints) in the config file.
+
+**Example** If your config file were named `loadtest.yaml` and you wanted to do a try run of the third endpoint, whose alias was `3` (the default), you would run `pewpew loadtest.yaml 3`.

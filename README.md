@@ -304,7 +304,7 @@ Unlike other *provider_type*s `response` does not automatically receive data fro
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from being empty. Defaults to `auto`.
 
 #### static
-The `static` *provider_type* is used for having a single pre-defined value used throughout a test. A `static` provider will make copies of the value every time a value is required from the provider. When defining a `static` provider the only parameter is the literal value which should be used.
+The `static` *provider_type* is used for having a single pre-defined value used throughout a test. A `static` provider will make copies of the value every time a value is required from the provider. When defining a `static` provider the only parameter is the literal value which should be used. Any string value in the literal will be interpreted as a template, but only environment variables can be referenced.
 
 For example:
 ```yaml

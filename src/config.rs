@@ -8,6 +8,7 @@ pub use self::select_parser::{
 };
 
 use crate::channel::Limit;
+use crate::error::TestError;
 use crate::mod_interval::{HitsPer, LinearBuilder};
 use crate::util::json_value_into_string;
 
@@ -62,6 +63,7 @@ pub enum Provider {
     File(FileProvider),
     Range(RangeProvider),
     Response(ResponseProvider),
+    #[serde(deserialize_with = "deserialize_static_json")]
     Static(json::Value),
     StaticList(Vec<json::Value>),
 }
@@ -462,6 +464,34 @@ impl<'de> Deserialize<'de> for Limit {
     }
 }
 
+fn static_json_helper(v: json::Value) -> Result<json::Value, TestError> {
+    let v = match v {
+        json::Value::Null | json::Value::Bool(_) | json::Value::Number(_) => v,
+        json::Value::Object(m) => {
+            let m = m.into_iter().map(|(k, v)| Ok::<_, TestError>((k, static_json_helper(v)?)))
+                .collect::<Result<_, _>>()?;
+            json::Value::Object(m)
+        }
+        json::Value::Array(v) => {
+            let v = v.into_iter().map(static_json_helper).collect::<Result<_, _>>()?;
+            json::Value::Array(v)
+        }
+        json::Value::String(s) => {
+            let sp = BTreeMap::new();
+            Template::new(&s, &sp)?.evaluate(&json::Value::Null)?.into()
+        }
+    };
+    Ok(v)
+}
+
+fn deserialize_static_json<'de, D>(deserializer: D) -> Result<json::Value, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = json::Value::deserialize(deserializer)?;
+    static_json_helper(v).map_err(DeError::custom)
+}
+
 fn deserialize_path<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
@@ -469,9 +499,9 @@ where
     let template = String::deserialize(deserializer)?;
     let vars = BTreeMap::new();
     let template = Template::new(&template, &vars).map_err(DeError::custom)?;
-    Ok(template
+    template
         .evaluate(&json::Value::Null)
-        .map_err(DeError::custom)?)
+        .map_err(DeError::custom)
 }
 
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>

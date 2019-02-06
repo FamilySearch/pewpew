@@ -596,10 +596,11 @@ where
         let stats_tx2 = stats_tx.clone();
         let outgoing = self.outgoing.clone();
         let test_ended = self.test_ended.clone();
-        let test_ended2 = test_ended.clone();
         let timeout_in_ms = (duration_to_nanos(&self.timeout) / 1_000_000) as u64;
         let precheck_rr_providers = self.precheck_rr_providers;
         let endpoint_id = self.endpoint_id;
+        let auto_returns = handle_auto_returns(auto_returns, test_ended.clone());
+        let auto_returns2 = auto_returns.clone();
         let a = Timeout::new(response_future, self.timeout)
             .map_err(move |err| {
                 if let Some(err) = err.into_inner() {
@@ -633,7 +634,7 @@ where
                     test_ended,
                     endpoint_id,
                 };
-                rh.handle(response)
+                rh.handle(response, auto_returns)
             })
             .or_else(move |te| match te {
                 TestError::ConnectionErr(time, e) => {
@@ -664,34 +665,7 @@ where
                 }
                 _ => Either3::C(Err(te).into_future()),
             })
-            .and_then(move |_| {
-                let mut futures = Vec::new();
-                for (send_option, channel, jsons) in auto_returns {
-                    match send_option {
-                        EndpointProvidesSendOptions::Block => {
-                            let fut = channel
-                                .send_all(stream::iter_ok(jsons))
-                                .map(|_| ())
-                                .map_err(|_e| TestError::ProviderEnded(None))
-                                .select(test_ended2.clone().then(|_| Ok(())))
-                                .map(|v| v.0)
-                                .map_err(|e| e.0);
-                            futures.push(fut);
-                        }
-                        EndpointProvidesSendOptions::Force => {
-                            jsons.into_iter().for_each(|v| channel.force_send(v))
-                        }
-                        EndpointProvidesSendOptions::IfNotFull => {
-                            for v in jsons {
-                                if channel.try_send(v).is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                join_all(futures).map(|_| ())
-            });
+            .and_then(move |_| auto_returns2.map(|_| ()).map_err(|e| (&*e).clone()));
         Either::A(a)
     }
 }
@@ -717,10 +691,14 @@ where
     <F as Future>::Error: Send + Sync,
     <F as Future>::Item: Send + Sync,
 {
-    fn handle(
+    fn handle<F2>(
         self,
         response: hyper::Response<HyperBody>,
-    ) -> impl Future<Item = (), Error = TestError> {
+        auto_returns: Shared<F2>,
+    ) -> impl Future<Item = (), Error = TestError>
+    where
+        F2: Future<Item = (), Error = TestError>,
+    {
         let status_code = response.status();
         let status = status_code.as_u16();
         let response_provider = json::json!({ "status": status });
@@ -838,7 +816,7 @@ where
             stats_tx,
             status,
         };
-        let a = body_stream.then(move |result| bh.handle(result));
+        let a = body_stream.then(move |result| bh.handle(result, auto_returns));
         Either::A(a)
     }
 }
@@ -865,13 +843,19 @@ where
     <F as Future>::Error: Send + Sync,
     <F as Future>::Item: Send + Sync,
 {
-    fn handle(
+    fn handle<F2>(
         self,
         result: Result<Option<json::Value>, TestError>,
-    ) -> impl Future<Item = (), Error = TestError> {
+        auto_returns: Shared<F2>,
+    ) -> impl Future<Item = (), Error = TestError>
+    where
+        F2: Future<Item = (), Error = TestError>,
+    {
         let rtt = (duration_to_nanos(&self.now.elapsed()) / 1_000_000) as u64;
         let mut template_values = self.template_values;
-        let mut futures = Vec::new();
+        let mut futures = vec![Either3::C(
+            auto_returns.map(|_| ()).map_err(|e| (&*e).clone()),
+        )];
         template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
         match result {
             Ok(body) => {
@@ -905,7 +889,7 @@ where
                                 .select(self.test_ended.clone().then(|_| Ok(())))
                                 .map(|v| v.0)
                                 .map_err(|e| e.0);
-                            futures.push(Either::A(fut));
+                            futures.push(Either3::A(fut));
                         }
                         EndpointProvidesSendOptions::Force => {
                             for v in i {
@@ -929,7 +913,7 @@ where
                         }
                     }
                 }
-                futures.push(Either::B(
+                futures.push(Either3::B(
                     self.stats_tx
                         .send(
                             stats::ResponseStat {
@@ -997,4 +981,42 @@ fn handle_response_requirements(
         *response_fields_added |= RESPONSE_BODY;
         // the actual adding of the body happens later
     }
+}
+
+fn handle_auto_returns<F>(
+    auto_returns: Vec<config::AutoReturn>,
+    test_ended: Shared<F>,
+) -> Shared<impl Future<Item = (), Error = TestError>>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Error: Send + Sync,
+    <F as Future>::Item: Send + Sync,
+{
+    let futures = auto_returns
+        .into_iter()
+        .filter_map(move |(send_option, channel, jsons)| match send_option {
+            EndpointProvidesSendOptions::Block => {
+                let fut = channel
+                    .send_all(stream::iter_ok(jsons))
+                    .map(|_| ())
+                    .map_err(|_e| TestError::ProviderEnded(None))
+                    .select(test_ended.clone().then(|_| Ok(())))
+                    .map(|v| v.0)
+                    .map_err(|e| e.0);
+                Some(fut)
+            }
+            EndpointProvidesSendOptions::Force => {
+                jsons.into_iter().for_each(|v| channel.force_send(v));
+                None
+            }
+            EndpointProvidesSendOptions::IfNotFull => {
+                for v in jsons {
+                    if channel.try_send(v).is_err() {
+                        break;
+                    }
+                }
+                None
+            }
+        });
+    join_all(futures).map(|_| ()).shared()
 }

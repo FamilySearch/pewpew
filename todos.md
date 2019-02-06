@@ -1,21 +1,32 @@
 # TODOs
-- Add `if` expression function which returns the second argument if the first is true or the third if the first is false
-- Allow option to support templates within static providers
-- Allow declare expressions to reference other declare variables as long as there's no recursive references
-- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer). For `run` stats output format (currently in config.general.summary_output_format-- remove that option). *Breaking change*. Version 0.5.
-- Create a try run viewer. Version 0.5.
-- Merge `stats_id` and `alias`. New property `id`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run you could specify key/value pairs which could select 1 or more endpoints. *Breaking change*. Version 0.5.
-- Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
-- Allow math in expressions
-- Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296)
-- Create a Visual Studio Code language extension for the loadtest file schema
-- Add cli option for results
-- every minute we print stats to console, also write those results to disk, overwriting the previous file every minute
+- Allow a value of `0` for the `buffer` parameter on `file` and `response` providers. This will make it so a value will only be put into the channel when a receiver has already polled, but values will not be pushed onto the channel pre-emptively. This will cause requests to act in a "serial" fashion. This should be used for try runs to prevent extraneous requests happening to fill buffers. Will also have to change ForEachParallel or the code in endpoint.rs to prevent buffering of requests. Perhaps requests which feed a provider with a `0` sized buffer will wait on the receiver, like other requests wait on a provider.
+- Make static providers act like selects except any string value is interpreted as a template rather than an expression
+- Create guide book using mdbook (https://github.com/rust-lang-nursery/mdBook)
+- Allow basic math operations in expressions
+- every minute we print stats to console, write those results to disk, overwriting the previous file every minute
+- add optional select clause for file providers
 - add `files` body provider
 - allow multipart uploads
-- update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
 - add more tests - unit and integration - get code coverage
-- track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
-- add in machine clustering. Machines should open up a secure connection using a PSK
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
+- Allow declare expressions to reference other declare variables as long as there's no recursive references
+- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option), results file. *Breaking change*. Version 0.5.
+- Create a try run viewer. Version 0.5.
+- Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.
+- Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
+- Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296, https://github.com/est31/msvc-wine-rust)
+- Create a Visual Studio Code language extension for the loadtest file schema
+- update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
+- Create server mode:
+  - Allows the running of tests on demand.
+  - Live UI to see the progress of a running tests.
+  - No access to environment variables from configs.
+  - Files for file providers will need to be included with the test as the server should not access any files on disk.
+  - Loggers cannot write to files or stdout/stderr--everything should be displayed in the test results view.
+  - Need ability to write stats to a log to be ingested by splunk.
+  - Have a domain whitelist--only explicitly specified domains can be hit in a test.
+  - Storage layer to store server config, tests and results
+  - User permissions: roles to run a test, see results, create a test
+- Add in machine clustering (only in server mode). Machines should open up a secure connection using a PSK
+- track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
 - Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces

@@ -262,7 +262,7 @@ impl Builder {
         let mut required_providers2 = BTreeSet::new();
         for (name, d) in self.declare {
             required_providers.remove(&name);
-            let vce = config::ValueOrComplexExpression::new(
+            let vce = config::ValueOrExpression::new(
                 &d,
                 &mut required_providers2,
                 &ctx.static_providers,

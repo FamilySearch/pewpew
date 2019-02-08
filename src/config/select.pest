@@ -1,6 +1,6 @@
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | "\n" | "\t" | "\r\n" }
 
-value = ${ not? ~ (boolean | null | json_path | string_outer | number) }
+value = ${ boolean | null | json_path | string_outer | number }
 
 json_ident = @{ json_ident_start ~ json_ident_rest* }
 
@@ -32,7 +32,7 @@ function_call = !{
     ")"
 }
 
-function_arg = { complex_expression }
+function_arg = { expression }
 
 QUOTATION_MARK = _{ "\"" | "'" | "`" }
 
@@ -52,25 +52,33 @@ boolean = { "true" | "false" }
 
 null = { "null" }
 
-entry_point = _{ SOI ~ complex_expression ~ EOI }
+entry_point = _{ SOI ~ expression ~ EOI }
 
 template_not_expression = ${ (!"${" ~ (("\\" ~ ANY) | ANY))+ }
 
-template_expression = !{ "${" ~ complex_expression ~ "}" }
+template_expression = !{ "${" ~ expression ~ "}" }
 
 template_entry_point = @{ SOI ~ ( template_expression | template_not_expression )* ~ EOI }
 
-complex_expression = _{
-    (simple_expression | group_expression) ~
-    (combiner ~ complex_expression)*
+expression = {
+	unary_operator* ~ (value | group_expression)
+    ~ (infix_operator ~ expression)*
 }
 
-simple_expression = { value ~ (operator ~ value)? }
+group_expression = _{ "(" ~ expression ~ ")" }
 
-group_expression = { "(" ~ complex_expression ~ ")" }
-
-combiner = { "&&" | "||" }
-
-not = { "!" }
-
-operator = { "==" | "!=" | ">=" | ">" | "<=" | "<" }
+unary_operator = _{ "!" }
+infix_operator = {
+    "||"
+    | "&&"
+    | "=="
+    | "!="
+    | ">="
+    | ">"
+    | "<="
+    | "<"
+    | "+"
+    | "-"
+    |  "*"
+    | "/"
+}

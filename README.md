@@ -659,16 +659,22 @@ As seen above an optional space can be used to delimit the individual duration p
 #### Expressions
 Expressions are strings which provide a way to act on one or more providers' data. Expressions can be used to select sub-properties on an object, access elements in an array, acess the length of an array, evaluate boolean logic or use helper functions to act on data from a provider.
 
-The following operators can be used in boolean logic:
+The following operators can be used within an expression:
 
 Operator | Description
 --- | --- 
-`==` | Equal. Check that two values are equal to each other
-`!=` | Not equal. Check that two values are not equal to each other
-`>` | Greater than. Check that the left value is greater than the right
-`<` | Less than. Check that the left value is less than the right
-`>=` | Greater than or equal to. Check that the left value is greater than or equal to the right
-`<=` | Less than or equal to. Check that the left value is less than or equal to the right
+`==` | Equal. Check that two values are equal to each other and produces a boolean.
+`!=` | Not equal. Check that two values are not equal to each other and produces a boolean.
+`>` | Greater than. Check that the left value is greater than the right and produces a boolean.
+`<` | Less than. Check that the left value is less than the right and produces a boolean.
+`>=` | Greater than or equal to. Check that the left value is greater than or equal to the right and produces a boolean.
+`<=` | Less than or equal to. Check that the left value is less than or equal to the right and produces a boolean.
+`&&` | And. Checks that two values are true and produces a boolean.
+`&&` | Or. Checks that one of two values is true and produces a boolean.
+`+` | Add. Adds two numbers together producing a number.
+`-` | Subtract. Subtracts two numbers producing a number.
+`*` | Multiply. Multiplies two numbers producing a number.
+`/` | Divide. Divides two numbers producing a number.
 
 The following helper functions are also available:
 
@@ -934,8 +940,6 @@ Pads a string or number to be minimum length. Any added padding will be added to
 </tr>
 </tbody>
 </table>
-
-#### Headers
 
 #### Headers
 Key/value pairs where the key is a string and the value is a [template string](#Templates) which specify the headers which will be sent with a request. Note that the `host` header is added automatically to every request and cannot be overwritten.

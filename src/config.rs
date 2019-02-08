@@ -2,7 +2,7 @@ mod expression_functions;
 mod select_parser;
 
 pub use self::select_parser::{
-    AutoReturn, Rule as ParserRule, Select, Template, ValueOrComplexExpression, REQUEST_BODY,
+    AutoReturn, Rule as ParserRule, Select, Template, ValueOrExpression, REQUEST_BODY,
     REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
     RESPONSE_STARTLINE, STATS,
 };
@@ -468,12 +468,17 @@ fn static_json_helper(v: json::Value) -> Result<json::Value, TestError> {
     let v = match v {
         json::Value::Null | json::Value::Bool(_) | json::Value::Number(_) => v,
         json::Value::Object(m) => {
-            let m = m.into_iter().map(|(k, v)| Ok::<_, TestError>((k, static_json_helper(v)?)))
+            let m = m
+                .into_iter()
+                .map(|(k, v)| Ok::<_, TestError>((k, static_json_helper(v)?)))
                 .collect::<Result<_, _>>()?;
             json::Value::Object(m)
         }
         json::Value::Array(v) => {
-            let v = v.into_iter().map(static_json_helper).collect::<Result<_, _>>()?;
+            let v = v
+                .into_iter()
+                .map(static_json_helper)
+                .collect::<Result<_, _>>()?;
             json::Value::Array(v)
         }
         json::Value::String(s) => {

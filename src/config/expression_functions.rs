@@ -1,4 +1,4 @@
-use super::select_parser::{bool_value, f64_value, AutoReturn, Value, ValueOrComplexExpression};
+use super::select_parser::{bool_value, f64_value, AutoReturn, Value, ValueOrExpression};
 use crate::error::TestError;
 use crate::providers;
 use crate::util::{json_value_to_string, Either};
@@ -20,13 +20,13 @@ use std::{
 
 #[derive(Debug)]
 pub(super) struct Collect {
-    arg: ValueOrComplexExpression,
+    arg: ValueOrExpression,
     min: u64,
     random: Option<Uniform<u64>>,
 }
 
 impl Collect {
-    pub(super) fn new(mut args: Vec<ValueOrComplexExpression>) -> Result<Self, TestError> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
         match args.len() {
             2 | 3 => {
                 let second = as_u64(&args.remove(1))
@@ -135,22 +135,22 @@ impl Encoding {
 
 #[derive(Debug)]
 pub(super) struct Encode {
-    arg: ValueOrComplexExpression,
+    arg: ValueOrExpression,
     encoding: Encoding,
 }
 
 impl Encode {
     pub(super) fn new(
-        mut args: Vec<ValueOrComplexExpression>,
+        mut args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
-            [_, ValueOrComplexExpression::V(Value::Json(json::Value::String(encoding)))] => {
+            [_, ValueOrExpression::Value(Value::Json(json::Value::String(encoding)))] => {
                 let encoding = Encoding::try_from(encoding.as_str())?;
                 let e = Encode {
                     arg: args.remove(0),
                     encoding,
                 };
-                if let ValueOrComplexExpression::V(Value::Json(json)) = &e.arg {
+                if let ValueOrExpression::Value(Value::Json(json)) = &e.arg {
                     Ok(Either::B(e.evaluate_with_arg(json)))
                 } else {
                     Ok(Either::A(e))
@@ -195,9 +195,9 @@ pub(super) enum Epoch {
 }
 
 impl Epoch {
-    pub(super) fn new(args: Vec<ValueOrComplexExpression>) -> Result<Self, TestError> {
+    pub(super) fn new(args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
         match args.as_slice() {
-            [ValueOrComplexExpression::V(Value::Json(json::Value::String(unit)))] => {
+            [ValueOrExpression::Value(Value::Json(json::Value::String(unit)))] => {
                 match unit.as_str() {
                     "s" => Ok(Epoch::Seconds),
                     "ms" => Ok(Epoch::Milliseconds),
@@ -240,14 +240,14 @@ impl Epoch {
 
 #[derive(Debug)]
 pub(super) struct If {
-    first: ValueOrComplexExpression,
-    second: ValueOrComplexExpression,
-    third: ValueOrComplexExpression,
+    first: ValueOrExpression,
+    second: ValueOrExpression,
+    third: ValueOrExpression,
 }
 
 impl If {
     pub(super) fn new(
-        mut args: Vec<ValueOrComplexExpression>,
+        mut args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.len() {
             3 => {
@@ -256,14 +256,14 @@ impl If {
                 let first = args.pop().expect("should have had arg");
                 match (first, second, third) {
                     (
-                        ValueOrComplexExpression::V(Value::Json(first)),
-                        ValueOrComplexExpression::V(Value::Json(second)),
+                        ValueOrExpression::Value(Value::Json(first)),
+                        ValueOrExpression::Value(Value::Json(second)),
                         _,
                     ) if bool_value(&first)? => Ok(Either::B(second)),
                     (
-                        ValueOrComplexExpression::V(Value::Json(first)),
+                        ValueOrExpression::Value(Value::Json(first)),
                         _,
-                        ValueOrComplexExpression::V(Value::Json(third)),
+                        ValueOrExpression::Value(Value::Json(third)),
                     ) if !bool_value(&first)? => Ok(Either::B(third)),
                     (first, second, third) => Ok(Either::A(If {
                         first,
@@ -320,17 +320,17 @@ impl If {
 
 #[derive(Debug)]
 pub(super) struct Join {
-    arg: ValueOrComplexExpression,
+    arg: ValueOrExpression,
     sep: String,
     sep2: Option<String>,
 }
 
 impl Join {
     pub(super) fn new(
-        mut args: Vec<ValueOrComplexExpression>,
+        mut args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
-            [_, ValueOrComplexExpression::V(Value::Json(json::Value::String(_)))] => {
+            [_, ValueOrExpression::Value(Value::Json(json::Value::String(_)))] => {
                 let two = into_string(args.pop().expect("join should have two args"))
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
@@ -339,13 +339,13 @@ impl Join {
                     sep: two,
                     sep2: None,
                 };
-                if let ValueOrComplexExpression::V(Value::Json(json)) = &j.arg {
+                if let ValueOrExpression::Value(Value::Json(json)) = &j.arg {
                     Ok(Either::B(j.evaluate_with_arg(json)))
                 } else {
                     Ok(Either::A(j))
                 }
             }
-            [_, ValueOrComplexExpression::V(Value::Json(json::Value::String(_))), ValueOrComplexExpression::V(Value::Json(json::Value::String(_)))] =>
+            [_, ValueOrExpression::Value(Value::Json(json::Value::String(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
                 let three = into_string(args.pop().expect("join should have two args"))
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
@@ -357,7 +357,7 @@ impl Join {
                     sep: two,
                     sep2: Some(three),
                 };
-                if let ValueOrComplexExpression::V(Value::Json(json)) = &j.arg {
+                if let ValueOrExpression::Value(Value::Json(json)) = &j.arg {
                     Ok(Either::B(j.evaluate_with_arg(json)))
                 } else {
                     Ok(Either::A(j))
@@ -421,12 +421,12 @@ impl fmt::Debug for JsonPath {
 
 impl JsonPath {
     pub(super) fn new(
-        args: Vec<ValueOrComplexExpression>,
+        args: Vec<ValueOrExpression>,
         providers: &mut BTreeSet<String>,
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
-            [ValueOrComplexExpression::V(Value::Json(json::Value::String(json_path)))] => {
+            [ValueOrExpression::Value(Value::Json(json::Value::String(json_path)))] => {
                 let provider = {
                     // parse out the provider name, or if it's `request` or `response` get the second layer
                     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
@@ -524,17 +524,17 @@ impl JsonPath {
 
 #[derive(Debug)]
 pub(super) struct Match {
-    arg: ValueOrComplexExpression,
+    arg: ValueOrExpression,
     capture_names: Vec<String>,
     regex: Regex,
 }
 
 impl Match {
     pub(super) fn new(
-        args: Vec<ValueOrComplexExpression>,
+        args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
-            [_, ValueOrComplexExpression::V(Value::Json(json::Value::String(regex_str)))] => {
+            [_, ValueOrExpression::Value(Value::Json(json::Value::String(regex_str)))] => {
                 let regex = Regex::new(regex_str).map_err(TestError::RegexErr)?;
                 let capture_names = regex
                     .capture_names()
@@ -546,7 +546,7 @@ impl Match {
                     capture_names,
                     regex,
                 };
-                if let ValueOrComplexExpression::V(Value::Json(json)) = &m.arg {
+                if let ValueOrExpression::Value(Value::Json(json)) = &m.arg {
                     Ok(Either::B(m.evaluate_with_arg(json)))
                 } else {
                     Ok(Either::A(m))
@@ -600,18 +600,18 @@ impl Match {
 
 #[derive(Debug)]
 pub(super) struct MinMax {
-    args: Vec<ValueOrComplexExpression>,
+    args: Vec<ValueOrExpression>,
     min: bool,
 }
 
 impl MinMax {
     pub(super) fn new(
         min: bool,
-        args: Vec<ValueOrComplexExpression>,
+        args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         let m = MinMax { args, min };
         let iter = m.args.iter().filter_map(|fa| {
-            if let ValueOrComplexExpression::V(Value::Json(json)) = fa {
+            if let ValueOrExpression::Value(Value::Json(json)) = fa {
                 Some(Ok(Cow::Borrowed(json)))
             } else {
                 None
@@ -683,7 +683,7 @@ impl MinMax {
 #[derive(Debug)]
 pub(super) struct Pad {
     start: bool,
-    arg: ValueOrComplexExpression,
+    arg: ValueOrExpression,
     min_length: usize,
     padding: String,
 }
@@ -691,17 +691,17 @@ pub(super) struct Pad {
 impl Pad {
     pub(super) fn new(
         start: bool,
-        mut args: Vec<ValueOrComplexExpression>,
+        mut args: Vec<ValueOrExpression>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         let as_usize = |fa| match fa {
-            ValueOrComplexExpression::V(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n
+            ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n
                 .as_u64()
                 .map(|n| n as usize)
                 .ok_or_else(|| TestError::InvalidArguments("pad".into())),
             _ => Err(TestError::InvalidArguments("pad".into())),
         };
         match args.as_slice() {
-            [_, ValueOrComplexExpression::V(Value::Json(json::Value::Number(_))), ValueOrComplexExpression::V(Value::Json(json::Value::String(_)))] =>
+            [_, ValueOrExpression::Value(Value::Json(json::Value::Number(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
                 let third = into_string(args.pop().expect("pad should have three args"))
                     .ok_or_else(|| TestError::InvalidArguments("pad".into()))?;
@@ -713,7 +713,7 @@ impl Pad {
                     min_length: second,
                     padding: third,
                 };
-                if let ValueOrComplexExpression::V(Value::Json(json)) = &p.arg {
+                if let ValueOrExpression::Value(Value::Json(json)) = &p.arg {
                     Ok(Either::B(p.evaluate_with_arg(json)))
                 } else {
                     Ok(Either::A(p))
@@ -793,19 +793,19 @@ impl ReversibleRange {
 
 #[derive(Debug)]
 pub(super) enum Range {
-    Args(ValueOrComplexExpression, ValueOrComplexExpression),
+    Args(ValueOrExpression, ValueOrExpression),
     Range(ReversibleRange),
 }
 
 impl Range {
-    pub(super) fn new(mut args: Vec<ValueOrComplexExpression>) -> Result<Self, TestError> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
         if args.len() == 2 {
             let second = args.pop().expect("range should have two args");
             let first = args.pop().expect("range should have two args");
             match (&first, &second) {
                 (
-                    ValueOrComplexExpression::V(Value::Json(_)),
-                    ValueOrComplexExpression::V(Value::Json(_)),
+                    ValueOrExpression::Value(Value::Json(_)),
+                    ValueOrExpression::Value(Value::Json(_)),
                 ) => {
                     let first = as_u64(&first)
                         .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
@@ -884,7 +884,7 @@ pub(super) struct Repeat {
 }
 
 impl Repeat {
-    pub(super) fn new(mut args: Vec<ValueOrComplexExpression>) -> Result<Self, TestError> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
         match args.len() {
             1 | 2 => {
                 let min = as_u64(&args.remove(0))
@@ -923,20 +923,20 @@ impl Repeat {
     }
 }
 
-fn into_string(fa: ValueOrComplexExpression) -> Option<String> {
-    if let ValueOrComplexExpression::V(Value::Json(json::Value::String(s))) = fa {
+fn into_string(fa: ValueOrExpression) -> Option<String> {
+    if let ValueOrExpression::Value(Value::Json(json::Value::String(s))) = fa {
         Some(s)
     } else {
         None
     }
 }
 
-fn as_u64(fa: &ValueOrComplexExpression) -> Option<u64> {
+fn as_u64(fa: &ValueOrExpression) -> Option<u64> {
     match fa {
-        ValueOrComplexExpression::V(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
+        ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
             n.as_u64()
         }
-        ValueOrComplexExpression::V(Value::Json(json::Value::Number(ref n))) if n.is_f64() => {
+        ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_f64() => {
             n.as_f64().map(|n| n as u64)
         }
         _ => None,
@@ -958,21 +958,18 @@ mod tests {
     use serde_json::json as j;
     use tokio::runtime::current_thread;
 
-    impl From<json::Value> for ValueOrComplexExpression {
+    impl From<json::Value> for ValueOrExpression {
         fn from(j: json::Value) -> Self {
-            ValueOrComplexExpression::V(Value::Json(j))
+            ValueOrExpression::Value(Value::Json(j))
         }
     }
 
-    impl From<&str> for ValueOrComplexExpression {
+    impl From<&str> for ValueOrExpression {
         fn from(s: &str) -> Self {
-            ValueOrComplexExpression::V(Value::Path(
-                false,
-                Path {
-                    start: PathStart::Ident(s.into()),
-                    rest: vec![],
-                },
-            ))
+            ValueOrExpression::Value(Value::Path(Path {
+                start: PathStart::Ident(s.into()),
+                rest: vec![],
+            }))
         }
     }
 

@@ -346,7 +346,7 @@ enum StreamItem {
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
-type EndpointStream = Box<Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
+type EndpointStream = Box<dyn Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint<F>
@@ -604,7 +604,7 @@ where
         let a = Timeout::new(response_future, self.timeout)
             .map_err(move |err| {
                 if let Some(err) = err.into_inner() {
-                    let err: Arc<StdError + Send + Sync> =
+                    let err: Arc<dyn StdError + Send + Sync> =
                         if let Some(io_error_maybe) = err.source() {
                             if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
                                 let io_error = err.into_cause().expect("should have a cause error");

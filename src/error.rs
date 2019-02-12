@@ -9,8 +9,8 @@ use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemT
 
 #[derive(Clone, Debug)]
 pub enum TestError {
-    BodyErr(Arc<StdError + Send + Sync>),
-    ConnectionErr(SystemTime, Arc<StdError + Send + Sync>),
+    BodyErr(Arc<dyn StdError + Send + Sync>),
+    ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
     IndexingJson(String, json::Value),
     Internal(String),
     InvalidArguments(String),

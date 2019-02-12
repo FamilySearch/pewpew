@@ -26,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-type EndpointCalls = Box<Future<Item = (), Error = ()> + Send + 'static>;
+type EndpointCalls = Box<dyn Future<Item = (), Error = ()> + Send + 'static>;
 
 pub struct LoadTest {
     // how long the test will run for (can go longer due to waiting for responses)

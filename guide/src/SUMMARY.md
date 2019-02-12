@@ -11,3 +11,4 @@
     - [Expressions](./config/common-types/expressions.md)
 - [Command-line options](./cli.md)
 - [Viewing results](./viewing-results.md)
+- [Miscellaneous](./misc.md)

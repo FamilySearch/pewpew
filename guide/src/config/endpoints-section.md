@@ -13,7 +13,7 @@ endpoints:
     [provides: <i>provides_subsection</i>]
     [logs: <i>logs_subsection</i>]
     [alias: <i>string</i>]
-    [max_parallel_requests: <i>unsized integer</i>]
+    [max_parallel_requests: <i>unsigned integer</i>]
 </pre>
 
 The `endpoints` section declares what HTTP endpoints will be called during a test.

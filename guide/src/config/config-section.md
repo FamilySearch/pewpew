@@ -7,7 +7,7 @@ config:
     headers: <i>headers</i>
     keepalive: <i>duration</i>
   general:
-    auto_buffer_start_size: <i>unsized integer</i>
+    auto_buffer_start_size: <i>unsigned integer</i>
     bucket_size: <i>duration</i>
     summary_output_format: pretty | json
 </pre>

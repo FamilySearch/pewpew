@@ -18,7 +18,6 @@ use serde::{
     de::{Error as DeError, Unexpected},
     Deserialize, Deserializer,
 };
-use serde_derive::Deserialize;
 use serde_json as json;
 use tuple_vec_map;
 

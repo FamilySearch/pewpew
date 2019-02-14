@@ -2,7 +2,6 @@ use super::print_test_error_to_console;
 use crate::config;
 use crate::error::TestError;
 
-use ansi_term::{Color, Style};
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
 use futures::{
@@ -12,10 +11,10 @@ use futures::{
 };
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
-use serde::Serialize;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tokio::{fs::File as TokioFile, timer::Interval};
+use yansi::Paint;
 
 use std::{
     cell::Cell,
@@ -186,10 +185,11 @@ impl RollingAggregateStats {
         if is_pretty_format {
             eprint!(
                 "{}",
-                Style::new().bold().paint(format!(
+                Paint::new(format!(
                     "\nBucket Summary {}\n",
                     create_date_diff(time, time + self.duration)
                 ))
+                .bold()
             );
         }
         for (stats_id, stats_map) in self.buckets.values() {
@@ -344,9 +344,7 @@ impl AggregateStats {
             config::SummaryOutputFormats::Pretty => {
                 eprint!(
                     "{}",
-                    Color::Yellow
-                        .dimmed()
-                        .paint(format!("\n- {} {}:\n", method, url))
+                    Paint::yellow(format!("\n- {} {}:\n", method, url)).dimmed()
                 );
                 eprint!("{}", format!("  calls made: {}\n", calls_made));
                 eprint!("{}", format!("  status counts: {:?}\n", self.status_counts));
@@ -663,9 +661,7 @@ where
             if i == 0 && is_pretty_format {
                 eprint!(
                     "{}",
-                    Style::new()
-                        .bold()
-                        .paint(format!("\nTest Summary {}\n", create_date_diff(start, end)))
+                    Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
                 );
             }
             summary.print_summary(stats_id, summary_output_format, false);

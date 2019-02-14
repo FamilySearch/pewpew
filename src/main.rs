@@ -20,7 +20,6 @@ use crate::error::TestError;
 use crate::load_test::LoadTest;
 use crate::util::Either3;
 
-use ansi_term::Color;
 use clap::{crate_version, App, Arg};
 use futures::{
     future::{lazy, IntoFuture},
@@ -29,11 +28,17 @@ use futures::{
 };
 use serde_yaml;
 use tokio;
+use yansi::Paint;
 
 fn main() {
     #[cfg(target_os = "windows")]
     {
-        let _ = ansi_term::enable_ansi_support();
+        if !Paint::enable_windows_ascii() {
+            Paint::disable();
+        }
+    }
+    if atty::isnt(atty::Stream::Stderr) {
+        Paint::disable();
     }
     let matches = App::new("pewpew")
         .version(crate_version!())
@@ -93,12 +98,11 @@ fn main() {
 
 pub fn print_test_error_to_console(e: TestError) {
     match e {
-        TestError::KilledByLogger => eprintln!(
-            "\n{}",
-            Color::Yellow.bold().paint("Test killed early by logger")
-        ),
+        TestError::KilledByLogger => {
+            eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())
+        }
         _ => {
-            eprintln!("\n{} {}", Color::Red.bold().paint("Fatal test error"), e);
+            eprintln!("\n{} {}", Paint::red("Fatal test error").bold(), e);
         }
     }
 }

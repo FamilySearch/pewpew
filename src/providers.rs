@@ -180,13 +180,11 @@ where
     F: Future + Send + 'static,
 {
     let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
-    tweak_path(&mut template.to, config_path);
-    let file_name = Arc::new(template.to);
     let limit = template.limit;
     let pretty = template.pretty;
     let kill = template.kill;
     let mut counter = 1;
-    match file_name.as_str() {
+    match template.to.as_str() {
         "stderr" => {
             let logger = rx
                 .for_each(move |v| {
@@ -246,6 +244,8 @@ where
             tokio::spawn(logger);
         }
         _ => {
+            tweak_path(&mut template.to, config_path);
+            let file_name = Arc::new(template.to);
             let file_name2 = file_name.clone();
             let test_killer2 = test_killer.clone();
             let logger = TokioFile::create((&*file_name).clone())

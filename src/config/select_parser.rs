@@ -1306,6 +1306,7 @@ fn parse_value(
     Ok(v)
 }
 
+#[derive(Debug)]
 enum ExpressionOrOperator {
     Expression(Expression),
     Operator(InfixOperator),
@@ -1343,10 +1344,20 @@ fn expression_helper(
                 expression_helper(left, level)?
             };
             let right = expression_helper(right, level)?;
-            e.op = Some((operator, right.into()));
+            let op = Some((operator, right.into()));
+            e = if e.op.is_none() {
+                e.op = op;
+                e
+            } else {
+                Expression {
+                    lhs: ExpressionLhs::Expression(e.into()),
+                    not: None,
+                    op,
+                }
+            };
             Ok(e)
         }
-        None if level >= 5 => {
+        None if level >= 5 || items.len() == 1 => {
             if items.len() == 1 {
                 if let Some(ExpressionOrOperator::Expression(e)) = items.pop() {
                     Ok(e)
@@ -1366,13 +1377,14 @@ fn expression_helper(
     }
 }
 
-fn parse_expression(
+fn parse_expression_pieces(
     pairs: Pairs<Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
-) -> Result<Expression, TestError> {
+    pieces: &mut Vec<ExpressionOrOperator>,
+) -> Result<(), TestError> {
     let mut not_count = 0;
-    let mut pieces = Vec::new();
+    let start_len = pieces.len();
     for pair in pairs {
         let rule = pair.as_rule();
         match rule {
@@ -1393,20 +1405,35 @@ fn parse_expression(
                 pieces.push(eoo);
             }
             Rule::expression => {
-                let mut e = parse_expression(pair.into_inner(), providers, static_providers)?;
-                let not = match not_count {
-                    0 => None,
-                    n => Some(n % 2 == 1),
-                };
-                e = Expression {
-                    not,
-                    lhs: ExpressionLhs::Expression(e.into()),
-                    op: None,
-                };
-                not_count = 0;
-                e.not = not;
-                let eoo = ExpressionOrOperator::Expression(e);
-                pieces.push(eoo);
+                if pieces.len() == start_len {
+                    // if nothing has been added to pieces and we're at an expression, it's a "grouped" expression
+                    let mut pieces2 = Vec::new();
+                    parse_expression_pieces(
+                        pair.into_inner(),
+                        providers,
+                        static_providers,
+                        &mut pieces2,
+                    )?;
+                    let mut e = expression_helper(pieces2, 0)?;
+                    let not = match not_count {
+                        0 => None,
+                        n => Some(n % 2 == 1),
+                    };
+                    e.not = match (e.not, not) {
+                        (Some(true), _) | (_, Some(true)) => Some(true),
+                        (Some(false), _) | (_, Some(false)) => Some(false),
+                        _ => None,
+                    };
+                    let eoo = ExpressionOrOperator::Expression(e);
+                    pieces.push(eoo);
+                } else {
+                    parse_expression_pieces(
+                        pair.into_inner(),
+                        providers,
+                        static_providers,
+                        pieces,
+                    )?;
+                }
             }
             Rule::infix_operator => {
                 let o = match pair.as_str() {
@@ -1441,6 +1468,16 @@ fn parse_expression(
             }
         }
     }
+    Ok(())
+}
+
+fn parse_expression(
+    pairs: Pairs<Rule>,
+    providers: &mut BTreeSet<String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> Result<Expression, TestError> {
+    let mut pieces = Vec::new();
+    parse_expression_pieces(pairs, providers, static_providers, &mut pieces)?;
     expression_helper(pieces, 0)
 }
 
@@ -1708,6 +1745,7 @@ mod tests {
 
         // (where clause, expected out data)
         let check_table = vec![
+            ("0 == 0 && 1 == 1", &three),
             ("three > 2", &three),
             ("three > 3", &empty),
             ("three < 4", &three),
@@ -1738,7 +1776,7 @@ mod tests {
             ("true && false || true", &three),
             ("false || true && false", &empty),
             ("false || (true || false) && false", &empty),
-            ("false || (true && false) && true", &empty),
+            ("0 || (1 && false) && 2", &empty),
             ("false || (true || false) && true", &three),
         ];
 

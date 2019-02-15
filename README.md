@@ -2,9 +2,16 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.4.7
+Bugfix:
+- Fixed memory leak introduced in v0.4.6.
+- Fixed error where order of operations were not being executed correctly--introduced in v0.4.6.
+- Fixed off-by-one bug for loggers killing a test.
+- Fixed bug where loggers would not log to stdout or stderr.
+
 ### v0.4.6
 Bugfix:
-- Fixed issue where `auto_return`s were getting blocked waiting for provides to finish.
+- Fixed bug where `auto_return`s were getting blocked waiting for provides to finish.
 
 Changes:
 - Add `max_parallel_requests` endpoint parameter.
@@ -28,7 +35,7 @@ Changes:
 
 ### v0.4.2:
 Bug fixes:
-- Fixed issue where when a request failed `auto_return` values were not being sent back to their provider.
+- Fixed bug where when a request failed `auto_return` values were not being sent back to their provider.
 
 Changes:
 - `stats_id` can now have templates as the values.
@@ -36,8 +43,8 @@ Changes:
 
 ### v0.4.1:
 Bug fixes:
-- Fixed issue where variables in declare were not being recognized as providers in an expression.
-- Fixed issue where bucket stats were sometimes printed in the middle of test summary stats.
+- Fixed bug where variables in declare were not being recognized as providers in an expression.
+- Fixed bug where bucket stats were sometimes printed in the middle of test summary stats.
 
 ### v0.4.0: 
 Breaking changes:

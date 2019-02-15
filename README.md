@@ -3,14 +3,14 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 
 ## Changelog
 ### v0.4.7
-Bugfix:
+Bug fixes:
 - Fixed memory leak introduced in v0.4.6.
 - Fixed error where order of operations were not being executed correctly--introduced in v0.4.6.
 - Fixed off-by-one bug for loggers killing a test.
 - Fixed bug where loggers would not log to stdout or stderr.
 
 ### v0.4.6
-Bugfix:
+Bug fixes:
 - Fixed bug where `auto_return`s were getting blocked waiting for provides to finish.
 
 Changes:

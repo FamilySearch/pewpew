@@ -1,10 +1,10 @@
 [package]
 name = "pewpew"
-version = "0.4.6"
+version = "0.4.7-beta"
 edition = "2018"
 
 [dependencies]
-ansi_term = "0.11"
+atty = "0.2"
 base64 = "0.10"
 bytes = "0.4"
 brotli-decompressor = "2"
@@ -37,8 +37,12 @@ tokio = "0.1"
 tokio-threadpool = "0.1"
 unicode-segmentation = "1"
 url = "1"
+yansi = "0.5"
 
 [dev-dependencies]
+actix = "0.7"
+actix-web = "0.7"
+assert_cmd = "0.11"
 tempfile = "3"
 
 [profile.release]

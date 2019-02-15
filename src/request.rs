@@ -11,6 +11,7 @@ use hyper::{
     Body as HyperBody, Client, Method, Request, Response,
 };
 use hyper_tls::HttpsConnector;
+use parking_lot::Mutex;
 use serde_json as json;
 use tokio::{prelude::*, timer::Timeout};
 
@@ -665,7 +666,14 @@ where
                 }
                 _ => Either3::C(Err(te).into_future()),
             })
-            .and_then(move |_| auto_returns2.map(|_| ()).map_err(|e| (&*e).clone()));
+            .and_then(move |_| {
+                if let Some(mut f) = auto_returns2.try_lock() {
+                    if let Some(f) = f.take() {
+                        return Either::A(f);
+                    }
+                }
+                Either::B(Ok(()).into_future())
+            });
         Either::A(a)
     }
 }
@@ -694,7 +702,7 @@ where
     fn handle<F2>(
         self,
         response: hyper::Response<HyperBody>,
-        auto_returns: Shared<F2>,
+        auto_returns: Arc<Mutex<Option<F2>>>,
     ) -> impl Future<Item = (), Error = TestError>
     where
         F2: Future<Item = (), Error = TestError>,
@@ -846,16 +854,19 @@ where
     fn handle<F2>(
         self,
         result: Result<Option<json::Value>, TestError>,
-        auto_returns: Shared<F2>,
+        auto_returns: Arc<Mutex<Option<F2>>>,
     ) -> impl Future<Item = (), Error = TestError>
     where
         F2: Future<Item = (), Error = TestError>,
     {
         let rtt = (duration_to_nanos(&self.now.elapsed()) / 1_000_000) as u64;
         let mut template_values = self.template_values;
-        let mut futures = vec![Either3::C(
-            auto_returns.map(|_| ()).map_err(|e| (&*e).clone()),
-        )];
+        let mut futures = Vec::new();
+        if let Some(mut f) = auto_returns.try_lock() {
+            if let Some(f) = f.take() {
+                futures.push(Either3::C(f))
+            }
+        }
         template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
         match result {
             Ok(body) => {
@@ -986,7 +997,7 @@ fn handle_response_requirements(
 fn handle_auto_returns<F>(
     auto_returns: Vec<config::AutoReturn>,
     test_ended: Shared<F>,
-) -> Shared<impl Future<Item = (), Error = TestError>>
+) -> Arc<Mutex<Option<impl Future<Item = (), Error = TestError>>>>
 where
     F: Future + Send + 'static,
     <F as Future>::Error: Send + Sync,
@@ -1018,5 +1029,5 @@ where
                 None
             }
         });
-    join_all(futures).map(|_| ()).shared()
+    Mutex::new(Some(join_all(futures).map(|_| ()))).into()
 }

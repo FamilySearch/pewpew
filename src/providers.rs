@@ -183,7 +183,7 @@ where
     let limit = template.limit;
     let pretty = template.pretty;
     let kill = template.kill;
-    let mut counter = 1;
+    let mut counter = 0;
     match template.to.as_str() {
         "stderr" => {
             let logger = rx

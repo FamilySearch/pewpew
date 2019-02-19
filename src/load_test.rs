@@ -284,28 +284,36 @@ impl LoadTest {
                     .map(|k| (k, Vec::new()))
                     .collect();
                 let mut endpoints = BTreeMap::new();
-                for (i, (alias, mut builder, provides)) in builders.into_iter().enumerate() {
+                for (i, (alias, mut builder, mut provides)) in builders.into_iter().enumerate() {
                     if alias == target_endpoint {
+                        provides = None;
                         let stream = Ok(Instant::now()).into_future().into_stream();
                         builder = builder
                             .map(|b| b.start_stream(Some(Box::new(stream))).provides(Vec::new()))
                     }
                     let endpoint = builder.and_then(|b| b.build(&mut builder_ctx, i)).map(|e| {
-                        let required_request_providers: Vec<_> = e
-                            .required_providers
-                            .iter()
-                            .filter(|p| request_providers.contains_key(*p))
-                            .cloned()
-                            .collect();
+                        let mut required_request_providers = Vec::new();
+                        for rp in &e.required_providers {
+                            // create list of the request providers needed for this endpoint
+                            if request_providers.contains_key(rp) {
+                                required_request_providers.push(rp.clone());
+                            }
+                            // remove any provides that the endpoint also requires
+                            if let Some(provides) = &mut provides {
+                                provides.remove(rp);
+                            }
+                        }
                         (e, required_request_providers)
                     });
                     if endpoint.is_err() && alias == target_endpoint {
                         return Err(endpoint.err().expect("should be an error"));
                     }
                     endpoints.insert(alias.clone(), endpoint);
-                    for p in provides.expect("should have provides") {
-                        if let Some(v) = request_providers.get_mut(&p) {
-                            v.push(alias.clone());
+                    if let Some(provides) = provides {
+                        for p in provides {
+                            if let Some(v) = request_providers.get_mut(&p) {
+                                v.push(alias.clone());
+                            }
                         }
                     }
                 }

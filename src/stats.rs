@@ -532,8 +532,7 @@ where
         .then(|_| Ok(()))
         .join(
             test_complete
-                .then(|r| r)
-                .map_err(|e| print_test_error_to_console((&*e).clone()))
+                .map_err(|e| print_test_error_to_console(&*e))
                 .map(|_| ()),
         )
         .then(|_| Ok(()));
@@ -667,7 +666,7 @@ where
             summary.print_summary(stats_id, summary_output_format, false);
         }
         if let Err(e) = result {
-            print_test_error_to_console(e);
+            print_test_error_to_console(&e);
         }
         Ok(())
     });

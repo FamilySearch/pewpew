@@ -65,7 +65,7 @@ fn main() {
             Ok(f) => f,
             Err(_) => {
                 let e = TestError::InvalidConfigFilePath(load_test_config_file);
-                print_test_error_to_console(e);
+                print_test_error_to_console(&e);
                 return Either3::B(Ok(()).into_future());
             }
         };
@@ -73,7 +73,7 @@ fn main() {
             Ok(c) => c,
             Err(e) => {
                 let e = TestError::YamlDeserializerErr(e.into());
-                print_test_error_to_console(e);
+                print_test_error_to_console(&e);
                 return Either3::B(Ok(()).into_future());
             }
         };
@@ -87,7 +87,7 @@ fn main() {
         match load_test {
             Ok(l) => Either3::A(l.run()),
             Err(e) => {
-                print_test_error_to_console(e);
+                print_test_error_to_console(&e);
                 // we send the test_ended message as Ok so if the stats monitor
                 // is running it won't reprint the error message
                 Either3::C(test_ended_tx.send(Ok(())).then(|_| Ok(())))
@@ -96,7 +96,7 @@ fn main() {
     }));
 }
 
-pub fn print_test_error_to_console(e: TestError) {
+pub fn print_test_error_to_console(e: &TestError) {
     match e {
         TestError::KilledByLogger => {
             eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())

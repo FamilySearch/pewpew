@@ -10,7 +10,6 @@ pub use self::select_parser::{
 use crate::channel::Limit;
 use crate::error::TestError;
 use crate::mod_interval::{HitsPer, LinearBuilder};
-use crate::util::json_value_into_string;
 
 use hyper::Method;
 use regex::Regex;
@@ -199,7 +198,7 @@ pub struct Endpoint {
     pub declare: BTreeMap<String, String>,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
-    #[serde(default, deserialize_with = "deserialize_body")]
+    #[serde(default)]
     pub body: Option<String>,
     #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
     pub load_pattern: Option<Vec<LoadPattern>>,
@@ -528,14 +527,6 @@ where
         None
     };
     Ok(c)
-}
-
-fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let res: Option<json::Value> = Option::deserialize(deserializer)?;
-    Ok(res.map(json_value_into_string))
 }
 
 fn deserialize_logs<'de, D>(

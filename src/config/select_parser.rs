@@ -522,13 +522,14 @@ enum InfixOperator {
     Gte = 5,
     Lt = 6,
     Lte = 7,
-    Multiply = 8,
-    Ne = 9,
-    Or = 10,
-    Subtract = 11,
+    Mod = 8,
+    Multiply = 9,
+    Ne = 10,
+    Or = 11,
+    Subtract = 12,
 }
 
-static INFIX_OPERATOR_PRECEDENCE: [u8; 12] = [
+static INFIX_OPERATOR_PRECEDENCE: [u8; 13] = [
     4, // Add
     2, // And
     5, // Divide
@@ -537,6 +538,7 @@ static INFIX_OPERATOR_PRECEDENCE: [u8; 12] = [
     3, // Gte
     3, // Lt
     3, // Lte
+    5, // Mod
     5, // Multiply
     3, // Ne
     1, // Or
@@ -582,6 +584,10 @@ impl InfixOperator {
             InfixOperator::Lte => {
                 let b = f64_value(left) <= f64_value(right);
                 b.into()
+            }
+            InfixOperator::Mod => {
+                let n = f64_value(left) % f64_value(right);
+                to_json_number(n)
             }
             InfixOperator::Multiply => {
                 let n = f64_value(left) * f64_value(right);
@@ -1449,6 +1455,7 @@ fn parse_expression_pieces(
                     "-" => InfixOperator::Subtract,
                     "*" => InfixOperator::Multiply,
                     "/" => InfixOperator::Divide,
+                    "%" => InfixOperator::Mod,
                     o => {
                         return Err(TestError::Internal(format!(
                             "Unexpected operator while parsing simple expression: {:?}",

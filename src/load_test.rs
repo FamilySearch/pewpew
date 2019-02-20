@@ -296,8 +296,7 @@ impl LoadTest {
                 for (i, (alias, mut builder, mut provides)) in builders.into_iter().enumerate() {
                     if alias == target_endpoint {
                         provides = None;
-                        builder = builder
-                            .map(|b| b.provides(Vec::new()))
+                        builder = builder.map(|b| b.provides(Vec::new()))
                     }
                     let endpoint = builder.and_then(|b| b.build(&mut builder_ctx, i)).map(|e| {
                         let mut required_request_providers = Vec::new();

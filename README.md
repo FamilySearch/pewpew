@@ -10,6 +10,7 @@ Changes:
 - Add modulus `%` expression operator.
 - Add `repeat` option for range providers.
 - Disabled `load_pattern`s during try runs.
+- Have the process return an error code on a fatal error.
 
 ### v0.4.7
 Bug fixes:

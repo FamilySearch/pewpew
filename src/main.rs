@@ -14,7 +14,11 @@ mod stats;
 mod util;
 mod zip_all;
 
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use crate::error::TestError;
 use crate::load_test::LoadTest;
@@ -94,7 +98,12 @@ fn main() {
             }
         }
     }));
+    if HAD_FATAL_ERROR.load(Ordering::Relaxed) {
+        std::process::exit(1)
+    }
 }
+
+static HAD_FATAL_ERROR: AtomicBool = AtomicBool::new(false);
 
 pub fn print_test_error_to_console(e: &TestError) {
     match e {
@@ -102,7 +111,8 @@ pub fn print_test_error_to_console(e: &TestError) {
             eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())
         }
         _ => {
-            eprintln!("\n{} {}", Paint::red("Fatal test error").bold(), e);
+            HAD_FATAL_ERROR.store(true, Ordering::Relaxed);
+            eprintln!("\n{} {}", Paint::red("Fatal error").bold(), e);
         }
     }
 }

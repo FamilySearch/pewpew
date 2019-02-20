@@ -1,0 +1,47 @@
+load_pattern:
+  - linear:
+      to: 100%
+      over: 10s
+loggers:
+  l:
+    select: >-
+      (response.body.a == 0
+      && response.body.b == "foo"
+      && response.body.c == 123
+      && response.body.e == response.body.e2)
+      && response.body.f == "line1"
+      ||
+      (response.body.a == 1
+      && response.body.b == "foo"
+      && response.body.c == 456
+      && response.body.e == response.body.e2)
+      && response.body.f == "line2"
+    limit: 2
+    to: stdout
+    kill: true
+providers:
+  a:
+    range: {}
+  b:
+    static: "foo"
+  c:
+    static_list:
+      - 123
+      - 456
+  d:
+    response: {}
+  e2:
+    static: ["foo", "foo", "foo"]
+  f:
+    file:
+      path: integration.data
+      repeat: true
+endpoints:
+  - method: POST
+    declare:
+      e: collect(b, 3)
+    url: http://localhost:8080/
+    body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
+    peak_load: 1hps
+    headers:
+      Content-Type: application/json

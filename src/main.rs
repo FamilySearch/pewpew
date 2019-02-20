@@ -110,6 +110,13 @@ pub fn print_test_error_to_console(e: &TestError) {
         TestError::KilledByLogger => {
             eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())
         }
+        TestError::ProviderEnded(name) => eprintln!(
+            "\n{}",
+            Paint::yellow(format!(
+                "Test ended early because provider `{}` ended",
+                name
+            ))
+        ),
         _ => {
             HAD_FATAL_ERROR.store(true, Ordering::Relaxed);
             eprintln!("\n{} {}", Paint::red("Fatal error").bold(), e);

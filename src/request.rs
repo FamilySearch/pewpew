@@ -887,10 +887,9 @@ where
                             let tx = o.tx.clone();
                             let fut = stream::iter_result(i)
                                 .for_each(move |v| {
-                                    tx.clone()
-                                        .send(v)
-                                        .map(|_| ())
-                                        .map_err(|_| TestError::ProviderEnded(None))
+                                    tx.clone().send(v).map(|_| ()).map_err(|_| {
+                                        TestError::Internal("Could not send provides".into())
+                                    })
                                 })
                                 .select(self.test_ended.clone().then(|_| Ok(())))
                                 .map(|v| v.0)
@@ -1005,7 +1004,7 @@ where
                 let fut = channel
                     .send_all(stream::iter_ok(jsons))
                     .map(|_| ())
-                    .map_err(|_e| TestError::ProviderEnded(None))
+                    .map_err(|_e| TestError::Internal("Could not send auto_return".into()))
                     .select(test_ended.clone().then(|_| Ok(())))
                     .map(|v| v.0)
                     .map_err(|e| e.0);

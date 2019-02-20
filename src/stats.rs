@@ -582,7 +582,7 @@ where
             Ok(())
         });
     let receiver = Stream::for_each(
-        rx.map_err(|_| TestError::ProviderEnded(None)),
+        rx.map_err(|_| TestError::Internal("Error receiving stats".into())),
         move |datum| {
             let mut stats = stats.lock();
             match datum {

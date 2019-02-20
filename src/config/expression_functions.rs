@@ -501,9 +501,9 @@ impl JsonPath {
                     .rx
                     .clone()
                     .into_future()
-                    .map_err(move |_| TestError::ProviderEnded(Some(jp.provider.clone())))
+                    .map_err(move |_| TestError::ProviderEnded(jp.provider.clone()))
                     .and_then(move |(v, _)| {
-                        v.ok_or_else(|| TestError::ProviderEnded(Some(jp2.provider.clone())))
+                        v.ok_or_else(|| TestError::ProviderEnded(jp2.provider.clone()))
                     })
                     .map(move |v| {
                         let v = json::json!({ &*jp3.provider: v });

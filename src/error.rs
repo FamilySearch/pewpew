@@ -23,7 +23,7 @@ pub enum TestError {
     KilledByLogger,
     Other(String),
     PestParseErr(PestError<config::ParserRule>),
-    ProviderEnded(Option<String>),
+    ProviderEnded(String),
     RecursiveForEachReference,
     RequestBuilderErr(Arc<HttpError>),
     RegexErr(regex::Error),
@@ -61,8 +61,8 @@ impl fmt::Display for TestError {
             PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),
             ProviderEnded(p) => write!(
                 f,
-                "provider `{}` unexpectedly ended",
-                p.as_ref().map(|p| p.as_str()).unwrap_or("unknown")
+                "provider `{}` ended",
+                p
             ),
             RecursiveForEachReference => write!(
                 f,

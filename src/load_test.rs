@@ -86,9 +86,17 @@ impl LoadTest {
                             limit.store(auto_size, Ordering::Relaxed);
                         }
                     }
-                    providers::file(template, test_ended_rx, test_ended_tx.clone(), &config_path)?
+                    providers::file(
+                        template,
+                        test_ended_rx,
+                        test_ended_tx.clone(),
+                        &config_path,
+                        name.clone(),
+                    )?
                 }
-                config::Provider::Range(range) => providers::range(range, test_ended_rx),
+                config::Provider::Range(range) => {
+                    providers::range(range, test_ended_rx, test_ended_tx.clone(), name.clone())
+                }
                 config::Provider::Response(mut template) => {
                     if is_try_run {
                         template.buffer = channel::Limit::Integer(1);
@@ -364,10 +372,9 @@ impl LoadTest {
                         r.map(
                             move |e| -> Box<dyn Future<Item = (), Error = TestError> + Send> {
                                 Box::new(e.0.into_future().and_then(|_| {
-                                    test_ended_tx
-                                        .send(Ok(()))
-                                        .map(|_| ())
-                                        .map_err(|_| TestError::ProviderEnded(None))
+                                    test_ended_tx.send(Ok(())).map(|_| ()).map_err(|_| {
+                                        TestError::Internal("Sending test ended signal".into())
+                                    })
                                 }))
                             },
                         )
@@ -428,7 +435,7 @@ impl LoadTest {
         let test_killer = self.test_killer;
         self.stats_tx
             .send(StatsMessage::Start(self.duration))
-            .map_err(|_| TestError::ProviderEnded(None))
+            .map_err(|_| TestError::Internal("Error sending test start signal".into()))
             .then(move |r| match r {
                 Ok(_) => Either::A(endpoint_calls),
                 Err(e) => Either::B(test_killer.send(Err(e)).then(|_| Ok(()))),

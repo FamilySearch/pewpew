@@ -256,7 +256,7 @@ impl Path {
                             .rx
                             .clone()
                             .into_future()
-                            .map_err(move |_| TestError::ProviderEnded(Some((&*s).clone())))
+                            .map_err(move |_| TestError::ProviderEnded((&*s).clone()))
                             .and_then(move |(v, _)| {
                                 v.map(move |v| {
                                     let mut outgoing = Vec::new();
@@ -268,7 +268,7 @@ impl Path {
                                 })
                                 .transpose()
                                 .and_then(|o| {
-                                    o.ok_or_else(|| TestError::ProviderEnded(Some((&*s2).clone())))
+                                    o.ok_or_else(|| TestError::ProviderEnded((&*s2).clone()))
                                 })
                             })
                     })

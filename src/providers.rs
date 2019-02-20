@@ -33,6 +33,7 @@ pub fn file<F>(
     test_complete: Shared<F>,
     test_killer: FCSender<Result<(), TestError>>,
     config_path: &PathBuf,
+    name: String,
 ) -> Result<Kind, TestError>
 where
     F: Future + Send + 'static,
@@ -41,6 +42,7 @@ where
 {
     tweak_path(&mut template.path, config_path);
     let file = template.path.clone();
+    let test_killer2 = test_killer.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
             CsvReader::new(&template)
@@ -72,9 +74,14 @@ where
             tx2.clone()
                 .send(v)
                 .map(|_| ())
-                .map_err(|_| TestError::ProviderEnded(None))
+                .map_err(|_| TestError::Internal("Could not send from file provider".into()))
         })
-        .or_else(move |e| test_killer.send(Err(e)).then(|_| Ok(())))
+        .and_then(move |_| {
+            test_killer
+                .send(Err(TestError::ProviderEnded(name)))
+                .then(|_| Ok(()))
+        })
+        .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok(())))
         .map(|_| ())
         .select(test_complete.then(|_| Ok::<(), ()>(())))
         .then(|_| Ok(()));
@@ -149,7 +156,12 @@ where
     }
 }
 
-pub fn range<F>(range: config::RangeProvider, test_complete: Shared<F>) -> Kind
+pub fn range<F>(
+    range: config::RangeProvider,
+    test_complete: Shared<F>,
+    test_killer: FCSender<Result<(), TestError>>,
+    name: String,
+) -> Kind
 where
     F: Future + Send + 'static,
     <F as Future>::Error: Send + Sync,
@@ -159,6 +171,7 @@ where
     let prime_tx = stream::iter_ok::<_, ()>(range.0.map(json::Value::from))
         .forward(tx.clone())
         // Error propagate here when sender channel closes at test conclusion
+        .then(move |_| test_killer.send(Err(TestError::ProviderEnded(name))))
         .then(|_| Ok(()))
         .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
@@ -253,34 +266,36 @@ where
                     TestError::Other(format!("creating logger file `{:?}`: {}", file_name2, e))
                 })
                 .and_then(move |mut file| {
-                    rx.map_err(|_| TestError::ProviderEnded(None))
-                        .for_each(move |v| {
-                            let file_name = file_name.clone();
-                            counter += 1;
-                            let result = if pretty {
-                                writeln!(file, "{:#}", v)
-                            } else {
-                                writeln!(file, "{}", v)
-                            };
-                            let result = result.into_future().map_err(move |e| {
-                                TestError::Other(format!("writing to file `{}`: {}", file_name, e))
-                            });
-                            match limit {
-                                Some(limit) if kill && counter >= limit => Either3::B(
-                                    test_killer
-                                        .clone()
-                                        .send(Err(TestError::KilledByLogger))
-                                        .then(|_| Ok::<_, TestError>(())),
-                                ),
-                                None if kill => Either3::C(
-                                    test_killer
-                                        .clone()
-                                        .send(Err(TestError::KilledByLogger))
-                                        .then(|_| Ok::<_, TestError>(())),
-                                ),
-                                _ => Either3::A(result),
-                            }
-                        })
+                    rx.map_err(|_| {
+                        TestError::Internal("logger receiver unexpectedly errored".into())
+                    })
+                    .for_each(move |v| {
+                        let file_name = file_name.clone();
+                        counter += 1;
+                        let result = if pretty {
+                            writeln!(file, "{:#}", v)
+                        } else {
+                            writeln!(file, "{}", v)
+                        };
+                        let result = result.into_future().map_err(move |e| {
+                            TestError::Other(format!("writing to file `{}`: {}", file_name, e))
+                        });
+                        match limit {
+                            Some(limit) if kill && counter >= limit => Either3::B(
+                                test_killer
+                                    .clone()
+                                    .send(Err(TestError::KilledByLogger))
+                                    .then(|_| Ok::<_, TestError>(())),
+                            ),
+                            None if kill => Either3::C(
+                                test_killer
+                                    .clone()
+                                    .send(Err(TestError::KilledByLogger))
+                                    .then(|_| Ok::<_, TestError>(())),
+                            ),
+                            _ => Either3::A(result),
+                        }
+                    })
                 })
                 .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok::<_, ()>(())))
                 .select(test_complete.then(|_| Ok::<_, ()>(())))

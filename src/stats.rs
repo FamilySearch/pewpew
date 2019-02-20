@@ -1,6 +1,6 @@
 use super::print_test_error_to_console;
 use crate::config;
-use crate::error::TestError;
+use crate::error::{RecoverableError, TestError};
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
@@ -225,6 +225,7 @@ pub struct AggregateStats {
     rtt_histogram: Histogram<u64>,
     start_time: u64, // epoch in seconds, when the first request was logged
     status_counts: FnvHashMap<u16, u64>,
+    test_errors: FnvHashMap<String, u64>,
     time: u64, // epoch in seconds, when the bucket time begins
 }
 
@@ -287,6 +288,7 @@ impl AggregateStats {
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             start_time: 0,
             status_counts: FnvHashMap::default(),
+            test_errors: FnvHashMap::default(),
             time,
         }
     }
@@ -298,23 +300,32 @@ impl AggregateStats {
         }
         self.end_time = cmp::max(self.end_time, time);
         match rhs.kind {
-            StatKind::ConnectionError(description) => {
+            StatKind::RecoverableError(RecoverableError::IndexingJson(..)) => {
+                let msg = "error indexing into json".into();
+                eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
+                self.test_errors
+                    .entry(msg)
+                    .and_modify(|n| *n += 1)
+                    .or_insert(1);
+            }
+            StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
+            StatKind::RecoverableError(r) => {
+                let msg = format!("{}", r);
+                eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
                 self.connection_errors
-                    .entry(description)
+                    .entry(msg)
                     .and_modify(|count| *count += 1)
                     .or_insert(1);
             }
-            StatKind::Rtt(rtt, status) => {
-                self.rtt_histogram += rtt;
+            StatKind::Response(status) => {
                 self.status_counts
                     .entry(status)
                     .and_modify(|n| *n += 1)
                     .or_insert(1);
             }
-            StatKind::Timeout(to) => {
-                self.rtt_histogram += to;
-                self.request_timeouts += 1
-            }
+        }
+        if let Some(rtt) = rhs.rtt {
+            self.rtt_histogram += rtt;
         }
         Ok(())
     }
@@ -361,6 +372,9 @@ impl AggregateStats {
                         format!("  connection errors: {:?}\n", self.connection_errors)
                     );
                 }
+                if !self.test_errors.is_empty() {
+                    eprint!("{}", format!("  test errors: {:?}\n", self.test_errors));
+                }
                 eprint!(
                     "{}",
                     format!(
@@ -394,6 +408,10 @@ impl AggregateStats {
                         self.connection_errors.iter()
                             .fold(0, |sum, (_, c)| sum + c),
                     "connectionErrors": self.connection_errors,
+                    "testErrors":
+                        self.test_errors.iter()
+                            .map(|(error, count)| json::json!({ "error": error, "count": count }))
+                            .collect::<Vec<(_)>>(),
                     "p50": p50,
                     "p90": p90,
                     "p95": p95,
@@ -434,14 +452,14 @@ pub struct StatsInit {
 pub struct ResponseStat {
     pub endpoint_id: EndpointId,
     pub kind: StatKind,
+    pub rtt: Option<u64>,
     pub time: SystemTime,
 }
 
 #[derive(Debug)]
 pub enum StatKind {
-    ConnectionError(String),
-    Rtt(u64, u16),
-    Timeout(u64),
+    RecoverableError(RecoverableError),
+    Response(u16),
 }
 
 impl From<ResponseStat> for StatsMessage {

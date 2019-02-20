@@ -8,10 +8,30 @@ use serde_yaml as yaml;
 use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
 
 #[derive(Clone, Debug)]
-pub enum TestError {
+pub enum RecoverableError {
     BodyErr(Arc<dyn StdError + Send + Sync>),
     ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
     IndexingJson(String, json::Value),
+    Timeout(SystemTime),
+}
+
+use RecoverableError::*;
+
+impl fmt::Display for RecoverableError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BodyErr(e) => write!(f, "body error: {}", e),
+            ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
+            IndexingJson(p, v) => {
+                write!(f, "indexing into json. Path was `{}`, json was: `{}`", p, v)
+            }
+            Timeout(..) => write!(f, "request timed out"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum TestError {
     Internal(String),
     InvalidArguments(String),
     InvalidConfigFilePath(PathBuf),
@@ -24,14 +44,20 @@ pub enum TestError {
     Other(String),
     PestParseErr(PestError<config::ParserRule>),
     ProviderEnded(String),
+    Recoverable(RecoverableError),
     RecursiveForEachReference,
     RequestBuilderErr(Arc<HttpError>),
     RegexErr(regex::Error),
-    Timeout(SystemTime),
     TimeSkew,
     UnknownLogger(String),
     UnknownProvider(String),
     YamlDeserializerErr(Arc<yaml::Error>),
+}
+
+impl From<RecoverableError> for TestError {
+    fn from(re: RecoverableError) -> Self {
+        TestError::Recoverable(re)
+    }
 }
 
 use TestError::*;
@@ -39,9 +65,6 @@ use TestError::*;
 impl fmt::Display for TestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            BodyErr(e) => write!(f, "body error: {}", e),
-            ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
-            IndexingJson(p, v) => write!(f, "indexing into json. Path was `{}`, json was: `{}`", p, v),
             Internal(m) => write!(f, "internal error: {}", m),
             InvalidArguments(func) => {
                 write!(f, "invalid arguments for function {}", func)
@@ -64,6 +87,7 @@ impl fmt::Display for TestError {
                 "provider `{}` ended",
                 p
             ),
+            Recoverable(r) => write!(f, "{}", r),
             RecursiveForEachReference => write!(
                 f,
                 "cannot reference 'for_each' within a for_each expression"
@@ -74,7 +98,6 @@ impl fmt::Display for TestError {
                 e
             ),
             RegexErr(err) => write!(f, "invalid regex: {}", err),
-            Timeout(_) => write!(f, "request timed out"),
             TimeSkew => write!(f, "system clock experienced time skew"),
             UnknownProvider(p) => write!(f, "unknown provider `{}`", p),
             UnknownLogger(l) => write!(f, "unknown logger `{}`", l),
@@ -86,9 +109,9 @@ impl fmt::Display for TestError {
 impl StdError for TestError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            BodyErr(e) => Some(&**e),
-            ConnectionErr(_, e) => Some(&**e),
             PestParseErr(e) => Some(e),
+            Recoverable(BodyErr(e)) => Some(&**e),
+            Recoverable(ConnectionErr(_, e)) => Some(&**e),
             RegexErr(e) => Some(e),
             RequestBuilderErr(e) => Some(&**e),
             YamlDeserializerErr(e) => Some(&**e),

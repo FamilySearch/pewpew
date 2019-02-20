@@ -1,4 +1,5 @@
 #![feature(bind_by_move_pattern_guards, drain_filter, no_more_cas)]
+#![recursion_limit = "128"]
 #![type_length_limit = "2097152"]
 
 mod body_reader;

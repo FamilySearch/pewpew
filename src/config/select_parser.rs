@@ -5,7 +5,7 @@ use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
 use crate::channel;
 use crate::config;
-use crate::error::TestError;
+use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::util::{json_value_into_string, json_value_to_string, Either, Either3};
 
@@ -170,8 +170,12 @@ fn index_json<'a>(
         (json::Value::Array(a), Either::A(s)) if s == "length" => {
             return Ok(Cow::Owned((a.len() as u64).into()));
         }
-        (_, Either::A(s)) => return Err(TestError::IndexingJson(s.into(), json.clone())),
-        (_, Either::B(n)) => return Err(TestError::IndexingJson(format!("[{}]", n), json.clone())),
+        (_, Either::A(s)) => {
+            return Err(RecoverableError::IndexingJson(s.into(), json.clone()).into());
+        }
+        (_, Either::B(n)) => {
+            return Err(RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into());
+        }
     };
     Ok(Cow::Borrowed(o.unwrap_or(&json::Value::Null)))
 }
@@ -187,13 +191,13 @@ fn index_json2<'a>(
             (json::Value::Array(a), Either::A(ref s)) if s == "length" => {
                 let ret = (a.len() as u64).into();
                 if i != indexes.len() - 1 {
-                    return Err(TestError::IndexingJson(s.clone(), ret));
+                    return Err(RecoverableError::IndexingJson(s.clone(), ret).into());
                 }
                 return Ok(ret);
             }
-            (_, Either::A(s)) => return Err(TestError::IndexingJson(s, json.clone())),
+            (_, Either::A(s)) => return Err(RecoverableError::IndexingJson(s, json.clone()).into()),
             (_, Either::B(n)) => {
-                return Err(TestError::IndexingJson(format!("[{}]", n), json.clone()));
+                return Err(RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into());
             }
         };
         json = o.unwrap_or(&json::Value::Null)

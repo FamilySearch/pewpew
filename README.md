@@ -14,6 +14,7 @@ Changes:
 - Add console message when test ends early due to a provider ending.
 - Add `random` expression function.
 - Change RTTs to be stored with microsecond precision but still display as milliseconds (with decimal)
+- Make some errors which may occur during a test run just print warnings
 
 ### v0.4.7
 Bug fixes:

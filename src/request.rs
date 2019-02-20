@@ -21,7 +21,7 @@ use crate::config::{
     self, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
-use crate::error::TestError;
+use crate::error::{RecoverableError, TestError};
 use crate::for_each_parallel::ForEachParallel;
 use crate::providers;
 use crate::stats;
@@ -615,9 +615,9 @@ where
                         } else {
                             Arc::new(err)
                         };
-                    TestError::ConnectionErr(SystemTime::now(), err)
+                    RecoverableError::ConnectionErr(SystemTime::now(), err).into()
                 } else {
-                    TestError::Timeout(SystemTime::now())
+                    RecoverableError::Timeout(SystemTime::now()).into()
                 }
             })
             .and_then(move |response| {
@@ -633,33 +633,29 @@ where
                 rh.handle(response, auto_returns)
             })
             .or_else(move |te| match te {
-                TestError::ConnectionErr(time, e) => {
-                    let task = stats_tx2
+                TestError::Recoverable(r) => {
+                    let time = match r {
+                        RecoverableError::Timeout(t) | RecoverableError::ConnectionErr(t, _) => t,
+                        _ => SystemTime::now(),
+                    };
+                    let rtt = match r {
+                        RecoverableError::Timeout(_) => Some(timeout_in_micros),
+                        _ => None,
+                    };
+                    let a = stats_tx2
                         .send(
                             stats::ResponseStat {
                                 endpoint_id,
-                                kind: stats::StatKind::ConnectionError(format!("{}", e)),
+                                kind: stats::StatKind::RecoverableError(r),
+                                rtt,
                                 time,
                             }
                             .into(),
                         )
                         .then(|_| Ok(()));
-                    Either3::A(task)
+                    Either::A(a)
                 }
-                TestError::Timeout(time) => {
-                    let task = stats_tx2
-                        .send(
-                            stats::ResponseStat {
-                                endpoint_id,
-                                kind: stats::StatKind::Timeout(timeout_in_micros),
-                                time,
-                            }
-                            .into(),
-                        )
-                        .then(|_| Ok(()));
-                    Either3::B(task)
-                }
-                _ => Either3::C(Err(te).into_future()),
+                _ => Either::B(Err(te).into_future()),
             })
             .and_then(move |_| {
                 if let Some(mut f) = auto_returns2.try_lock() {
@@ -769,18 +765,18 @@ where
                 let mut br = body_reader::BodyReader::new(ce);
                 let a = response
                     .into_body()
-                    .map_err(|e| TestError::BodyErr(Arc::new(e)))
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
                     .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
                         br.decode(chunks.into_bytes(), &mut out_bytes)
-                            .map_err(|e| TestError::BodyErr(Arc::new(e)))?;
-                        Ok::<_, TestError>(out_bytes)
+                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                        Ok::<_, RecoverableError>(out_bytes)
                     })
                     .and_then(|body| {
                         let s = match str::from_utf8(&body) {
                             Ok(s) => s,
                             Err(e) => {
                                 return Either::A(
-                                    Err(TestError::BodyErr(Arc::new(e))).into_future(),
+                                    Err(RecoverableError::BodyErr(Arc::new(e))).into_future(),
                                 );
                             }
                         };
@@ -798,7 +794,7 @@ where
                 Either::B(
                     response
                         .into_body()
-                        .map_err(|e| TestError::BodyErr(Arc::new(e)))
+                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
                         .for_each(|_| Ok(()))
                         .and_then(|_| Ok(None)),
                 )
@@ -848,15 +844,36 @@ where
 {
     fn handle<F2>(
         self,
-        result: Result<Option<json::Value>, TestError>,
+        result: Result<Option<json::Value>, RecoverableError>,
         auto_returns: Arc<Mutex<Option<F2>>>,
     ) -> impl Future<Item = (), Error = TestError>
     where
         F2: Future<Item = (), Error = TestError>,
     {
         let rtt = self.now.elapsed().as_micros() as u64;
+        let stats_tx = self.stats_tx.clone();
+        let endpoint_id = self.endpoint_id;
+        let send_response_stat = move |kind| {
+            Either3::B(
+                stats_tx
+                    .clone()
+                    .send(
+                        stats::ResponseStat {
+                            endpoint_id,
+                            kind,
+                            rtt: Some(rtt),
+                            time: SystemTime::now(),
+                        }
+                        .into(),
+                    )
+                    .map(|_| ())
+                    .map_err(|e| {
+                        TestError::Internal(format!("unexpected error trying to send stats, {}", e))
+                    }),
+            )
+        };
         let mut template_values = self.template_values;
-        let mut futures = Vec::new();
+        let mut futures = vec![send_response_stat(stats::StatKind::Response(self.status))];
         if let Some(mut f) = auto_returns.try_lock() {
             if let Some(f) = f.take() {
                 futures.push(Either3::C(f))
@@ -878,14 +895,19 @@ where
                         .outgoing
                         .get(*i)
                         .expect("outgoing element at index should exist");
-                    let i = match o.select.as_iter(template_values.as_json().clone()) {
+                    let iter = match o.select.as_iter(template_values.as_json().clone()) {
                         Ok(v) => v,
+                        Err(TestError::Recoverable(r)) => {
+                            let kind = stats::StatKind::RecoverableError(r);
+                            futures.push(send_response_stat(kind));
+                            continue;
+                        }
                         Err(e) => return Either::B(Err(e).into_future()),
                     };
                     match o.select.get_send_behavior() {
                         EndpointProvidesSendOptions::Block => {
                             let tx = o.tx.clone();
-                            let fut = stream::iter_result(i)
+                            let fut = stream::iter_result(iter)
                                 .for_each(move |v| {
                                     tx.clone().send(v).map(|_| ()).map_err(|_| {
                                         TestError::Internal("Could not send provides".into())
@@ -897,18 +919,28 @@ where
                             futures.push(Either3::A(fut));
                         }
                         EndpointProvidesSendOptions::Force => {
-                            for v in i {
+                            for v in iter {
                                 let v = match v {
                                     Ok(v) => v,
+                                    Err(TestError::Recoverable(r)) => {
+                                        let kind = stats::StatKind::RecoverableError(r);
+                                        futures.push(send_response_stat(kind));
+                                        continue;
+                                    }
                                     Err(e) => return Either::B(Err(e).into_future()),
                                 };
                                 o.tx.force_send(v);
                             }
                         }
                         EndpointProvidesSendOptions::IfNotFull => {
-                            for v in i {
+                            for v in iter {
                                 let v = match v {
                                     Ok(v) => v,
+                                    Err(TestError::Recoverable(r)) => {
+                                        let kind = stats::StatKind::RecoverableError(r);
+                                        futures.push(send_response_stat(kind));
+                                        continue;
+                                    }
                                     Err(e) => return Either::B(Err(e).into_future()),
                                 };
                                 if o.tx.try_send(v).is_err() {
@@ -918,29 +950,11 @@ where
                         }
                     }
                 }
-                futures.push(Either3::B(
-                    self.stats_tx
-                        .send(
-                            stats::ResponseStat {
-                                endpoint_id: self.endpoint_id,
-                                kind: stats::StatKind::Rtt(rtt, self.status),
-                                time: SystemTime::now(),
-                            }
-                            .into(),
-                        )
-                        .map(|_| ())
-                        .map_err(|e| {
-                            TestError::Internal(format!(
-                                "unexpected error trying to send stats, {}",
-                                e
-                            ))
-                        }),
-                ));
             }
-            Err(ref err) => eprint!(
-                "{}",
-                format!("err getting body: {:?}\n took {}ms\n", err, rtt)
-            ),
+            Err(r) => {
+                let kind = stats::StatKind::RecoverableError(r);
+                futures.push(send_response_stat(kind));
+            }
         }
         Either::A(join_all(futures).map(|_| ()))
     }

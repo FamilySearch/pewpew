@@ -168,7 +168,7 @@ impl LoadTest {
 
         // create the endpoints
         let builders: Builders = config.endpoints.into_iter().enumerate().map(|(i, mut endpoint)| {
-            let mut mod_interval = None;
+            let mut mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> = None;
             let alias = endpoint.alias.unwrap_or_else(|| (i + 1).to_string());
             let provides_set = if is_try_run {
                 Some(
@@ -198,12 +198,21 @@ impl LoadTest {
                     Ok(l) => l,
                     Err(e) => return (alias, Err(e), provides_set)
                 };
-                let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
-                    Box::new(stream::empty::<Instant, TestError>());
-                let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
-                    config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
-                });
-                mod_interval = Some(mod_interval2);
+                match &try_run {
+                    Some(target_endpoint) if &alias == target_endpoint => {
+                        let stream = Ok(Instant::now()).into_future().into_stream();
+                        mod_interval = Some(Box::new(stream));
+                    }
+                    None => {
+                        let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
+                        Box::new(stream::empty::<Instant, TestError>());
+                        let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
+                            config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
+                        });
+                        mod_interval = Some(mod_interval2);
+                    }
+                    _ => ()
+                }
                 let duration2 = load_pattern
                     .iter()
                     .fold(Duration::new(0, 0), |left, right| left + right.duration());
@@ -287,9 +296,8 @@ impl LoadTest {
                 for (i, (alias, mut builder, mut provides)) in builders.into_iter().enumerate() {
                     if alias == target_endpoint {
                         provides = None;
-                        let stream = Ok(Instant::now()).into_future().into_stream();
                         builder = builder
-                            .map(|b| b.start_stream(Some(Box::new(stream))).provides(Vec::new()))
+                            .map(|b| b.provides(Vec::new()))
                     }
                     let endpoint = builder.and_then(|b| b.build(&mut builder_ctx, i)).map(|e| {
                         let mut required_request_providers = Vec::new();

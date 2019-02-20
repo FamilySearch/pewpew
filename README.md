@@ -9,6 +9,7 @@ Bug fixes:
 Changes:
 - Add modulus `%` expression operator.
 - Add `repeat` option for range providers.
+- Disabled `load_pattern`s during try runs.
 
 ### v0.4.7
 Bug fixes:

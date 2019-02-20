@@ -178,11 +178,6 @@ impl Builder {
         self
     }
 
-    pub fn start_stream(mut self, start_stream: Option<StartStream>) -> Self {
-        self.start_stream = start_stream;
-        self
-    }
-
     pub fn stats_id(mut self, stats_id: Option<BTreeMap<String, String>>) -> Self {
         self.stats_id = stats_id;
         self

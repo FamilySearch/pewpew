@@ -11,11 +11,6 @@ use std::{
 const NANOS_IN_SECOND: u32 = 1_000_000_000;
 
 #[inline]
-fn duration_to_nanos(d: Duration) -> f64 {
-    (d.as_secs() * u64::from(NANOS_IN_SECOND) + u64::from(d.subsec_nanos())) as f64
-}
-
-#[inline]
 fn nanos_to_duration(n: f64) -> Duration {
     let secs = n as u64 / u64::from(NANOS_IN_SECOND);
     let nanos = (n % f64::from(NANOS_IN_SECOND)) as u32;
@@ -56,7 +51,7 @@ impl LinearBuilder {
             HitsPer::Second(n) => f64::from(*n),
             HitsPer::Minute(n) => f64::from(*n) / 60.0,
         };
-        let duration = duration_to_nanos(self.duration);
+        let duration = self.duration.as_nanos() as f64;
         ModInterval::new(LinearScaling::new(
             self.start_percent,
             self.end_percent,
@@ -167,7 +162,7 @@ where
 
         // Calculate how long the next delay should be
         let next_deadline = {
-            let x = duration_to_nanos(deadline - start_time);
+            let x = (deadline - start_time).as_nanos() as f64;
             let y = self.scale_fn.y(x);
             cmp::min(start_time + nanos_to_duration(y + x), end_time)
         };

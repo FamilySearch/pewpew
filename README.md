@@ -13,6 +13,7 @@ Changes:
 - Have the process return an error code on a fatal error.
 - Add console message when test ends early due to a provider ending.
 - Add `random` expression function.
+- Change RTTs to be stored with microsecond precision but still display as milliseconds (with decimal)
 
 ### v0.4.7
 Bug fixes:

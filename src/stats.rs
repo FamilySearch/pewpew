@@ -304,7 +304,7 @@ impl AggregateStats {
                     .and_modify(|count| *count += 1)
                     .or_insert(1);
             }
-            StatKind::Rtt((rtt, status)) => {
+            StatKind::Rtt(rtt, status) => {
                 self.rtt_histogram += rtt;
                 self.status_counts
                     .entry(status)
@@ -329,17 +329,18 @@ impl AggregateStats {
         if calls_made == 0 {
             return false;
         }
+        const MICROS_TO_MS: f64 = 1_000.0;
         let method = stats_id.get("method").expect("stats_id missing `method`");
         let url = stats_id.get("url").expect("stats_id missing `url`");
-        let p50 = self.rtt_histogram.value_at_quantile(0.5);
-        let p90 = self.rtt_histogram.value_at_quantile(0.90);
-        let p95 = self.rtt_histogram.value_at_quantile(0.95);
-        let p99 = self.rtt_histogram.value_at_quantile(0.99);
-        let p99_9 = self.rtt_histogram.value_at_quantile(0.999);
-        let min = self.rtt_histogram.min();
-        let max = self.rtt_histogram.max();
-        let mean = (self.rtt_histogram.mean() * 100.0).round() / 100.0;
-        let stddev = (self.rtt_histogram.stdev() * 100.0).round() / 100.0;
+        let p50 = self.rtt_histogram.value_at_quantile(0.5) as f64 / MICROS_TO_MS;
+        let p90 = self.rtt_histogram.value_at_quantile(0.90) as f64 / MICROS_TO_MS;
+        let p95 = self.rtt_histogram.value_at_quantile(0.95) as f64 / MICROS_TO_MS;
+        let p99 = self.rtt_histogram.value_at_quantile(0.99) as f64 / MICROS_TO_MS;
+        let p99_9 = self.rtt_histogram.value_at_quantile(0.999) as f64 / MICROS_TO_MS;
+        let min = self.rtt_histogram.min() as f64 / MICROS_TO_MS;
+        let max = self.rtt_histogram.max() as f64 / MICROS_TO_MS;
+        let mean = self.rtt_histogram.mean().round() / MICROS_TO_MS;
+        let stddev = self.rtt_histogram.stdev().round() / MICROS_TO_MS;
         match format {
             config::SummaryOutputFormats::Pretty => {
                 eprint!(
@@ -439,7 +440,7 @@ pub struct ResponseStat {
 #[derive(Debug)]
 pub enum StatKind {
     ConnectionError(String),
-    Rtt((u64, u16)),
+    Rtt(u64, u16),
     Timeout(u64),
 }
 

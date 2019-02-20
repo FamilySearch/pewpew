@@ -592,7 +592,7 @@ where
         let stats_tx2 = stats_tx.clone();
         let outgoing = self.outgoing.clone();
         let test_ended = self.test_ended.clone();
-        let timeout_in_ms = (duration_to_nanos(&self.timeout) / 1_000_000) as u64;
+        let timeout_in_micros = self.timeout.as_micros() as u64;
         let precheck_rr_providers = self.precheck_rr_providers;
         let endpoint_id = self.endpoint_id;
         let auto_returns = handle_auto_returns(auto_returns, test_ended.clone());
@@ -651,7 +651,7 @@ where
                         .send(
                             stats::ResponseStat {
                                 endpoint_id,
-                                kind: stats::StatKind::Timeout(timeout_in_ms),
+                                kind: stats::StatKind::Timeout(timeout_in_micros),
                                 time,
                             }
                             .into(),
@@ -854,7 +854,7 @@ where
     where
         F2: Future<Item = (), Error = TestError>,
     {
-        let rtt = (duration_to_nanos(&self.now.elapsed()) / 1_000_000) as u64;
+        let rtt = self.now.elapsed().as_micros() as u64;
         let mut template_values = self.template_values;
         let mut futures = Vec::new();
         if let Some(mut f) = auto_returns.try_lock() {
@@ -862,7 +862,7 @@ where
                 futures.push(Either3::C(f))
             }
         }
-        template_values.insert("stats".into(), json::json!({ "rtt": rtt }));
+        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
         match result {
             Ok(body) => {
                 if let Some(body) = body {
@@ -923,7 +923,7 @@ where
                         .send(
                             stats::ResponseStat {
                                 endpoint_id: self.endpoint_id,
-                                kind: stats::StatKind::Rtt((rtt, self.status)),
+                                kind: stats::StatKind::Rtt(rtt, self.status),
                                 time: SystemTime::now(),
                             }
                             .into(),
@@ -944,10 +944,6 @@ where
         }
         Either::A(join_all(futures).map(|_| ()))
     }
-}
-
-fn duration_to_nanos(d: &Duration) -> u128 {
-    u128::from(d.as_secs()) * 1_000_000_000 + u128::from(d.subsec_nanos())
 }
 
 fn handle_response_requirements(

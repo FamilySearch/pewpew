@@ -20,6 +20,7 @@ Operator | Description
 `-` | Subtract. Subtracts two numbers producing a number.
 `*` | Multiply. Multiplies two numbers producing a number.
 `/` | Divide. Divides two numbers producing a number.
+`%` | Remainder. Provides the remainder after dividing two numbers.
 
 ## Helper functions
 

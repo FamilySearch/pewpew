@@ -10,6 +10,7 @@ pub use self::select_parser::{
 use crate::channel::Limit;
 use crate::error::TestError;
 use crate::mod_interval::{HitsPer, LinearBuilder};
+use crate::util::Either;
 
 use hyper::Method;
 use regex::Regex;
@@ -22,6 +23,7 @@ use tuple_vec_map;
 
 use std::{
     collections::BTreeMap,
+    iter,
     num::{NonZeroU16, NonZeroUsize},
     time::Duration,
 };
@@ -66,7 +68,9 @@ pub enum Provider {
     StaticList(Vec<json::Value>),
 }
 
-pub struct RangeProvider(pub std::iter::StepBy<std::ops::RangeInclusive<i64>>);
+type RangeProviderIteratorA = iter::StepBy<std::ops::RangeInclusive<i64>>;
+
+pub struct RangeProvider(pub Either<RangeProviderIteratorA, iter::Cycle<RangeProviderIteratorA>>);
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
@@ -74,6 +78,8 @@ pub struct RangeProviderPreProcessed {
     start: Option<i64>,
     end: Option<i64>,
     step: Option<NonZeroU16>,
+    #[serde(default)]
+    repeat: bool,
 }
 
 #[serde(rename_all = "snake_case")]
@@ -366,7 +372,13 @@ impl<'de> Deserialize<'de> for RangeProvider {
         let start = rppp.start.unwrap_or(0);
         let end = rppp.end.unwrap_or(i64::max_value());
         let step = usize::from(rppp.step.map(|n| n.get()).unwrap_or(1));
-        Ok(RangeProvider((start..=end).step_by(step)))
+        let iter = (start..=end).step_by(step);
+        let iter = if rppp.repeat {
+            Either::B(iter.cycle())
+        } else {
+            Either::A(iter)
+        };
+        Ok(RangeProvider(iter))
     }
 }
 

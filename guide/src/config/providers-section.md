@@ -218,6 +218,7 @@ The `range` *provider_type* provides an incrementing sequence of numbers in a gi
 - **`start`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [-9223372036854775808, 9223372036854775807]. This indicates what the starting number should be for the range. Defaults to `0`.
 - **`end`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [-9223372036854775808, 9223372036854775807]. This indicates what the end number should be for the range. This number is included in the range. Defaults to `9223372036854775807`.
 - **`step`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [1, 65535]. This indicates how big each "step" in the range will be. Defaults to `1`.
+- **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean which causes the range to repeat infinitely. Defaults to `false`.
 
 **Examples**:
 ```yaml

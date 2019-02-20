@@ -1,26 +1,26 @@
 # TODOs
-- Log info stats about the providers. Include: capacity, length, pending (provides that are "block")
 - Add warning logs for errors which happen that we don't want to crash the test--like bad indexing into json for a response. Break TestErrors into two--those which happen before a test can run and those which happen during a test run (based on data changes).
+- disable load_patterns during try run
+- Make the process return an error code when there's a fatal test error (use `process::exit(1)`)
+- Log message when a test ends early because a file/range provider ends
+- create `random` expression helper function which produces a number between two numbers.
+- Add config option to log info stats about the providers. Include: capacity, length, pending (provides that are "block")
+- Allow sub-ms precision for RTTs. This will require dividing the stats from the HDR histogram
 - Allow a value of `0` for the `buffer` parameter on `file` and `response` providers. This will make it so a value will only be put into the channel when a receiver has already polled, but values will not be pushed onto the channel pre-emptively. This will cause requests to act in a "serial" fashion. This should be used for try runs to prevent extraneous requests happening to fill buffers. Will also have to change ForEachParallel or the code in endpoint.rs to prevent buffering of requests. Perhaps requests which feed a provider with a `0` sized buffer will wait on the receiver, like other requests wait on a provider.
 - every minute we print stats to console, write those results to disk, overwriting the previous file every minute
 - add optional select clause for file providers
-- Make the process exit with an error code when there's a fatal test error (use `process::exit(1)`)
-- add `files` body provider
 - allow multipart uploads
+  - add `files` body provider
 - add more tests - unit and integration - get code coverage
-- create `random` expression helper function which produces a number between two numbers.
-- Allow sub-ms precision for RTTs. This will require dividing the stats from the HDR histogram
 - Adjust expression parsing errors to have line numbers which match with the yaml file
-- Log message when a test ends early because a file/range provider ends
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
 - Allow declare expressions to reference other declare variables as long as there's no recursive references
 - Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, disable colored output. *Breaking change*. Version 0.5.
 - Create a try run viewer. Version 0.5.
 - Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.
 - Make the inclusive/exlusiveness of `collect`, `range`, and `repeat` consistent. *Breaking change*. Version 0.5.
-- Log when a request is waiting for a provider. Waiting for Tokio Trace (https://github.com/tokio-rs/tokio/issues/561)
+- Log when a request is waiting for a provider. Waiting for Tokio Trace stability (https://github.com/tokio-rs/tokio-trace-nursery). Needs to be on crates.io and documented
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296, https://github.com/est31/msvc-wine-rust)
-- Create a Visual Studio Code language extension for the loadtest file schema
 - update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
 - Create server mode:
   - Allows the running of tests on demand.
@@ -34,4 +34,5 @@
   - User permissions: roles to run a test, see results, create a test
 - Add in machine clustering (only in server mode). Machines should open up a secure connection using a PSK
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
-- Add `where` support so we can have nested selects. `where` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
+- Add `with` support so we can have nested selects. `with` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
+- Create a Visual Studio Code language extension for the loadtest file schema

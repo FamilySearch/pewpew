@@ -1,5 +1,5 @@
 use super::expression_functions::{
-    Collect, Encode, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Range, Repeat,
+    Collect, Encode, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
@@ -42,6 +42,7 @@ pub(super) enum FunctionCall {
     Match(Arc<Match>),
     MinMax(Arc<MinMax>),
     Pad(Arc<Pad>),
+    Random(Arc<Random>),
     Range(Arc<Range>),
     Repeat(Arc<Repeat>),
 }
@@ -66,6 +67,7 @@ impl FunctionCall {
             "max" => MinMax::new(false, args)?.map_a(|a| FunctionCall::MinMax(a.into())),
             "min" => MinMax::new(true, args)?.map_a(|a| FunctionCall::MinMax(a.into())),
             "start_pad" => Pad::new(true, args)?.map_a(|a| FunctionCall::Pad(a.into())),
+            "random" => Either::A(FunctionCall::Random(Random::new(args)?.into())),
             "range" => Either::A(FunctionCall::Range(Range::new(args)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?.into())),
             _ => return Err(TestError::InvalidFunction(ident.into())),
@@ -84,6 +86,7 @@ impl FunctionCall {
             FunctionCall::MinMax(m) => m.evaluate(d),
             FunctionCall::Pad(p) => p.evaluate(d),
             FunctionCall::Range(r) => r.evaluate(d),
+            FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
         }
     }
@@ -100,8 +103,9 @@ impl FunctionCall {
             FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(d)?)),
             FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
             FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(d)?)),
-            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either::A(m.evaluate_as_iter(d)?))),
-            FunctionCall::Pad(p) => Either3::C(Either3::A(Either::B(p.evaluate_as_iter(d)?))),
+            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(m.evaluate_as_iter(d)?))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(p.evaluate_as_iter(d)?))),
+            FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_iter()))),
             FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(d)?)),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_iter())),
         };
@@ -129,12 +133,13 @@ impl FunctionCall {
             FunctionCall::Match(m) => {
                 Either3::B(Either3::C(m.clone().evaluate_as_future(providers)))
             }
-            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either::A(
+            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(
                 m.clone().evaluate_as_future(providers),
             ))),
-            FunctionCall::Pad(p) => Either3::C(Either3::A(Either::B(
+            FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(
                 p.clone().evaluate_as_future(providers),
             ))),
+            FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_future()))),
             FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_future(providers))),
             FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_future())),
         };

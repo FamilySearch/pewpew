@@ -761,6 +761,52 @@ impl Pad {
     }
 }
 
+#[derive(Debug)]
+pub enum Random {
+    Integer(Uniform<u64>),
+    Float(Uniform<f64>),
+}
+
+impl Random {
+    pub(super) fn new(args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
+        match args.as_slice() {
+            [ValueOrExpression::Value(Value::Json(json::Value::Number(first))), ValueOrExpression::Value(Value::Json(json::Value::Number(second)))] => {
+                if first.is_u64() && second.is_u64() {
+                    let r = Uniform::new(
+                        first.as_u64().expect("should have been u64"),
+                        second.as_u64().expect("should have been u64"),
+                    );
+                    Ok(Random::Integer(r))
+                } else {
+                    let r = Uniform::new(
+                        first.as_f64().expect("should have been f64"),
+                        second.as_f64().expect("should have been f64"),
+                    );
+                    Ok(Random::Float(r))
+                }
+            }
+            _ => Err(TestError::InvalidArguments("random".into())),
+        }
+    }
+
+    pub(super) fn evaluate(&self) -> json::Value {
+        match self {
+            Random::Integer(r) => r.sample(&mut rand::thread_rng()).into(),
+            Random::Float(r) => r.sample(&mut rand::thread_rng()).into(),
+        }
+    }
+
+    pub(super) fn evaluate_as_iter(&self) -> impl Iterator<Item = json::Value> + Clone {
+        iter::once(self.evaluate())
+    }
+
+    pub(super) fn evaluate_as_future(
+        &self,
+    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        future::ok((self.evaluate(), Vec::new()))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct ReversibleRange {
     range: std::ops::Range<u64>,
@@ -2002,6 +2048,60 @@ mod tests {
         }));
     }
 
+    #[test]
+    fn random_eval() {
+        let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
+
+        for (first, second) in args.into_iter() {
+            let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+            let left = r.evaluate();
+            if first.is_u64() && second.is_u64() {
+                let left = left.as_u64().unwrap();
+                let check = left >= first.as_u64().unwrap() && left < second.as_u64().unwrap();
+                assert!(check);
+            }
+        }
+    }
+
+    #[test]
+    fn random_eval_iter() {
+        let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
+
+        for (first, second) in args.into_iter() {
+            let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+            let mut left = r.evaluate_as_iter().collect::<Vec<_>>();
+            assert_eq!(left.len(), 1);
+            let left = left.pop().unwrap();
+            if first.is_u64() && second.is_u64() {
+                let left = left.as_u64().unwrap();
+                let check = left >= first.as_u64().unwrap() && left < second.as_u64().unwrap();
+                assert!(check);
+            }
+        }
+    }
+
+    #[test]
+    fn random_eval_future() {
+        let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
+
+        current_thread::run(lazy(move || {
+            let futures: Vec<_> = args
+                .into_iter()
+                .map(move |(first, second)| {
+                    let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+                    r.evaluate_as_future().map(move |(left, _)| {
+                        if first.is_u64() && second.is_u64() {
+                            let left = left.as_u64().unwrap();
+                            let check =
+                                left >= first.as_u64().unwrap() && left < second.as_u64().unwrap();
+                            assert!(check);
+                        }
+                    })
+                })
+                .collect();
+            join_all(futures).then(|_| Ok(()))
+        }));
+    }
     #[test]
     fn range_eval() {
         let data = j!({

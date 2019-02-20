@@ -12,6 +12,7 @@ Changes:
 - Disabled `load_pattern`s during try runs.
 - Have the process return an error code on a fatal error.
 - Add console message when test ends early due to a provider ending.
+- Add `random` expression function.
 
 ### v0.4.7
 Bug fixes:

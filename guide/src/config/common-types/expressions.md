@@ -231,6 +231,18 @@ Selects the smallest number out of a sequence of numbers. Each argument should b
 <tr>
 <td>
 
+<code>random(<i>start</i>, </i>end</i>)</code>
+
+</td>
+<td>
+
+Generates a random number between *start* (inclusive) and *end* (exclusive). Both *start* and *end* must be number literals. If both numbers are integers only integers will be generated within the specified range. If either number is a floating point number then a floating point number will be generated within the specified range.
+
+</td>
+</tr>
+<tr>
+<td>
+
 <code>range(<i>start</i>, </i>end</i>)</code>
 
 </td>

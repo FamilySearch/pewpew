@@ -563,55 +563,56 @@ fn to_json_number(n: f64) -> json::Value {
 }
 
 impl InfixOperator {
-    fn evaluate(self, left: &json::Value, right: &json::Value) -> Result<json::Value, TestError> {
+    fn evaluate<'a>(
+        self,
+        left: &json::Value,
+        right: Result<Cow<'a, json::Value>, TestError>,
+    ) -> Result<json::Value, TestError> {
         let value = match self {
             InfixOperator::Add => {
-                let n = f64_value(left) + f64_value(right);
+                let n = f64_value(left) + f64_value(&*right?);
                 to_json_number(n)
             }
             InfixOperator::And => {
-                let b = bool_value(left)? && bool_value(right)?;
+                let b = bool_value(left)? && bool_value(&*right?)?;
                 b.into()
             }
             InfixOperator::Divide => {
-                let n = f64_value(left) / f64_value(right);
+                let n = f64_value(left) / f64_value(&*right?);
                 to_json_number(n)
             }
-            InfixOperator::Eq => left.eq(right).into(),
+            InfixOperator::Eq => left.eq(&*right?).into(),
             InfixOperator::Gt => {
-                let b = f64_value(left) > f64_value(right);
+                let b = f64_value(left) > f64_value(&*right?);
                 b.into()
             }
             InfixOperator::Gte => {
-                let b = f64_value(left) >= f64_value(right);
+                let b = f64_value(left) >= f64_value(&*right?);
                 b.into()
             }
             InfixOperator::Lt => {
-                let b = f64_value(left) < f64_value(right);
+                let b = f64_value(left) < f64_value(&*right?);
                 b.into()
             }
             InfixOperator::Lte => {
-                let b = f64_value(left) <= f64_value(right);
+                let b = f64_value(left) <= f64_value(&*right?);
                 b.into()
             }
             InfixOperator::Mod => {
-                let n = f64_value(left) % f64_value(right);
+                let n = f64_value(left) % f64_value(&*right?);
                 to_json_number(n)
             }
             InfixOperator::Multiply => {
-                let n = f64_value(left) * f64_value(right);
+                let n = f64_value(left) * f64_value(&*right?);
                 to_json_number(n)
             }
-            InfixOperator::Ne => left.ne(right).into(),
+            InfixOperator::Ne => left.ne(&*right?).into(),
             InfixOperator::Or => {
-                if bool_value(left)? {
-                    true.into()
-                } else {
-                    bool_value(right)?.into()
-                }
+                let b = bool_value(left)? || bool_value(&*right?)?;
+                b.into()
             }
             InfixOperator::Subtract => {
-                let n = f64_value(left) - f64_value(right);
+                let n = f64_value(left) - f64_value(&*right?);
                 to_json_number(n)
             }
         };
@@ -642,8 +643,8 @@ impl Expression {
             ExpressionLhs::Value(v) => v.evaluate(d)?,
         };
         if let Some((op, rhs)) = &self.op {
-            let rhs = rhs.evaluate(d)?;
-            v = Cow::Owned(op.evaluate(&*v, &*rhs)?);
+            let rhs = rhs.evaluate(d);
+            v = Cow::Owned(op.evaluate(&*v, rhs)?);
         }
         match self.not {
             Some(true) => {
@@ -683,10 +684,16 @@ impl Expression {
         let not = self.not;
         let v = if let Some((op, rhs)) = &self.op {
             let op = *op;
-            let a = v.join(rhs.evaluate_as_future(providers)).and_then(
-                move |((l, mut returns), (r, returns2))| {
-                    returns.extend(returns2);
-                    let mut v = op.evaluate(&l, &r)?;
+            let a = v.join(rhs.evaluate_as_future(providers).then(Ok)).and_then(
+                move |((lhs, mut returns), r)| {
+                    let rhs = match r {
+                        Ok((r, returns2)) => {
+                            returns.extend(returns2);
+                            Ok(Cow::Owned(r))
+                        }
+                        Err(e) => Err(e),
+                    };
+                    let mut v = op.evaluate(&lhs, rhs)?;
                     if let Some(not) = not {
                         let mut b = bool_value(&v)?;
                         if not {
@@ -1761,6 +1768,10 @@ mod tests {
 
         // (where clause, expected out data)
         let check_table = vec![
+            (
+                "empty_array.length > 0 && empty_array[0].foo == 'foo'",
+                &empty,
+            ),
             ("0 == 0 && 1 == 1", &three),
             ("three > 2", &three),
             ("three > 3", &empty),

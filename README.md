@@ -5,6 +5,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.4.8
 Bug fixes:
 - Fixed error where a try run could try to use an endpoint which provides for a provider that it also depends on.
+- Prevent errors from arising due to boolean operators not being evaluated lazily.
 
 Changes:
 - Add modulus `%` expression operator.

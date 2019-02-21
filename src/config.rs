@@ -327,6 +327,8 @@ pub struct GeneralConfig {
         deserialize_with = "deserialize_duration"
     )]
     pub bucket_size: Duration,
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub log_provider_stats: Option<Duration>,
     #[serde(default)]
     pub summary_output_format: SummaryOutputFormats,
 }
@@ -336,6 +338,7 @@ impl Default for GeneralConfig {
         GeneralConfig {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(),
+            log_provider_stats: None,
             summary_output_format: SummaryOutputFormats::default(),
         }
     }
@@ -580,23 +583,16 @@ where
     Ok(map)
 }
 
-fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let string = String::deserialize(deserializer)?;
+fn deserialize_duration_helper(dur: &str) -> Option<Duration> {
     let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
     let sanity_re =
         Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
-    if !sanity_re.is_match(&string) {
-        return Err(DeError::invalid_value(
-            Unexpected::Str(&string),
-            &"example '15m' or '2 hours'",
-        ));
+    if !sanity_re.is_match(dur) {
+        return None;
     }
     let mut total_secs = 0;
     let re = Regex::new(base_re).expect("should be a valid regex");
-    for captures in re.captures_iter(&string) {
+    for captures in re.captures_iter(dur) {
         let n: u64 = captures
             .get(1)
             .expect("should have capture group")
@@ -613,7 +609,30 @@ where
         };
         total_secs += secs;
     }
-    Ok(Duration::from_secs(total_secs))
+    Some(Duration::from_secs(total_secs))
+}
+
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let dur = String::deserialize(deserializer)?;
+    deserialize_duration_helper(&dur)
+        .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))
+}
+
+fn deserialize_duration_option<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let dur: String = match Option::deserialize(deserializer)? {
+        Some(dur) => dur,
+        None => return Ok(None),
+    };
+
+    deserialize_duration_helper(&dur)
+        .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))
+        .map(Some)
 }
 
 fn deserialize_method<'de, D>(deserializer: D) -> Result<Method, D::Error>

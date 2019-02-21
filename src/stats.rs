@@ -1,6 +1,8 @@
 use super::print_test_error_to_console;
-use crate::config;
+use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
+use crate::providers;
+use crate::util::Either;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use fnv::FnvHashMap;
@@ -178,39 +180,44 @@ impl RollingAggregateStats {
             })
     }
 
-    fn print_summary(&self, time: u64, summary_output_format: config::SummaryOutputFormats) {
+    fn print_summary(&self, time: u64, summary_output_format: SummaryOutputFormats) {
         let mut printed = false;
         self.last_print_time.set(time);
         let is_pretty_format = summary_output_format.is_pretty();
-        if is_pretty_format {
-            eprint!(
+        let mut print_string = if is_pretty_format {
+            format!(
                 "{}",
                 Paint::new(format!(
                     "\nBucket Summary {}\n",
                     create_date_diff(time, time + self.duration)
                 ))
                 .bold()
-            );
-        }
+            )
+        } else {
+            String::new()
+        };
         for (stats_id, stats_map) in self.buckets.values() {
             if let Some(stats) = stats_map.get(&time) {
-                let did_print = stats.print_summary(stats_id, summary_output_format, true);
-                if !printed && did_print {
+                let piece = stats.print_summary(stats_id, summary_output_format, true);
+                print_string.push_str(&piece);
+                if !printed && !piece.is_empty() {
                     printed = true;
                 }
             }
         }
         if is_pretty_format {
             if !printed {
-                eprint!("{}", "no data\n");
+                print_string.push_str("no data\n");
             }
             if let Some(et) = self.end_time.get() {
                 if et > Instant::now() {
                     let test_end_msg = duration_till_end_to_pretty_string(et - Instant::now());
-                    eprint!("{}", format!("\n{}\n", test_end_msg));
+                    let piece = format!("\n{}\n", test_end_msg);
+                    print_string.push_str(&piece);
                 }
             }
         }
+        eprint!("{}", print_string);
     }
 }
 
@@ -333,12 +340,13 @@ impl AggregateStats {
     fn print_summary(
         &self,
         stats_id: &StatsId,
-        format: config::SummaryOutputFormats,
+        format: SummaryOutputFormats,
         bucket_summary: bool,
-    ) -> bool {
+    ) -> String {
         let calls_made = self.rtt_histogram.len();
+        let mut print_string = String::new();
         if calls_made == 0 {
-            return false;
+            return print_string;
         }
         const MICROS_TO_MS: f64 = 1_000.0;
         let method = stats_id.get("method").expect("stats_id missing `method`");
@@ -353,44 +361,34 @@ impl AggregateStats {
         let mean = self.rtt_histogram.mean().round() / MICROS_TO_MS;
         let stddev = self.rtt_histogram.stdev().round() / MICROS_TO_MS;
         match format {
-            config::SummaryOutputFormats::Pretty => {
-                eprint!(
-                    "{}",
-                    Paint::yellow(format!("\n- {} {}:\n", method, url)).dimmed()
+            SummaryOutputFormats::Pretty => {
+                let piece = format!(
+                    "\n{}\n  calls made: {}\n  status counts: {:?}\n",
+                    Paint::yellow(format!("- {} {}:", method, url)).dimmed(),
+                    calls_made,
+                    self.status_counts
                 );
-                eprint!("{}", format!("  calls made: {}\n", calls_made));
-                eprint!("{}", format!("  status counts: {:?}\n", self.status_counts));
+                print_string.push_str(&piece);
                 if self.request_timeouts > 0 {
-                    eprint!(
-                        "{}",
-                        format!("  request timeouts: {:?}\n", self.request_timeouts)
-                    );
+                    let piece = format!("  request timeouts: {:?}\n", self.request_timeouts);
+                    print_string.push_str(&piece);
                 }
                 if !self.connection_errors.is_empty() {
-                    eprint!(
-                        "{}",
-                        format!("  connection errors: {:?}\n", self.connection_errors)
-                    );
+                    let piece = format!("  connection errors: {:?}\n", self.connection_errors);
+                    print_string.push_str(&piece);
                 }
                 if !self.test_errors.is_empty() {
-                    eprint!("{}", format!("  test errors: {:?}\n", self.test_errors));
+                    let piece = format!("  test errors: {:?}\n", self.test_errors);
+                    print_string.push_str(&piece);
                 }
-                eprint!(
-                    "{}",
-                    format!(
-                        "  p50: {}ms, p90: {}ms, p95: {}ms, p99: {}ms, p99.9: {}ms\n",
-                        p50, p90, p95, p99, p99_9
-                    )
+                let piece = format!(
+                    "  p50: {}ms, p90: {}ms, p95: {}ms, p99: {}ms, p99.9: {}ms\n  \
+                     min: {}ms, max: {}ms, avg: {}ms, std. dev: {}ms\n",
+                    p50, p90, p95, p99, p99_9, min, max, mean, stddev
                 );
-                eprint!(
-                    "{}",
-                    format!(
-                        "  min: {}ms, max: {}ms, avg: {}ms, std. dev: {}ms\n",
-                        min, max, mean, stddev
-                    )
-                );
+                print_string.push_str(&piece);
             }
-            config::SummaryOutputFormats::Json => {
+            SummaryOutputFormats::Json => {
                 let summary_type = if bucket_summary { "bucket" } else { "test" };
                 let output = json::json!({
                     "startTime": self.time,
@@ -426,10 +424,11 @@ impl AggregateStats {
                             .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
                             .collect::<BTreeMap<_, _>>(),
                 });
-                eprint!("{}", format!("{}\n", output));
+                let piece = format!("{}\n", output);
+                print_string.push_str(&piece);
             }
         }
-        true
+        print_string
     }
 }
 
@@ -558,10 +557,65 @@ where
     (tx, f)
 }
 
+fn create_provider_stats_printer(
+    providers: Arc<BTreeMap<String, providers::Kind>>,
+    interval: Duration,
+    now: Instant,
+    start_sec: u64,
+    summary_output_format: SummaryOutputFormats,
+) -> impl Future<Item = (), Error = TestError> {
+    let first_print = start_sec / interval.as_secs() * interval.as_secs();
+    let start_print =
+        Duration::from_millis((interval.as_secs() - (start_sec - first_print)) * 1000 + 1);
+    Interval::new(now + start_print, interval)
+        .map_err(|_| TestError::Internal("something happened while printing stats".into()))
+        .for_each(move |_| {
+            let time = Local::now();
+            let is_pretty_format = summary_output_format.is_pretty();
+            let mut string_to_print = if is_pretty_format {
+                format!(
+                    "{}",
+                    Paint::new(format!(
+                        "\nProvider Stats {}\n",
+                        time.format("%T %-e-%b-%Y")
+                    ))
+                    .bold()
+                )
+            } else {
+                String::new()
+            };
+            let time = time.timestamp();
+            for (name, kind) in providers.iter() {
+                let stats = kind.tx.get_stats(name, time);
+                let piece = if is_pretty_format {
+                    format!(
+                        "\n- {}:\n  length: {}\n  limit: {}\n  \
+                         tasks waiting to send: {}\n  endpoints waiting to receive: {}\n",
+                        Paint::yellow(stats.provider).dimmed(),
+                        stats.len,
+                        stats.limit,
+                        stats.waiting_to_send,
+                        stats.waiting_to_receive,
+                    )
+                } else {
+                    let mut s = json::to_string(&stats).map_err(|_| {
+                        TestError::Internal("could not serialize provider stats".into())
+                    })?;
+                    s.push_str("\n");
+                    s
+                };
+                string_to_print.push_str(&piece);
+            }
+            eprint!("{}", string_to_print);
+            Ok(())
+        })
+}
+
 pub fn create_stats_channel<F>(
     test_complete: Shared<F>,
     test_killer: FCSender<Result<(), TestError>>,
     config: &config::GeneralConfig,
+    providers: Arc<BTreeMap<String, providers::Kind>>,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
@@ -600,6 +654,19 @@ where
             stats.print_summary(prev_time, summary_output_format);
             Ok(())
         });
+    let print_stats = if let Some(interval) = config.log_provider_stats {
+        let print_provider_stats = create_provider_stats_printer(
+            providers,
+            interval,
+            now,
+            start_sec,
+            summary_output_format,
+        );
+        let a = print_stats.join(print_provider_stats).map(|_| ());
+        Either::A(a)
+    } else {
+        Either::B(print_stats)
+    };
     let receiver = Stream::for_each(
         rx.map_err(|_| TestError::Internal("Error receiving stats".into())),
         move |datum| {
@@ -656,7 +723,15 @@ where
                 stats.print_summary(end_time_secs, summary_output_format);
             }
         }
-        for (i, (stats_id, time_buckets)) in stats.buckets.values().enumerate() {
+        let mut print_string = if is_pretty_format {
+            format!(
+                "{}",
+                Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
+            )
+        } else {
+            String::new()
+        };
+        for (stats_id, time_buckets) in stats.buckets.values() {
             let mut summary = {
                 let (start_time_secs, mut end_time_secs) = {
                     let mut bucket_values = time_buckets.values();
@@ -676,14 +751,10 @@ where
             for agg_stats in time_buckets.values() {
                 summary += &*agg_stats;
             }
-            if i == 0 && is_pretty_format {
-                eprint!(
-                    "{}",
-                    Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
-                );
-            }
-            summary.print_summary(stats_id, summary_output_format, false);
+            let piece = summary.print_summary(stats_id, summary_output_format, false);
+            print_string.push_str(&piece);
         }
+        eprint!("{}", print_string);
         if let Err(e) = result {
             print_test_error_to_console(&e);
         }

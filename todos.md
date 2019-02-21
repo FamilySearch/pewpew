@@ -1,5 +1,4 @@
 # TODOs
-- Add config option to log info stats about the providers. Include: capacity, length, pending (provides that are "block")
 - Allow a value of `0` for the `buffer` parameter on `file` and `response` providers. This will make it so a value will only be put into the channel when a receiver has already polled, but values will not be pushed onto the channel pre-emptively. This will cause requests to act in a "serial" fashion. This should be used for try runs to prevent extraneous requests happening to fill buffers. Will also have to change ForEachParallel or the code in endpoint.rs to prevent buffering of requests. Perhaps requests which feed a provider with a `0` sized buffer will wait on the receiver, like other requests wait on a provider.
 - every minute we print stats to console, write those results to disk, overwriting the previous file every minute
 - add optional select clause for file providers

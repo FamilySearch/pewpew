@@ -3,14 +3,14 @@
 <pre>
 config:
   client:
-    request_timeout: <i>duration</i>
-    headers: <i>headers</i>
-    keepalive: <i>duration</i>
+    [request_timeout: <i>duration</i>]
+    [headers: <i>headers</i>]
+    [keepalive: <i>duration</i>]
   general:
-    auto_buffer_start_size: <i>unsigned integer</i>
-    bucket_size: <i>duration</i>
-    log_provider_stats: <i>duration</i>
-    summary_output_format: pretty | json
+    [auto_buffer_start_size: <i>unsigned integer</i>]
+    [bucket_size: <i>duration</i>]
+    [log_provider_stats: <i>duration</i>]
+    [summary_output_format: pretty | json]
 </pre>
 
 The `config` section provides a means of customizing different parameters for the test. Parameters are divided into two subsections: `client` which pertains to customizations for the HTTP client and `general` which are other miscellaneous settings for the test.

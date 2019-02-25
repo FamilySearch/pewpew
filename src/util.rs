@@ -2,7 +2,7 @@ use futures::{Poll, Stream};
 use serde_json as json;
 use tokio::prelude::*;
 
-use std::{borrow::Cow, cmp::PartialEq, fmt};
+use std::{borrow::Cow, cmp::PartialEq, fmt, path};
 
 pub enum Either<A, B> {
     A(A),
@@ -239,6 +239,10 @@ pub fn json_value_into_string(v: json::Value) -> String {
         json::Value::String(s) => s,
         _ => v.to_string(),
     }
+}
+
+pub fn tweak_path(rest: &mut String, base: &path::PathBuf) {
+    *rest = base.with_file_name(&rest).to_string_lossy().into();
 }
 
 #[cfg(test)]

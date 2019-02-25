@@ -287,6 +287,7 @@ impl LoadTest {
 
         let mut builder_ctx = request::BuilderContext {
             config: config_config,
+            config_path,
             client: Arc::new(client),
             loggers,
             providers,

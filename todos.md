@@ -1,13 +1,12 @@
 # TODOs
-- Allow a value of `0` for the `buffer` parameter on `file` and `response` providers. This will make it so a value will only be put into the channel when a receiver has already polled, but values will not be pushed onto the channel pre-emptively. This will cause requests to act in a "serial" fashion. This should be used for try runs to prevent extraneous requests happening to fill buffers. Will also have to change ForEachParallel or the code in endpoint.rs to prevent buffering of requests. Perhaps requests which feed a provider with a `0` sized buffer will wait on the receiver, like other requests wait on a provider.
 - every minute we print stats to console, write those results to disk, overwriting the previous file every minute
 - add optional select clause for file providers
-- allow multipart uploads
-  - add `files` body provider
+- add multipart body support
 - add more tests - unit and integration - get code coverage
 - Adjust expression parsing errors to have line numbers which match with the yaml file
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
-- Allow declare expressions to reference other declare variables as long as there's no recursive references
+- HARD - Allow a value of `0` for the `buffer` parameter on `file` and `response` providers. This will make it so a value will only be put into the channel when a receiver has already polled, but values will not be pushed onto the channel pre-emptively. This will cause requests to act in a "serial" fashion. This should be used for try runs to prevent extraneous requests happening to fill buffers. Will also have to change ForEachParallel or the code in endpoint.rs to prevent buffering of requests. Perhaps requests which feed a provider with a `0` sized buffer will wait on the receiver, like other requests wait on a provider.
+- HARD - Allow declare expressions to reference other declare variables as long as there's no recursive references
 - Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, disable colored output. *Breaking change*. Version 0.5.
 - Create a try run viewer. Version 0.5.
 - Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.

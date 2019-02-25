@@ -4,7 +4,7 @@
 endpoints:
   - [declare: <i>declare_subsection</i>]
     [headers: <i>headers</i>]
-    [body: <i>template</i>]
+    [body: <i>body</i>]
     [load_pattern: <i>load_pattern_subsection</i>]
     [method: <i>method</i>]
     [peak_load: <i>peak_load</i>]
@@ -20,7 +20,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare subsection](#declare-subsection)
 - **`headers`** <sub><sup>*Optional*</sup></sub> - See [headers](./common-types.md#headers)
-- **`body`** <sub><sup>*Optional*</sup></sub> - A [template](./common-types.md#templates) indicating the body that should be sent with the request.
+- **`body`** <sub><sup>*Optional*</sup></sub> - Either a [template](./common-types.md#templates) indicating a string that should be sent as the request body, or an object with a key `file` and a value of a [template](./common-types.md#templates) which will evaluate to the name of a file to send as the request body. When a relative path is specified it is interpreted as relative to the config file.
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](./load_pattern-section.md)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
 - **`peak_load`** <sub><sup>*Optional**</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents how much traffic is generated for this endpoint when the [load_pattern](./load_pattern-section.md) reaches `100%`. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.

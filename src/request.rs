@@ -25,7 +25,7 @@ use crate::error::{RecoverableError, TestError};
 use crate::for_each_parallel::ForEachParallel;
 use crate::providers;
 use crate::stats;
-use crate::util::{Either, Either3};
+use crate::util::{tweak_path, Either, Either3};
 use crate::zip_all::zip_all;
 
 use std::{
@@ -33,6 +33,7 @@ use std::{
     error::Error as StdError,
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
+    path::PathBuf,
     str,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
@@ -97,6 +98,7 @@ where
     <F as Future>::Item: Send + Sync,
 {
     pub config: config::Config,
+    pub config_path: PathBuf,
     // the http client
     pub client: Arc<
         Client<
@@ -115,7 +117,7 @@ where
 }
 
 pub struct Builder {
-    body: Option<String>,
+    body: Option<config::Body>,
     declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
     logs: Vec<(String, Select)>,
@@ -173,7 +175,7 @@ impl Builder {
         self
     }
 
-    pub fn body(mut self, body: Option<String>) -> Self {
+    pub fn body(mut self, body: Option<config::Body>) -> Self {
         self.body = body;
         self
     }
@@ -250,8 +252,20 @@ impl Builder {
         let body = self
             .body
             .map(|body| {
-                let value = Template::new(&body, &ctx.static_providers)?;
-                required_providers.extend(value.get_providers().clone());
+                let (is_file, template) = match body {
+                    config::Body::File(body) => {
+                        (true, Template::new(&body, &ctx.static_providers)?)
+                    }
+                    config::Body::String(body) => {
+                        (false, Template::new(&body, &ctx.static_providers)?)
+                    }
+                };
+                required_providers.extend(template.get_providers().clone());
+                let value = if is_file {
+                    BodyTemplate::File(ctx.config_path.clone(), template)
+                } else {
+                    BodyTemplate::String(template)
+                };
                 Ok::<_, TestError>(value)
             })
             .transpose()?;
@@ -342,6 +356,28 @@ enum StreamItem {
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
+#[derive(Clone)]
+enum BodyTemplate {
+    File(PathBuf, Template),
+    String(Template),
+}
+
+impl BodyTemplate {
+    pub fn evaluate(&self, d: &json::Value) -> Result<String, TestError> {
+        match self {
+            BodyTemplate::File(_, t) => t.evaluate(d),
+            BodyTemplate::String(t) => t.evaluate(d),
+        }
+    }
+
+    pub fn get_path(&self) -> Option<&PathBuf> {
+        match self {
+            BodyTemplate::File(p, _) => Some(&p),
+            BodyTemplate::String(_) => None,
+        }
+    }
+}
+
 type EndpointStream = Box<dyn Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
@@ -351,7 +387,7 @@ where
     <F as Future>::Error: Send + Sync,
     <F as Future>::Item: Send + Sync,
 {
-    body: Option<Template>,
+    body: Option<BodyTemplate>,
     client: Arc<
         Client<
             HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
@@ -429,7 +465,7 @@ where
     url: Template,
     method: Method,
     headers: BTreeMap<String, Template>,
-    body: Option<Template>,
+    body: Option<BodyTemplate>,
     rr_providers: u16,
     client: Arc<
         Client<
@@ -493,14 +529,36 @@ where
         }
         let mut body_value = None;
         let body = if let Some(b) = self.body.clone().as_mut() {
-            let body = match b.evaluate(&template_values.0) {
+            let mut body = match b.evaluate(&template_values.0) {
                 Ok(b) => b,
                 Err(e) => return Either::B(Err(e).into_future()),
             };
-            if self.rr_providers & REQUEST_BODY != 0 {
-                body_value = Some(body.clone());
+            if let Some(path) = b.get_path() {
+                tweak_path(&mut body, path);
+                let stream = tokio::fs::File::open(body)
+                    .and_then(|mut file| {
+                        let mut buf = bytes::BytesMut::new();
+                        buf.resize(8 * (1 << 10), 0);
+                        let s = stream::poll_fn(move || {
+                            let ret = match file.read_buf(&mut buf)? {
+                                Async::Ready(n) if n == 0 => Async::Ready(None),
+                                Async::Ready(n) => {
+                                    Async::Ready(bytes::Bytes::from(&buf[..n]).into())
+                                }
+                                Async::NotReady => Async::NotReady,
+                            };
+                            Ok(ret)
+                        });
+                        Ok(s)
+                    })
+                    .flatten_stream();
+                hyper::Body::wrap_stream(stream)
+            } else {
+                if self.rr_providers & REQUEST_BODY != 0 {
+                    body_value = Some(body.clone());
+                }
+                body.into()
             }
-            body.into()
         } else {
             HyperBody::empty()
         };

@@ -205,7 +205,7 @@ pub struct Endpoint {
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
     #[serde(default)]
-    pub body: Option<String>,
+    pub body: Option<Body>,
     #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
     pub load_pattern: Option<Vec<LoadPattern>>,
     #[serde(default, deserialize_with = "deserialize_method")]
@@ -220,6 +220,24 @@ pub struct Endpoint {
     pub logs: Vec<(String, EndpointProvidesPreProcessed)>,
     #[serde(default)]
     pub max_parallel_requests: Option<NonZeroUsize>,
+}
+
+pub enum Body {
+    String(String),
+    File(String),
+}
+
+#[serde(untagged)]
+#[derive(Deserialize)]
+enum BodyHelper {
+    String(String),
+    File(BodyFileHelper),
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct BodyFileHelper {
+    file: String,
 }
 
 #[serde(rename_all = "snake_case")]
@@ -364,6 +382,20 @@ pub struct LoadTest {
     pub providers: Vec<(String, Provider)>,
     #[serde(default, with = "tuple_vec_map")]
     pub loggers: Vec<(String, Logger)>,
+}
+
+impl<'de> Deserialize<'de> for Body {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bh = BodyHelper::deserialize(deserializer)?;
+        let body = match bh {
+            BodyHelper::String(s) => Body::String(s),
+            BodyHelper::File(fh) => Body::File(fh.file),
+        };
+        Ok(body)
+    }
 }
 
 impl<'de> Deserialize<'de> for RangeProvider {

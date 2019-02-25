@@ -7,7 +7,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 use crate::channel::{self, Limit};
 use crate::config;
 use crate::error::TestError;
-use crate::util::{json_value_into_string, Either3};
+use crate::util::{json_value_into_string, tweak_path, Either3};
 
 use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
 use serde_json as json;
@@ -22,10 +22,6 @@ pub struct Provider<T> {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
     pub tx: channel::Sender<T>,
     pub rx: channel::Receiver<T>,
-}
-
-fn tweak_path(rest: &mut String, base: &PathBuf) {
-    *rest = base.with_file_name(&rest).to_string_lossy().into();
 }
 
 pub fn file<F>(

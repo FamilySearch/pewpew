@@ -5,7 +5,7 @@ use pest::error::Error as PestError;
 use serde_json as json;
 use serde_yaml as yaml;
 
-use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
+use std::{borrow::Cow, error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
 
 #[derive(Clone, Debug)]
 pub enum RecoverableError {
@@ -32,7 +32,7 @@ impl fmt::Display for RecoverableError {
 
 #[derive(Clone, Debug)]
 pub enum TestError {
-    Internal(String),
+    Internal(Cow<'static, str>),
     InvalidArguments(String),
     InvalidConfigFilePath(PathBuf),
     InvalidEncoding(String),
@@ -41,7 +41,7 @@ pub enum TestError {
     InvalidStatsIdReference(String),
     InvalidUrl(String),
     KilledByLogger,
-    Other(String),
+    Other(Cow<'static, str>),
     PestParseErr(PestError<config::ParserRule>),
     ProviderEnded(String),
     Recoverable(RecoverableError),
@@ -134,6 +134,6 @@ impl From<yaml::Error> for TestError {
 
 impl From<tokio::timer::Error> for TestError {
     fn from(te: tokio::timer::Error) -> Self {
-        TestError::Internal(format!("{}", te))
+        TestError::Internal(format!("{}", te).into())
     }
 }

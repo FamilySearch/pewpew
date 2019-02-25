@@ -852,10 +852,9 @@ impl Template {
                     TemplatePiece::NotExpression(pair.as_str().into())
                 }
                 rule => {
-                    return Err(TestError::Internal(format!(
-                        "unexpected rule while parsing template, {:?}",
-                        rule
-                    )));
+                    return Err(TestError::Internal(
+                        format!("unexpected rule while parsing template, {:?}", rule).into(),
+                    ));
                 }
             };
             pieces.push(piece);
@@ -1145,10 +1144,9 @@ fn parse_function_call(
                 );
             }
             r => {
-                return Err(TestError::Internal(format!(
-                    "Unexpected rule for function call, `{:?}`",
-                    r
-                )));
+                return Err(TestError::Internal(
+                    format!("Unexpected rule for function call, `{:?}`", r).into(),
+                ));
             }
         }
     }
@@ -1178,10 +1176,9 @@ fn parse_indexed_property(
                 )
             },
         )?)),
-        r => Err(TestError::Internal(format!(
-            "Unexpected rule for path segment, `{:?}`",
-            r
-        ))),
+        r => Err(TestError::Internal(
+            format!("Unexpected rule for path segment, `{:?}`", r).into(),
+        )),
     }
 }
 
@@ -1243,10 +1240,9 @@ fn parse_path(
                 }
             }
             r => {
-                return Err(TestError::Internal(format!(
-                    "Unexpected rule while parsing path, `{:?}`",
-                    r
-                )));
+                return Err(TestError::Internal(
+                    format!("Unexpected rule while parsing path, `{:?}`", r).into(),
+                ));
             }
         }
     }
@@ -1288,10 +1284,9 @@ fn parse_value(
                 "true" => true,
                 "false" => false,
                 s => {
-                    return Err(TestError::Internal(format!(
-                        "Expected value to parse as a boolean. Saw `{}`",
-                        s
-                    )));
+                    return Err(TestError::Internal(
+                        format!("Expected value to parse as a boolean. Saw `{}`", s).into(),
+                    ));
                 }
             };
             Value::Json(b.into())
@@ -1319,10 +1314,9 @@ fn parse_value(
             Value::Json(j)
         }
         r => {
-            return Err(TestError::Internal(format!(
-                "Unexpected rule while parsing value: {:?}",
-                r
-            )));
+            return Err(TestError::Internal(
+                format!("Unexpected rule while parsing value: {:?}", r).into(),
+            ));
         }
     };
     Ok(v)
@@ -1473,10 +1467,13 @@ fn parse_expression_pieces(
                     "/" => InfixOperator::Divide,
                     "%" => InfixOperator::Mod,
                     o => {
-                        return Err(TestError::Internal(format!(
-                            "Unexpected operator while parsing simple expression: {:?}",
-                            o
-                        )));
+                        return Err(TestError::Internal(
+                            format!(
+                                "Unexpected operator while parsing simple expression: {:?}",
+                                o
+                            )
+                            .into(),
+                        ));
                     }
                 };
                 let eoo = ExpressionOrOperator::Operator(o);
@@ -1484,10 +1481,9 @@ fn parse_expression_pieces(
             }
             Rule::EOI => (),
             r => {
-                return Err(TestError::Internal(format!(
-                    "Unexpected rule while parsing expression: {:?}",
-                    r
-                )));
+                return Err(TestError::Internal(
+                    format!("Unexpected rule while parsing expression: {:?}", r).into(),
+                ));
             }
         }
     }

@@ -265,7 +265,7 @@ impl LoadTest {
             let https = HttpsConnector::from((
                 http,
                 TlsConnector::new().map_err(|e| {
-                    TestError::Other(format!("could not create ssl connector: {}", e))
+                    TestError::Other(format!("could not create ssl connector: {}", e).into())
                 })?,
             ));
             Client::builder().set_host(false).build::<_, Body>(https)
@@ -336,10 +336,9 @@ impl LoadTest {
                 }
 
                 if !endpoints.contains_key(&*target_endpoint) {
-                    return Err(TestError::Other(format!(
-                        "could not find endpoint with alias `{}`",
-                        target_endpoint
-                    )));
+                    return Err(TestError::Other(
+                        format!("could not find endpoint with alias `{}`", target_endpoint).into(),
+                    ));
                 }
 
                 let endpoint_scores: BTreeMap<_, _> = endpoints
@@ -468,7 +467,7 @@ where
             rrp
         ));
         if endpoint_providers.is_empty() {
-            return start_err.map_err(TestError::Other);
+            return start_err.map_err(|e| TestError::Other(e.into()));
         }
         let v = endpoint_providers.iter().fold(start_err, |mut prev, ep| {
             if dont_visit.contains(ep.as_str()) {
@@ -501,7 +500,7 @@ where
         if let Ok(n) = v {
             score += n;
         } else {
-            return v.map_err(TestError::Other);
+            return v.map_err(|s| TestError::Other(s.into()));
         }
     }
     Ok(score)
@@ -570,7 +569,7 @@ where
                     endpoints,
                 )?;
             }
-            Err(msg) => return Err(TestError::Other(msg)),
+            Err(msg) => return Err(TestError::Other(msg.into())),
         }
     }
     Ok(())

@@ -43,21 +43,27 @@ where
         config::FileFormat::Csv => Either3::A(
             CsvReader::new(&template)
                 .map_err(|e| {
-                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                    TestError::Other(
+                        format!("creating file reader from file `{}`: {}", file, e).into(),
+                    )
                 })?
                 .into_stream(),
         ),
         config::FileFormat::Json => Either3::B(
             JsonReader::new(&template)
                 .map_err(|e| {
-                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                    TestError::Other(
+                        format!("creating file reader from file `{}`: {}", file, e).into(),
+                    )
                 })?
                 .into_stream(),
         ),
         config::FileFormat::Line => Either3::C(
             LineReader::new(&template)
                 .map_err(|e| {
-                    TestError::Other(format!("creating file reader from file `{}`: {}", file, e))
+                    TestError::Other(
+                        format!("creating file reader from file `{}`: {}", file, e).into(),
+                    )
                 })?
                 .into_stream(),
         ),
@@ -65,7 +71,7 @@ where
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
     let prime_tx = stream
-        .map_err(move |e| TestError::Other(format!("reading file `{}`: {}", file, e)))
+        .map_err(move |e| TestError::Other(format!("reading file `{}`: {}", file, e).into()))
         .for_each(move |v| {
             tx2.clone()
                 .send(v)
@@ -259,7 +265,9 @@ where
             let test_killer2 = test_killer.clone();
             let logger = TokioFile::create((&*file_name).clone())
                 .map_err(move |e| {
-                    TestError::Other(format!("creating logger file `{:?}`: {}", file_name2, e))
+                    TestError::Other(
+                        format!("creating logger file `{:?}`: {}", file_name2, e).into(),
+                    )
                 })
                 .and_then(move |mut file| {
                     rx.map_err(|_| {
@@ -274,7 +282,9 @@ where
                             writeln!(file, "{}", v)
                         };
                         let result = result.into_future().map_err(move |e| {
-                            TestError::Other(format!("writing to file `{}`: {}", file_name, e))
+                            TestError::Other(
+                                format!("writing to file `{}`: {}", file_name, e).into(),
+                            )
                         });
                         match limit {
                             Some(limit) if kill && counter >= limit => Either3::B(

@@ -429,7 +429,7 @@ where
                     }
                     .into(),
                 )
-                .map_err(|_| TestError::Other("could not send init stats".to_string()))
+                .map_err(|_| TestError::Other("could not send init stats".into()))
                 .and_then(move |_| {
                     let rm = RequestMaker {
                         url: self.url,
@@ -926,7 +926,9 @@ where
                     )
                     .map(|_| ())
                     .map_err(|e| {
-                        TestError::Internal(format!("unexpected error trying to send stats, {}", e))
+                        TestError::Internal(
+                            format!("unexpected error trying to send stats, {}", e).into(),
+                        )
                     }),
             )
         };

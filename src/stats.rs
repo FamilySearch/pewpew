@@ -135,10 +135,9 @@ impl RollingAggregateStats {
         stats_id: StatsId,
     ) -> Result<(), TestError> {
         if !stats_id.contains_key("url") || !stats_id.contains_key("method") {
-            return Err(TestError::Internal(format!(
-                "stats_id missing `url` and/or `method`. {:?}",
-                stats_id
-            )));
+            return Err(TestError::Internal(
+                format!("stats_id missing `url` and/or `method`. {:?}", stats_id).into(),
+            ));
         }
         let duration = self.duration;
         let time = to_epoch(time)? / duration * duration;

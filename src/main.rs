@@ -22,7 +22,7 @@ use std::{
 };
 
 use crate::error::TestError;
-use crate::load_test::LoadTest;
+use crate::load_test::{LoadTest, TestEndReason};
 use crate::util::Either3;
 
 use clap::{crate_version, App, Arg};
@@ -70,7 +70,7 @@ fn main() {
             Ok(f) => f,
             Err(_) => {
                 let e = TestError::InvalidConfigFilePath(load_test_config_file);
-                print_test_error_to_console(&e);
+                print_test_end_message(Err(&e));
                 return Either3::B(Ok(()).into_future());
             }
         };
@@ -78,7 +78,7 @@ fn main() {
             Ok(c) => c,
             Err(e) => {
                 let e = TestError::YamlDeserializerErr(e.into());
-                print_test_error_to_console(&e);
+                print_test_end_message(Err(&e));
                 return Either3::B(Ok(()).into_future());
             }
         };
@@ -92,10 +92,14 @@ fn main() {
         match load_test {
             Ok(l) => Either3::A(l.run()),
             Err(e) => {
-                print_test_error_to_console(&e);
+                print_test_end_message(Err(&e));
                 // we send the test_ended message as Ok so if the stats monitor
                 // is running it won't reprint the error message
-                Either3::C(test_ended_tx.send(Ok(())).then(|_| Ok(())))
+                Either3::C(
+                    test_ended_tx
+                        .send(Ok(TestEndReason::TimesUp))
+                        .then(|_| Ok(())),
+                )
             }
         }
     }));
@@ -106,21 +110,19 @@ fn main() {
 
 static HAD_FATAL_ERROR: AtomicBool = AtomicBool::new(false);
 
-pub fn print_test_error_to_console(e: &TestError) {
-    match e {
-        TestError::KilledByLogger => {
+pub fn print_test_end_message(r: Result<TestEndReason, &TestError>) {
+    match r {
+        Err(TestError::KilledByLogger) => {
             eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())
         }
-        TestError::ProviderEnded(name) => eprintln!(
-            "\n{}",
-            Paint::yellow(format!(
-                "Test ended early because provider `{}` ended",
-                name
-            ))
-        ),
-        _ => {
+        Err(e) => {
             HAD_FATAL_ERROR.store(true, Ordering::Relaxed);
             eprintln!("\n{} {}", Paint::red("Fatal error").bold(), e);
         }
+        Ok(TestEndReason::ProviderEnded) => eprintln!(
+            "\n{}",
+            Paint::yellow("Test ended early because a provider ended")
+        ),
+        _ => (),
     }
 }

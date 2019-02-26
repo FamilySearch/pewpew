@@ -47,6 +47,7 @@ pub struct ChannelStats<'a> {
     pub provider: &'a str,
     pub len: usize,
     pub limit: usize,
+    pub sender_count: usize,
     pub waiting_to_send: usize,
     pub waiting_to_receive: usize,
 }
@@ -82,17 +83,6 @@ impl<T> Sender<T> {
         self.inner.push(item);
         while let Ok(task) = self.parked_receivers.pop() {
             task.notify();
-        }
-    }
-
-    pub fn get_stats<'a>(&self, provider: &'a str, timestamp: i64) -> ChannelStats<'a> {
-        ChannelStats {
-            provider,
-            timestamp,
-            len: self.inner.len(),
-            limit: self.limit.get(),
-            waiting_to_receive: self.parked_receivers.len(),
-            waiting_to_send: self.parked_senders.len(),
         }
     }
 }
@@ -143,6 +133,20 @@ pub struct Receiver<T> {
     parked_receivers: Arc<SegQueue<task::Task>>,
     parked_senders: Arc<SegQueue<task::Task>>,
     sender_count: Arc<AtomicUsize>,
+}
+
+impl<T> Receiver<T> {
+    pub fn get_stats<'a>(&self, provider: &'a str, timestamp: i64) -> ChannelStats<'a> {
+        ChannelStats {
+            provider,
+            timestamp,
+            len: self.inner.len(),
+            limit: self.limit.get(),
+            sender_count: self.sender_count.load(Ordering::Relaxed),
+            waiting_to_receive: self.parked_receivers.len(),
+            waiting_to_send: self.parked_senders.len(),
+        }
+    }
 }
 
 impl<T> Stream for Receiver<T> {

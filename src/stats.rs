@@ -1,6 +1,7 @@
-use super::print_test_error_to_console;
 use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
+use crate::load_test::TestEndReason;
+use crate::print_test_end_message;
 use crate::providers;
 use crate::util::Either;
 
@@ -542,14 +543,14 @@ pub fn create_try_run_stats_channel<F>(
     impl Future<Item = (), Error = ()> + Send,
 )
 where
-    F: Future<Item = (), Error = TestError> + Send + 'static,
+    F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
 {
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let f = Stream::for_each(rx, |_| Ok(()))
         .then(|_| Ok(()))
         .join(
             test_complete
-                .map_err(|e| print_test_error_to_console(&*e))
+                .map_err(|e| print_test_end_message(Err(&*e)))
                 .map(|_| ()),
         )
         .then(|_| Ok(()));
@@ -566,6 +567,10 @@ fn create_provider_stats_printer(
     let first_print = start_sec / interval.as_secs() * interval.as_secs();
     let start_print =
         Duration::from_millis((interval.as_secs() - (start_sec - first_print)) * 1000 + 1);
+    let providers: Vec<_> = providers
+        .iter()
+        .map(|(name, kind)| (name.clone(), kind.rx.clone()))
+        .collect();
     Interval::new(now + start_print, interval)
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
@@ -584,17 +589,19 @@ fn create_provider_stats_printer(
                 String::new()
             };
             let time = time.timestamp();
-            for (name, kind) in providers.iter() {
-                let stats = kind.tx.get_stats(name, time);
+            for (name, rx) in providers.iter() {
+                let stats = rx.get_stats(name, time);
                 let piece = if is_pretty_format {
                     format!(
                         "\n- {}:\n  length: {}\n  limit: {}\n  \
-                         tasks waiting to send: {}\n  endpoints waiting to receive: {}\n",
+                         tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
+                         number of senders: {}\n",
                         Paint::yellow(stats.provider).dimmed(),
                         stats.len,
                         stats.limit,
                         stats.waiting_to_send,
                         stats.waiting_to_receive,
+                        stats.sender_count,
                     )
                 } else {
                     let mut s = json::to_string(&stats).map_err(|_| {
@@ -612,7 +619,7 @@ fn create_provider_stats_printer(
 
 pub fn create_stats_channel<F>(
     test_complete: Shared<F>,
-    test_killer: FCSender<Result<(), TestError>>,
+    test_killer: FCSender<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
     providers: Arc<BTreeMap<String, providers::Kind>>,
 ) -> Result<
@@ -623,7 +630,7 @@ pub fn create_stats_channel<F>(
     TestError,
 >
 where
-    F: Future<Item = (), Error = TestError> + Send + 'static,
+    F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
 {
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
@@ -685,11 +692,11 @@ where
         },
     )
     .join(print_stats)
-    .map(|_| ())
+    .map(|_| TestEndReason::TimesUp)
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
-    .select(test_complete.map(|_| ()).map_err(|e| (&*e).clone()))
+    .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
     .map_err(|e| e.0)
-    .and_then(move |_| stats2.lock().persist())
+    .and_then(move |(b, _)| stats2.lock().persist().map(move |_| b))
     .then(move |result| {
         let stats = stats3.lock();
         let duration = stats.duration;
@@ -754,9 +761,7 @@ where
             print_string.push_str(&piece);
         }
         eprint!("{}", print_string);
-        if let Err(e) = result {
-            print_test_error_to_console(&e);
-        }
+        print_test_end_message(result.as_ref().map(|b| *b));
         Ok(())
     });
     Ok((tx, receiver))

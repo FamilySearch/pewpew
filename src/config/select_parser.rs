@@ -8,8 +8,9 @@ use crate::config;
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::util::{json_value_into_string, json_value_to_string, Either, Either3};
+use crate::zip_all::zip_all;
 
-use futures::{future, stream, Future, IntoFuture, Stream};
+use futures::{stream, Future, IntoFuture, Stream};
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
@@ -33,18 +34,18 @@ pub type AutoReturn = (
 
 #[derive(Clone, Debug)]
 pub(super) enum FunctionCall {
-    Collect(Arc<Collect>),
-    Encode(Arc<Encode>),
+    Collect(Collect),
+    Encode(Encode),
     Epoch(Epoch),
-    If(Arc<If>),
-    Join(Arc<Join>),
-    JsonPath(Arc<JsonPath>),
-    Match(Arc<Match>),
-    MinMax(Arc<MinMax>),
-    Pad(Arc<Pad>),
-    Random(Arc<Random>),
-    Range(Arc<Range>),
-    Repeat(Arc<Repeat>),
+    If(Box<If>),
+    Join(Join),
+    JsonPath(JsonPath),
+    Match(Match),
+    MinMax(MinMax),
+    Pad(Pad),
+    Random(Random),
+    Range(Box<Range>),
+    Repeat(Repeat),
 }
 
 impl FunctionCall {
@@ -55,21 +56,22 @@ impl FunctionCall {
         static_providers: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         let r = match ident {
-            "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?.into())),
-            "encode" => Encode::new(args)?.map_a(|a| FunctionCall::Encode(a.into())),
-            "end_pad" => Pad::new(false, args)?.map_a(|a| FunctionCall::Pad(a.into())),
+            "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?)),
+            "encode" => Encode::new(args)?.map_a(FunctionCall::Encode),
+            "end_pad" => Pad::new(false, args)?.map_a(FunctionCall::Pad),
             "epoch" => Either::A(FunctionCall::Epoch(Epoch::new(args)?)),
-            "if" => If::new(args)?.map_a(|i| FunctionCall::If(i.into())),
-            "join" => Join::new(args)?.map_a(|a| FunctionCall::Join(a.into())),
-            "json_path" => JsonPath::new(args, providers, static_providers)?
-                .map_a(|a| FunctionCall::JsonPath(a.into())),
-            "match" => Match::new(args)?.map_a(|a| FunctionCall::Match(a.into())),
-            "max" => MinMax::new(false, args)?.map_a(|a| FunctionCall::MinMax(a.into())),
-            "min" => MinMax::new(true, args)?.map_a(|a| FunctionCall::MinMax(a.into())),
-            "start_pad" => Pad::new(true, args)?.map_a(|a| FunctionCall::Pad(a.into())),
-            "random" => Either::A(FunctionCall::Random(Random::new(args)?.into())),
+            "if" => If::new(args)?.map_a(|a| FunctionCall::If(a.into())),
+            "join" => Join::new(args)?.map_a(FunctionCall::Join),
+            "json_path" => {
+                JsonPath::new(args, providers, static_providers)?.map_a(FunctionCall::JsonPath)
+            }
+            "match" => Match::new(args)?.map_a(FunctionCall::Match),
+            "max" => MinMax::new(false, args)?.map_a(FunctionCall::MinMax),
+            "min" => MinMax::new(true, args)?.map_a(FunctionCall::MinMax),
+            "start_pad" => Pad::new(true, args)?.map_a(FunctionCall::Pad),
+            "random" => Either::A(FunctionCall::Random(Random::new(args)?)),
             "range" => Either::A(FunctionCall::Range(Range::new(args)?.into())),
-            "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?.into())),
+            "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?)),
             _ => return Err(TestError::InvalidFunction(ident.into())),
         };
         Ok(r)
@@ -112,38 +114,26 @@ impl FunctionCall {
         Ok(r)
     }
 
-    fn evaluate_as_future(
-        &self,
+    fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> Box<dyn Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
         let f = match self {
-            FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_future(providers))),
-            FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_future(providers))),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.evaluate_as_future()))),
-            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(
-                i.clone().evaluate_as_future(providers),
-            ))),
-            FunctionCall::Join(j) => {
-                Either3::B(Either3::A(j.clone().evaluate_as_future(providers)))
-            }
-            FunctionCall::JsonPath(j) => {
-                Either3::B(Either3::B(j.clone().evaluate_as_future(providers)))
-            }
-            FunctionCall::Match(m) => {
-                Either3::B(Either3::C(m.clone().evaluate_as_future(providers)))
-            }
-            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(
-                m.clone().evaluate_as_future(providers),
-            ))),
-            FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(
-                p.clone().evaluate_as_future(providers),
-            ))),
-            FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_future()))),
-            FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_future(providers))),
-            FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_future())),
+            FunctionCall::Collect(c) => Either3::A(Either3::A(c.into_stream(providers))),
+            FunctionCall::Encode(e) => Either3::A(Either3::B(e.into_stream(providers))),
+            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.into_stream()))),
+            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(i.into_stream(providers)))),
+            FunctionCall::Join(j) => Either3::B(Either3::A(j.into_stream(providers))),
+            FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.into_stream(providers))),
+            FunctionCall::Match(m) => Either3::B(Either3::C(m.into_stream(providers))),
+            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(m.into_stream(providers)))),
+            FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(p.into_stream(providers)))),
+            FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.into_stream()))),
+            FunctionCall::Range(r) => Either3::C(Either3::B(r.into_stream(providers))),
+            FunctionCall::Repeat(r) => Either3::C(Either3::C(r.into_stream())),
         };
-        // boxed to prevent recursive impl Future
+        // boxed to prevent recursive impl Stream
         Box::new(f)
     }
 }
@@ -242,53 +232,49 @@ impl Path {
         Ok(r)
     }
 
-    fn evaluate_as_future(
-        &self,
+    fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let rest = self.rest.clone();
-        match self.start.clone() {
-            PathStart::FunctionCall(fnc) => Either3::A(
-                fnc.evaluate_as_future(providers)
-                    .and_then(move |(j, returns)| Ok((index_json2(&j, &rest)?, returns))),
-            ),
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        // TODO: don't we need providers when evaluating `rest`?
+        let rest = self.rest;
+        match self.start {
+            PathStart::FunctionCall(fnc) => {
+                let a = fnc
+                    .into_stream(providers)
+                    .and_then(move |(j, returns)| Ok((index_json2(&j, &rest)?, returns)));
+                Either3::A(a)
+            }
             PathStart::Ident(s) => {
                 let s = Arc::new(s);
                 let s2 = s.clone();
                 let b = providers
                     .get(&*s2)
                     .map(move |provider| {
-                        let s = s2.clone();
-                        let auto_return = provider.auto_return;
-                        let tx = provider.tx.clone();
+                        let auto_return = provider.auto_return.map(|ar| (ar, provider.tx.clone()));
                         provider
                             .rx
                             .clone()
-                            .into_future()
-                            .map_err(move |_| TestError::ProviderEnded((&*s).clone()))
-                            .and_then(move |(v, _)| {
-                                v.map(move |v| {
-                                    let mut outgoing = Vec::new();
-                                    if let Some(ar) = auto_return {
-                                        outgoing.push((ar, tx, vec![v.clone()]));
-                                    }
-                                    let v = index_json2(&v, &rest)?;
-                                    Ok((v, outgoing))
-                                })
-                                .transpose()
-                                .and_then(|o| {
-                                    o.ok_or_else(|| TestError::ProviderEnded((&*s2).clone()))
-                                })
+                            .map_err(move |_| {
+                                TestError::Internal("unexpected error from provider".into())
+                            })
+                            .and_then(move |v| {
+                                let mut outgoing = Vec::new();
+                                if let Some((ar, tx)) = &auto_return {
+                                    outgoing.push((*ar, tx.clone(), vec![v.clone()]));
+                                }
+                                let v = index_json2(&v, &rest)?;
+                                Ok((v, outgoing))
                             })
                     })
                     .ok_or_else(move || TestError::UnknownProvider((&*s).clone()))
                     .into_future()
-                    .flatten();
+                    .flatten_stream();
                 Either3::B(b)
             }
             PathStart::Value(v) => {
                 let v = index_json2(&v, &rest).map(|v| (v, Vec::new()));
-                Either3::C(future::result(v))
+                Either3::C(stream::iter_result(iter::repeat(v)))
             }
         }
     }
@@ -365,51 +351,22 @@ impl ValueOrExpression {
         }
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        match self {
-            ValueOrExpression::Value(v) => Either::A(v.evaluate_as_future(&providers)),
-            ValueOrExpression::Expression(ce) => Either::B(ce.evaluate_as_future(&providers)),
-        }
-    }
-
     pub fn into_stream(
         self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let providers = providers.clone();
-        let this = Arc::new(self);
-        stream::repeat(())
-            .and_then(move |_| this.evaluate_as_future(&providers))
-            .map(Either::A)
-            .or_else(|d| {
-                if let TestError::ProviderEnded(_) = d {
-                    Ok(Either::B(()))
-                } else {
-                    Err(d)
-                }
-            })
-            .take_while(|v| {
-                if let Either::A(_) = v {
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
-            })
-            .map(|v| match v {
-                Either::A(v) => v,
-                _ => unreachable!("variant B should never get this far"),
-            })
+        match self {
+            ValueOrExpression::Value(v) => Either::A(v.into_stream(providers)),
+            ValueOrExpression::Expression(ce) => Either::B(ce.into_stream(providers)),
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Path(Path),
+    Path(Box<Path>),
     Json(json::Value),
-    Template(Arc<Template>),
+    Template(Template),
 }
 
 impl Value {
@@ -460,23 +417,23 @@ impl Value {
         Ok(r)
     }
 
-    fn evaluate_as_future(
-        &self,
+    fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> Box<dyn Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
-        let f = match self {
-            Value::Path(path) => Either3::A(path.evaluate_as_future(providers)),
-            Value::Json(value) => Either3::B(future::ok((value.clone(), Vec::new()))),
+        let s = match self {
+            Value::Path(path) => Either3::A(path.into_stream(providers)),
+            Value::Json(value) => Either3::B(stream::repeat((value, Vec::new()))),
             Value::Template(t) => {
-                let f = t
-                    .evaluate_as_future(providers)
+                let c = t
+                    .into_stream(providers)
                     .map(|(s, v)| (json::Value::String(s), v));
-                Either3::C(f)
+                Either3::C(c)
             }
         };
-        // boxed to prevent recursive impl Future
-        Box::new(f)
+        // boxed to prevent recursive impl Stream
+        Box::new(s)
     }
 }
 
@@ -672,27 +629,21 @@ impl Expression {
         Ok(i)
     }
 
-    fn evaluate_as_future(
-        &self,
+    fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> Box<dyn Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Send + Sync>
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Send + Sync>
     {
-        let v = match &self.lhs {
-            ExpressionLhs::Expression(e) => Either::A(e.evaluate_as_future(providers)),
-            ExpressionLhs::Value(v) => Either::B(v.evaluate_as_future(providers)),
+        let v = match self.lhs {
+            ExpressionLhs::Expression(e) => Either::A(e.into_stream(providers)),
+            ExpressionLhs::Value(v) => Either::B(v.into_stream(providers)),
         };
         let not = self.not;
-        let v = if let Some((op, rhs)) = &self.op {
-            let op = *op;
-            let a = v.join(rhs.evaluate_as_future(providers).then(Ok)).and_then(
-                move |((lhs, mut returns), r)| {
-                    let rhs = match r {
-                        Ok((r, returns2)) => {
-                            returns.extend(returns2);
-                            Ok(Cow::Owned(r))
-                        }
-                        Err(e) => Err(e),
-                    };
+        let v = if let Some((op, rhs)) = self.op {
+            let a = v.zip(rhs.into_stream(providers)).and_then(
+                move |((lhs, mut returns), (r, returns2))| {
+                    returns.extend(returns2);
+                    let rhs = Ok(Cow::Owned(r));
                     let mut v = op.evaluate(&lhs, rhs)?;
                     if let Some(not) = not {
                         let mut b = bool_value(&v)?;
@@ -887,8 +838,8 @@ impl Template {
         self.pieces
             .iter()
             .map(|piece| match piece {
-                TemplatePiece::Expression(voce) => {
-                    let v = voce.evaluate(d)?;
+                TemplatePiece::Expression(voe) => {
+                    let v = voe.evaluate(d)?;
                     Ok(json_value_to_string(&*v).into_owned())
                 }
                 TemplatePiece::NotExpression(s) => Ok(s.clone()),
@@ -906,30 +857,33 @@ impl Template {
             .join("")
     }
 
-    fn evaluate_as_future(
-        &self,
+    fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (String, Vec<AutoReturn>), Error = TestError> {
-        let futures = self.pieces.iter().map(|piece| match piece {
-            TemplatePiece::Expression(voce) => {
-                let a = voce
-                    .evaluate_as_future(providers)
+    ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = TestError> {
+        let streams = self.pieces.into_iter().map(|piece| match piece {
+            TemplatePiece::Expression(voe) => {
+                let a = voe
+                    .into_stream(providers)
                     .map(|v| (json_value_into_string(v.0), v.1));
                 Either::A(a)
             }
             TemplatePiece::NotExpression(s) => {
-                let b = future::ok((s.clone(), Vec::new()));
+                let b = stream::repeat((s, Vec::new()));
                 Either::B(b)
             }
         });
-        stream::futures_ordered(futures).fold(
-            (String::with_capacity(self.size_hint), Vec::new()),
-            |(mut s, mut returns), (s2, returns2)| {
-                s.push_str(&s2);
-                returns.extend(returns2);
-                Ok::<_, TestError>((s, returns))
-            },
-        )
+        let size_hint = self.size_hint;
+        zip_all(streams).map(move |values| {
+            values.into_iter().fold(
+                (String::with_capacity(size_hint), Vec::new()),
+                |(mut s, mut returns), (s2, returns2)| {
+                    s.push_str(&s2);
+                    returns.extend(returns2);
+                    (s, returns)
+                },
+            )
+        })
     }
 }
 
@@ -1294,7 +1248,7 @@ fn parse_value(
         Rule::null => Value::Json(json::Value::Null),
         Rule::json_path => match parse_path(pair, providers, static_providers)? {
             Either::A(v) => Value::Json(v),
-            Either::B(p) => Value::Path(p),
+            Either::B(p) => Value::Path(p.into()),
         },
         Rule::string => {
             let template = Template::new(pair.as_str(), static_providers)?;
@@ -1302,7 +1256,7 @@ fn parse_value(
                 Either::A(s) => Value::Json(s.into()),
                 Either::B(t) => {
                     providers.extend(t.get_providers().clone());
-                    Value::Template(t.into())
+                    Value::Template(t)
                 }
             }
         }
@@ -1662,7 +1616,7 @@ mod tests {
     }
 
     #[test]
-    fn voce_stream() {
+    fn voe_stream() {
         let data = btreemap! {
             "a" => json::json!(3),
             "b" => json::json!({ "foo": "bar", "some:thing": "else", "e": [5, 6, 7, 8] }),
@@ -1682,7 +1636,7 @@ mod tests {
         let test_end = rx.shared();
 
         current_thread::run(lazy(move || {
-            let providers = data
+            let providers: Arc<_> = data
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
@@ -1734,9 +1688,9 @@ mod tests {
             let static_providers = BTreeMap::new();
             let mut futures = Vec::new();
             for (i, (expr, expect)) in tests.into_iter().enumerate() {
-                let voce = ValueOrExpression::new(expr, &mut required_providers, &static_providers)
+                let voe = ValueOrExpression::new(expr, &mut required_providers, &static_providers)
                     .unwrap();
-                let fut = voce
+                let fut = voe
                     .into_stream(&providers)
                     .map(|(v, _)| v)
                     .into_future()

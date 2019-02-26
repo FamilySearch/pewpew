@@ -43,7 +43,6 @@ pub enum TestError {
     KilledByLogger,
     Other(Cow<'static, str>),
     PestParseErr(PestError<config::ParserRule>),
-    ProviderEnded(String),
     Recoverable(RecoverableError),
     RecursiveForEachReference,
     RequestBuilderErr(Arc<HttpError>),
@@ -82,11 +81,6 @@ impl fmt::Display for TestError {
             KilledByLogger => write!(f, "killed by logger"),
             Other(s) => write!(f, "{}", s),
             PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),
-            ProviderEnded(p) => write!(
-                f,
-                "provider `{}` ended",
-                p
-            ),
             Recoverable(r) => write!(f, "{}", r),
             RecursiveForEachReference => write!(
                 f,

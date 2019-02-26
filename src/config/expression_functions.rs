@@ -2,8 +2,9 @@ use super::select_parser::{bool_value, f64_value, AutoReturn, Value, ValueOrExpr
 use crate::error::TestError;
 use crate::providers;
 use crate::util::{json_value_to_string, Either};
+use crate::zip_all::zip_all;
 
-use futures::{future, stream, Future, IntoFuture, Stream};
+use futures::{stream, try_ready, Async, Future, IntoFuture, Stream};
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
@@ -18,7 +19,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Collect {
     arg: ValueOrExpression,
     min: u64,
@@ -61,27 +62,41 @@ impl Collect {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let n = if let Some(r) = self.random {
-            r.sample(&mut rand::thread_rng())
-        } else {
-            self.min
-        };
-        let futures = (0..n).map(move |_| self.arg.evaluate_as_future(providers));
-        stream::futures_ordered(futures)
-            .fold(
-                (Vec::new(), Vec::new()),
-                |(mut jsons, mut outgoing), (json, outgoing2)| {
-                    jsons.push(json);
-                    outgoing.extend(outgoing2);
-                    Ok::<_, TestError>((jsons, outgoing))
-                },
-            )
-            // .fold(1, |_, _| Ok(1))
-            .map(|(jsons, outgoing)| (jsons.into(), outgoing))
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let mut value = None;
+        let mut arg_stream = self.arg.into_stream(providers);
+        let random = self.random;
+        let min = self.min;
+        stream::poll_fn(move || {
+            if value.is_none() {
+                let n = if let Some(r) = random {
+                    r.sample(&mut rand::thread_rng())
+                } else {
+                    min
+                };
+                value = Some((Vec::with_capacity(n as usize), Vec::new()));
+            }
+            if let Some((ref mut jsons, ref mut returns)) = &mut value {
+                loop {
+                    if let Some((v, returns2)) = try_ready!(arg_stream.poll()) {
+                        jsons.push(v);
+                        returns.extend(returns2);
+                        if jsons.len() == jsons.capacity() {
+                            let value =
+                                value.take().map(|(jsons, returns)| (jsons.into(), returns));
+                            break Ok(Async::Ready(value));
+                        }
+                    } else {
+                        break Ok(Async::Ready(None));
+                    }
+                }
+            } else {
+                Ok(Async::Ready(None))
+            }
+        })
     }
 }
 
@@ -133,7 +148,7 @@ impl Encoding {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Encode {
     arg: ValueOrExpression,
     encoding: Encoding,
@@ -175,13 +190,13 @@ impl Encode {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let encoding = self.encoding;
         self.arg
-            .evaluate_as_future(providers)
+            .into_stream(providers)
             .map(move |(d, returns)| (encoding.encode(&d).into(), returns))
     }
 }
@@ -230,15 +245,15 @@ impl Epoch {
         Ok(iter::once(self.evaluate()?))
     }
 
-    pub(super) fn evaluate_as_future(
+    pub(super) fn into_stream(
         self,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let r = self.evaluate().map(|v| (v, Vec::new()));
-        future::result(r)
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let iter = iter::repeat_with(move || self.evaluate().map(|v| (v, Vec::new())));
+        stream::iter_result(iter)
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct If {
     first: ValueOrExpression,
     second: ValueOrExpression,
@@ -292,33 +307,42 @@ impl If {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let providers = providers.clone();
-        self.first
-            .evaluate_as_future(&providers)
-            .and_then(move |(v, mut returns)| {
-                let b = match bool_value(&v) {
-                    Ok(b) => b,
-                    Err(e) => return Either::B(Err(e).into_future()),
-                };
-                let f = if b {
-                    self.second.evaluate_as_future(&providers)
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let mut first = self.first.into_stream(providers);
+        let mut second = self.second.into_stream(providers);
+        let mut third = self.third.into_stream(providers);
+        let mut holder = None;
+        stream::poll_fn(move || {
+            if holder.is_none() {
+                let r = try_ready!(first.poll());
+                if let Some((v, returns)) = r {
+                    let b = bool_value(&v)?;
+                    holder = Some((b, returns));
                 } else {
-                    self.third.evaluate_as_future(&providers)
-                };
-                let a = f.map(move |(v, returns2)| {
+                    return Ok(Async::Ready(None));
+                }
+            }
+            if let Some((b, returns)) = &mut holder {
+                let s = if *b { &mut second } else { &mut third };
+                let r = try_ready!(s.poll());
+                if let Some((v, returns2)) = r {
                     returns.extend(returns2);
-                    (v, returns)
-                });
-                Either::A(a)
-            })
+                    let value = holder.take().map(|(_, returns)| (v, returns));
+                    Ok(Async::Ready(value))
+                } else {
+                    Ok(Async::Ready(None))
+                }
+            } else {
+                Ok(Async::Ready(None))
+            }
+        })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Join {
     arg: ValueOrExpression,
     sep: String,
@@ -334,14 +358,14 @@ impl Join {
                 let two = into_string(args.pop().expect("join should have two args"))
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
-                let j = Join {
-                    arg: one,
-                    sep: two,
-                    sep2: None,
-                };
-                if let ValueOrExpression::Value(Value::Json(json)) = &j.arg {
-                    Ok(Either::B(j.evaluate_with_arg(json)))
+                if let ValueOrExpression::Value(Value::Json(json)) = &one {
+                    Ok(Either::B(Join::evaluate_with_arg(&two, &None, json)))
                 } else {
+                    let j = Join {
+                        arg: one,
+                        sep: two,
+                        sep2: None,
+                    };
                     Ok(Either::A(j))
                 }
             }
@@ -352,14 +376,14 @@ impl Join {
                 let two = into_string(args.pop().expect("join should have two args"))
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
-                let j = Join {
-                    arg: one,
-                    sep: two,
-                    sep2: Some(three),
-                };
-                if let ValueOrExpression::Value(Value::Json(json)) = &j.arg {
-                    Ok(Either::B(j.evaluate_with_arg(json)))
+                if let ValueOrExpression::Value(Value::Json(json)) = &one {
+                    Ok(Either::B(Join::evaluate_with_arg(&two, &Some(three), json)))
                 } else {
+                    let j = Join {
+                        arg: one,
+                        sep: two,
+                        sep2: Some(three),
+                    };
                     Ok(Either::A(j))
                 }
             }
@@ -367,28 +391,30 @@ impl Join {
         }
     }
 
-    fn evaluate_with_arg(&self, d: &json::Value) -> json::Value {
-        match (d, &self.sep2) {
+    fn evaluate_with_arg(sep: &str, sep2: &Option<String>, d: &json::Value) -> json::Value {
+        match (d, sep2) {
             (json::Value::Array(v), _) => v
                 .iter()
                 .map(|v| json_value_to_string(v).into_owned())
                 .collect::<Vec<_>>()
                 .as_slice()
-                .join(&self.sep)
+                .join(sep)
                 .into(),
             (json::Value::Object(m), Some(sep2)) => m
                 .iter()
                 .map(|(k, v)| format!("{}{}{}", k, sep2, json_value_to_string(v)))
                 .collect::<Vec<_>>()
                 .as_slice()
-                .join(&self.sep)
+                .join(sep)
                 .into(),
             _ => json_value_to_string(d).into_owned().into(),
         }
     }
 
     pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
+        self.arg
+            .evaluate(d)
+            .map(|d| Join::evaluate_with_arg(&self.sep, &self.sep2, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
@@ -398,19 +424,22 @@ impl Join {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let sep = self.sep;
+        let sep2 = self.sep2;
         self.arg
-            .evaluate_as_future(providers)
-            .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
+            .into_stream(providers)
+            .map(move |(d, returns)| (Join::evaluate_with_arg(&sep, &sep2, &d), returns))
     }
 }
 
+#[derive(Clone)]
 pub(super) struct JsonPath {
     provider: String,
-    selector: jsonpath::Selector,
+    selector: Arc<jsonpath::Selector>,
 }
 
 impl fmt::Debug for JsonPath {
@@ -447,7 +476,7 @@ impl JsonPath {
                     .map_err(move |_| TestError::InvalidJsonPathQuery(json_path.clone()))?;
                 let j = JsonPath {
                     provider: provider.into(),
-                    selector: json_path,
+                    selector: json_path.into(),
                 };
                 let v = match (provider.starts_with('$'), env::var(&provider[1..])) {
                     (true, Ok(s)) => {
@@ -484,45 +513,37 @@ impl JsonPath {
         self.evaluate_to_vec(d).into_iter()
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let jp = self.clone();
-        let jp2 = self.clone();
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let provider_name = self.provider.clone();
         providers
             .get(&self.provider)
             .map(move |provider| {
-                let jp2 = jp.clone();
-                let jp3 = jp.clone();
-                let auto_return = provider.auto_return;
-                let tx = provider.tx.clone();
+                let auto_return = provider.auto_return.map(|ar| (ar, provider.tx.clone()));
                 provider
                     .rx
                     .clone()
-                    .into_future()
-                    .map_err(move |_| TestError::ProviderEnded(jp.provider.clone()))
-                    .and_then(move |(v, _)| {
-                        v.ok_or_else(|| TestError::ProviderEnded(jp2.provider.clone()))
-                    })
+                    .map_err(move |_| TestError::Internal("unexpected error from provider".into()))
                     .map(move |v| {
-                        let v = json::json!({ &*jp3.provider: v });
-                        let result = jp3.evaluate(&v);
-                        let outgoing = if let Some(ar) = auto_return {
-                            vec![(ar, tx, vec![v.clone()])]
+                        let outgoing = if let Some((ar, tx)) = &auto_return {
+                            vec![(*ar, tx.clone(), vec![v.clone()])]
                         } else {
                             Vec::new()
                         };
+                        let v = json::json!({ self.provider.as_str(): &v });
+                        let result = self.evaluate(&v);
                         (result, outgoing)
                     })
             })
-            .ok_or_else(move || TestError::UnknownProvider(jp2.provider.clone()))
+            .ok_or_else(move || TestError::UnknownProvider(provider_name.clone()))
             .into_future()
-            .flatten()
+            .flatten_stream()
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Match {
     arg: ValueOrExpression,
     capture_names: Vec<String>,
@@ -536,19 +557,24 @@ impl Match {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(regex_str)))] => {
                 let regex = Regex::new(regex_str).map_err(TestError::RegexErr)?;
-                let capture_names = regex
+                let capture_names: Vec<_> = regex
                     .capture_names()
                     .enumerate()
                     .map(|(i, n)| n.map(|s| s.into()).unwrap_or_else(|| i.to_string()))
                     .collect();
-                let m = Match {
-                    arg: args.into_iter().nth(0).expect("match should have two args"),
-                    capture_names,
-                    regex,
-                };
-                if let ValueOrExpression::Value(Value::Json(json)) = &m.arg {
-                    Ok(Either::B(m.evaluate_with_arg(json)))
+                let arg = args.into_iter().nth(0).expect("match should have two args");
+                if let ValueOrExpression::Value(Value::Json(json)) = &arg {
+                    Ok(Either::B(Match::evaluate_with_arg(
+                        &regex,
+                        &capture_names,
+                        json,
+                    )))
                 } else {
+                    let m = Match {
+                        arg,
+                        capture_names,
+                        regex,
+                    };
                     Ok(Either::A(m))
                 }
             }
@@ -556,11 +582,10 @@ impl Match {
         }
     }
 
-    fn evaluate_with_arg(&self, d: &json::Value) -> json::Value {
+    fn evaluate_with_arg(regex: &Regex, capture_names: &[String], d: &json::Value) -> json::Value {
         let search_str = json_value_to_string(d);
-        if let Some(captures) = self.regex.captures(&*search_str) {
-            let map: json::Map<String, json::Value> = self
-                .capture_names
+        if let Some(captures) = regex.captures(&*search_str) {
+            let map: json::Map<String, json::Value> = capture_names
                 .iter()
                 .zip(captures.iter())
                 .map(|(name, capture)| {
@@ -578,7 +603,9 @@ impl Match {
     }
 
     pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
+        self.arg
+            .evaluate(d)
+            .map(|d| Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
@@ -588,17 +615,22 @@ impl Match {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        self.arg
-            .evaluate_as_future(providers)
-            .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let capture_names = self.capture_names;
+        let regex = self.regex;
+        self.arg.into_stream(providers).map(move |(d, returns)| {
+            (
+                Match::evaluate_with_arg(&regex, &capture_names, &d),
+                returns,
+            )
+        })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct MinMax {
     args: Vec<ValueOrExpression>,
     min: bool,
@@ -617,7 +649,7 @@ impl MinMax {
                 None
             }
         });
-        let (v, count) = m.eval_iter(iter)?;
+        let (v, count) = MinMax::eval_iter(m.min, iter)?;
         if count == m.args.len() {
             Ok(Either::B(v.into_owned()))
         } else {
@@ -626,7 +658,7 @@ impl MinMax {
     }
 
     fn eval_iter<'a, I: Iterator<Item = Result<Cow<'a, json::Value>, TestError>>>(
-        &self,
+        min: bool,
         mut iter: I,
     ) -> Result<(Cow<'a, json::Value>, usize), TestError> {
         iter.try_fold(
@@ -635,7 +667,7 @@ impl MinMax {
                 let right = right?;
                 let l = f64_value(&*left);
                 let r = f64_value(&*right);
-                let v = match (l.partial_cmp(&r), self.min, l.is_finite()) {
+                let v = match (l.partial_cmp(&r), min, l.is_finite()) {
                     (Some(Ordering::Less), true, _)
                     | (Some(Ordering::Greater), false, _)
                     | (None, _, true) => left,
@@ -649,7 +681,7 @@ impl MinMax {
 
     pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
         let iter = self.args.iter().map(|fa| fa.evaluate(d));
-        self.eval_iter(iter).map(|d| d.0.into_owned())
+        MinMax::eval_iter(self.min, iter).map(|d| d.0.into_owned())
     }
 
     pub(super) fn evaluate_as_iter(
@@ -659,28 +691,22 @@ impl MinMax {
         self.evaluate(d).map(iter::once)
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let futures = self.args.iter().map(|fa| fa.evaluate_as_future(providers));
-        stream::futures_unordered(futures)
-            .collect()
-            .and_then(move |values| {
-                let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
-                let v = self.eval_iter(iter)?.0.into_owned();
-                let returns = values
-                    .into_iter()
-                    .fold(Vec::new(), |mut returns, (_, returns2)| {
-                        returns.extend(returns2);
-                        returns
-                    });
-                Ok((v, returns))
-            })
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let streams = self.args.into_iter().map(|fa| fa.into_stream(providers));
+        let min = self.min;
+        zip_all(streams).and_then(move |values| {
+            let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
+            let v = MinMax::eval_iter(min, iter)?.0.into_owned();
+            let returns = values.into_iter().map(|v| v.1).flatten().collect();
+            Ok((v, returns))
+        })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Pad {
     start: bool,
     arg: ValueOrExpression,
@@ -707,15 +733,17 @@ impl Pad {
                     .ok_or_else(|| TestError::InvalidArguments("pad".into()))?;
                 let second = as_usize(args.pop().expect("pad should have three args"))?;
                 let first = args.pop().expect("pad should have three args");
-                let p = Pad {
-                    start,
-                    arg: first,
-                    min_length: second,
-                    padding: third,
-                };
-                if let ValueOrExpression::Value(Value::Json(json)) = &p.arg {
-                    Ok(Either::B(p.evaluate_with_arg(json)))
+                if let ValueOrExpression::Value(Value::Json(json)) = &first {
+                    Ok(Either::B(Pad::evaluate_with_arg(
+                        &third, second, start, json,
+                    )))
                 } else {
+                    let p = Pad {
+                        start,
+                        arg: first,
+                        min_length: second,
+                        padding: third,
+                    };
                     Ok(Either::A(p))
                 }
             }
@@ -723,13 +751,17 @@ impl Pad {
         }
     }
 
-    fn evaluate_with_arg(&self, d: &json::Value) -> json::Value {
+    fn evaluate_with_arg(
+        pad_str: &str,
+        min_length: usize,
+        start: bool,
+        d: &json::Value,
+    ) -> json::Value {
         let string_to_pad = json_value_to_string(&d);
-        let pad_str = self.padding.as_str();
         let str_len = string_to_pad.graphemes(true).count();
-        let diff = self.min_length.saturating_sub(str_len);
+        let diff = min_length.saturating_sub(str_len);
         let mut pad_str: String = pad_str.graphemes(true).cycle().take(diff).collect();
-        let output = if self.start {
+        let output = if start {
             pad_str.push_str(&string_to_pad);
             pad_str
         } else {
@@ -741,7 +773,9 @@ impl Pad {
     }
 
     pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(|d| self.evaluate_with_arg(&*d))
+        self.arg
+            .evaluate(d)
+            .map(|d| Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
@@ -751,17 +785,23 @@ impl Pad {
         Ok(iter::once(self.evaluate(d)?))
     }
 
-    pub(super) fn evaluate_as_future(
-        self: Arc<Self>,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        self.arg
-            .evaluate_as_future(providers)
-            .map(move |(d, returns)| (self.evaluate_with_arg(&d), returns))
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let padding = self.padding;
+        let min_length = self.min_length;
+        let start = self.start;
+        self.arg.into_stream(providers).map(move |(d, returns)| {
+            (
+                Pad::evaluate_with_arg(&padding, min_length, start, &d),
+                returns,
+            )
+        })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Random {
     Integer(Uniform<u64>),
     Float(Uniform<f64>),
@@ -800,10 +840,10 @@ impl Random {
         iter::once(self.evaluate())
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        future::ok((self.evaluate(), Vec::new()))
+    pub(super) fn into_stream(
+        self,
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        stream::iter_ok(iter::repeat_with(move || (self.evaluate(), Vec::new())))
     }
 }
 
@@ -837,7 +877,7 @@ impl ReversibleRange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) enum Range {
     Args(ValueOrExpression, ValueOrExpression),
     Range(ReversibleRange),
@@ -891,15 +931,15 @@ impl Range {
         Ok(r.into_iter())
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
+    pub(super) fn into_stream(
+        self,
         providers: &Arc<BTreeMap<String, providers::Kind>>,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             Range::Args(first, second) => {
                 let a = first
-                    .evaluate_as_future(providers)
-                    .join(second.evaluate_as_future(providers))
+                    .into_stream(providers)
+                    .zip(second.into_stream(providers))
                     .and_then(|((first, mut returns), (second, returns2))| {
                         let first = first
                             .as_u64()
@@ -917,13 +957,13 @@ impl Range {
             }
             Range::Range(..) => {
                 let r = self.evaluate(&json::Value::Null).map(|v| (v, Vec::new()));
-                Either::B(future::result(r))
+                Either::B(stream::iter_result(iter::repeat(r)))
             }
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Repeat {
     min: u64,
     random: Option<Uniform<u64>>,
@@ -962,10 +1002,10 @@ impl Repeat {
         iter::repeat(json::Value::Null).take(n as usize)
     }
 
-    pub(super) fn evaluate_as_future(
-        &self,
-    ) -> impl Future<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        future::ok((self.evaluate(), Vec::new()))
+    pub(super) fn into_stream(
+        self,
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        stream::repeat((self.evaluate(), Vec::new()))
     }
 }
 
@@ -1012,10 +1052,13 @@ mod tests {
 
     impl From<&str> for ValueOrExpression {
         fn from(s: &str) -> Self {
-            ValueOrExpression::Value(Value::Path(Path {
-                start: PathStart::Ident(s.into()),
-                rest: vec![],
-            }))
+            ValueOrExpression::Value(Value::Path(
+                Path {
+                    start: PathStart::Ident(s.into()),
+                    rest: vec![],
+                }
+                .into(),
+            ))
         }
     }
 
@@ -1052,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_eval_future() {
+    fn collect_into_stream() {
         // constructor args, expect, range
         let checks = vec![
             (vec!["a".into(), j!(3).into()], j!([45, 45, 45]), None),
@@ -1062,7 +1105,6 @@ mod tests {
                 Some((1, 3)),
             ),
         ];
-
         current_thread::run(lazy(move || {
             let (tx, rx) = oneshot::channel::<()>();
             let test_end = rx.shared();
@@ -1071,13 +1113,13 @@ mod tests {
                 "a".to_string() => literals(vec!(j!(45)), None, test_end)
             );
 
-            let providers = providers.into();
-
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right, range)| {
                     let c = Collect::new(args).unwrap();
-                    c.evaluate_as_future(&providers).map(move |(left, _)| {
+                    c.into_stream(&providers).into_future().map(move |(v, _)| {
+                        let (left, _) = v.unwrap();
                         if let Some((min, max)) = range {
                             if let json::Value::Array(v) = left {
                                 let len = v.len();
@@ -1196,7 +1238,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_eval_future() {
+    fn encode_into_stream() {
         // constructor args, expect
         let checks = vec![
             (
@@ -1228,14 +1270,15 @@ mod tests {
                 "d".to_string() => literals(vec!(j!("asd jkl|")), None, test_end),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
 
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match Encode::new(args).unwrap() {
                     Either::A(e) => e
-                        .evaluate_as_future(&providers)
-                        .map(move |(left, _)| assert_eq!(left, right)),
+                        .into_stream(&providers)
+                        .into_future()
+                        .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
@@ -1302,7 +1345,7 @@ mod tests {
     }
 
     #[test]
-    fn epoch_eval_future() {
+    fn epoch_into_stream() {
         // constructor args
         let checks = vec![j!("s"), j!("ms"), j!("mu"), j!("ns")];
 
@@ -1311,7 +1354,8 @@ mod tests {
                 .into_iter()
                 .map(|arg| {
                     let e = Epoch::new(vec![arg.into()]).unwrap();
-                    e.evaluate_as_future().map(move |(left, _)| {
+                    e.into_stream().into_future().map(move |(v, _)| {
+                        let (left, _) = v.unwrap();
                         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                         let (allowable_dif, right) = match e {
                             Epoch::Seconds => (1, u128::from(epoch.as_secs())),
@@ -1377,7 +1421,7 @@ mod tests {
     }
 
     #[test]
-    fn if_eval_future() {
+    fn if_into_stream() {
         // constructor args, expect
         let checks = vec![
             (vec!["a".into(), j!(1).into(), j!(2).into()], j!(1)),
@@ -1393,14 +1437,15 @@ mod tests {
                 "b".to_string() => literals(vec!(j!(false)), None, test_end.clone()),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
 
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match If::new(args).unwrap() {
-                    Either::A(e) => Arc::new(e)
-                        .evaluate_as_future(&providers)
-                        .map(move |(left, _)| assert_eq!(left, right)),
+                    Either::A(e) => e
+                        .into_stream(&providers)
+                        .into_future()
+                        .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
@@ -1488,7 +1533,7 @@ mod tests {
     }
 
     #[test]
-    fn join_eval_future() {
+    fn join_into_stream() {
         // constructor args, eval_arg, expect
         let checks = vec![
             (vec!["a".into(), j!("-").into()], j!("foo-bar-baz")),
@@ -1506,17 +1551,13 @@ mod tests {
                 "c".to_string() => literals(vec!(j!(["foo", null, "baz"])), None, test_end),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match Join::new(args).unwrap() {
-                    Either::A(j) => {
-                        Arc::new(j)
-                            .evaluate_as_future(&providers)
-                            .map(move |(left, _)| {
-                                assert_eq!(left, right);
-                            })
-                    }
+                    Either::A(j) => j.into_stream(&providers).into_future().map(move |(v, _)| {
+                        assert_eq!(v.unwrap().0, right);
+                    }),
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
@@ -1611,7 +1652,7 @@ mod tests {
     }
 
     #[test]
-    fn json_path_eval_future() {
+    fn json_path_into_stream() {
         // constructor args, expect response, expect providers
         let checks = vec![
             (j!("a.b.c"), j!([1]), btreeset!["a".to_string()]),
@@ -1627,7 +1668,7 @@ mod tests {
                 "c".to_string() => literals(vec!(j!({ "b": [{ "id": 0 }, { "id": 1 }] })), None, test_end),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(arg, right, providers_expect)| {
@@ -1638,11 +1679,9 @@ mod tests {
                     {
                         Either::A(j) => {
                             assert_eq!(providers2, providers_expect);
-                            Arc::new(j)
-                                .evaluate_as_future(&providers)
-                                .map(move |(left, _)| {
-                                    assert_eq!(left, right);
-                                })
+                            j.into_stream(&providers).into_future().map(move |(v, _)| {
+                                assert_eq!(v.unwrap().0, right);
+                            })
                         }
                         Either::B(_) => unreachable!(),
                     }
@@ -1723,7 +1762,7 @@ mod tests {
     }
 
     #[test]
-    fn match_eval_future() {
+    fn match_into_stream() {
         // constructor args, expect
         let checks = vec![
             (
@@ -1744,16 +1783,14 @@ mod tests {
                 "foo".to_string() => literals(vec!(j!("bar")), None, test_end.clone()),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match Match::new(args) {
                     Ok(Either::A(m)) => {
-                        Arc::new(m)
-                            .evaluate_as_future(&providers)
-                            .map(move |(left, _)| {
-                                assert_eq!(left, right);
-                            })
+                        m.into_stream(&providers).into_future().map(move |(v, _)| {
+                            assert_eq!(v.unwrap().0, right);
+                        })
                     }
                     _ => unreachable!(),
                 })
@@ -1849,7 +1886,7 @@ mod tests {
     }
 
     #[test]
-    fn min_max_eval_future() {
+    fn min_max_into_stream() {
         // min, constructor args, expect
         let checks = vec![
             (true, vec!["a".into(), j!(9).into(), "b".into()], j!(0.0)),
@@ -1865,14 +1902,13 @@ mod tests {
                 "b".to_string() => literals(vec!(j!(10)), None, test_end.clone()),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(min, args, right)| {
                     if let Either::A(m) = MinMax::new(min, args).unwrap() {
-                        let m = Arc::new(m);
-                        m.evaluate_as_future(&providers).map(move |(left, _)| {
-                            assert_eq!(left, right);
+                        m.into_stream(&providers).into_future().map(move |(v, _)| {
+                            assert_eq!(v.unwrap().0, right);
                         })
                     } else {
                         unreachable!()
@@ -1993,7 +2029,7 @@ mod tests {
     }
 
     #[test]
-    fn pad_eval_future() {
+    fn pad_into_stream() {
         // start_pad, constructor args, expect
         let checks = vec![
             (
@@ -2026,17 +2062,15 @@ mod tests {
                 "a".to_string() => literals(vec!(j!("a")), None, test_end.clone()),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(
                     |(start, args, right)| match Pad::new(start, args).unwrap() {
                         Either::A(p) => {
-                            Arc::new(p)
-                                .evaluate_as_future(&providers)
-                                .map(move |(left, _)| {
-                                    assert_eq!(left, right);
-                                })
+                            p.into_stream(&providers).into_future().map(move |(v, _)| {
+                                assert_eq!(v.unwrap().0, right);
+                            })
                         }
                         _ => unreachable!(),
                     },
@@ -2081,7 +2115,7 @@ mod tests {
     }
 
     #[test]
-    fn random_eval_future() {
+    fn random_into_stream() {
         let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
 
         current_thread::run(lazy(move || {
@@ -2089,7 +2123,8 @@ mod tests {
                 .into_iter()
                 .map(move |(first, second)| {
                     let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
-                    r.evaluate_as_future().map(move |(left, _)| {
+                    r.into_stream().into_future().map(move |(v, _)| {
+                        let (left, _) = v.unwrap();
                         if first.is_u64() && second.is_u64() {
                             let left = left.as_u64().unwrap();
                             let check =
@@ -2150,7 +2185,7 @@ mod tests {
     }
 
     #[test]
-    fn range_eval_future() {
+    fn range_into_stream() {
         // constructor args, expect
         let checks = vec![
             (vec![j!(5).into(), j!(1).into()], j!([5, 4, 3, 2])),
@@ -2168,13 +2203,13 @@ mod tests {
                 "b".to_string() => literals(vec!(j!(5)), None, test_end.clone()),
             );
 
-            let providers = providers.into();
+            let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(move |(args, right)| {
                     let r = Range::new(args).unwrap();
-                    r.evaluate_as_future(&providers).map(move |(left, _)| {
-                        assert_eq!(left, right);
+                    r.into_stream(&providers).into_future().map(move |(v, _)| {
+                        assert_eq!(v.unwrap().0, right);
                     })
                 })
                 .collect();
@@ -2229,7 +2264,7 @@ mod tests {
     }
 
     #[test]
-    fn repeat_eval_future() {
+    fn repeat_into_stream() {
         // constructor args, count
         let checks = vec![
             (vec![j!(5).into()], Either::A(5)),
@@ -2241,7 +2276,8 @@ mod tests {
                 .into_iter()
                 .map(|(args, count)| {
                     let r = Repeat::new(args).unwrap();
-                    r.evaluate_as_future().map(move |(v, _)| {
+                    r.into_stream().into_future().map(move |(v, _)| {
+                        let (v, _) = v.unwrap();
                         let v = if let json::Value::Array(v) = v {
                             v
                         } else {

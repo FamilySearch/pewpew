@@ -36,7 +36,13 @@ pub struct LoadTest {
     // channel to send stats related data
     stats_tx: request::StatsTx,
     // channel to kill the test
-    test_killer: FCSender<Result<(), TestError>>,
+    test_killer: FCSender<Result<TestEndReason, TestError>>,
+}
+
+#[derive(Copy, Clone)]
+pub enum TestEndReason {
+    TimesUp,
+    ProviderEnded,
 }
 
 type Builders = Vec<(
@@ -44,9 +50,10 @@ type Builders = Vec<(
     Result<request::Builder, TestError>,
     Option<BTreeSet<String>>,
 )>;
+
 type TestEndedChannel = (
-    FCSender<Result<(), TestError>>,
-    FCReceiver<Result<(), TestError>>,
+    FCSender<Result<TestEndReason, TestError>>,
+    FCReceiver<Result<TestEndReason, TestError>>,
 );
 
 impl LoadTest {
@@ -86,17 +93,9 @@ impl LoadTest {
                             limit.store(auto_size, Ordering::Relaxed);
                         }
                     }
-                    providers::file(
-                        template,
-                        test_ended_rx,
-                        test_ended_tx.clone(),
-                        &config_path,
-                        name.clone(),
-                    )?
+                    providers::file(template, test_ended_rx, test_ended_tx.clone(), &config_path)?
                 }
-                config::Provider::Range(range) => {
-                    providers::range(range, test_ended_rx, test_ended_tx.clone(), name.clone())
-                }
+                config::Provider::Range(range) => providers::range(range, test_ended_rx),
                 config::Provider::Response(mut template) => {
                     if is_try_run {
                         template.buffer = channel::Limit::Integer(1);
@@ -373,9 +372,12 @@ impl LoadTest {
                         r.map(
                             move |e| -> Box<dyn Future<Item = (), Error = TestError> + Send> {
                                 Box::new(e.0.into_future().and_then(|_| {
-                                    test_ended_tx.send(Ok(())).map(|_| ()).map_err(|_| {
-                                        TestError::Internal("Sending test ended signal".into())
-                                    })
+                                    test_ended_tx
+                                        .send(Ok(TestEndReason::TimesUp))
+                                        .map(|_| ())
+                                        .map_err(|_| {
+                                            TestError::Internal("Sending test ended signal".into())
+                                        })
                                 }))
                             },
                         )
@@ -405,20 +407,20 @@ impl LoadTest {
         let test_ended_tx2 = test_ended_tx.clone();
         let endpoint_calls: EndpointCalls = Box::new(
             join_all(endpoint_calls)
-                .map(|_r| ())
+                .map(|_| TestEndReason::ProviderEnded)
                 .select(lazy(move || {
                     let test_end = Instant::now() + duration;
                     poll_fn(
                         move || match (test_ended_rx.poll(), Instant::now() >= test_end) {
                             (Ok(Async::NotReady), false) => Ok(Async::NotReady),
                             (Ok(Async::Ready(_)), _) | (Ok(Async::NotReady), true) => {
-                                Ok(Async::Ready(()))
+                                Ok(Async::Ready(TestEndReason::TimesUp))
                             }
                             (Err(e), _) => Err((&*e).clone()),
                         },
                     )
                 }))
-                .map(|_| ())
+                .map(|r| r.0)
                 .map_err(|e| e.0)
                 .then(move |r| test_ended_tx2.send(r).then(|_| Ok(()))),
         );

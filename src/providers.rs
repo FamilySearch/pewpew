@@ -7,6 +7,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 use crate::channel::{self, Limit};
 use crate::config;
 use crate::error::TestError;
+use crate::load_test::TestEndReason;
 use crate::util::{json_value_into_string, tweak_path, Either3};
 
 use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
@@ -27,9 +28,8 @@ pub struct Provider<T> {
 pub fn file<F>(
     mut template: config::FileProvider,
     test_complete: Shared<F>,
-    test_killer: FCSender<Result<(), TestError>>,
+    test_killer: FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
-    name: String,
 ) -> Result<Kind, TestError>
 where
     F: Future + Send + 'static,
@@ -77,11 +77,6 @@ where
                 .send(v)
                 .map(|_| ())
                 .map_err(|_| TestError::Internal("Could not send from file provider".into()))
-        })
-        .and_then(move |_| {
-            test_killer
-                .send(Err(TestError::ProviderEnded(name)))
-                .then(|_| Ok(()))
         })
         .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok(())))
         .map(|_| ())
@@ -158,12 +153,7 @@ where
     }
 }
 
-pub fn range<F>(
-    range: config::RangeProvider,
-    test_complete: Shared<F>,
-    test_killer: FCSender<Result<(), TestError>>,
-    name: String,
-) -> Kind
+pub fn range<F>(range: config::RangeProvider, test_complete: Shared<F>) -> Kind
 where
     F: Future + Send + 'static,
     <F as Future>::Error: Send + Sync,
@@ -173,7 +163,6 @@ where
     let prime_tx = stream::iter_ok::<_, ()>(range.0.map(json::Value::from))
         .forward(tx.clone())
         // Error propagate here when sender channel closes at test conclusion
-        .then(move |_| test_killer.send(Err(TestError::ProviderEnded(name))))
         .then(|_| Ok(()))
         .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
@@ -188,7 +177,7 @@ where
 pub fn logger<F>(
     mut template: config::Logger,
     test_complete: F,
-    test_killer: FCSender<Result<(), TestError>>,
+    test_killer: FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
 ) -> channel::Sender<json::Value>
 where

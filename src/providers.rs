@@ -188,23 +188,33 @@ where
     let pretty = template.pretty;
     let kill = template.kill;
     let mut counter = 0;
+    let mut keep_logging = true;
     match template.to.as_str() {
         "stderr" => {
             let logger = rx
                 .for_each(move |v| {
                     counter += 1;
-                    if pretty && !v.is_string() {
-                        eprintln!("{:#}", v);
-                    } else {
-                        eprintln!("{}", json_value_into_string(v));
+                    if keep_logging {
+                        if pretty && !v.is_string() {
+                            eprintln!("{:#}", v);
+                        } else {
+                            eprintln!("{}", json_value_into_string(v));
+                        }
                     }
                     match limit {
-                        Some(limit) if kill && counter >= limit => Either3::B(
-                            test_killer
-                                .clone()
-                                .send(Err(TestError::KilledByLogger))
-                                .then(|_| Ok(())),
-                        ),
+                        Some(limit) if counter >= limit => {
+                            if kill {
+                                Either3::B(
+                                    test_killer
+                                        .clone()
+                                        .send(Err(TestError::KilledByLogger))
+                                        .then(|_| Ok(())),
+                                )
+                            } else {
+                                keep_logging = false;
+                                Either3::A(Ok(()).into_future())
+                            }
+                        }
                         None if kill => Either3::C(
                             test_killer
                                 .clone()
@@ -222,18 +232,27 @@ where
             let logger = rx
                 .for_each(move |v| {
                     counter += 1;
-                    if pretty && !v.is_string() {
-                        println!("{:#}", v);
-                    } else {
-                        println!("{}", json_value_into_string(v));
+                    if keep_logging {
+                        if pretty && !v.is_string() {
+                            println!("{:#}", v);
+                        } else {
+                            println!("{}", json_value_into_string(v));
+                        }
                     }
                     match limit {
-                        Some(limit) if kill && counter >= limit => Either3::B(
-                            test_killer
-                                .clone()
-                                .send(Err(TestError::KilledByLogger))
-                                .then(|_| Ok(())),
-                        ),
+                        Some(limit) if counter >= limit => {
+                            if kill {
+                                Either3::B(
+                                    test_killer
+                                        .clone()
+                                        .send(Err(TestError::KilledByLogger))
+                                        .then(|_| Ok(())),
+                                )
+                            } else {
+                                keep_logging = false;
+                                Either3::A(Ok(()).into_future())
+                            }
+                        }
                         None if kill => Either3::C(
                             test_killer
                                 .clone()
@@ -265,10 +284,14 @@ where
                     .for_each(move |v| {
                         let file_name = file_name.clone();
                         counter += 1;
-                        let result = if pretty {
-                            writeln!(file, "{:#}", v)
+                        let result = if keep_logging {
+                            if pretty {
+                                writeln!(file, "{:#}", v)
+                            } else {
+                                writeln!(file, "{}", v)
+                            }
                         } else {
-                            writeln!(file, "{}", v)
+                            Ok(())
                         };
                         let result = result.into_future().map_err(move |e| {
                             TestError::Other(
@@ -276,17 +299,24 @@ where
                             )
                         });
                         match limit {
-                            Some(limit) if kill && counter >= limit => Either3::B(
-                                test_killer
-                                    .clone()
-                                    .send(Err(TestError::KilledByLogger))
-                                    .then(|_| Ok::<_, TestError>(())),
-                            ),
+                            Some(limit) if counter >= limit => {
+                                if kill {
+                                    Either3::B(
+                                        test_killer
+                                            .clone()
+                                            .send(Err(TestError::KilledByLogger))
+                                            .then(|_| Ok(())),
+                                    )
+                                } else {
+                                    keep_logging = false;
+                                    Either3::A(result)
+                                }
+                            },
                             None if kill => Either3::C(
                                 test_killer
                                     .clone()
                                     .send(Err(TestError::KilledByLogger))
-                                    .then(|_| Ok::<_, TestError>(())),
+                                    .then(|_| Ok(())),
                             ),
                             _ => Either3::A(result),
                         }

@@ -84,7 +84,6 @@ impl LoadTest {
         let config_config = config.config;
         let auto_size = config_config.general.auto_buffer_start_size;
         for (name, template) in config.providers {
-            let test_ended_rx = test_ended_rx.clone();
             let provider = match template {
                 config::Provider::File(template) => {
                     // the auto_buffer_start_size is not the default
@@ -93,9 +92,9 @@ impl LoadTest {
                             limit.store(auto_size, Ordering::Relaxed);
                         }
                     }
-                    providers::file(template, test_ended_rx, test_ended_tx.clone(), &config_path)?
+                    providers::file(template, test_ended_tx.clone(), &config_path)?
                 }
-                config::Provider::Range(range) => providers::range(range, test_ended_rx),
+                config::Provider::Range(range) => providers::range(range),
                 config::Provider::Response(mut template) => {
                     if is_try_run {
                         template.buffer = channel::Limit::Integer(1);
@@ -112,9 +111,7 @@ impl LoadTest {
                     static_providers.insert(name, value);
                     continue;
                 }
-                config::Provider::StaticList(values) => {
-                    providers::literals(values, None, test_ended_rx)
-                }
+                config::Provider::StaticList(values) => providers::literals(values, None),
             };
             providers.insert(name, provider);
         }
@@ -127,13 +124,12 @@ impl LoadTest {
                           ========================================\n\
                           ${request['start-line']}\n\
                           ${join(request.headers, '\n', ': ')}\n\
-                          ${if(request.body != '', '\n${request.body}', '')}\n\
-                          \n\
+                          ${if(request.body != '', '\n${request.body}\n', '')}\n\
                           Response (RTT: ${stats.rtt}ms)\n\
                           ========================================\n\
                           ${response['start-line']}\n\
                           ${join(response.headers, '\n', ': ')}\n\
-                          ${if(response.body != '', '\n${response.body}', '')}\n`";
+                          ${if(response.body != '', '\n${response.body}', '')}\n\n`";
             let logger = json::json!({
                 "select": select,
                 "to": "stdout",
@@ -149,17 +145,11 @@ impl LoadTest {
             .loggers
             .into_iter()
             .map(|(name, mut template)| {
-                let test_ended_rx = test_ended_rx.clone();
                 let select = template.select.take().map(eppp_to_select).transpose()?;
                 Ok::<_, TestError>((
                     name,
                     (
-                        providers::logger(
-                            template,
-                            test_ended_rx,
-                            test_ended_tx.clone(),
-                            &config_path,
-                        ),
+                        providers::logger(template, test_ended_tx.clone(), &config_path),
                         select,
                     ),
                 ))
@@ -240,15 +230,21 @@ impl LoadTest {
                 Ok(l) => l,
                 Err(e) => return (alias, Err(e), provides_set)
             };
+            let on_demand = if is_try_run {
+                true
+            } else {
+                endpoint.on_demand
+            };
             let builder = request::Builder::new(endpoint.url, mod_interval)
-                .declare(endpoint.declare)
                 .body(endpoint.body)
-                .stats_id(endpoint.stats_id)
+                .declare(endpoint.declare)
+                .headers(headers)
+                .logs(logs)
                 .max_parallel_requests(endpoint.max_parallel_requests)
                 .method(endpoint.method)
-                .headers(headers)
+                .on_demand(on_demand)
                 .provides(provides)
-                .logs(logs);
+                .stats_id(endpoint.stats_id);
             (
                 alias,
                 Ok(builder),
@@ -292,7 +288,6 @@ impl LoadTest {
             providers,
             static_providers,
             stats_tx: stats_tx.clone(),
-            test_ended: test_ended_rx.clone(),
         };
 
         let endpoint_calls = match try_run {
@@ -405,11 +400,17 @@ impl LoadTest {
         };
 
         let test_ended_tx2 = test_ended_tx.clone();
+        let test_end = Instant::now() + duration;
         let endpoint_calls: EndpointCalls = Box::new(
             join_all(endpoint_calls)
-                .map(|_| TestEndReason::ProviderEnded)
+                .map(move |_| {
+                    if Instant::now() >= test_end {
+                        TestEndReason::TimesUp
+                    } else {
+                        TestEndReason::ProviderEnded
+                    }
+                })
                 .select(lazy(move || {
-                    let test_end = Instant::now() + duration;
                     poll_fn(
                         move || match (test_ended_rx.poll(), Instant::now() >= test_end) {
                             (Ok(Async::NotReady), false) => Ok(Async::NotReady),
@@ -446,19 +447,14 @@ impl LoadTest {
     }
 }
 
-type Endpoints<F> = BTreeMap<String, Result<(request::Endpoint<F>, Vec<String>), TestError>>;
+type Endpoints = BTreeMap<String, Result<(request::Endpoint, Vec<String>), TestError>>;
 
-fn calc_endpoint_score<F>(
+fn calc_endpoint_score(
     required_request_providers: &[String],
     dont_visit: BTreeSet<&str>,
     request_providers: &BTreeMap<String, Vec<String>>,
-    endpoints: &Endpoints<F>,
-) -> Result<usize, TestError>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+    endpoints: &Endpoints,
+) -> Result<usize, TestError> {
     let mut score = 0;
     for rrp in required_request_providers {
         let endpoint_providers = request_providers
@@ -508,18 +504,13 @@ where
     Ok(score)
 }
 
-fn get_test_endpoints<F>(
+fn get_test_endpoints(
     target_endpoint: String,
     test_endpoints: &mut BTreeSet<String>,
     request_providers: &BTreeMap<String, Vec<String>>,
     endpoint_scores: &BTreeMap<&String, Result<usize, TestError>>,
-    endpoints: &Endpoints<F>,
-) -> Result<(), TestError>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+    endpoints: &Endpoints,
+) -> Result<(), TestError> {
     if test_endpoints.contains(&target_endpoint) {
         return Ok(());
     }

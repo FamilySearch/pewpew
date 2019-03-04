@@ -19,6 +19,7 @@ Changes:
 - Make some errors which may occur during a test run just print warnings.
 - Add `log_provider_stats` config option to log statistics about providers.
 - Add in ability to specify a file as the request body.
+- Add `on_demand` endpoint option.
 
 ### v0.4.7
 Bug fixes:

@@ -1,9 +1,4 @@
-use futures::{
-    future::{join_all, Shared},
-    stream,
-    sync::mpsc as futures_channel,
-    Sink, Stream,
-};
+use futures::{future::join_all, stream, sync::mpsc as futures_channel, Sink, Stream};
 use hyper::{
     body::Payload,
     client::HttpConnector,
@@ -18,12 +13,13 @@ use tokio::{prelude::*, timer::Timeout};
 use crate::body_reader;
 use crate::channel;
 use crate::config::{
-    self, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
+    self, AutoReturn, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 use crate::error::{RecoverableError, TestError};
 use crate::for_each_parallel::ForEachParallel;
 use crate::providers;
+use crate::select_any::select_any;
 use crate::stats;
 use crate::util::{tweak_path, Either, Either3};
 use crate::zip_all::zip_all;
@@ -79,24 +75,24 @@ impl From<json::Value> for TemplateValues {
 }
 
 struct Outgoing {
+    cb: Option<Arc<Fn() + Send + Sync + 'static>>,
     select: Select,
     tx: channel::Sender<json::Value>,
 }
 
 impl Outgoing {
-    fn new(select: Select, tx: channel::Sender<json::Value>) -> Self {
-        Outgoing { select, tx }
+    fn new(
+        select: Select,
+        tx: channel::Sender<json::Value>,
+        cb: Option<Arc<Fn() + Send + Sync + 'static>>,
+    ) -> Self {
+        Outgoing { cb, select, tx }
     }
 }
 
 type StartStream = Box<dyn Stream<Item = Instant, Error = TestError> + Send>;
 
-pub struct BuilderContext<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+pub struct BuilderContext {
     pub config: config::Config,
     pub config_path: PathBuf,
     // the http client
@@ -108,12 +104,11 @@ where
     // a mapping of names to their prospective static (single value) providers
     pub static_providers: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
-    pub providers: Arc<BTreeMap<String, providers::Kind>>,
+    pub providers: Arc<BTreeMap<String, providers::Provider>>,
     // a mapping of names to their prospective loggers
     pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: StatsTx,
-    pub test_ended: Shared<F>,
 }
 
 pub struct Builder {
@@ -123,8 +118,9 @@ pub struct Builder {
     logs: Vec<(String, Select)>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
-    start_stream: Option<StartStream>,
+    on_demand: bool,
     provides: Vec<(String, Select)>,
+    start_stream: Option<StartStream>,
     stats_id: Option<BTreeMap<String, String>>,
     url: String,
 }
@@ -138,6 +134,7 @@ impl Builder {
             logs: Vec::new(),
             max_parallel_requests: None,
             method: Method::GET,
+            on_demand: false,
             start_stream,
             provides: Vec::new(),
             stats_id: None,
@@ -170,6 +167,11 @@ impl Builder {
         self
     }
 
+    pub fn on_demand(mut self, on_demand: bool) -> Self {
+        self.on_demand = on_demand;
+        self
+    }
+
     pub fn headers(mut self, mut headers: Vec<(String, String)>) -> Self {
         self.headers.append(&mut headers);
         self
@@ -185,19 +187,14 @@ impl Builder {
         self
     }
 
-    pub fn build<F>(
+    pub fn build(
         self,
-        ctx: &mut BuilderContext<F>,
+        ctx: &mut BuilderContext,
         endpoint_id: usize,
-    ) -> Result<Endpoint<F>, TestError>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Error: Send + Sync,
-        <F as Future>::Item: Send + Sync,
-    {
+    ) -> Result<Endpoint, TestError> {
         let mut streams = Vec::new();
         if let Some(start_stream) = self.start_stream {
-            streams.push(Either3::A(start_stream.map(StreamItem::Instant)));
+            streams.push(Either3::A(start_stream.map(|_| StreamItem::None)));
         };
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
         let url = Template::new(&self.url, &ctx.static_providers)?;
@@ -215,6 +212,7 @@ impl Builder {
         let mut precheck_rr_providers = 0;
         let mut rr_providers = 0;
         let mut outgoing = Vec::new();
+        let mut on_demand_streams = Vec::new();
         for (k, v) in self.provides {
             let provider = ctx
                 .providers
@@ -227,7 +225,14 @@ impl Builder {
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
-            outgoing.push(Outgoing::new(v, tx));
+            let cb = if self.on_demand {
+                let (stream, cb) = provider.on_demand.clone().into_stream();
+                on_demand_streams.push(stream);
+                Some(cb)
+            } else {
+                None
+            };
+            outgoing.push(Outgoing::new(v, tx, cb));
         }
         for (k, v) in self.logs {
             let (tx, _) = ctx
@@ -237,14 +242,14 @@ impl Builder {
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
-            outgoing.push(Outgoing::new(v, tx.clone()));
+            outgoing.push(Outgoing::new(v, tx.clone(), None));
         }
         outgoing.extend(ctx.loggers.values().filter_map(|(tx, select)| {
             if let Some(select) = select {
                 required_providers.extend(select.get_providers().clone());
                 rr_providers |= select.get_special_providers();
                 precheck_rr_providers |= select.get_where_clause_special_providers();
-                Some(Outgoing::new(select.clone(), tx.clone()))
+                Some(Outgoing::new(select.clone(), tx.clone(), None))
             } else {
                 None
             }
@@ -297,7 +302,7 @@ impl Builder {
                 Stream::map(receiver, move |v| {
                     let ar = ar
                         .clone()
-                        .map(|(send_option, tx)| (send_option, tx, vec![v.clone()]));
+                        .map(|(send_option, tx)| AutoReturn::new(send_option, tx, vec![v.clone()]));
                     StreamItem::TemplateValue(name.clone(), v, ar)
                 })
                 .map_err(|_| TestError::Internal("Unexpected error from receiver".into())),
@@ -319,8 +324,38 @@ impl Builder {
         }
         stats_id.insert("url".into(), url.evaluate_with_star());
         stats_id.insert("method".into(), method.to_string());
-        let stream = Box::new(zip_all(streams));
-        // using existential types here to avoid the box causes ICE https://github.com/rust-lang/rust/issues/54899
+        // using existential types here to avoid the boxed stream causes ICE https://github.com/rust-lang/rust/issues/54899
+        let stream: EndpointStream = if !on_demand_streams.is_empty() {
+            let mut on_demand_streams = select_any(on_demand_streams);
+            let mut zipped_streams = zip_all(streams);
+            let mut od_continue = false;
+            let stream = stream::poll_fn(move || {
+                let p = on_demand_streams.poll();
+                if !od_continue {
+                    match p {
+                        Ok(Async::Ready(Some(_))) => od_continue = true,
+                        Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+                        Ok(Async::NotReady) => return Ok(Async::NotReady),
+                        Err(_) => {
+                            return Err(TestError::Internal(
+                                "on demand streams should never error".into(),
+                            ));
+                        }
+                    }
+                }
+                let p = zipped_streams.poll();
+                match p {
+                    Ok(Async::NotReady) => (),
+                    _ => {
+                        od_continue = false;
+                    }
+                }
+                p
+            });
+            Box::new(stream)
+        } else {
+            Box::new(zip_all(streams))
+        };
         let timeout = ctx.config.client.request_timeout;
         Ok(Endpoint {
             body,
@@ -338,21 +373,14 @@ impl Builder {
             stats_tx,
             stream,
             url,
-            test_ended: ctx.test_ended.clone(),
             timeout,
         })
     }
 }
 
-// enum ProviderResponse {
-//     Channel(channel::Receiver<Vec<u8>>),
-//     Value(json::Value),
-// }
-
 enum StreamItem {
-    // Body(ProviderResponse),
     Declare(String, json::Value, Vec<config::AutoReturn>),
-    Instant(Instant),
+    None,
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
@@ -381,12 +409,7 @@ impl BodyTemplate {
 type EndpointStream = Box<dyn Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
-pub struct Endpoint<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+pub struct Endpoint {
     body: Option<BodyTemplate>,
     client: Arc<
         Client<
@@ -405,18 +428,12 @@ where
     stats_id: BTreeMap<String, String>,
     stats_tx: StatsTx,
     stream: EndpointStream,
-    test_ended: Shared<F>,
     timeout: Duration,
     url: Template,
 }
 
 // This returns a boxed future because otherwise the type system runs out of memory for the type
-impl<F> Endpoint<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+impl Endpoint {
     pub fn into_future(self) -> Box<dyn Future<Item = (), Error = TestError> + Send> {
         Box::new(
             self.stats_tx
@@ -440,7 +457,6 @@ where
                         client: self.client,
                         stats_tx: self.stats_tx,
                         outgoing: self.outgoing,
-                        test_ended: self.test_ended,
                         precheck_rr_providers: self.precheck_rr_providers,
                         endpoint_id: self.endpoint_id,
                         timeout: self.timeout,
@@ -456,12 +472,7 @@ where
     }
 }
 
-struct RequestMaker<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+struct RequestMaker {
     url: Template,
     method: Method,
     headers: BTreeMap<String, Template>,
@@ -474,18 +485,12 @@ where
     >,
     stats_tx: StatsTx,
     outgoing: Arc<Vec<Outgoing>>,
-    test_ended: Shared<F>,
     precheck_rr_providers: u16,
     endpoint_id: usize,
     timeout: Duration,
 }
 
-impl<F> RequestMaker<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+impl RequestMaker {
     fn send_requests(&self, values: Vec<StreamItem>) -> impl Future<Item = (), Error = TestError> {
         let mut template_values = TemplateValues::new();
         let mut auto_returns = Vec::new();
@@ -493,17 +498,22 @@ where
             match tv {
                 StreamItem::Declare(name, value, returns) => {
                     template_values.insert(name, value);
-                    auto_returns.extend(returns);
+                    auto_returns.extend(returns.into_iter().map(|ar| ar.into_future()));
                 }
+                StreamItem::None => (),
                 StreamItem::TemplateValue(name, value, auto_return) => {
                     template_values.insert(name, value);
                     if let Some(ar) = auto_return {
-                        auto_returns.push(ar);
+                        auto_returns.push(ar.into_future());
                     }
                 }
-                StreamItem::Instant(_) => (),
             };
         }
+        let auto_returns: Arc<_> =
+            Mutex::new(Some(join_all(auto_returns).map(|_| ()).map_err(|_| {
+                TestError::Internal("auto returns should never error".into())
+            })))
+            .into();
         let mut request = Request::builder();
         let url = match self.url.evaluate(&template_values.0) {
             Ok(u) => u,
@@ -649,11 +659,11 @@ where
         let stats_tx = self.stats_tx.clone();
         let stats_tx2 = stats_tx.clone();
         let outgoing = self.outgoing.clone();
-        let test_ended = self.test_ended.clone();
+        let outgoing2 = outgoing.clone();
         let timeout_in_micros = self.timeout.as_micros() as u64;
         let precheck_rr_providers = self.precheck_rr_providers;
         let endpoint_id = self.endpoint_id;
-        let auto_returns = handle_auto_returns(auto_returns, test_ended.clone());
+
         let auto_returns2 = auto_returns.clone();
         let a = Timeout::new(response_future, self.timeout)
             .map_err(move |err| {
@@ -685,7 +695,6 @@ where
                     outgoing,
                     now,
                     stats_tx,
-                    test_ended,
                     endpoint_id,
                 };
                 rh.handle(response, auto_returns)
@@ -700,6 +709,11 @@ where
                         RecoverableError::Timeout(_) => Some(timeout_in_micros),
                         _ => None,
                     };
+                    for o in outgoing2.iter() {
+                        if let Some(cb) = &o.cb {
+                            cb();
+                        }
+                    }
                     let a = stats_tx2
                         .send(
                             stats::ResponseStat {
@@ -727,27 +741,16 @@ where
     }
 }
 
-struct ResponseHandler<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+struct ResponseHandler {
     template_values: TemplateValues,
     precheck_rr_providers: u16,
     outgoing: Arc<Vec<Outgoing>>,
     now: Instant,
     stats_tx: StatsTx,
-    test_ended: Shared<F>,
     endpoint_id: usize,
 }
 
-impl<F> ResponseHandler<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+impl ResponseHandler {
     fn handle<F2>(
         self,
         response: hyper::Response<HyperBody>,
@@ -772,7 +775,9 @@ where
                 .expect("`response` in template_values should be an object"),
             &response,
         );
-        let included_outgoing_indexes: Result<Vec<_>, _> = self
+        // executing the where clause determine which of the provides and logs need
+        // to be executed
+        let included_outgoing_indexes: Result<BTreeSet<_>, _> = self
             .outgoing
             .iter()
             .enumerate()
@@ -860,7 +865,6 @@ where
         };
         let now = self.now;
         let outgoing = self.outgoing;
-        let test_ended = self.test_ended;
         let stats_tx = self.stats_tx;
         let endpoint_id = self.endpoint_id;
         let bh = BodyHandler {
@@ -868,7 +872,6 @@ where
             template_values,
             included_outgoing_indexes,
             outgoing,
-            test_ended,
             endpoint_id,
             stats_tx,
             status,
@@ -878,28 +881,17 @@ where
     }
 }
 
-struct BodyHandler<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+struct BodyHandler {
     now: Instant,
     template_values: TemplateValues,
-    included_outgoing_indexes: Vec<usize>,
+    included_outgoing_indexes: BTreeSet<usize>,
     outgoing: Arc<Vec<Outgoing>>,
-    test_ended: Shared<F>,
     endpoint_id: usize,
     stats_tx: StatsTx,
     status: u16,
 }
 
-impl<F> BodyHandler<F>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+impl BodyHandler {
     fn handle<F2>(
         self,
         result: Result<Option<json::Value>, RecoverableError>,
@@ -950,11 +942,13 @@ where
                         .expect("`response` in template_values should be an object")
                         .insert("body".into(), body);
                 }
-                for i in self.included_outgoing_indexes.iter() {
-                    let o = self
-                        .outgoing
-                        .get(*i)
-                        .expect("outgoing element at index should exist");
+                for (i, o) in self.outgoing.iter().enumerate() {
+                    if !self.included_outgoing_indexes.contains(&i) {
+                        if let Some(cb) = &o.cb {
+                            cb();
+                        }
+                        continue;
+                    }
                     let iter = match o.select.as_iter(template_values.as_json().clone()) {
                         Ok(v) => v,
                         Err(TestError::Recoverable(r)) => {
@@ -967,15 +961,21 @@ where
                     match o.select.get_send_behavior() {
                         EndpointProvidesSendOptions::Block => {
                             let tx = o.tx.clone();
+                            let cb = o.cb.clone();
                             let fut = stream::iter_result(iter)
-                                .for_each(move |v| {
-                                    tx.clone().send(v).map(|_| ()).map_err(|_| {
-                                        TestError::Internal("Could not send provides".into())
-                                    })
+                                .map_err(channel::ChannelClosed::wrapped)
+                                .forward(tx)
+                                .map(|_| ())
+                                .or_else(|e| match e.inner_cast::<TestError>() {
+                                    Some(e) => Err(*e),
+                                    None => Ok(()),
                                 })
-                                .select(self.test_ended.clone().then(|_| Ok(())))
-                                .map(|v| v.0)
-                                .map_err(|e| e.0);
+                                .then(|r| {
+                                    if let Some(cb) = cb {
+                                        cb()
+                                    }
+                                    r
+                                });
                             futures.push(Either3::A(fut));
                         }
                         EndpointProvidesSendOptions::Force => {
@@ -991,6 +991,9 @@ where
                                 };
                                 o.tx.force_send(v);
                             }
+                            if let Some(cb) = &o.cb {
+                                cb();
+                            }
                         }
                         EndpointProvidesSendOptions::IfNotFull => {
                             for v in iter {
@@ -1003,9 +1006,12 @@ where
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
                                 };
-                                if o.tx.try_send(v).is_err() {
+                                if !o.tx.try_send(v).is_success() {
                                     break;
                                 }
+                            }
+                            if let Some(cb) = &o.cb {
+                                cb();
                             }
                         }
                     }
@@ -1056,42 +1062,4 @@ fn handle_response_requirements(
         *response_fields_added |= RESPONSE_BODY;
         // the actual adding of the body happens later
     }
-}
-
-fn handle_auto_returns<F>(
-    auto_returns: Vec<config::AutoReturn>,
-    test_ended: Shared<F>,
-) -> Arc<Mutex<Option<impl Future<Item = (), Error = TestError>>>>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
-    let futures = auto_returns
-        .into_iter()
-        .filter_map(move |(send_option, channel, jsons)| match send_option {
-            EndpointProvidesSendOptions::Block => {
-                let fut = channel
-                    .send_all(stream::iter_ok(jsons))
-                    .map(|_| ())
-                    .map_err(|_e| TestError::Internal("Could not send auto_return".into()))
-                    .select(test_ended.clone().then(|_| Ok(())))
-                    .map(|v| v.0)
-                    .map_err(|e| e.0);
-                Some(fut)
-            }
-            EndpointProvidesSendOptions::Force => {
-                jsons.into_iter().for_each(|v| channel.force_send(v));
-                None
-            }
-            EndpointProvidesSendOptions::IfNotFull => {
-                for v in jsons {
-                    if channel.try_send(v).is_err() {
-                        break;
-                    }
-                }
-                None
-            }
-        });
-    Mutex::new(Some(join_all(futures).map(|_| ()))).into()
 }

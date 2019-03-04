@@ -1,3 +1,4 @@
+use crate::channel;
 use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
 use crate::load_test::TestEndReason;
@@ -558,7 +559,7 @@ where
 }
 
 fn create_provider_stats_printer(
-    providers: Arc<BTreeMap<String, providers::Kind>>,
+    providers: Arc<BTreeMap<String, providers::Provider>>,
     interval: Duration,
     now: Instant,
     start_sec: u64,
@@ -569,7 +570,7 @@ fn create_provider_stats_printer(
         Duration::from_millis((interval.as_secs() - (start_sec - first_print)) * 1000 + 1);
     let providers: Vec<_> = providers
         .iter()
-        .map(|(name, kind)| (name.clone(), kind.rx.clone()))
+        .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
         .collect();
     Interval::new(now + start_print, interval)
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
@@ -589,18 +590,19 @@ fn create_provider_stats_printer(
                 String::new()
             };
             let time = time.timestamp();
-            for (name, rx) in providers.iter() {
-                let stats = rx.get_stats(name, time);
+            for reader in providers.iter() {
+                let stats = reader.get_stats(time);
                 let piece = if is_pretty_format {
                     format!(
                         "\n- {}:\n  length: {}\n  limit: {}\n  \
                          tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
-                         number of senders: {}\n",
+                         number of receivers: {}\n  number of senders: {}\n",
                         Paint::yellow(stats.provider).dimmed(),
                         stats.len,
                         stats.limit,
                         stats.waiting_to_send,
                         stats.waiting_to_receive,
+                        stats.receiver_count,
                         stats.sender_count,
                     )
                 } else {
@@ -621,7 +623,7 @@ pub fn create_stats_channel<F>(
     test_complete: Shared<F>,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
-    providers: Arc<BTreeMap<String, providers::Kind>>,
+    providers: Arc<BTreeMap<String, providers::Provider>>,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,

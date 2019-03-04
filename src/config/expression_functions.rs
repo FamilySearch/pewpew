@@ -64,7 +64,7 @@ impl Collect {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let mut value = None;
         let mut arg_stream = self.arg.into_stream(providers);
@@ -192,7 +192,7 @@ impl Encode {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let encoding = self.encoding;
         self.arg
@@ -309,7 +309,7 @@ impl If {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let mut first = self.first.into_stream(providers);
         let mut second = self.second.into_stream(providers);
@@ -426,7 +426,7 @@ impl Join {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let sep = self.sep;
         let sep2 = self.sep2;
@@ -515,7 +515,7 @@ impl JsonPath {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let provider_name = self.provider.clone();
         providers
@@ -528,7 +528,7 @@ impl JsonPath {
                     .map_err(move |_| TestError::Internal("unexpected error from provider".into()))
                     .map(move |v| {
                         let outgoing = if let Some((ar, tx)) = &auto_return {
-                            vec![(*ar, tx.clone(), vec![v.clone()])]
+                            vec![AutoReturn::new(*ar, tx.clone(), vec![v.clone()])]
                         } else {
                             Vec::new()
                         };
@@ -617,7 +617,7 @@ impl Match {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let capture_names = self.capture_names;
         let regex = self.regex;
@@ -693,7 +693,7 @@ impl MinMax {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let streams = self.args.into_iter().map(|fa| fa.into_stream(providers));
         let min = self.min;
@@ -787,7 +787,7 @@ impl Pad {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let padding = self.padding;
         let min_length = self.min_length;
@@ -933,7 +933,7 @@ impl Range {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             Range::Args(first, second) => {
@@ -1036,10 +1036,7 @@ mod tests {
     use crate::providers::literals;
     use crate::util::json_value_into_string;
 
-    use futures::{
-        future::{join_all, lazy},
-        sync::oneshot,
-    };
+    use futures::future::{join_all, lazy};
     use maplit::{btreemap, btreeset};
     use serde_json::json as j;
     use tokio::runtime::current_thread;
@@ -1106,11 +1103,8 @@ mod tests {
             ),
         ];
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(45)), None, test_end)
+                "a".to_string() => literals(vec!(j!(45)), None)
             );
 
             let providers = Arc::new(providers);
@@ -1136,9 +1130,7 @@ mod tests {
                     })
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1260,14 +1252,11 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!("asd/jkl%")), None, test_end.clone()),
-                "b".to_string() => literals(vec!(j!("asd\njkl#")), None, test_end.clone()),
-                "c".to_string() => literals(vec!(j!("asd\njkl{")), None, test_end.clone()),
-                "d".to_string() => literals(vec!(j!("asd jkl|")), None, test_end),
+                "a".to_string() => literals(vec!(j!("asd/jkl%")), None),
+                "b".to_string() => literals(vec!(j!("asd\njkl#")), None),
+                "c".to_string() => literals(vec!(j!("asd\njkl{")), None),
+                "d".to_string() => literals(vec!(j!("asd jkl|")), None),
             );
 
             let providers = Arc::new(providers);
@@ -1282,9 +1271,7 @@ mod tests {
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1429,12 +1416,9 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(true)), None, test_end.clone()),
-                "b".to_string() => literals(vec!(j!(false)), None, test_end.clone()),
+                "a".to_string() => literals(vec!(j!(true)), None),
+                "b".to_string() => literals(vec!(j!(false)), None),
             );
 
             let providers = Arc::new(providers);
@@ -1449,9 +1433,7 @@ mod tests {
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1542,13 +1524,10 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(["foo", "bar", "baz"])), None, test_end.clone()),
-                "b".to_string() => literals(vec!(j!(1)), None, test_end.clone()),
-                "c".to_string() => literals(vec!(j!(["foo", null, "baz"])), None, test_end),
+                "a".to_string() => literals(vec!(j!(["foo", "bar", "baz"])), None),
+                "b".to_string() => literals(vec!(j!(1)), None),
+                "c".to_string() => literals(vec!(j!(["foo", null, "baz"])), None),
             );
 
             let providers = Arc::new(providers);
@@ -1561,9 +1540,7 @@ mod tests {
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1660,12 +1637,9 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!({ "b": {"c": 1 } })), None, test_end.clone()),
-                "c".to_string() => literals(vec!(j!({ "b": [{ "id": 0 }, { "id": 1 }] })), None, test_end),
+                "a".to_string() => literals(vec!(j!({ "b": {"c": 1 } })), None),
+                "c".to_string() => literals(vec!(j!({ "b": [{ "id": 0 }, { "id": 1 }] })), None),
             );
 
             let providers = Arc::new(providers);
@@ -1687,9 +1661,7 @@ mod tests {
                     }
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1776,11 +1748,8 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "foo".to_string() => literals(vec!(j!("bar")), None, test_end.clone()),
+                "foo".to_string() => literals(vec!(j!("bar")), None),
             );
 
             let providers = Arc::new(providers);
@@ -1795,9 +1764,7 @@ mod tests {
                     _ => unreachable!(),
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -1894,12 +1861,9 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(0.0)), None, test_end.clone()),
-                "b".to_string() => literals(vec!(j!(10)), None, test_end.clone()),
+                "a".to_string() => literals(vec!(j!(0.0)), None),
+                "b".to_string() => literals(vec!(j!(10)), None),
             );
 
             let providers = Arc::new(providers);
@@ -1915,9 +1879,7 @@ mod tests {
                     }
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -2055,11 +2017,8 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!("a")), None, test_end.clone()),
+                "a".to_string() => literals(vec!(j!("a")), None),
             );
 
             let providers = Arc::new(providers);
@@ -2076,9 +2035,7 @@ mod tests {
                     },
                 )
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 
@@ -2195,12 +2152,9 @@ mod tests {
         ];
 
         current_thread::run(lazy(move || {
-            let (tx, rx) = oneshot::channel::<()>();
-            let test_end = rx.shared();
-
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(1)), None, test_end.clone()),
-                "b".to_string() => literals(vec!(j!(5)), None, test_end.clone()),
+                "a".to_string() => literals(vec!(j!(1)), None),
+                "b".to_string() => literals(vec!(j!(5)), None),
             );
 
             let providers = Arc::new(providers);
@@ -2213,9 +2167,7 @@ mod tests {
                     })
                 })
                 .collect();
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 

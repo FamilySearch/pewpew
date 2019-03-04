@@ -2,8 +2,8 @@ mod expression_functions;
 mod select_parser;
 
 pub use self::select_parser::{
-    AutoReturn, Rule as ParserRule, Select, Template, ValueOrExpression, REQUEST_BODY,
-    REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    AutoReturn, AutoReturnFuture, Rule as ParserRule, Select, Template, ValueOrExpression,
+    REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
     RESPONSE_STARTLINE, STATS,
 };
 
@@ -210,6 +210,8 @@ pub struct Endpoint {
     pub load_pattern: Option<Vec<LoadPattern>>,
     #[serde(default, deserialize_with = "deserialize_method")]
     pub method: Method,
+    #[serde(default)]
+    pub on_demand: bool,
     #[serde(default)]
     pub peak_load: Option<HitsPer>,
     pub stats_id: Option<BTreeMap<String, String>>,

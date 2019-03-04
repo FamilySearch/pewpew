@@ -10,7 +10,7 @@ use crate::providers;
 use crate::util::{json_value_into_string, json_value_to_string, Either, Either3};
 use crate::zip_all::zip_all;
 
-use futures::{stream, Future, IntoFuture, Stream};
+use futures::{stream, Async, Future, IntoFuture, Sink, Stream};
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
@@ -26,11 +26,77 @@ use std::{
     sync::Arc,
 };
 
-pub type AutoReturn = (
-    config::EndpointProvidesSendOptions,
-    channel::Sender<json::Value>,
-    Vec<json::Value>,
-);
+#[derive(Clone)]
+pub struct AutoReturn {
+    send_option: config::EndpointProvidesSendOptions,
+    channel: channel::Sender<json::Value>,
+    jsons: Vec<json::Value>,
+}
+
+impl AutoReturn {
+    pub fn new(
+        send_option: config::EndpointProvidesSendOptions,
+        channel: channel::Sender<json::Value>,
+        jsons: Vec<json::Value>,
+    ) -> Self {
+        AutoReturn {
+            send_option,
+            channel,
+            jsons,
+        }
+    }
+
+    pub fn into_future(self) -> AutoReturnFuture {
+        AutoReturnFuture::new(self)
+    }
+}
+
+existential type ARInner: Future<Item = (), Error = ()>;
+
+pub struct AutoReturnFuture {
+    inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,
+}
+
+impl AutoReturnFuture {
+    fn new(ar: AutoReturn) -> Self {
+        let channel = ar.channel;
+        let jsons = ar.jsons;
+        let inner = match ar.send_option {
+            EndpointProvidesSendOptions::Block => {
+                let a: ARInner = channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(()));
+                Either::A(a)
+            }
+            EndpointProvidesSendOptions::Force => Either::B((true, channel, jsons)),
+            EndpointProvidesSendOptions::IfNotFull => Either::B((false, channel, jsons)),
+        };
+        AutoReturnFuture { inner }
+    }
+}
+
+impl Future for AutoReturnFuture {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Result<Async<()>, ()> {
+        match &mut self.inner {
+            Either::A(ref mut a) => a.poll(),
+            Either::B((true, ref channel, ref mut jsons)) => {
+                while let Some(json) = jsons.pop() {
+                    channel.force_send(json);
+                }
+                Ok(Async::Ready(()))
+            }
+            Either::B((false, ref channel, ref mut jsons)) => {
+                while let Some(json) = jsons.pop() {
+                    if !channel.try_send(json).is_success() {
+                        break;
+                    }
+                }
+                Ok(Async::Ready(()))
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(super) enum FunctionCall {
@@ -116,7 +182,7 @@ impl FunctionCall {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
         let f = match self {
@@ -234,7 +300,7 @@ impl Path {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
@@ -261,7 +327,11 @@ impl Path {
                             .and_then(move |v| {
                                 let mut outgoing = Vec::new();
                                 if let Some((ar, tx)) = &auto_return {
-                                    outgoing.push((*ar, tx.clone(), vec![v.clone()]));
+                                    outgoing.push(AutoReturn::new(
+                                        *ar,
+                                        tx.clone(),
+                                        vec![v.clone()],
+                                    ));
                                 }
                                 let v = index_json2(&v, &rest)?;
                                 Ok((v, outgoing))
@@ -353,7 +423,7 @@ impl ValueOrExpression {
 
     pub fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             ValueOrExpression::Value(v) => Either::A(v.into_stream(providers)),
@@ -419,7 +489,7 @@ impl Value {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
         let s = match self {
@@ -631,7 +701,7 @@ impl Expression {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Send + Sync>
     {
         let v = match self.lhs {
@@ -859,7 +929,7 @@ impl Template {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Kind>>,
+        providers: &Arc<BTreeMap<String, providers::Provider>>,
     ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = TestError> {
         let streams = self.pieces.into_iter().map(|piece| match piece {
             TemplatePiece::Expression(voe) => {
@@ -1458,10 +1528,7 @@ fn parse_expression(
 mod tests {
     use super::*;
     use crate::providers;
-    use futures::{
-        future::{join_all, lazy},
-        sync::oneshot,
-    };
+    use futures::future::{join_all, lazy};
     use maplit::btreemap;
     use serde_json as json;
     use tokio::runtime::current_thread;
@@ -1632,16 +1699,13 @@ mod tests {
             ]]),
         };
 
-        let (tx, rx) = oneshot::channel::<()>();
-        let test_end = rx.shared();
-
         current_thread::run(lazy(move || {
             let providers: Arc<_> = data
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
-                        json::Value::Array(v) => providers::literals(v, None, test_end.clone()),
-                        _ => providers::literals(vec![v], None, test_end.clone()),
+                        json::Value::Array(v) => providers::literals(v, None),
+                        _ => providers::literals(vec![v], None),
                     };
                     (k.to_string(), p)
                 })
@@ -1699,9 +1763,7 @@ mod tests {
                     });
                 futures.push(fut);
             }
-            join_all(futures)
-                .then(move |_| tx.send(()))
-                .then(|_| Ok(()))
+            join_all(futures).then(|_| Ok(()))
         }));
     }
 

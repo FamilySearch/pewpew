@@ -8,34 +8,42 @@ use crate::channel::{self, Limit};
 use crate::config;
 use crate::error::TestError;
 use crate::load_test::TestEndReason;
-use crate::util::{json_value_into_string, tweak_path, Either3};
+use crate::util::{json_value_into_string, tweak_path, Either, Either3};
 
-use futures::{future::Shared, stream, sync::mpsc::Sender as FCSender, Future, Stream};
+use futures::{stream, sync::mpsc::Sender as FCSender, Future, Stream};
 use serde_json as json;
 use tokio::{fs::File as TokioFile, prelude::*};
 use tokio_threadpool::blocking;
 
 use std::{io, path::PathBuf, sync::Arc};
 
-pub type Kind = Provider<json::Value>;
-
-pub struct Provider<T> {
+pub struct Provider {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
-    pub tx: channel::Sender<T>,
-    pub rx: channel::Receiver<T>,
+    pub rx: channel::Receiver<json::Value>,
+    pub tx: channel::Sender<json::Value>,
+    pub on_demand: channel::OnDemandReceiver<json::Value>,
 }
 
-pub fn file<F>(
+impl Provider {
+    fn new(
+        auto_return: Option<config::EndpointProvidesSendOptions>,
+        rx: channel::Receiver<json::Value>,
+        tx: channel::Sender<json::Value>,
+    ) -> Self {
+        Provider {
+            auto_return,
+            tx,
+            rx: rx.clone(),
+            on_demand: channel::OnDemandReceiver::new(rx),
+        }
+    }
+}
+
+pub fn file(
     mut template: config::FileProvider,
-    test_complete: Shared<F>,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
-) -> Result<Kind, TestError>
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+) -> Result<Provider, TestError> {
     tweak_path(&mut template.path, config_path);
     let file = template.path.clone();
     let test_killer2 = test_killer.clone();
@@ -71,24 +79,19 @@ where
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
     let prime_tx = stream
-        .map_err(move |e| TestError::Other(format!("reading file `{}`: {}", file, e).into()))
-        .for_each(move |v| {
-            tx2.clone()
-                .send(v)
-                .map(|_| ())
-                .map_err(|_| TestError::Internal("Could not send from file provider".into()))
+        .map_err(move |e| {
+            let e = TestError::Other(format!("reading file `{}`: {}", file, e).into());
+            channel::ChannelClosed::wrapped(e)
         })
-        .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok(())))
+        .forward(tx2)
         .map(|_| ())
-        .select(test_complete.then(|_| Ok::<(), ()>(())))
-        .then(|_| Ok(()));
+        .or_else(move |e| match e.inner_cast() {
+            Some(e) => Either::A(test_killer2.send(Err(*e)).then(|_| Ok(()))),
+            None => Either::B(Ok(()).into_future()),
+        });
 
     tokio::spawn(prime_tx);
-    Ok(Provider {
-        auto_return: template.auto_return,
-        rx,
-        tx,
-    })
+    Ok(Provider::new(template.auto_return, rx, tx))
 }
 
 #[must_use = "streams do nothing unless polled"]
@@ -103,12 +106,9 @@ impl<T> RepeaterStream<T> {
     }
 }
 
-impl<T> Stream for RepeaterStream<T>
-where
-    T: Clone,
-{
+impl<T: Clone> Stream for RepeaterStream<T> {
     type Item = T;
-    type Error = ();
+    type Error = channel::ChannelClosed;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let i = self.i;
@@ -117,72 +117,42 @@ where
     }
 }
 
-pub fn response(template: config::ResponseProvider) -> Kind {
+pub fn response(template: config::ResponseProvider) -> Provider {
     let (tx, rx) = channel::channel(template.buffer);
-    Provider {
-        auto_return: template.auto_return,
-        tx,
-        rx,
-    }
+    Provider::new(template.auto_return, rx, tx)
 }
 
-pub fn literals<F>(
+pub fn literals(
     values: Vec<json::Value>,
     auto_return: Option<config::EndpointProvidesSendOptions>,
-    test_complete: Shared<F>,
-) -> Kind
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+) -> Provider {
     let rs: RepeaterStream<json::Value> = RepeaterStream::new(values);
     let (tx, rx) = channel::channel(Limit::auto());
     let tx2 = tx.clone();
     let prime_tx = rs
         .forward(tx2)
         // Error propagate here when sender channel closes at test conclusion
-        .then(|_| Ok(()))
-        .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Provider {
-        auto_return,
-        tx,
-        rx,
-    }
+    Provider::new(auto_return, rx, tx)
 }
 
-pub fn range<F>(range: config::RangeProvider, test_complete: Shared<F>) -> Kind
-where
-    F: Future + Send + 'static,
-    <F as Future>::Error: Send + Sync,
-    <F as Future>::Item: Send + Sync,
-{
+pub fn range(range: config::RangeProvider) -> Provider {
     let (tx, rx) = channel::channel(Limit::auto());
-    let prime_tx = stream::iter_ok::<_, ()>(range.0.map(json::Value::from))
+    let prime_tx = stream::iter_ok::<_, channel::ChannelClosed>(range.0.map(json::Value::from))
+        // .map_err(|_| channel::ChannelClosed)
         .forward(tx.clone())
         // Error propagate here when sender channel closes at test conclusion
-        .then(|_| Ok(()))
-        .select(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     tokio::spawn(prime_tx);
-    Provider {
-        auto_return: None,
-        tx,
-        rx,
-    }
+    Provider::new(None, rx, tx)
 }
 
-pub fn logger<F>(
+pub fn logger(
     mut template: config::Logger,
-    test_complete: F,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
-) -> channel::Sender<json::Value>
-where
-    F: Future + Send + 'static,
-{
+) -> channel::Sender<json::Value> {
     let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
     let limit = template.limit;
     let pretty = template.pretty;
@@ -224,7 +194,6 @@ where
                         _ => Either3::A(Ok(()).into_future()),
                     }
                 })
-                .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
             tokio::spawn(logger);
         }
@@ -262,7 +231,6 @@ where
                         _ => Either3::A(Ok(()).into_future()),
                     }
                 })
-                .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
             tokio::spawn(logger);
         }
@@ -311,7 +279,7 @@ where
                                     keep_logging = false;
                                     Either3::A(result)
                                 }
-                            },
+                            }
                             None if kill => Either3::C(
                                 test_killer
                                     .clone()
@@ -323,7 +291,6 @@ where
                     })
                 })
                 .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok::<_, ()>(())))
-                .select(test_complete.then(|_| Ok::<_, ()>(())))
                 .then(|_| Ok(()));
             tokio::spawn(logger);
         }

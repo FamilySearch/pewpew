@@ -1,4 +1,9 @@
-#![feature(bind_by_move_pattern_guards, drain_filter)]
+#![feature(
+    bind_by_move_pattern_guards,
+    drain_filter,
+    existential_type,
+    impl_trait_in_bindings
+)]
 #![recursion_limit = "128"]
 #![type_length_limit = "2097152"]
 
@@ -11,6 +16,7 @@ mod load_test;
 mod mod_interval;
 mod providers;
 mod request;
+mod select_any;
 mod stats;
 mod util;
 mod zip_all;

@@ -11,6 +11,7 @@ endpoints:
     [stats_id: <i>stats_id</i>]
     url: <i>template</i>
     [provides: <i>provides_subsection</i>]
+    [on_demand: <i>boolean</i>]
     [logs: <i>logs_subsection</i>]
     [alias: <i>string</i>]
     [max_parallel_requests: <i>unsigned integer</i>]
@@ -42,6 +43,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
   In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
 - **`url`** - A [template](./common-types.md#templates) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides subsection](#provides-subsection)
+- **`on_demand`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that this endpoint should only be called when another endpoint first needs data that this endpoint provides. If the endpoint has no `provides` it has no affect.
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs subsection](#logs-subsection)
 - **`alias`** <sub><sup>*Optional*</sup></sub> - Gives this endpoint an alias for the purpose of "try runs". See the [command-line options](../cli.md).
 - **`max_parallel_requests`** <sub><sup>*Optional*</sup></sub> - Limits how many requests can be "open" at any point for the endpoint. *WARNING*: this can cause coordinated omission, invalidating the test statistics.
@@ -115,13 +117,13 @@ The request object has the properties `start-line`, `method`, `url`, `headers` a
 
   The `select` and `where` parameters can access the elements provided by `for_each` through the value `for_each` just like accessing a value from a provider. Because a `for_each` can iterate over multiple arrays, each element can be accessed by indexing into the array. For example `for_each[1]` would access the element from the second array (indexes are referenced with zero based counting so `0` represents the element in the first array).
 - **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is an [expression](./common-types/expressions.md) which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
-- **`send`** <sub><sup>*Optional*</sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are `block`, `force`, and `if_not_full`.
+- **`send`** <sub><sup>*Optional*</sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. Defaults to `block`.
 
   `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until there's room in the provider's buffer for the value.
   
-  `force` indicates that the value will be returned to the provider regardless of whether its buffer is "full". This can make a provider's buffer exceed its soft limit.
+  `force` indicates that the value will be sent to the provider regardless of whether its buffer is "full". This can make a provider's buffer exceed its soft limit.
   
-  `if_not_full` indicates that the value will be returned to the provider only if the provider is not full.
+  `if_not_full` indicates that the value will be sent to the provider only if the provider is not full.
 
 ### Example 1
 With an HTTP response with the following body

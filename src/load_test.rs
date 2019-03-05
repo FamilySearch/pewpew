@@ -115,7 +115,6 @@ impl LoadTest {
             };
             providers.insert(name, provider);
         }
-        let providers = Arc::new(providers);
 
         let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
         if is_try_run {
@@ -274,7 +273,7 @@ impl LoadTest {
                 test_ended_rx.clone(),
                 test_ended_tx.clone(),
                 &config_config.general,
-                providers.clone(),
+                &providers,
             )?;
             tokio::spawn(stats_rx);
             stats_tx

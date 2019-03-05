@@ -559,7 +559,7 @@ where
 }
 
 fn create_provider_stats_printer(
-    providers: Arc<BTreeMap<String, providers::Provider>>,
+    providers: &BTreeMap<String, providers::Provider>,
     interval: Duration,
     now: Instant,
     start_sec: u64,
@@ -623,7 +623,7 @@ pub fn create_stats_channel<F>(
     test_complete: Shared<F>,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
-    providers: Arc<BTreeMap<String, providers::Provider>>,
+    providers: &BTreeMap<String, providers::Provider>,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,

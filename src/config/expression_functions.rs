@@ -64,7 +64,7 @@ impl Collect {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let mut value = None;
         let mut arg_stream = self.arg.into_stream(providers);
@@ -192,7 +192,7 @@ impl Encode {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let encoding = self.encoding;
         self.arg
@@ -309,7 +309,7 @@ impl If {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let mut first = self.first.into_stream(providers);
         let mut second = self.second.into_stream(providers);
@@ -426,7 +426,7 @@ impl Join {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let sep = self.sep;
         let sep2 = self.sep2;
@@ -515,7 +515,7 @@ impl JsonPath {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let provider_name = self.provider.clone();
         providers
@@ -617,7 +617,7 @@ impl Match {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let capture_names = self.capture_names;
         let regex = self.regex;
@@ -693,7 +693,7 @@ impl MinMax {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let streams = self.args.into_iter().map(|fa| fa.into_stream(providers));
         let min = self.min;
@@ -787,7 +787,7 @@ impl Pad {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let padding = self.padding;
         let min_length = self.min_length;
@@ -933,7 +933,7 @@ impl Range {
 
     pub(super) fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             Range::Args(first, second) => {

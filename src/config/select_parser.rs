@@ -182,7 +182,7 @@ impl FunctionCall {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
         let f = match self {
@@ -300,7 +300,7 @@ impl Path {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
@@ -423,7 +423,7 @@ impl ValueOrExpression {
 
     pub fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             ValueOrExpression::Value(v) => Either::A(v.into_stream(providers)),
@@ -489,7 +489,7 @@ impl Value {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
     {
         let s = match self {
@@ -701,7 +701,7 @@ impl Expression {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Send + Sync>
     {
         let v = match self.lhs {
@@ -929,7 +929,7 @@ impl Template {
 
     fn into_stream(
         self,
-        providers: &Arc<BTreeMap<String, providers::Provider>>,
+        providers: &BTreeMap<String, providers::Provider>,
     ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = TestError> {
         let streams = self.pieces.into_iter().map(|piece| match piece {
             TemplatePiece::Expression(voe) => {

@@ -104,7 +104,7 @@ pub struct BuilderContext {
     // a mapping of names to their prospective static (single value) providers
     pub static_providers: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
-    pub providers: Arc<BTreeMap<String, providers::Provider>>,
+    pub providers: BTreeMap<String, providers::Provider>,
     // a mapping of names to their prospective loggers
     pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
     // channel that receives and aggregates stats for the test

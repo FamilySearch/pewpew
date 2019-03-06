@@ -258,9 +258,20 @@ dependencies = [
 name = "body_reader"
 version = "0.0.0"
 dependencies = [
+ "brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "libflate 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "brotli"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "alloc-no-stdlib 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "alloc-stdlib 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -508,13 +519,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "either"
-version = "0.0.0"
-dependencies = [
- "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "either"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
@@ -600,6 +604,13 @@ dependencies = [
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.89 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "ether"
+version = "0.0.0"
+dependencies = [
+ "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1248,7 +1259,7 @@ dependencies = [
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "csv 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "either 0.0.0",
+ "ether 0.0.0",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "for_each_parallel 0.0.0",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1609,7 +1620,7 @@ dependencies = [
 name = "select_any"
 version = "0.0.0"
 dependencies = [
- "either 0.0.0",
+ "ether 0.0.0",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -2333,7 +2344,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "zip_all"
 version = "0.0.0"
 dependencies = [
- "either 0.0.0",
+ "ether 0.0.0",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -2360,6 +2371,7 @@ dependencies = [
 "checksum base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)" = "489d6c0ed21b11d038c31b6ceccca973e65d73ba3bd8ecb9a2babf5546164643"
 "checksum bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "228047a76f468627ca71776ecdebd732a3423081fcf5125585bcd7c49886ce12"
 "checksum block-buffer 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a076c298b9ecdb530ed9d967e74a6027d6a7478924520acddcddc24c1c8ab3ab"
+"checksum brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7f29919120f08613aadcd4383764e00526fc9f18b6c0895814faeed0dd78613e"
 "checksum brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2a9f2b517b96b19d8f91c1ff5b1cf498e688850b32eae5d58e02d15c4d4fdc0c"
 "checksum brotli-sys 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "4445dea95f4c2b41cde57cc9fee236ae4dbae88d8fcbdb4750fc1bb5d86aaecd"
 "checksum brotli2 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "0cb036c3eade309815c15ddbacec5b22c4d1f3983a774ab2eac2e3e9ea85568e"

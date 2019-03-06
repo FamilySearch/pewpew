@@ -132,7 +132,7 @@ where
 mod tests {
     use super::*;
     use futures::stream;
-    use tokio::timer::Delay;
+    use tokio::{runtime::current_thread, timer::Delay};
 
     use std::{
         iter,
@@ -158,7 +158,7 @@ mod tests {
         })
         .then(|_| Ok(()));
         let start = Instant::now();
-        tokio::run(fep);
+        current_thread::run(fep);
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);
@@ -189,7 +189,7 @@ mod tests {
         )
         .then(|_| Ok(()));
         let start = Instant::now();
-        tokio::run(fep);
+        current_thread::run(fep);
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);
@@ -221,7 +221,7 @@ mod tests {
         )
         .then(|_| Ok(()));
         let start = Instant::now();
-        tokio::run(fep);
+        current_thread::run(fep);
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);

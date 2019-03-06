@@ -5,7 +5,7 @@ use crate::print_test_end_message;
 use crate::providers;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
-use either::Either;
+use ether::Either;
 use fnv::FnvHashMap;
 use futures::{
     future::Shared,

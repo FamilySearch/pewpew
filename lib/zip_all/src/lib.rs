@@ -80,7 +80,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use either::Either;
+    use ether::Either;
     use futures::stream;
 
     #[test]

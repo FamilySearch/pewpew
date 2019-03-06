@@ -50,18 +50,48 @@ where
 mod tests {
     use super::*;
 
-    use either::Either3;
+    use ether::Either3;
     use futures::{stream, Future};
-    use std::time::Duration;
-    use tokio::{self, timer::Interval};
+    use std::{
+        rc::Rc,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+    use tokio::runtime::current_thread;
 
     #[test]
     fn select_any_works() {
-        let a = Either3::A(Interval::new_interval(Duration::from_millis(160)).map(|_| 3));
-        let b = Either3::B(Interval::new_interval(Duration::from_millis(120)).map(|_| 2));
-        let c = Either3::C(Interval::new_interval(Duration::from_millis(80)).map(|_| 1));
+        let baton_a = Rc::new(AtomicUsize::new(0));
+        let baton_b = baton_a.clone();
+        let baton_c = baton_a.clone();
+        let a = Either3::A(stream::poll_fn(move || {
+            let n = baton_a.load(Ordering::SeqCst);
+            if let 0 | 2 | 4 | 6 = n {
+                baton_a.store(n + 1, Ordering::SeqCst);
+                Ok(Async::Ready(Some(1)))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }));
+        let b = Either3::B(stream::poll_fn(move || {
+            let n = baton_b.load(Ordering::SeqCst);
+            if let 1 | 5 | 7 = n {
+                baton_b.store(n + 1, Ordering::SeqCst);
+                Ok(Async::Ready(Some(2)))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }));
+        let c = Either3::C(stream::poll_fn(move || {
+            let n = baton_c.load(Ordering::SeqCst);
+            if let 3 | 8 = n {
+                baton_c.store(n + 1, Ordering::SeqCst);
+                Ok(Async::Ready(Some(3)))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }));
 
-        let expects = vec![1, 2, 1, 3];
+        let expects = vec![1, 2, 1, 3, 1, 2, 1, 2, 3];
 
         let stream = select_any(vec![a, b, c])
             .zip(stream::iter_ok(expects.into_iter().enumerate()))
@@ -69,8 +99,8 @@ mod tests {
                 assert_eq!(l, r, "index: {}", i);
                 Ok(())
             })
-            .map_err(|e| panic!(e));
+            .map_err(|e: ()| panic!(e));
 
-        tokio::run(stream);
+        current_thread::run(stream);
     }
 }

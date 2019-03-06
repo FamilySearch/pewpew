@@ -6,13 +6,17 @@ mod common;
 
 #[test]
 fn int1() {
-    common::start_test_server();
+    let port = common::start_test_server();
     let out = Command::cargo_bin(env!("CARGO_PKG_NAME"))
-        .unwrap()
+        .expect("error calling cargo_bin")
+        .env("PORT", port.to_string())
         .arg("tests/integration.yaml")
         .output()
-        .unwrap();
+        .expect("could not execute integration test");
 
-    let stdout = std::str::from_utf8(&out.stdout).unwrap();
-    assert_eq!(stdout, "true\ntrue\n");
+    assert!(out.status.success(), "process had a non-zero exit status. Stderr: {}", std::str::from_utf8(&out.stderr).unwrap());
+
+    let left = std::str::from_utf8(&out.stdout).expect("could not parse stdout as string");
+    let right = include_str!("integration.stdout.out");
+    assert_eq!(left, right);
 }

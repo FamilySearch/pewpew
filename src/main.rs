@@ -1,6 +1,7 @@
 #![feature(bind_by_move_pattern_guards, existential_type, impl_trait_in_bindings)]
 #![recursion_limit = "128"]
 #![type_length_limit = "2097152"]
+#![warn(rust_2018_idioms)]
 
 mod config;
 mod error;
@@ -20,7 +21,7 @@ use crate::error::TestError;
 use crate::load_test::{LoadTest, TestEndReason};
 
 use clap::{crate_version, App, Arg};
-use either::Either3;
+use ether::Either3;
 use futures::{
     future::{lazy, IntoFuture},
     sync::mpsc as futures_channel,

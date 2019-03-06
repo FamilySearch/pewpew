@@ -3,7 +3,13 @@ name = "body_reader"
 version = "0.0.0"
 edition = "2018"
 
+[lib]
+doctest = false
+
 [dependencies]
 bytes = "0.4"
 brotli-decompressor = "2"
 libflate = "0.1"
+
+[dev-dependencies]
+brotli = "3"

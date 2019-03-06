@@ -3,6 +3,9 @@ name = "for_each_parallel"
 version = "0.0.0"
 edition = "2018"
 
+[lib]
+doctest = false
+
 [dependencies]
 channel = { path = "../channel" }
 futures = "0.1"

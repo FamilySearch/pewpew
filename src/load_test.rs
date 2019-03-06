@@ -3,10 +3,11 @@ use crate::error::TestError;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
+use crate::util::tweak_path;
 
-use either::Either;
+use ether::{Either, Either3};
 use futures::{
-    future::{join_all, lazy, poll_fn},
+    future::{self, join_all, lazy, poll_fn},
     sink::Sink,
     stream,
     sync::mpsc::{Receiver as FCReceiver, Sender as FCSender},
@@ -20,6 +21,7 @@ use serde_json as json;
 use std::{
     cmp,
     collections::{BTreeMap, BTreeSet},
+    io, mem,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
@@ -38,7 +40,7 @@ pub struct LoadTest {
     test_killer: FCSender<Result<TestEndReason, TestError>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum TestEndReason {
     TimesUp,
     ProviderEnded,
@@ -110,7 +112,7 @@ impl LoadTest {
                     static_providers.insert(name, value);
                     continue;
                 }
-                config::Provider::StaticList(values) => providers::literals(values, None),
+                config::Provider::StaticList(values) => providers::literals(values),
             };
             providers.insert(name, provider);
         }
@@ -143,14 +145,27 @@ impl LoadTest {
             .loggers
             .into_iter()
             .map(|(name, mut template)| {
+                let writer_future = match template.to.as_str() {
+                    "stderr" => Either::A(future::ok(Either3::A(io::stderr()))),
+                    "stdout" => Either::A(future::ok(Either3::B(io::stdout()))),
+                    _ => {
+                        let mut path = mem::replace(&mut template.to, String::new());
+                        tweak_path(&mut path, &config_path);
+                        let name2 = name.clone();
+                        let f = tokio::fs::File::create(path)
+                            .map(Either3::C)
+                            .map_err(move |e| {
+                                TestError::Other(
+                                    format!("creating logger file for `{:?}`: {}", name2, e).into(),
+                                )
+                            });
+                        Either::B(f)
+                    }
+                };
                 let select = template.select.take().map(eppp_to_select).transpose()?;
-                Ok::<_, TestError>((
-                    name,
-                    (
-                        providers::logger(template, test_ended_tx.clone(), &config_path),
-                        select,
-                    ),
-                ))
+                let sender =
+                    providers::logger(name.clone(), template, test_ended_tx.clone(), writer_future);
+                Ok::<_, TestError>((name, (sender, select)))
             })
             .collect::<Result<_, _>>()?;
 

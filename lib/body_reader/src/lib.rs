@@ -118,3 +118,72 @@ impl BodyReader {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{cmp, io::Write};
+
+    static TRUTH: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+    trait IntoInner: Write {
+        fn into_inner(self: Box<Self>) -> Vec<u8>;
+    }
+
+    impl IntoInner for ::brotli::CompressorWriter<Vec<u8>> {
+        fn into_inner(self: Box<Self>) -> Vec<u8> {
+            ::brotli::CompressorWriter::into_inner(*self)
+        }
+    }
+
+    impl IntoInner for libflate::gzip::Encoder<Vec<u8>> {
+        fn into_inner(self: Box<Self>) -> Vec<u8> {
+            self.finish().unwrap().0
+        }
+    }
+
+    impl IntoInner for libflate::deflate::Encoder<Vec<u8>> {
+        fn into_inner(self: Box<Self>) -> Vec<u8> {
+            self.finish().unwrap().0
+        }
+    }
+
+    impl IntoInner for Vec<u8> {
+        fn into_inner(self: Box<Self>) -> Vec<u8> {
+            *self
+        }
+    }
+
+    #[test]
+    fn body_reader_works() {
+        let brotli = ::brotli::CompressorWriter::new(Vec::new(), 4096, 11, 22);
+        let gzip = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let deflate = libflate::deflate::Encoder::new(Vec::new());
+
+        let flavors: Vec<(Box<dyn IntoInner>, &str)> = vec![
+            (Box::new(brotli), "br"),
+            (Box::new(gzip), "gzip"),
+            (Box::new(deflate), "deflate"),
+            (Box::new(Vec::new()), ""),
+        ];
+
+        for (i, (mut writer, compression)) in flavors.into_iter().enumerate() {
+            let input: Bytes = {
+                writer.write_all(TRUTH.as_bytes()).unwrap();
+                let vec = writer.into_inner();
+                vec.into()
+            };
+
+            let compression = Compression::try_from(compression).unwrap();
+            let mut reader = BodyReader::new(compression);
+            let mut decoded_bytes = BytesMut::new();
+            for n in (0..input.len()).step_by(4) {
+                let slice = input.slice(n, cmp::min(n + 4, input.len()));
+                reader.decode(slice, &mut decoded_bytes).unwrap();
+            }
+            let decoded_bytes = decoded_bytes.freeze();
+            let left = std::str::from_utf8(&decoded_bytes).unwrap();
+            assert_eq!(left, TRUTH, "index {}", i);
+        }
+    }
+}

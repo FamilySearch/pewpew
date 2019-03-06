@@ -1,7 +1,6 @@
+#![feature(no_more_cas)]
 use crossbeam_queue::SegQueue;
-use futures::{
-    future, sink::Sink, stream, task, Async, AsyncSink, Future, Poll, StartSend, Stream,
-};
+use futures::{sink::Sink, stream, task, Async, AsyncSink, Poll, StartSend, Stream};
 use serde::{
     de::{Error as DeError, Unexpected},
     Deserialize, Deserializer, Serialize,
@@ -10,7 +9,7 @@ use serde::{
 use std::{
     error::Error as StdError,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -104,9 +103,15 @@ impl<T> SendState<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ChannelClosed {
     inner: Option<Box<dyn StdError + Send + Sync + 'static>>,
+}
+
+impl PartialEq<ChannelClosed> for ChannelClosed {
+    fn eq(&self, rhs: &ChannelClosed) -> bool {
+        self.inner.is_none() && rhs.inner.is_none()
+    }
 }
 
 impl ChannelClosed {
@@ -299,6 +304,9 @@ impl<T> Stream for Receiver<T> {
             if self.sender_count.load(Ordering::Acquire) == 0 {
                 Ok(Async::Ready(None))
             } else {
+                if let Limit::Auto(a) = &self.limit {
+                    a.fetch_add(1, Ordering::Release);
+                }
                 self.parked_senders.wake_all();
                 Ok(Async::NotReady)
             }
@@ -331,62 +339,18 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     (sender, receiver)
 }
 
-struct DropFuture {
-    dropped: Arc<AtomicBool>,
-    parked_tasks: Arc<ParkedTasks>,
-}
-
-impl DropFuture {
-    fn new_pair() -> (DropFuture, DropFuture) {
-        let dropped = Arc::new(AtomicBool::default());
-        let parked_tasks = Arc::new(ParkedTasks::new());
-        let a = DropFuture {
-            dropped: dropped.clone(),
-            parked_tasks: parked_tasks.clone(),
-        };
-        let b = DropFuture {
-            dropped,
-            parked_tasks,
-        };
-        (a, b)
-    }
-}
-
-impl Drop for DropFuture {
-    fn drop(&mut self) {
-        self.dropped.store(true, Ordering::Release);
-        self.parked_tasks.wake_all();
-    }
-}
-
-impl Future for DropFuture {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Result<Async<()>, ()> {
-        if self.dropped.load(Ordering::Acquire) {
-            Ok(Async::Ready(()))
-        } else {
-            self.parked_tasks.park(task::current());
-            Ok(Async::NotReady)
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct OnDemandReceiver<T> {
-    demander: Receiver<T>,
-    bootstrapped: Arc<AtomicBool>,
-    parked_listeners: Arc<ParkedTasks>,
+    demander_inner: Arc<SegQueue<T>>,
+    demander_parked_senders: Arc<ParkedTasks>,
     signal: Arc<AtomicUsize>,
 }
 
 impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
-    pub fn new(demander: Receiver<T>) -> Self {
+    pub fn new(demander: &Receiver<T>) -> Self {
         OnDemandReceiver {
-            demander,
-            bootstrapped: AtomicBool::default().into(),
-            parked_listeners: ParkedTasks::new().into(),
+            demander_inner: demander.inner.clone(),
+            demander_parked_senders: demander.parked_senders.clone(),
             signal: AtomicUsize::default().into(),
         }
     }
@@ -397,48 +361,231 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
         impl Stream<Item = (), Error = ()>,
         Arc<Fn() + Send + Sync + 'static>,
     ) {
-        let mut kill_switch = None;
-        if !self.bootstrapped.swap(true, Ordering::Release) {
-            let (left, mut right) = DropFuture::new_pair();
-            kill_switch = Some(left);
-            self.demander.parked_senders.park(task::current());
-            let mut first_go = true;
-            let signal = self.signal.clone();
-            let parked_listeners = self.parked_listeners.clone();
-            let parked_senders = self.demander.parked_senders.clone();
-            let inner = self.demander.inner.clone();
-            let coordinator = future::poll_fn(move || {
-                if let Ok(Async::Ready(())) = right.poll() {
-                    return Ok(Async::Ready(()));
-                }
-                parked_senders.park(task::current());
-                if first_go {
-                    first_go = false;
-                } else if inner.is_empty() && signal.compare_and_swap(0, 1, Ordering::AcqRel) == 0 {
-                    parked_listeners.wake_all();
-                }
-                Ok(Async::NotReady)
-            });
-            tokio::spawn(coordinator);
-        }
-
         let signal = self.signal.clone();
         // this callback is called after a request finishes
         let right = move || {
             signal.store(0, Ordering::Release);
         };
-        // Currently the on demand stream must resolve for every callback. That should be changed to a
-        // select_any on the streams
         let left = stream::poll_fn(move || {
-            let _ = kill_switch;
-            if self.signal.compare_and_swap(1, 2, Ordering::AcqRel) == 1 {
-                Ok(Async::Ready(Some(())))
-            } else {
-                self.parked_listeners.park(task::current());
-                Ok(Async::NotReady)
+            if self.demander_inner.is_empty() {
+                let signal_state = self
+                    .signal
+                    .fetch_update(
+                        |prev| match prev {
+                            0 => Some(1),
+                            1 => Some(2),
+                            _ => None,
+                        },
+                        Ordering::Acquire,
+                        Ordering::AcqRel,
+                    )
+                    .unwrap_or_else(|e| e);
+
+                if signal_state == 1 {
+                    return Ok(Async::Ready(Some(())));
+                }
             }
+            self.demander_parked_senders.park(task::current());
+            Ok(Async::NotReady)
         });
 
         (left, Arc::new(right))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::future;
+    use tokio::runtime::current_thread;
+
+    #[test]
+    fn channel_limit_works() {
+        let f = future::lazy(|| {
+            let limit = Limit::Integer(1);
+            let (mut tx, _rx) = channel::<bool>(limit.clone());
+
+            for _ in 0..limit.get() {
+                let left = tx.start_send(true);
+                let right = Ok(AsyncSink::Ready);
+                assert_eq!(left, right);
+            }
+
+            let left = tx.start_send(true);
+            let right = Ok(AsyncSink::NotReady(true));
+            assert_eq!(left, right);
+
+            Ok(())
+        });
+        current_thread::run(f);
+    }
+
+    #[test]
+    fn channel_auto_limit_expands() {
+        let f = future::lazy(|| {
+            let limit = Limit::auto();
+            let start_limit = limit.get();
+            let (mut tx, mut rx) = channel::<bool>(limit.clone());
+
+            for _ in 0..start_limit {
+                let left = tx.start_send(true);
+                let right = Ok(AsyncSink::Ready);
+                assert_eq!(left, right, "first sends work");
+            }
+
+            let left = tx.start_send(true);
+            let right = Ok(AsyncSink::NotReady(true));
+            assert_eq!(left, right, "can't send another because it's full");
+
+            assert_eq!(limit.get(), start_limit, "limit's still the same");
+
+            for _ in 0..start_limit {
+                let left = rx.poll();
+                let right = Ok(Async::Ready(Some(true)));
+                assert_eq!(left, right, "receives work");
+            }
+
+            let mut new_limit = start_limit + 1;
+            assert_eq!(limit.get(), new_limit, "limit has increased");
+
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receive doesn't work because it's empty");
+
+            new_limit += 1;
+            assert_eq!(limit.get(), new_limit, "limit has increased again");
+
+            for _ in 0..new_limit {
+                let left = tx.start_send(true);
+                let right = Ok(AsyncSink::Ready);
+                assert_eq!(left, right, "second sends work");
+            }
+
+            let left = tx.start_send(true);
+            let right = Ok(AsyncSink::NotReady(true));
+            assert_eq!(left, right, "can't send another because it's full");
+
+            Ok(())
+        });
+        current_thread::run(f);
+    }
+
+    #[test]
+    fn sender_errs_when_no_receivers() {
+        let f = future::lazy(|| {
+            let (mut tx, mut rx) = channel::<bool>(Limit::auto());
+
+            loop {
+                if let Ok(AsyncSink::NotReady(_)) = tx.start_send(true) {
+                    break;
+                }
+            }
+
+            loop {
+                if let Ok(Async::NotReady) = rx.poll() {
+                    break;
+                }
+            }
+
+            drop(rx);
+
+            let left = tx.start_send(true);
+            let right = Err(ChannelClosed::new());
+
+            assert_eq!(
+                left, right,
+                "should not be able to send after receiver is dropped"
+            );
+
+            Ok(())
+        });
+        current_thread::run(f);
+    }
+
+    #[test]
+    fn receiver_ends_when_no_senders() {
+        let f = future::lazy(|| {
+            let limit = Limit::auto();
+            let start_size = limit.get();
+            let (mut tx, mut rx) = channel::<bool>(limit);
+
+            loop {
+                if let Ok(AsyncSink::NotReady(_)) = tx.start_send(true) {
+                    break;
+                }
+            }
+
+            drop(tx);
+
+            for _ in 0..start_size {
+                let left = rx.poll();
+                let right = Ok(Async::Ready(Some(true)));
+                assert_eq!(
+                    left, right,
+                    "receiver should be able to receive until queue is empty"
+                );
+            }
+
+            let left = rx.poll();
+            let right = Ok(Async::Ready(None));
+
+            assert_eq!(
+                left, right,
+                "should not be able to recieve after sender is dropped and queue is empty"
+            );
+
+            Ok(())
+        });
+        current_thread::run(f);
+    }
+
+    #[test]
+    fn on_demand_receiver_works() {
+        let f = future::lazy(|| {
+            let (_tx, mut rx) = channel::<bool>(Limit::auto());
+
+            let (mut on_demand, done_fn) = OnDemandReceiver::new(&rx).into_stream();
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "on_demand stream should not be ready");
+
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receiver should not be ready");
+
+            let left = on_demand.poll();
+            let right = Ok(Async::Ready(Some(())));
+            assert_eq!(left, right, "on_demand stream should be ready");
+
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receiver should still not be ready");
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled");
+
+            done_fn();
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(
+                left, right,
+                "on_demand stream should not be ready until the receiver is polled"
+            );
+
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receiver should still not be ready");
+
+            let left = on_demand.poll();
+            let right = Ok(Async::Ready(Some(())));
+            assert_eq!(left, right, "on_demand stream should be ready");
+
+            Ok(())
+        });
+        current_thread::run(f);
+    }
+
 }

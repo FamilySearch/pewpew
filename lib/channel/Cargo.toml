@@ -3,6 +3,9 @@ name = "channel"
 version = "0.0.0"
 edition = "2018"
 
+[lib]
+doctest = false
+
 [dependencies]
 futures = "0.1"
 crossbeam-queue = "0.1"

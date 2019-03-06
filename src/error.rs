@@ -18,7 +18,7 @@ pub enum RecoverableError {
 use RecoverableError::*;
 
 impl fmt::Display for RecoverableError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BodyErr(e) => write!(f, "body error: {}", e),
             ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
@@ -62,7 +62,7 @@ impl From<RecoverableError> for TestError {
 use TestError::*;
 
 impl fmt::Display for TestError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Internal(m) => write!(f, "internal error: {}", m),
             InvalidArguments(func) => {

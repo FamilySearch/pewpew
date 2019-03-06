@@ -1,6 +1,6 @@
-use std::{cmp::PartialEq, fmt};
+use std::{cmp::PartialEq, fmt, io};
 
-use futures::{ Future, Poll, Stream };
+use futures::{Future, Poll, Stream};
 
 pub enum Either<A, B> {
     A(A),
@@ -217,6 +217,29 @@ where
             Either3::A(a) => write!(f, "{}", a),
             Either3::B(b) => write!(f, "{}", b),
             Either3::C(c) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl<A, B, C> io::Write for Either3<A, B, C>
+where
+    A: io::Write,
+    B: io::Write,
+    C: io::Write,
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        match self {
+            Either3::A(a) => a.write(buf),
+            Either3::B(b) => b.write(buf),
+            Either3::C(c) => c.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        match self {
+            Either3::A(a) => a.flush(),
+            Either3::B(b) => b.flush(),
+            Either3::C(c) => c.flush(),
         }
     }
 }

@@ -2,20 +2,26 @@ load_pattern:
   - linear:
       to: 100%
       over: 10s
+config:
+  client:
+    headers:
+      test: 123
 loggers:
   l:
     select: >-
-      (response.body.a == 0
-      && response.body.b == "foo"
-      && response.body.c == 123
-      && response.body.e == response.body.e2)
-      && response.body.f == "line1"
-      ||
-      (response.body.a == 1
-      && response.body.b == "foo"
-      && response.body.c == 456
-      && response.body.e == response.body.e2)
-      && response.body.f == "line2"
+      (response.body.b == "foo"
+        && response.body.e == response.body.e2
+        && request.headers.test == "123")
+      &&
+      (
+        (response.body.a == 0
+          && response.body.c == 123
+          && response.body.f == "line1")
+        ||
+        (response.body.a == 1
+          && response.body.c == 456
+          && response.body.f == "line2")
+      )
     limit: 2
     to: stdout
     kill: true
@@ -40,7 +46,7 @@ endpoints:
   - method: POST
     declare:
       e: collect(b, 3)
-    url: http://localhost:8080/
+    url: http://localhost:${$PORT}/
     body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
     peak_load: 1hps
     headers:

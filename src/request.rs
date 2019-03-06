@@ -1,6 +1,9 @@
-use either::{Either, Either3};
+use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
-use futures::{future::join_all, stream, sync::mpsc as futures_channel, Sink, Stream};
+use futures::{
+    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
+    Stream,
+};
 use hyper::{
     body::Payload,
     client::HttpConnector,
@@ -11,7 +14,7 @@ use hyper_tls::HttpsConnector;
 use parking_lot::Mutex;
 use select_any::select_any;
 use serde_json as json;
-use tokio::{prelude::*, timer::Timeout};
+use tokio::{io::AsyncRead, timer::Timeout};
 use zip_all::zip_all;
 
 use crate::config::{
@@ -74,7 +77,7 @@ impl From<json::Value> for TemplateValues {
 }
 
 struct Outgoing {
-    cb: Option<Arc<Fn() + Send + Sync + 'static>>,
+    cb: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
     select: Select,
     tx: channel::Sender<json::Value>,
 }
@@ -83,7 +86,7 @@ impl Outgoing {
     fn new(
         select: Select,
         tx: channel::Sender<json::Value>,
-        cb: Option<Arc<Fn() + Send + Sync + 'static>>,
+        cb: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
     ) -> Self {
         Outgoing { cb, select, tx }
     }

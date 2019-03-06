@@ -13,7 +13,7 @@ clap = "2"
 crossbeam = "0.7"
 csv = "1"
 chrono = "0.4"
-either = { path = "./lib/either" }
+ether = { path = "./lib/either" }
 fnv = "1"
 for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.1"

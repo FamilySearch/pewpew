@@ -8,7 +8,7 @@ use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::util::{json_value_into_string, json_value_to_string};
 
-use either::{Either, Either3};
+use ether::{Either, Either3};
 use futures::{stream, Async, Future, IntoFuture, Sink, Stream};
 use itertools::Itertools;
 use pest::{
@@ -1150,7 +1150,7 @@ fn parse_select(
 }
 
 fn parse_function_call(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
 ) -> Result<Either<FunctionCall, json::Value>, TestError> {
@@ -1184,7 +1184,7 @@ fn parse_function_call(
 }
 
 fn parse_indexed_property(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
 ) -> Result<PathSegment, TestError> {
@@ -1207,7 +1207,7 @@ fn parse_indexed_property(
 }
 
 fn parse_path(
-    pair: Pair<Rule>,
+    pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
 ) -> Result<Either<json::Value, Path>, TestError> {
@@ -1295,7 +1295,7 @@ fn parse_path(
 }
 
 fn parse_value(
-    mut pairs: Pairs<Rule>,
+    mut pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
 ) -> Result<Value, TestError> {
@@ -1418,7 +1418,7 @@ fn expression_helper(
 }
 
 fn parse_expression_pieces(
-    pairs: Pairs<Rule>,
+    pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
     pieces: &mut Vec<ExpressionOrOperator>,
@@ -1515,7 +1515,7 @@ fn parse_expression_pieces(
 }
 
 fn parse_expression(
-    pairs: Pairs<Rule>,
+    pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
     static_providers: &BTreeMap<String, json::Value>,
 ) -> Result<Expression, TestError> {
@@ -1704,8 +1704,8 @@ mod tests {
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
-                        json::Value::Array(v) => providers::literals(v, None),
-                        _ => providers::literals(vec![v], None),
+                        json::Value::Array(v) => providers::literals(v),
+                        _ => providers::literals(vec![v]),
                     };
                     (k.to_string(), p)
                 })
@@ -1841,11 +1841,13 @@ mod tests {
             ]
         });
 
-        // (select, for_each, expect)
+        // (statement, expect)
         let check_table = vec![
             (
-                json::json!("a"),
-                vec!["repeat(5)"],
+                json::json!({
+                    "select": "a",
+                    "for_each": ["repeat(5)"]
+                }),
                 vec![
                     json::json!(3),
                     json::json!(3),
@@ -1855,18 +1857,24 @@ mod tests {
                 ],
             ),
             (
-                json::json!("for_each[1]"),
-                vec!["repeat(3)", "true || false"],
+                json::json!({
+                    "select": "for_each[1]",
+                    "for_each": ["repeat(3)", "true || false"]
+                }),
                 vec![true.into(), true.into(), true.into()],
             ),
             (
-                json::json!("for_each[0]"),
-                vec![r#"json_path("c.*.d")"#],
+                json::json!({
+                    "select": "for_each[0]",
+                    "for_each": ["json_path('c.*.d')"]
+                }),
                 vec![json::json!(1), json::json!(2), json::json!(3)],
             ),
             (
-                json::json!("for_each[0]"),
-                vec!["c"],
+                json::json!({
+                    "select": "for_each[0]",
+                    "for_each": ["c"]
+                }),
                 vec![
                     json::json!({ "d": 1 }),
                     json::json!({ "d": 2 }),
@@ -1874,8 +1882,10 @@ mod tests {
                 ],
             ),
             (
-                json::json!("for_each[1]"),
-                vec!["repeat(2)", r#"json_path("c.*.d")"#],
+                json::json!({
+                    "select": "for_each[1]",
+                    "for_each": ["repeat(2)", r#"json_path("c.*.d")"#]
+                }),
                 vec![
                     json::json!(1),
                     json::json!(2),
@@ -1887,12 +1897,8 @@ mod tests {
             ),
         ];
 
-        for (i, (select, for_each, expect)) in check_table.into_iter().enumerate() {
+        for (i, (select, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let select = json::json!({
-                "select": select,
-                "for_each": for_each
-            });
             check_results(select, data, &expect, i);
         }
     }

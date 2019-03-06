@@ -1,6 +1,9 @@
 use futures::{try_ready, Async, Future, Poll, Stream};
 use regex::Regex;
-use serde::{Deserialize, Deserializer, de::{Error as DeError, Unexpected}};
+use serde::{
+    de::{Error as DeError, Unexpected},
+    Deserialize, Deserializer,
+};
 use tokio::timer::Delay;
 
 use std::{

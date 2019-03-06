@@ -10,7 +10,7 @@ pub use self::select_parser::{
 use crate::error::TestError;
 
 use channel::Limit;
-use either::Either;
+use ether::Either;
 use hyper::Method;
 use mod_interval::{HitsPer, LinearBuilder};
 use regex::Regex;
@@ -369,6 +369,7 @@ impl Default for GeneralConfig {
 pub struct Config {
     #[serde(default)]
     pub client: ClientConfig,
+    #[serde(default)]
     pub general: GeneralConfig,
 }
 

@@ -3,7 +3,7 @@ use crate::error::TestError;
 use crate::providers;
 use crate::util::json_value_to_string;
 
-use either::Either;
+use ether::Either;
 use futures::{stream, try_ready, Async, Future, IntoFuture, Stream};
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
@@ -444,7 +444,7 @@ pub(super) struct JsonPath {
 }
 
 impl fmt::Debug for JsonPath {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "JsonPath {{ provider: {} }}", self.provider)
     }
 }
@@ -1105,7 +1105,7 @@ mod tests {
         ];
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(45)), None)
+                "a".to_string() => literals(vec!(j!(45)))
             );
 
             let providers = Arc::new(providers);
@@ -1254,10 +1254,10 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!("asd/jkl%")), None),
-                "b".to_string() => literals(vec!(j!("asd\njkl#")), None),
-                "c".to_string() => literals(vec!(j!("asd\njkl{")), None),
-                "d".to_string() => literals(vec!(j!("asd jkl|")), None),
+                "a".to_string() => literals(vec!(j!("asd/jkl%"))),
+                "b".to_string() => literals(vec!(j!("asd\njkl#"))),
+                "c".to_string() => literals(vec!(j!("asd\njkl{"))),
+                "d".to_string() => literals(vec!(j!("asd jkl|"))),
             );
 
             let providers = Arc::new(providers);
@@ -1418,8 +1418,8 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(true)), None),
-                "b".to_string() => literals(vec!(j!(false)), None),
+                "a".to_string() => literals(vec!(j!(true))),
+                "b".to_string() => literals(vec!(j!(false))),
             );
 
             let providers = Arc::new(providers);
@@ -1526,9 +1526,9 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(["foo", "bar", "baz"])), None),
-                "b".to_string() => literals(vec!(j!(1)), None),
-                "c".to_string() => literals(vec!(j!(["foo", null, "baz"])), None),
+                "a".to_string() => literals(vec!(j!(["foo", "bar", "baz"]))),
+                "b".to_string() => literals(vec!(j!(1))),
+                "c".to_string() => literals(vec!(j!(["foo", null, "baz"]))),
             );
 
             let providers = Arc::new(providers);
@@ -1639,8 +1639,8 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!({ "b": {"c": 1 } })), None),
-                "c".to_string() => literals(vec!(j!({ "b": [{ "id": 0 }, { "id": 1 }] })), None),
+                "a".to_string() => literals(vec!(j!({ "b": {"c": 1 } }))),
+                "c".to_string() => literals(vec!(j!({ "b": [{ "id": 0 }, { "id": 1 }] }))),
             );
 
             let providers = Arc::new(providers);
@@ -1750,7 +1750,7 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "foo".to_string() => literals(vec!(j!("bar")), None),
+                "foo".to_string() => literals(vec!(j!("bar"))),
             );
 
             let providers = Arc::new(providers);
@@ -1863,8 +1863,8 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(0.0)), None),
-                "b".to_string() => literals(vec!(j!(10)), None),
+                "a".to_string() => literals(vec!(j!(0.0))),
+                "b".to_string() => literals(vec!(j!(10))),
             );
 
             let providers = Arc::new(providers);
@@ -2019,7 +2019,7 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!("a")), None),
+                "a".to_string() => literals(vec!(j!("a"))),
             );
 
             let providers = Arc::new(providers);
@@ -2154,8 +2154,8 @@ mod tests {
 
         current_thread::run(lazy(move || {
             let providers = btreemap!(
-                "a".to_string() => literals(vec!(j!(1)), None),
-                "b".to_string() => literals(vec!(j!(5)), None),
+                "a".to_string() => literals(vec!(j!(1))),
+                "b".to_string() => literals(vec!(j!(5))),
             );
 
             let providers = Arc::new(providers);

@@ -6,21 +6,24 @@ edition = "2018"
 [dependencies]
 atty = "0.2"
 base64 = "0.10"
+body_reader = { path = "./lib/body_reader" }
 bytes = "0.4"
-brotli-decompressor = "2"
+channel = { path = "./lib/channel" }
 clap = "2"
 crossbeam = "0.7"
 csv = "1"
 chrono = "0.4"
+either = { path = "./lib/either" }
 fnv = "1"
+for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.1"
 hdrhistogram = "6"
 hyper = "0.12"
 hyper-tls = "0.3"
 itertools = "0.8"
 jsonpath = "0.1"
-libflate = "0.1"
 maplit = "1"
+mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
 percent-encoding = "1"
 pest = "2"
@@ -28,6 +31,7 @@ pest_derive = "2"
 parking_lot = "0.7"
 rand = "0.6"
 regex = "1"
+select_any = { path = "./lib/select_any" }
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
@@ -38,6 +42,7 @@ tokio-threadpool = "0.1"
 unicode-segmentation = "1"
 url = "1"
 yansi = "0.5"
+zip_all = { path = "./lib/zip_all" }
 
 [dev-dependencies]
 actix = "0.7"
@@ -47,3 +52,14 @@ tempfile = "3"
 
 [profile.release]
 panic = "abort"
+
+[workspace]
+members = [
+    "lib/body_reader",
+    "lib/channel",
+    "lib/either",
+    "lib/for_each_parallel",
+    "lib/mod_interval",
+    "lib/select_any",
+    "lib/zip_all",
+]

@@ -1,11 +1,10 @@
-use crate::channel;
 use crate::config;
 use crate::error::TestError;
 use crate::providers;
 use crate::request;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
-use crate::util::Either;
 
+use either::Either;
 use futures::{
     future::{join_all, lazy, poll_fn},
     sink::Sink,

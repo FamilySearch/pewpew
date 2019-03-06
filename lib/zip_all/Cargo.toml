@@ -1,0 +1,10 @@
+[package]
+name = "zip_all"
+version = "0.0.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.1"
+
+[dev-dependencies]
+either = { path = "../either" }

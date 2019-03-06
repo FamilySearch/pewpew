@@ -3,13 +3,12 @@ use super::expression_functions::{
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
-use crate::channel;
 use crate::config;
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
-use crate::util::{json_value_into_string, json_value_to_string, Either, Either3};
-use crate::zip_all::zip_all;
+use crate::util::{json_value_into_string, json_value_to_string};
 
+use either::{Either, Either3};
 use futures::{stream, Async, Future, IntoFuture, Sink, Stream};
 use itertools::Itertools;
 use pest::{
@@ -18,6 +17,7 @@ use pest::{
 };
 use pest_derive::Parser;
 use serde_json as json;
+use zip_all::zip_all;
 
 use std::{
     borrow::Cow,

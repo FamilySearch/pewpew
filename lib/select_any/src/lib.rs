@@ -1,5 +1,6 @@
 use futures::{Async, Poll, Stream};
 
+#[must_use = "streams do nothing unless polled"]
 pub struct SelectAny<T>
 where
     T: Stream,
@@ -48,8 +49,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::Either3;
 
+    use either::Either3;
     use futures::{stream, Future};
     use std::time::Duration;
     use tokio::{self, timer::Interval};

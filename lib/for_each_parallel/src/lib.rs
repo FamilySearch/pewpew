@@ -1,6 +1,7 @@
-use futures::{sync::oneshot, Async, Future, IntoFuture, Poll, Stream};
+#![feature(drain_filter)]
 
-use crate::channel::Limit;
+use channel::Limit;
+use futures::{sync::oneshot, Async, Future, IntoFuture, Poll, Stream};
 
 use std::{cmp, num::NonZeroUsize};
 

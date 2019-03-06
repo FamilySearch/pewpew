@@ -1,25 +1,14 @@
-#![feature(
-    bind_by_move_pattern_guards,
-    drain_filter,
-    existential_type,
-    impl_trait_in_bindings
-)]
+#![feature(bind_by_move_pattern_guards, existential_type, impl_trait_in_bindings)]
 #![recursion_limit = "128"]
 #![type_length_limit = "2097152"]
 
-mod body_reader;
-mod channel;
 mod config;
 mod error;
-mod for_each_parallel;
 mod load_test;
-mod mod_interval;
 mod providers;
 mod request;
-mod select_any;
 mod stats;
 mod util;
-mod zip_all;
 
 use std::{
     fs::File,
@@ -29,9 +18,9 @@ use std::{
 
 use crate::error::TestError;
 use crate::load_test::{LoadTest, TestEndReason};
-use crate::util::Either3;
 
 use clap::{crate_version, App, Arg};
+use either::Either3;
 use futures::{
     future::{lazy, IntoFuture},
     sync::mpsc as futures_channel,

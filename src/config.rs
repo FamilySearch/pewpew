@@ -7,12 +7,12 @@ pub use self::select_parser::{
     RESPONSE_STARTLINE, STATS,
 };
 
-use crate::channel::Limit;
 use crate::error::TestError;
-use crate::mod_interval::{HitsPer, LinearBuilder};
-use crate::util::Either;
 
+use channel::Limit;
+use either::Either;
 use hyper::Method;
+use mod_interval::{HitsPer, LinearBuilder};
 use regex::Regex;
 use serde::{
     de::{Error as DeError, Unexpected},
@@ -465,49 +465,6 @@ impl<'de> Deserialize<'de> for Percent {
                 .parse()
                 .expect("should be valid digits for percent"),
         ))
-    }
-}
-
-impl<'de> Deserialize<'de> for HitsPer {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
-        let captures = re.captures(&string).ok_or_else(|| {
-            DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
-        })?;
-        let n = captures
-            .get(1)
-            .expect("should have capture group")
-            .as_str()
-            .parse()
-            .expect("should be valid digits for HitsPer");
-        if captures.get(2).expect("should have capture group").as_str()[0..1]
-            .eq_ignore_ascii_case("m")
-        {
-            Ok(HitsPer::Minute(n))
-        } else {
-            Ok(HitsPer::Second(n))
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Limit {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        if string == "auto" {
-            Ok(Limit::auto())
-        } else {
-            let n = string.parse::<usize>().map_err(|_| {
-                DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value")
-            })?;
-            Ok(Limit::Integer(n))
-        }
     }
 }
 

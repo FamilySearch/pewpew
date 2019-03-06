@@ -1,7 +1,7 @@
-use crate::error::TestError;
-
-use futures::try_ready;
-use tokio::{prelude::*, timer::Delay};
+use futures::{try_ready, Async, Future, Poll, Stream};
+use regex::Regex;
+use serde::{Deserialize, Deserializer, de::{Error as DeError, Unexpected}};
+use tokio::timer::Delay;
 
 use std::{
     cmp,
@@ -21,6 +21,32 @@ fn nanos_to_duration(n: f64) -> Duration {
 pub enum HitsPer {
     Second(u32),
     Minute(u32),
+}
+
+impl<'de> Deserialize<'de> for HitsPer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
+        let captures = re.captures(&string).ok_or_else(|| {
+            DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
+        })?;
+        let n = captures
+            .get(1)
+            .expect("should have capture group")
+            .as_str()
+            .parse()
+            .expect("should be valid digits for HitsPer");
+        if captures.get(2).expect("should have capture group").as_str()[0..1]
+            .eq_ignore_ascii_case("m")
+        {
+            Ok(HitsPer::Minute(n))
+        } else {
+            Ok(HitsPer::Second(n))
+        }
+    }
 }
 
 // x represents the time elapsed in the test
@@ -46,7 +72,7 @@ impl LinearBuilder {
         }
     }
 
-    pub fn build(&self, peak_load: &HitsPer) -> ModInterval<LinearScaling> {
+    pub fn build<E>(&self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
         let peak_load = match peak_load {
             HitsPer::Second(n) => f64::from(*n),
             HitsPer::Minute(n) => f64::from(*n) / 60.0,
@@ -105,21 +131,23 @@ impl ScaleFn for LinearScaling {
 /// A stream representing notifications at a modulating interval.
 /// This stream also has a built in end time
 #[must_use = "streams do nothing unless polled"]
-pub struct ModInterval<T>
+pub struct ModInterval<T, E>
 where
     T: ScaleFn + Send,
 {
+    _e: std::marker::PhantomData<E>,
     delay: Delay,
     scale_fn: T,
     start_end_time: Option<(Instant, Instant)>,
 }
 
-impl<T> ModInterval<T>
+impl<T, E> ModInterval<T, E>
 where
     T: ScaleFn + Send,
 {
     pub fn new(scale_fn: T) -> Self {
         ModInterval {
+            _e: std::marker::PhantomData,
             delay: Delay::new(Instant::now()),
             scale_fn,
             start_end_time: None,
@@ -127,12 +155,13 @@ where
     }
 }
 
-impl<T> Stream for ModInterval<T>
+impl<T, E> Stream for ModInterval<T, E>
 where
     T: ScaleFn + Send,
+    E: From<tokio::timer::Error>,
 {
     type Item = Instant;
-    type Error = TestError;
+    type Error = E;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // deadline represents a time when the next item will be provided from the stream
@@ -256,7 +285,7 @@ mod tests {
             checks.into_iter().enumerate()
         {
             let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let scale_fn = lb.build(&hitsper).scale_fn;
+            let scale_fn = lb.build::<()>(&hitsper).scale_fn;
             for (i2, (secs, hps)) in expects.iter().enumerate() {
                 let nanos = secs * nis;
                 let right = 1.0 / (scale_fn.y(nanos) / nis);

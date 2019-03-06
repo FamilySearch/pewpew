@@ -1,8 +1,11 @@
-use crossbeam::queue::SegQueue;
+use crossbeam_queue::SegQueue;
 use futures::{
     future, sink::Sink, stream, task, Async, AsyncSink, Future, Poll, StartSend, Stream,
 };
-use serde::Serialize;
+use serde::{
+    de::{Error as DeError, Unexpected},
+    Deserialize, Deserializer, Serialize,
+};
 
 use std::{
     error::Error as StdError,
@@ -12,6 +15,7 @@ use std::{
     },
 };
 
+#[derive(Clone)]
 pub enum Limit {
     Auto(Arc<AtomicUsize>),
     Integer(usize),
@@ -36,11 +40,19 @@ impl Limit {
     }
 }
 
-impl Clone for Limit {
-    fn clone(&self) -> Self {
-        match self {
-            Limit::Auto(a) => Limit::Auto(a.clone()),
-            Limit::Integer(n) => Limit::Integer(*n),
+impl<'de> Deserialize<'de> for Limit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        if string == "auto" {
+            Ok(Limit::auto())
+        } else {
+            let n = string.parse::<usize>().map_err(|_| {
+                DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value")
+            })?;
+            Ok(Limit::Integer(n))
         }
     }
 }
@@ -92,13 +104,14 @@ impl<T> SendState<T> {
     }
 }
 
+#[derive(Default)]
 pub struct ChannelClosed {
     inner: Option<Box<dyn StdError + Send + Sync + 'static>>,
 }
 
 impl ChannelClosed {
     pub fn new() -> Self {
-        ChannelClosed { inner: None }
+        ChannelClosed::default()
     }
 
     pub fn wrapped<T: StdError + Send + Sync + 'static>(wrapped: T) -> Self {

@@ -4,12 +4,13 @@ mod line_reader;
 
 use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineReader};
 
-use crate::channel::{self, Limit};
 use crate::config;
 use crate::error::TestError;
 use crate::load_test::TestEndReason;
-use crate::util::{json_value_into_string, tweak_path, Either, Either3};
+use crate::util::{json_value_into_string, tweak_path};
 
+use channel::Limit;
+use either::{Either, Either3};
 use futures::{stream, sync::mpsc::Sender as FCSender, Future, Stream};
 use serde_json as json;
 use tokio::{fs::File as TokioFile, prelude::*};

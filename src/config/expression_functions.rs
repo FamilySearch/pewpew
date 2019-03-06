@@ -1,14 +1,15 @@
 use super::select_parser::{bool_value, f64_value, AutoReturn, Value, ValueOrExpression};
 use crate::error::TestError;
 use crate::providers;
-use crate::util::{json_value_to_string, Either};
-use crate::zip_all::zip_all;
+use crate::util::json_value_to_string;
 
+use either::Either;
 use futures::{stream, try_ready, Async, Future, IntoFuture, Stream};
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
+use zip_all::zip_all;
 
 use std::{
     borrow::Cow,

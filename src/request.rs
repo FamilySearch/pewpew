@@ -1,3 +1,5 @@
+use either::{Either, Either3};
+use for_each_parallel::ForEachParallel;
 use futures::{future::join_all, stream, sync::mpsc as futures_channel, Sink, Stream};
 use hyper::{
     body::Payload,
@@ -7,22 +9,19 @@ use hyper::{
 };
 use hyper_tls::HttpsConnector;
 use parking_lot::Mutex;
+use select_any::select_any;
 use serde_json as json;
 use tokio::{prelude::*, timer::Timeout};
+use zip_all::zip_all;
 
-use crate::body_reader;
-use crate::channel;
 use crate::config::{
     self, AutoReturn, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 use crate::error::{RecoverableError, TestError};
-use crate::for_each_parallel::ForEachParallel;
 use crate::providers;
-use crate::select_any::select_any;
 use crate::stats;
-use crate::util::{tweak_path, Either, Either3};
-use crate::zip_all::zip_all;
+use crate::util::tweak_path;
 
 use std::{
     collections::{BTreeMap, BTreeSet},

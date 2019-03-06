@@ -1,12 +1,11 @@
-use crate::channel;
 use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
 use crate::load_test::TestEndReason;
 use crate::print_test_end_message;
 use crate::providers;
-use crate::util::Either;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
+use either::Either;
 use fnv::FnvHashMap;
 use futures::{
     future::Shared,

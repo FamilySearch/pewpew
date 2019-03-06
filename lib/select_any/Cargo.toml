@@ -1,0 +1,11 @@
+[package]
+name = "select_any"
+version = "0.0.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.1"
+
+[dev-dependencies]
+either = { path = "../either" }
+tokio = "0.1"

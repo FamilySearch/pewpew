@@ -22,15 +22,6 @@ where
     }
 }
 
-pub fn zip_all<I>(elems: I) -> ZipAll<I::Item>
-where
-    I: IntoIterator,
-    I::Item: Stream,
-{
-    let elems = elems.into_iter().map(|s| (s, None)).collect();
-    ZipAll { elems }
-}
-
 impl<T> Stream for ZipAll<T>
 where
     T: Stream,
@@ -77,10 +68,19 @@ where
     }
 }
 
+pub fn zip_all<I>(elems: I) -> ZipAll<I::Item>
+where
+    I: IntoIterator,
+    I::Item: Stream,
+{
+    let elems = elems.into_iter().map(|s| (s, None)).collect();
+    ZipAll { elems }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::Either;
+    use either::Either;
     use futures::stream;
 
     #[test]

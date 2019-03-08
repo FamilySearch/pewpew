@@ -691,12 +691,16 @@ impl Expression {
         &self,
         d: &'a json::Value,
     ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
-        let value = self.evaluate(d)?.into_owned();
-        let i = match value {
-            json::Value::Array(v) => Either::A(v.into_iter().map(Ok)),
-            _ => Either::B(iter::once(Ok(value))),
+        let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.op, &self.not, &self.lhs) {
+            Either3::A(v.evaluate_as_iter(d)?)
+        } else {
+            let value = self.evaluate(d)?.into_owned();
+            match value {
+                json::Value::Array(v) => Either3::B(v.into_iter().map(Ok)),
+                _ => Either3::C(iter::once(Ok(value))),
+            }
         };
-        Ok(i)
+        Ok(Box::new(i))
     }
 
     fn into_stream(

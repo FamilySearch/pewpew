@@ -179,7 +179,7 @@ where
                                     .send(Err(TestError::KilledByLogger))
                                     .then(|_| Ok(())),
                             )
-                        },
+                        }
                         _ => Either3::A(result),
                     }
                 })
@@ -201,11 +201,7 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{
-        future,
-        sync::mpsc::channel as futures_channel,
-        Async,
-    };
+    use futures::{future, sync::mpsc::channel as futures_channel, Async};
     use json::json;
     use parking_lot::Mutex;
     use tokio::runtime::current_thread;
@@ -337,16 +333,16 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec!(json!(1), json!(2))))
-                    .then(|_| Ok(()))
+                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                    .then(|_| Ok(())),
             );
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100))
-                .then(move |_| {
+            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+                move |_| {
                     let left = writer.get_string();
                     let right = "1\n";
                     assert_eq!(left, right, "value in writer should match");
-                    
+
                     let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
                         true
                     } else {
@@ -355,7 +351,8 @@ mod tests {
                     assert!(check, "test should be killed");
                     drop(test_killer);
                     Ok(())
-                });
+                },
+            );
 
             tokio::spawn(f);
 
@@ -378,16 +375,16 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec!(json!(1), json!(2))))
-                    .then(|_| Ok(()))
+                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                    .then(|_| Ok(())),
             );
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100))
-                .then(move |_| {
+            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+                move |_| {
                     let left = writer.get_string();
                     let right = "1\n";
                     assert_eq!(left, right, "value in writer should match");
-                    
+
                     let check = if let Ok(Async::NotReady) = test_killed_rx.poll() {
                         true
                     } else {
@@ -396,7 +393,8 @@ mod tests {
                     assert!(check, "test should not be killed");
                     drop(test_killer);
                     Ok(())
-                });
+                },
+            );
 
             tokio::spawn(f);
 
@@ -419,16 +417,16 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec!(json!({"foo": [1, 2, 3]}), json!(2))))
-                    .then(|_| Ok(()))
+                tx.send_all(stream::iter_ok(vec![json!({"foo": [1, 2, 3]}), json!(2)]))
+                    .then(|_| Ok(())),
             );
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100))
-                .then(move |_| {
+            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+                move |_| {
                     let left = writer.get_string();
                     let right = "{\n  \"foo\": [\n    1,\n    2,\n    3\n  ]\n}\n2\n";
                     assert_eq!(left, right, "value in writer should match");
-                    
+
                     let check = if let Ok(Async::NotReady) = test_killed_rx.poll() {
                         true
                     } else {
@@ -437,7 +435,8 @@ mod tests {
                     assert!(check, "test should not be killed");
                     drop(test_killer);
                     Ok(())
-                });
+                },
+            );
 
             tokio::spawn(f);
 

@@ -1,7 +1,4 @@
-use std::{
-    net,
-    thread,
-};
+use std::{net, thread};
 
 use actix::prelude::*;
 use actix_web::{
@@ -34,10 +31,11 @@ fn echo(req: &HttpRequest) -> HttpResponse {
 }
 
 pub fn start_test_server() -> u16 {
-    let listener = net::TcpListener::bind("127.0.0.1:0")
-        .expect("could not bind to a port");
+    let listener = net::TcpListener::bind("127.0.0.1:0").expect("could not bind to a port");
 
-    let port = listener.local_addr().expect("should have a local listenening address")
+    let port = listener
+        .local_addr()
+        .expect("should have a local listenening address")
         .port();
 
     thread::spawn(move || {

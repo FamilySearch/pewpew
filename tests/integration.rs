@@ -14,7 +14,11 @@ fn int1() {
         .output()
         .expect("could not execute integration test");
 
-    assert!(out.status.success(), "process had a non-zero exit status. Stderr: {}", std::str::from_utf8(&out.stderr).unwrap());
+    assert!(
+        out.status.success(),
+        "process had a non-zero exit status. Stderr: {}",
+        std::str::from_utf8(&out.stderr).unwrap()
+    );
 
     let left = std::str::from_utf8(&out.stdout).expect("could not parse stdout as string");
     let right = include_str!("integration.stdout.out");

@@ -10,7 +10,7 @@ use fnv::FnvHashMap;
 use futures::{
     future::Shared,
     sync::mpsc::{self as futures_channel, Sender as FCSender},
-    Future, Sink, Stream,
+    Future, IntoFuture, Sink, Stream,
 };
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
@@ -655,11 +655,11 @@ where
             let stats = stats4.lock();
             let epoch = match get_epoch() {
                 Ok(e) => e,
-                Err(e) => return Err(e),
+                Err(e) => return Either::A(Err(e).into_future()),
             };
             let prev_time = epoch / stats.duration * stats.duration - stats.duration;
             stats.print_summary(prev_time, summary_output_format);
-            Ok(())
+            Either::B(stats.persist().then(|_| Ok(())))
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
         let print_provider_stats = create_provider_stats_printer(

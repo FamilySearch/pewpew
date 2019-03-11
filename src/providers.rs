@@ -291,10 +291,9 @@ mod tests {
             let p = literals(esl.into());
 
             let jsons2 = jsons.clone();
-            let f = p.rx.collect()
-                .and_then(move |mut v| {
-                    v.sort_unstable_by_key(|v| v.clone().as_u64().unwrap());
-                    assert_eq!(v, jsons2);
+            let f = p.rx.collect().and_then(move |mut v| {
+                v.sort_unstable_by_key(|v| v.clone().as_u64().unwrap());
+                assert_eq!(v, jsons2);
                 Ok(())
             });
 
@@ -309,7 +308,7 @@ mod tests {
             let p = literals(esl.into());
             let expects = stream::iter_ok(jsons.clone().into_iter().cycle());
 
-            let f =  p.rx.zip(expects).take(50).for_each(|(left, right)| {
+            let f = p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);
                 Ok(())
             });
@@ -323,24 +322,20 @@ mod tests {
             };
 
             let p = literals(esl.into());
-            let expects: BTreeSet<_> = jsons.clone()
+            let expects: BTreeSet<_> = jsons
+                .clone()
                 .into_iter()
                 .map(|v| v.as_u64().unwrap())
                 .collect();
-            let jsons2: Vec<_> = jsons.clone()
-                .into_iter()
-                .cycle()
-                .take(500)
-                .collect();
+            let jsons2: Vec<_> = jsons.clone().into_iter().cycle().take(500).collect();
 
-            let f = p.rx.take(500).collect()
-                .and_then(move |v| {
-                    assert_ne!(v, jsons2);
-                    for j in v {
-                        assert!(expects.contains(&j.as_u64().unwrap()));
-                    }
-                    Ok(())
-                });
+            let f = p.rx.take(500).collect().and_then(move |v| {
+                assert_ne!(v, jsons2);
+                for j in v {
+                    assert!(expects.contains(&j.as_u64().unwrap()));
+                }
+                Ok(())
+            });
 
             tokio::spawn(f);
 

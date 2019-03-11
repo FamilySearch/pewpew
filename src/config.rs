@@ -61,7 +61,9 @@ impl LoadPattern {
     }
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
@@ -97,30 +99,28 @@ impl IntoIterator for StaticList {
     type IntoIter = Either3<
         StaticListRepeatRandomIterator,
         std::vec::IntoIter<json::Value>,
-        std::iter::Cycle<std::vec::IntoIter<json::Value>>
+        std::iter::Cycle<std::vec::IntoIter<json::Value>>,
     >;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            StaticList::Explicit(mut e) => {
-                match (e.repeat, e.random) {
-                    (true, true) => {
-                        let a = StaticListRepeatRandomIterator {
-                            random: Uniform::new(0, e.values.len()),
-                            values: e.values,
-                        };
-                        Either3::A(a)
-                    },
-                    (false, false) => Either3::B(e.values.into_iter()),
-                    (false, true) => {
-                        let mut rng = rand::thread_rng();
-                        e.values.sort_unstable_by_key(|_| rng.gen::<usize>());
-                        Either3::B(e.values.into_iter())
-                    }
-                    (true, false) => Either3::C(e.values.into_iter().cycle()),
+            StaticList::Explicit(mut e) => match (e.repeat, e.random) {
+                (true, true) => {
+                    let a = StaticListRepeatRandomIterator {
+                        random: Uniform::new(0, e.values.len()),
+                        values: e.values,
+                    };
+                    Either3::A(a)
                 }
-            }
-            StaticList::Implicit(v) => Either3::C(v.into_iter().cycle())
+                (false, false) => Either3::B(e.values.into_iter()),
+                (false, true) => {
+                    let mut rng = rand::thread_rng();
+                    e.values.sort_unstable_by_key(|_| rng.gen::<usize>());
+                    Either3::B(e.values.into_iter())
+                }
+                (true, false) => Either3::C(e.values.into_iter().cycle()),
+            },
+            StaticList::Implicit(v) => Either3::C(v.into_iter().cycle()),
         }
     }
 }

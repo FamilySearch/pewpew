@@ -1708,8 +1708,8 @@ mod tests {
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
-                        json::Value::Array(v) => providers::literals(v),
-                        _ => providers::literals(vec![v]),
+                        json::Value::Array(v) => providers::literals(v.into()),
+                        _ => providers::literals(vec![v].into()),
                     };
                     (k.to_string(), p)
                 })

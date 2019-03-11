@@ -198,7 +198,7 @@ providers:
 creates a `static` provider named `bar` where the value is equivalent to the JSON `{"a": 1, "b": 2, "c": 3}`.
 
 ## static_list
-The `static_list` *provider_type* is like the `static` *provider_type* except an array of values can be specified and the provider will iterate infinitely over the array using each element as the value to be provided.
+The `static_list` *provider_type* acts like the `static` *provider_type* except an array of values is specified.
 
 **Example**, the following:
 ```yaml
@@ -211,6 +211,12 @@ providers:
 ```
 
 creates a `static_list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
+
+`static_list` provider can be specified in two forms, either implicitly (example above) or explicitly. The explicit form has the following parameters:
+
+- **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that entries in the values array should provided in random order. When combined with `repeat` there is no sense of "fairness" in the randomization. Defaults to *false*.
+- **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that the array should repeat infitely. Defaults to *true*.
+- **`values`** - An array of json values.
 
 ## range
 The `range` *provider_type* provides an incrementing sequence of numbers in a given range. A `range` provider takes three optional parameters.

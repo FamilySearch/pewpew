@@ -99,8 +99,8 @@ pub fn response(template: config::ResponseProvider) -> Provider {
     Provider::new(template.auto_return, rx, tx)
 }
 
-pub fn literals(values: Vec<json::Value>) -> Provider {
-    let rs = stream::iter_ok::<_, channel::ChannelClosed>(values.into_iter().cycle());
+pub fn literals(list: config::StaticList) -> Provider {
+    let rs = stream::iter_ok::<_, channel::ChannelClosed>(list.into_iter());
     let (tx, rx) = channel::channel(Limit::auto());
     let tx2 = tx.clone();
     let prime_tx = rs
@@ -207,6 +207,7 @@ mod tests {
     use tokio::runtime::current_thread;
 
     use std::{
+        collections::BTreeSet,
         sync::Arc,
         time::{Duration, Instant},
     };
@@ -264,8 +265,87 @@ mod tests {
     fn literals_provider_works() {
         current_thread::run(future::lazy(|| {
             let jsons = vec![json!(1), json!(2), json!(3)];
-            let p = literals(jsons.clone());
-            let expects = stream::iter_ok(jsons.into_iter().cycle());
+
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: false,
+                random: false,
+            };
+
+            let p = literals(esl.into());
+            let expects = stream::iter_ok(jsons.clone().into_iter());
+
+            let f = p.rx.zip(expects).for_each(|(left, right)| {
+                assert_eq!(left, right);
+                Ok(())
+            });
+
+            tokio::spawn(f);
+
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: false,
+                random: true,
+            };
+
+            let p = literals(esl.into());
+
+            let jsons2 = jsons.clone();
+            let f = p.rx.collect()
+                .and_then(move |mut v| {
+                    v.sort_unstable_by_key(|v| v.clone().as_u64().unwrap());
+                    assert_eq!(v, jsons2);
+                Ok(())
+            });
+
+            tokio::spawn(f);
+
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: true,
+                random: false,
+            };
+
+            let p = literals(esl.into());
+            let expects = stream::iter_ok(jsons.clone().into_iter().cycle());
+
+            let f =  p.rx.zip(expects).take(50).for_each(|(left, right)| {
+                assert_eq!(left, right);
+                Ok(())
+            });
+
+            tokio::spawn(f);
+
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: true,
+                random: true,
+            };
+
+            let p = literals(esl.into());
+            let expects: BTreeSet<_> = jsons.clone()
+                .into_iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect();
+            let jsons2: Vec<_> = jsons.clone()
+                .into_iter()
+                .cycle()
+                .take(500)
+                .collect();
+
+            let f = p.rx.take(500).collect()
+                .and_then(move |v| {
+                    assert_ne!(v, jsons2);
+                    for j in v {
+                        assert!(expects.contains(&j.as_u64().unwrap()));
+                    }
+                    Ok(())
+                });
+
+            tokio::spawn(f);
+
+            let p = literals(jsons.clone().into());
+            let expects = stream::iter_ok(jsons.clone().into_iter().cycle());
 
             p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);

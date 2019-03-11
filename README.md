@@ -2,6 +2,10 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.4.9
+Changes:
+- Add in `random` and `repeat` parameters for `static_list` providers.
+
 ### v0.4.8
 Bug fixes:
 - Fixed error where a try run could try to use an endpoint which provides for a provider that it also depends on.

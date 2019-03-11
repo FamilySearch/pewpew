@@ -10,9 +10,13 @@ pub use self::select_parser::{
 use crate::error::TestError;
 
 use channel::Limit;
-use ether::Either;
+use ether::{Either, Either3};
 use hyper::Method;
 use mod_interval::{HitsPer, LinearBuilder};
+use rand::{
+    distributions::{Distribution, Uniform},
+    Rng,
+};
 use regex::Regex;
 use serde::{
     de::{Error as DeError, Unexpected},
@@ -57,6 +61,84 @@ impl LoadPattern {
     }
 }
 
+fn default_true() -> bool { true }
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+pub struct ExplicitStaticList {
+    #[serde(default)]
+    pub random: bool,
+    #[serde(default = "default_true")]
+    pub repeat: bool,
+    pub values: Vec<json::Value>,
+}
+
+#[serde(untagged)]
+#[derive(Deserialize)]
+pub enum StaticList {
+    Explicit(ExplicitStaticList),
+    Implicit(Vec<json::Value>),
+}
+
+impl From<Vec<json::Value>> for StaticList {
+    fn from(v: Vec<json::Value>) -> Self {
+        StaticList::Implicit(v)
+    }
+}
+
+impl From<ExplicitStaticList> for StaticList {
+    fn from(e: ExplicitStaticList) -> Self {
+        StaticList::Explicit(e)
+    }
+}
+
+impl IntoIterator for StaticList {
+    type Item = json::Value;
+    type IntoIter = Either3<
+        StaticListRepeatRandomIterator,
+        std::vec::IntoIter<json::Value>,
+        std::iter::Cycle<std::vec::IntoIter<json::Value>>
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            StaticList::Explicit(mut e) => {
+                match (e.repeat, e.random) {
+                    (true, true) => {
+                        let a = StaticListRepeatRandomIterator {
+                            random: Uniform::new(0, e.values.len()),
+                            values: e.values,
+                        };
+                        Either3::A(a)
+                    },
+                    (false, false) => Either3::B(e.values.into_iter()),
+                    (false, true) => {
+                        let mut rng = rand::thread_rng();
+                        e.values.sort_unstable_by_key(|_| rng.gen::<usize>());
+                        Either3::B(e.values.into_iter())
+                    }
+                    (true, false) => Either3::C(e.values.into_iter().cycle()),
+                }
+            }
+            StaticList::Implicit(v) => Either3::C(v.into_iter().cycle())
+        }
+    }
+}
+
+pub struct StaticListRepeatRandomIterator {
+    values: Vec<json::Value>,
+    random: Uniform<usize>,
+}
+
+impl Iterator for StaticListRepeatRandomIterator {
+    type Item = json::Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let pos_index = self.random.sample(&mut rand::thread_rng());
+        self.values.get(pos_index).cloned()
+    }
+}
+
 #[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
 pub enum Provider {
@@ -65,7 +147,7 @@ pub enum Provider {
     Response(ResponseProvider),
     #[serde(deserialize_with = "deserialize_static_json")]
     Static(json::Value),
-    StaticList(Vec<json::Value>),
+    StaticList(StaticList),
 }
 
 type RangeProviderIteratorA = iter::StepBy<std::ops::RangeInclusive<i64>>;

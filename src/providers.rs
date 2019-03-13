@@ -144,7 +144,7 @@ where
                 .for_each(move |v| {
                     counter += 1;
                     let result = if keep_logging {
-                        if pretty {
+                        if pretty && !v.is_string() {
                             writeln!(writer, "{:#}", v)
                         } else {
                             writeln!(writer, "{}", json_value_into_string(v))

@@ -7,11 +7,15 @@ use futures::{
 use hyper::{
     body::Payload,
     client::HttpConnector,
-    header::{HeaderValue, CONTENT_LENGTH, HOST},
+    header::{
+        Entry as HeaderEntry, HeaderMap, HeaderName, HeaderValue, CONTENT_DISPOSITION,
+        CONTENT_LENGTH, CONTENT_TYPE, HOST,
+    },
     Body as HyperBody, Client, Method, Request, Response,
 };
 use hyper_tls::HttpsConnector;
 use parking_lot::Mutex;
+use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
 use tokio::{io::AsyncRead, timer::Timeout};
@@ -259,23 +263,63 @@ impl Builder {
         let body = self
             .body
             .map(|body| {
-                let (is_file, template) = match body {
+                let value = match body {
                     config::Body::File(body) => {
-                        (true, Template::new(&body, &ctx.static_providers)?)
+                        let template = Template::new(&body, &ctx.static_providers)?;
+                        required_providers.extend(template.get_providers().clone());
+                        BodyTemplate::File(ctx.config_path.clone(), template)
                     }
                     config::Body::String(body) => {
-                        (false, Template::new(&body, &ctx.static_providers)?)
+                        let template = Template::new(&body, &ctx.static_providers)?;
+                        required_providers.extend(template.get_providers().clone());
+                        BodyTemplate::String(template)
                     }
-                };
-                required_providers.extend(template.get_providers().clone());
-                let value = if is_file {
-                    BodyTemplate::File(ctx.config_path.clone(), template)
-                } else {
-                    BodyTemplate::String(template)
+                    config::Body::Multipart(multipart) => {
+                        let pieces = multipart
+                            .into_iter()
+                            .map(|(name, v)| {
+                                let (is_file, template) = match v.body {
+                                    config::BodyMultipartPieceBody::File(f) => {
+                                        let template = Template::new(&f, &ctx.static_providers)?;
+                                        required_providers.extend(template.get_providers().clone());
+                                        (true, template)
+                                    }
+                                    config::BodyMultipartPieceBody::String(s) => {
+                                        let template = Template::new(&s, &ctx.static_providers)?;
+                                        required_providers.extend(template.get_providers().clone());
+                                        (false, template)
+                                    }
+                                };
+                                let headers = v
+                                    .headers
+                                    .into_iter()
+                                    .map(|(k, v)| {
+                                        let template = Template::new(&v, &ctx.static_providers)?;
+                                        required_providers.extend(template.get_providers().clone());
+                                        Ok::<_, TestError>((k, template))
+                                    })
+                                    .collect::<Result<_, _>>()?;
+
+                                let piece = MultipartPiece {
+                                    name,
+                                    headers,
+                                    is_file,
+                                    template,
+                                };
+                                Ok::<_, TestError>(piece)
+                            })
+                            .collect::<Result<_, _>>()?;
+                        let multipart = MultipartBody {
+                            path: ctx.config_path.clone(),
+                            pieces,
+                        };
+                        BodyTemplate::Multipart(multipart)
+                    }
                 };
                 Ok::<_, TestError>(value)
             })
-            .transpose()?;
+            .transpose()?
+            .unwrap_or(BodyTemplate::None);
         let mut required_providers2 = BTreeSet::new();
         for (name, d) in self.declare {
             required_providers.remove(&name);
@@ -386,24 +430,183 @@ enum StreamItem {
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
-#[derive(Clone)]
+struct MultipartPiece {
+    name: String,
+    headers: Vec<(String, Template)>,
+    is_file: bool,
+    template: Template,
+}
+
+struct MultipartBody {
+    path: PathBuf,
+    pieces: Vec<MultipartPiece>,
+}
+
+impl MultipartBody {
+    fn as_hyper_body<'a>(
+        &self,
+        template_values: &TemplateValues,
+        ct_entry: HeaderEntry<'a, HeaderValue>,
+    ) -> Result<HyperBody, TestError> {
+        let boundary: String = Alphanumeric
+            .sample_iter(&mut rand::thread_rng())
+            .take(20)
+            .collect();
+        let is_form = {
+            let content_type =
+                ct_entry.or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
+            let ct_str = content_type
+                .to_str()
+                .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+            if ct_str.starts_with("multipart/") {
+                let is_form = ct_str.starts_with("multipart/form-data");
+                *content_type = HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary))
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                is_form
+            } else {
+                *content_type =
+                    HeaderValue::from_str(&format!("multipart/form-data;boundary={}", boundary))
+                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                true
+            }
+        };
+        let mut pieces: Vec<_> = self
+            .pieces
+            .iter()
+            .rev()
+            .map(|mp| {
+                let body = mp.template.evaluate(&template_values.0)?;
+                let mut headers = mp
+                    .headers
+                    .iter()
+                    .map(|(k, t)| {
+                        let key = HeaderName::from_bytes(k.as_bytes())
+                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                        let value = HeaderValue::from_str(&t.evaluate(&template_values.0)?)
+                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                        Ok::<_, TestError>((key, value))
+                    })
+                    .collect::<Result<HeaderMap<_>, _>>()?;
+
+                if is_form && !headers.contains_key(CONTENT_DISPOSITION) {
+                    let value = HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
+                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                    headers.insert(CONTENT_DISPOSITION, value);
+                }
+                Ok((headers, mp.is_file, body))
+            })
+            .collect::<Result<_, TestError>>()?;
+
+        let mut sub_body: Option<HyperBody> = None;
+        let path = self.path.clone();
+        let mut ended = false;
+        let mut buf = bytes::BytesMut::with_capacity(8192);
+
+        let stream = stream::poll_fn::<_, TestError, _>(move || loop {
+            if let Some(ref mut sb) = &mut sub_body {
+                match sb.poll_data() {
+                    Ok(Async::Ready(Some(d))) => {
+                        buf.extend_from_slice(&*d);
+                    }
+                    Ok(Async::Ready(None)) => {
+                        sub_body = None;
+                        buf.extend_from_slice(b"\r\n");
+                    }
+                    Ok(Async::NotReady) => {
+                        return if buf.is_empty() {
+                            Ok(Async::NotReady)
+                        } else {
+                            Ok(Async::Ready(Some(buf.take().freeze())))
+                        };
+                    }
+                    Err(e) => return Err(RecoverableError::BodyErr(Arc::new(e)).into()),
+                }
+                continue;
+            }
+            match pieces.pop() {
+                Some((headers, is_file, body)) => {
+                    buf.extend_from_slice(format!("--{}", boundary).as_bytes());
+                    for (k, v) in headers.iter() {
+                        buf.extend_from_slice(format!("\r\n{}: ", k.as_str()).as_bytes());
+                        buf.extend_from_slice(v.as_bytes());
+                    }
+                    buf.extend_from_slice(b"\r\n\r\n");
+                    if is_file {
+                        sub_body = Some(create_file_hyper_body(body, &path));
+                    } else {
+                        buf.extend_from_slice(body.as_bytes());
+                        buf.extend_from_slice(b"\r\n");
+                    }
+                }
+                None => {
+                    if buf.is_empty() {
+                        return if ended {
+                            Ok(Async::Ready(None))
+                        } else {
+                            buf.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+                            ended = true;
+                            Ok(Async::Ready(Some(buf.take().freeze())))
+                        };
+                    } else {
+                        return Ok(Async::Ready(Some(buf.take().freeze())));
+                    }
+                }
+            }
+        });
+
+        Ok(HyperBody::wrap_stream(stream))
+    }
+}
+
+fn create_file_hyper_body(mut file: String, path: &PathBuf) -> HyperBody {
+    tweak_path(&mut file, path);
+    let stream = tokio::fs::File::open(file)
+        .and_then(|mut file| {
+            let mut buf = bytes::BytesMut::with_capacity(8 * (1 << 10));
+            let s = stream::poll_fn(move || {
+                buf.reserve(8 * (1 << 10));
+                let ret = match file.read_buf(&mut buf)? {
+                    Async::Ready(n) if n == 0 => Async::Ready(None),
+                    Async::Ready(_) => Async::Ready(buf.take().freeze().into()),
+                    Async::NotReady => Async::NotReady,
+                };
+                Ok(ret)
+            });
+            Ok(s)
+        })
+        .flatten_stream();
+    HyperBody::wrap_stream(stream)
+}
+
 enum BodyTemplate {
     File(PathBuf, Template),
+    Multipart(MultipartBody),
+    None,
     String(Template),
 }
 
 impl BodyTemplate {
-    pub fn evaluate(&self, d: &json::Value) -> Result<String, TestError> {
-        match self {
-            BodyTemplate::File(_, t) => t.evaluate(d),
-            BodyTemplate::String(t) => t.evaluate(d),
-        }
-    }
-
-    pub fn get_path(&self) -> Option<&PathBuf> {
-        match self {
-            BodyTemplate::File(p, _) => Some(&p),
-            BodyTemplate::String(_) => None,
+    fn as_hyper_body<'a>(
+        &self,
+        template_values: &TemplateValues,
+        copy_body_value: bool,
+        body_value: &mut Option<String>,
+        ct_entry: HeaderEntry<'a, HeaderValue>,
+    ) -> Result<HyperBody, TestError> {
+        let template = match self {
+            BodyTemplate::File(_, t) => t,
+            BodyTemplate::Multipart(m) => return m.as_hyper_body(template_values, ct_entry),
+            BodyTemplate::None => return Ok(HyperBody::empty()),
+            BodyTemplate::String(t) => t,
+        };
+        let body = template.evaluate(&template_values.0)?;
+        if let BodyTemplate::File(path, _) = self {
+            Ok(create_file_hyper_body(body, path))
+        } else {
+            if copy_body_value {
+                *body_value = Some(body.clone());
+            }
+            Ok(body.into())
         }
     }
 }
@@ -412,7 +615,7 @@ type EndpointStream = Box<dyn Stream<Item = Vec<StreamItem>, Error = TestError> 
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
-    body: Option<BodyTemplate>,
+    body: BodyTemplate,
     client: Arc<
         Client<
             HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
@@ -478,7 +681,7 @@ struct RequestMaker {
     url: Template,
     method: Method,
     headers: BTreeMap<String, Template>,
-    body: Option<BodyTemplate>,
+    body: BodyTemplate,
     rr_providers: u16,
     client: Arc<
         Client<
@@ -532,54 +735,41 @@ impl RequestMaker {
             Err(_) => return Either::B(Err(TestError::InvalidUrl(url)).into_future()),
         };
         request.method(self.method.clone());
-        for (key, v) in &self.headers {
-            let value = match v.evaluate(&template_values.0) {
-                Ok(v) => v,
-                Err(e) => return Either::B(Err(e).into_future()),
-            };
-            request.header(key.as_str(), value.as_str());
-        }
+        let headers = self
+            .headers
+            .iter()
+            .map(|(k, v)| {
+                let key = HeaderName::from_bytes(k.as_bytes())
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                let value = HeaderValue::from_str(&v.evaluate(&template_values.0)?)
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                Ok::<_, TestError>((key, value))
+            })
+            .collect::<Result<HeaderMap<_>, _>>();
+        let mut headers = match headers {
+            Ok(h) => h,
+            Err(e) => return Either::B(Err(e).into_future()),
+        };
+        let ct_entry = headers
+            .entry(CONTENT_TYPE)
+            .expect("Content-Type is a valid header name");
         let mut body_value = None;
-        let body = if let Some(b) = self.body.clone().as_mut() {
-            let mut body = match b.evaluate(&template_values.0) {
-                Ok(b) => b,
-                Err(e) => return Either::B(Err(e).into_future()),
-            };
-            if let Some(path) = b.get_path() {
-                tweak_path(&mut body, path);
-                let stream = tokio::fs::File::open(body)
-                    .and_then(|mut file| {
-                        let mut buf = bytes::BytesMut::new();
-                        buf.resize(8 * (1 << 10), 0);
-                        let s = stream::poll_fn(move || {
-                            let ret = match file.read_buf(&mut buf)? {
-                                Async::Ready(n) if n == 0 => Async::Ready(None),
-                                Async::Ready(n) => {
-                                    Async::Ready(bytes::Bytes::from(&buf[..n]).into())
-                                }
-                                Async::NotReady => Async::NotReady,
-                            };
-                            Ok(ret)
-                        });
-                        Ok(s)
-                    })
-                    .flatten_stream();
-                hyper::Body::wrap_stream(stream)
-            } else {
-                if self.rr_providers & REQUEST_BODY != 0 {
-                    body_value = Some(body.clone());
-                }
-                body.into()
-            }
-        } else {
-            HyperBody::empty()
+        let body = self.body.as_hyper_body(
+            &template_values,
+            self.rr_providers & REQUEST_BODY != 0,
+            &mut body_value,
+            ct_entry,
+        );
+        let body = match body {
+            Ok(b) => b,
+            Err(e) => return Either::B(Err(e).into_future()),
         };
         let mut request = match request.body(body) {
             Ok(b) => b,
             Err(e) => return Either::B(Err(TestError::RequestBuilderErr(e.into())).into_future()),
         };
         // add the host header
-        request.headers_mut().insert(
+        headers.insert(
             HOST,
             HeaderValue::from_str(url.host_str().expect("should be a valid url"))
                 .expect("url should be a valid string"),
@@ -588,7 +778,7 @@ impl RequestMaker {
         // (hyper adds it automatically but we need to add it manually here so it shows up in the logs)
         match request.body().content_length() {
             Some(n) if n > 0 => {
-                request.headers_mut().insert(CONTENT_LENGTH, n.into());
+                headers.insert(CONTENT_LENGTH, n.into());
             }
             _ => (),
         }
@@ -638,7 +828,7 @@ impl RequestMaker {
         }
         if self.rr_providers & REQUEST_HEADERS != 0 {
             let mut headers_json = json::Map::new();
-            for (k, v) in request.headers() {
+            for (k, v) in headers.iter() {
                 headers_json.insert(
                     k.as_str().to_string(),
                     json::Value::String(
@@ -656,6 +846,7 @@ impl RequestMaker {
         }
         request_obj.insert("method".into(), self.method.as_str().into());
         template_values.insert("request".into(), request_provider);
+        request.headers_mut().extend(headers);
         let response_future = self.client.request(request);
         let now = Instant::now();
         let stats_tx = self.stats_tx.clone();

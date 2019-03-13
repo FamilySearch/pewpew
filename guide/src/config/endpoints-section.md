@@ -21,7 +21,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 - **`declare`** <sub><sup>*Optional*</sup></sub> - See the [declare subsection](#declare-subsection)
 - **`headers`** <sub><sup>*Optional*</sup></sub> - See [headers](./common-types.md#headers)
-- **`body`** <sub><sup>*Optional*</sup></sub> - Either a [template](./common-types.md#templates) indicating a string that should be sent as the request body, or an object with a key `file` and a value of a [template](./common-types.md#templates) which will evaluate to the name of a file to send as the request body. When a relative path is specified it is interpreted as relative to the config file.
+- **`body`** <sub><sup>*Optional*</sup></sub> - See the [body subsection](#body-subsection)
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](./load_pattern-section.md)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
 - **`peak_load`** <sub><sup>*Optional**</sup></sub> - A string representing what the "peak load" for this endpoint should be. The term "peak load" represents how much traffic is generated for this endpoint when the [load_pattern](./load_pattern-section.md) reaches `100%`. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`.
@@ -50,6 +50,60 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 ## Using providers to build a request
 Providers can be referenced anywhere [templates](./common-types.md#templates) can be used and also in the `declare` subsection.
+
+## body subsection
+<pre>
+body: <i>template</i>
+</pre>
+
+<pre>
+body:
+  file: <i>template</i>
+</pre>
+
+<pre>
+body:
+  multipart: 
+    <i>field_name</i>:
+      [headers: <i>headers</i>]
+      body: <i>template</i>
+    <i>field_name</i>:
+      [headers: <i>headers</i>]
+      body:
+        file: <i>template</i>
+</pre>
+
+A request body can be in one of three formats: a [template](./common-types.md#templates) to send a string as the body, a file which will send the contents of a file as the body, or a multipart body.
+
+To send the contents of a file the body parameter should be an object with a single key of `file` and the value being a template. Relative paths resolve relative to the config file used to execute pewpew.
+
+To send a multipart body, the body parameter should be an object with a single key of `multipart` and the value being an object of key/value pairs, where each key/value pair represents a piece of the multipart body. The keys represent the *field_name*s used in an HTML form and the values are objects with the following properties:
+  - **`headers`** <sub><sup>*Optional*</sup></sub> - [Headers](./common-types.md#headers) that will be included with this piece of the multipart body. For example, it is not uncommon to include a `content-type` header with a piece of a multipart body which includes a file.
+  - **`body`** - Either a [template](./common-types.md#templates) which will send a string value or an object with a single key of `file` and the value being a [template](./common-types.md#templates)--which will send the contents of a file.
+
+When a multipart body is used for an endpoint each request will have the `content-type` header added with the value `multipart/form-data` and the necessary boundary. If there is already a `content-type` header set for the request it will be overwritten unless it is starts with `multipart/`--then the necessary boundary will be appended. If a `multipart/...` `content-type` is manually set with the request, make sure to not include a `boundary` parameter.
+
+For any request which has a `content-type` of `multipart/form-data`, a `Content-Disposition` header will be added to each piece in the multipart body with a value of <code>form-data; name="<i>field_name</i>"</code> (where *field_name* is substituted with the piece's *field_name*). If a `Content-Disposition` header is explicitly specified for a piece it will not be overwritten.
+  
+File example:
+
+```
+body:
+  file: a_file.txt
+```
+
+Multipart example:
+```
+body:
+  multipart:
+    foo:
+      headers:
+        Content-Type: image/jpeg
+      body:
+        file: foo.jpg
+    bar:
+      body: some text
+```
 
 ## declare subsection
 <pre>

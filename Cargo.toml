@@ -48,6 +48,7 @@ zip_all = { path = "./lib/zip_all" }
 actix = "0.7"
 actix-web = "0.7"
 assert_cmd = "0.11"
+rust-crypto = "0.2"
 tempfile = "3"
 
 [profile.release]

@@ -309,6 +309,24 @@ pub struct Endpoint {
 pub enum Body {
     String(String),
     File(String),
+    Multipart(Vec<(String, BodyMultipartPiece)>),
+}
+
+pub struct BodyMultipartPiece {
+    pub headers: Vec<(String, String)>,
+    pub body: BodyMultipartPieceBody,
+}
+
+pub enum BodyMultipartPieceBody {
+    String(String),
+    File(String),
+}
+
+#[serde(untagged)]
+#[derive(Deserialize)]
+enum BodyMultipartPieceBodyHelper {
+    String(String),
+    File(BodyFileHelper),
 }
 
 #[serde(untagged)]
@@ -316,6 +334,22 @@ pub enum Body {
 enum BodyHelper {
     String(String),
     File(BodyFileHelper),
+    Multipart(BodyMultipartHelper),
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct BodyMultipartPieceHelper {
+    #[serde(default, with = "tuple_vec_map")]
+    pub headers: Vec<(String, String)>,
+    pub body: BodyMultipartPieceBodyHelper,
+}
+
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct BodyMultipartHelper {
+    #[serde(with = "tuple_vec_map")]
+    multipart: Vec<(String, BodyMultipartPieceHelper)>,
 }
 
 #[serde(deny_unknown_fields)]
@@ -478,6 +512,28 @@ impl<'de> Deserialize<'de> for Body {
         let body = match bh {
             BodyHelper::String(s) => Body::String(s),
             BodyHelper::File(fh) => Body::File(fh.file),
+            BodyHelper::Multipart(mp) => {
+                let inner = mp
+                    .multipart
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let body = match v.body {
+                            BodyMultipartPieceBodyHelper::String(s) => {
+                                BodyMultipartPieceBody::String(s)
+                            }
+                            BodyMultipartPieceBodyHelper::File(f) => {
+                                BodyMultipartPieceBody::File(f.file)
+                            }
+                        };
+                        let v = BodyMultipartPiece {
+                            headers: v.headers,
+                            body,
+                        };
+                        (k, v)
+                    })
+                    .collect();
+                Body::Multipart(inner)
+            }
         };
         Ok(body)
     }

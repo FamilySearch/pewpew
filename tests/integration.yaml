@@ -1,7 +1,7 @@
 load_pattern:
   - linear:
       to: 100%
-      over: 10s
+      over: 5s
 config:
   client:
     headers:
@@ -24,7 +24,9 @@ loggers:
       )
     limit: 2
     to: stdout
-    kill: true
+  l2:
+    limit: 1
+    to: stdout
 providers:
   a:
     range: {}
@@ -51,3 +53,18 @@ endpoints:
     peak_load: 1hps
     headers:
       Content-Type: application/json
+  - method: POST
+    declare:
+      e: collect(b, 3)
+    url: http://localhost:${$PORT}/multipart
+    body:
+      multipart:
+        test: 
+          headers:
+            sha1: A4D8B154FB003E06DF42F7EEDFE95AE5F926F1BC
+          body:
+            file: test.jpg
+    peak_load: 1hps
+    logs:
+      l2:
+        select: if(response.status == 204, true, response.body)

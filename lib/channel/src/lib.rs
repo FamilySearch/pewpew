@@ -359,14 +359,21 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
         self,
     ) -> (
         impl Stream<Item = (), Error = ()>,
-        Arc<Fn() + Send + Sync + 'static>,
+        Arc<dyn Fn(bool) + Send + Sync + 'static>,
     ) {
         let signal = self.signal.clone();
+        let demander_inner = self.demander_inner.clone();
+        let demander_parked_senders = self.demander_parked_senders.clone();
         // this callback is called after a request finishes
-        let right = move || {
-            signal.store(0, Ordering::Release);
+        let cb = move |was_a_value_added: bool| {
+            if was_a_value_added || !demander_inner.is_empty() {
+                signal.store(0, Ordering::Release);
+            } else {
+                signal.store(1, Ordering::Release);
+                demander_parked_senders.wake_all();
+            }
         };
-        let left = stream::poll_fn(move || {
+        let stream = stream::poll_fn(move || {
             if self.demander_inner.is_empty() {
                 let signal_state = self
                     .signal
@@ -389,7 +396,7 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
             Ok(Async::NotReady)
         });
 
-        (left, Arc::new(right))
+        (stream, Arc::new(cb))
     }
 }
 
@@ -566,7 +573,7 @@ mod tests {
             let right = Ok(Async::NotReady);
             assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled");
 
-            done_fn();
+            done_fn(true);
 
             let left = on_demand.poll();
             let right = Ok(Async::NotReady);
@@ -582,6 +589,19 @@ mod tests {
             let left = on_demand.poll();
             let right = Ok(Async::Ready(Some(())));
             assert_eq!(left, right, "on_demand stream should be ready");
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled");
+
+            done_fn(false);
+
+            let left = on_demand.poll();
+            let right = Ok(Async::Ready(Some(())));
+            assert_eq!(
+                left, right,
+                "on_demand stream should be ready because a value was not put in the receiver"
+            );
 
             Ok(())
         });

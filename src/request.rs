@@ -81,7 +81,7 @@ impl From<json::Value> for TemplateValues {
 }
 
 struct Outgoing {
-    cb: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
+    cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
     select: Select,
     tx: channel::Sender<json::Value>,
 }
@@ -90,7 +90,7 @@ impl Outgoing {
     fn new(
         select: Select,
         tx: channel::Sender<json::Value>,
-        cb: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
+        cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
     ) -> Self {
         Outgoing { cb, select, tx }
     }
@@ -904,7 +904,7 @@ impl RequestMaker {
                     };
                     for o in outgoing2.iter() {
                         if let Some(cb) = &o.cb {
-                            cb();
+                            cb(false);
                         }
                     }
                     let a = stats_tx2
@@ -1138,12 +1138,12 @@ impl BodyHandler {
                 for (i, o) in self.outgoing.iter().enumerate() {
                     if !self.included_outgoing_indexes.contains(&i) {
                         if let Some(cb) = &o.cb {
-                            cb();
+                            cb(false);
                         }
                         continue;
                     }
-                    let iter = match o.select.as_iter(template_values.as_json().clone()) {
-                        Ok(v) => v,
+                    let mut iter = match o.select.as_iter(template_values.as_json().clone()) {
+                        Ok(v) => v.peekable(),
                         Err(TestError::Recoverable(r)) => {
                             let kind = stats::StatKind::RecoverableError(r);
                             futures.push(send_response_stat(kind));
@@ -1151,6 +1151,7 @@ impl BodyHandler {
                         }
                         Err(e) => return Either::B(Err(e).into_future()),
                     };
+                    let not_empty = iter.peek().is_some();
                     match o.select.get_send_behavior() {
                         EndpointProvidesSendOptions::Block => {
                             let tx = o.tx.clone();
@@ -1163,9 +1164,9 @@ impl BodyHandler {
                                     Some(e) => Err(*e),
                                     None => Ok(()),
                                 })
-                                .then(|r| {
+                                .then(move |r| {
                                     if let Some(cb) = cb {
-                                        cb()
+                                        cb(not_empty)
                                     }
                                     r
                                 });
@@ -1185,7 +1186,7 @@ impl BodyHandler {
                                 o.tx.force_send(v);
                             }
                             if let Some(cb) = &o.cb {
-                                cb();
+                                cb(not_empty);
                             }
                         }
                         EndpointProvidesSendOptions::IfNotFull => {
@@ -1204,7 +1205,7 @@ impl BodyHandler {
                                 }
                             }
                             if let Some(cb) = &o.cb {
-                                cb();
+                                cb(not_empty);
                             }
                         }
                     }

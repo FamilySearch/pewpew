@@ -3,6 +3,9 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 
 ## Changelog
 ### v0.4.9
+Buf fixes:
+- Fix issue with on_demand where things would lock up if the endpoint did not provide a value.
+
 Changes:
 - Add in `random` and `repeat` parameters for `static_list` providers.
 - Persists aggregate stats to disk every time they are printed to the console.

@@ -1,6 +1,7 @@
 use std::{cmp::PartialEq, fmt, io};
 
-use futures::{Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
+use tokio::io::AsyncWrite;
 
 pub enum Either<A, B> {
     A(A),
@@ -240,6 +241,21 @@ where
             Either3::A(a) => a.flush(),
             Either3::B(b) => b.flush(),
             Either3::C(c) => c.flush(),
+        }
+    }
+}
+
+impl<A, B, C> AsyncWrite for Either3<A, B, C>
+where
+    A: AsyncWrite,
+    B: AsyncWrite,
+    C: AsyncWrite,
+{
+    fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
+        match self {
+            Either3::A(a) => a.shutdown(),
+            Either3::B(b) => b.shutdown(),
+            Either3::C(c) => c.shutdown(),
         }
     }
 }

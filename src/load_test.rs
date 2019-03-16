@@ -21,7 +21,7 @@ use serde_json as json;
 use std::{
     cmp,
     collections::{BTreeMap, BTreeSet},
-    io, mem,
+    mem,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
@@ -146,8 +146,8 @@ impl LoadTest {
             .into_iter()
             .map(|(name, mut template)| {
                 let writer_future = match template.to.as_str() {
-                    "stderr" => Either::A(future::ok(Either3::A(io::stderr()))),
-                    "stdout" => Either::A(future::ok(Either3::B(io::stdout()))),
+                    "stderr" => Either::A(future::ok(Either3::A(tokio::io::stderr()))),
+                    "stdout" => Either::A(future::ok(Either3::B(tokio::io::stdout()))),
                     _ => {
                         let mut path = mem::replace(&mut template.to, String::new());
                         tweak_path(&mut path, &config_path);

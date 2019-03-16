@@ -9,9 +9,12 @@ use crate::error::TestError;
 use crate::load_test::TestEndReason;
 use crate::util::{json_value_into_string, tweak_path};
 
+use bytes::{Buf, Bytes, IntoBuf};
 use channel::Limit;
 use ether::{Either, Either3};
-use futures::{stream, sync::mpsc::Sender as FCSender, Future, IntoFuture, Sink, Stream};
+use futures::{
+    stream, sync::mpsc::Sender as FCSender, Async, AsyncSink, Future, IntoFuture, Sink, Stream,
+};
 use serde_json as json;
 use tokio_threadpool::blocking;
 
@@ -121,6 +124,71 @@ pub fn range(range: config::RangeProvider) -> Provider {
     Provider::new(None, rx, tx)
 }
 
+struct LogSink<W>
+where
+    W: tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    buf: Option<io::Cursor<Bytes>>,
+    name: String,
+    pretty: bool,
+    writer: W,
+}
+
+impl<W> Sink for LogSink<W>
+where
+    W: tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    type SinkItem = json::Value;
+    type SinkError = TestError;
+
+    fn start_send(
+        &mut self,
+        item: Self::SinkItem,
+    ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
+        if self.buf.is_some() {
+            match self.poll_complete() {
+                Ok(Async::Ready(_)) => (),
+                Ok(Async::NotReady) => return Ok(AsyncSink::NotReady(item)),
+                Err(e) => return Err(e),
+            }
+        }
+        let buf = if self.pretty && !item.is_string() {
+            let pretty = format!("{:#}\n", item);
+            Bytes::from(pretty).into_buf()
+        } else {
+            let mut s = json_value_into_string(item);
+            s.push('\n');
+            Bytes::from(s).into_buf()
+        };
+        self.buf = Some(buf);
+        Ok(AsyncSink::Ready)
+    }
+
+    fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
+        if let Some(ref mut buf) = &mut self.buf {
+            match self.writer.write_buf(buf) {
+                Ok(Async::Ready(_)) if !buf.has_remaining() => {
+                    self.buf = None;
+                    self.writer
+                        .poll_flush()
+                        .map_err(|_| TestError::Other("could not flush logger buffer".into()))
+                }
+                Ok(Async::NotReady) | Ok(Async::Ready(_)) => Ok(Async::NotReady),
+                Err(e) => {
+                    let e = TestError::Other(
+                        format!("writing to logger `{}`: {}", self.name, e).into(),
+                    );
+                    Err(e)
+                }
+            }
+        } else {
+            self.writer
+                .poll_flush()
+                .map_err(|_| TestError::Other("could not flush logger buffer".into()))
+        }
+    }
+}
+
 pub fn logger<F, W>(
     name: String,
     template: config::Logger,
@@ -129,63 +197,41 @@ pub fn logger<F, W>(
 ) -> channel::Sender<json::Value>
 where
     F: Future<Item = W, Error = TestError> + Send + Sync + 'static,
-    W: io::Write + Send + Sync + 'static,
+    W: tokio::io::AsyncWrite + Send + Sync + 'static,
 {
     let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
-    let limit = template.limit;
     let pretty = template.pretty;
     let kill = template.kill;
-    let mut counter = 0;
-    let mut keep_logging = true;
-    let test_killer2 = test_killer.clone();
+    let limit = if kill && template.limit.is_none() {
+        Some(1)
+    } else {
+        template.limit
+    };
     let logger = writer_future
-        .and_then(move |mut writer| {
+        .and_then(move |writer| {
+            let sink = LogSink {
+                buf: None,
+                name,
+                pretty,
+                writer,
+            };
+            let rx = if let Some(limit) = limit {
+                Either::A(rx.take(limit as u64))
+            } else {
+                Either::B(rx)
+            };
             rx.map_err(|_| TestError::Internal("logger receiver unexpectedly errored".into()))
-                .for_each(move |v| {
-                    counter += 1;
-                    let result = if keep_logging {
-                        if pretty && !v.is_string() {
-                            writeln!(writer, "{:#}", v)
-                        } else {
-                            writeln!(writer, "{}", json_value_into_string(v))
-                        }
-                    } else {
-                        Ok(())
-                    };
-                    let result = result
-                        .map_err(|e| {
-                            TestError::Other(format!("writing to logger `{}`: {}", name, e).into())
-                        })
-                        .into_future();
-                    match limit {
-                        Some(limit) if counter >= limit => {
-                            keep_logging = false;
-                            if kill {
-                                Either3::B(
-                                    test_killer
-                                        .clone()
-                                        .send(Err(TestError::KilledByLogger))
-                                        .then(|_| Ok(())),
-                                )
-                            } else {
-                                Either3::A(result)
-                            }
-                        }
-                        None if kill => {
-                            keep_logging = false;
-                            Either3::C(
-                                test_killer
-                                    .clone()
-                                    .send(Err(TestError::KilledByLogger))
-                                    .then(|_| Ok(())),
-                            )
-                        }
-                        _ => Either3::A(result),
-                    }
-                })
+                .forward(sink)
         })
-        .or_else(move |e| test_killer2.send(Err(e)).then(|_| Ok::<_, ()>(())))
-        .then(|_| Ok(()));
+        .then(move |r| match r {
+            Ok(_) if kill => Either3::A(
+                test_killer
+                    .send(Err(TestError::KilledByLogger))
+                    .then(|_| Ok(())),
+            ),
+            Ok(_) => Either3::B(Ok(()).into_future()),
+            Err(e) => Either3::C(test_killer.send(Err(e)).then(|_| Ok::<_, ()>(()))),
+        });
     tokio::spawn(logger);
     tx
 }
@@ -371,25 +417,41 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct TestWriter(Arc<Mutex<Vec<u8>>>);
+    struct TestWriter(Arc<Mutex<(bool, Vec<u8>)>>);
 
     impl TestWriter {
         fn new() -> Self {
-            TestWriter(Mutex::new(Vec::new()).into())
+            TestWriter(Mutex::new((false, Vec::new())).into())
         }
 
         fn get_string(&self) -> String {
-            String::from_utf8(self.0.lock().split_off(0)).unwrap()
+            String::from_utf8(self.0.lock().1.split_off(0)).unwrap()
+        }
+
+        fn do_would_block_on_next_write(&self) {
+            self.0.lock().0 = true;
         }
     }
 
     impl io::Write for TestWriter {
         fn write(&mut self, buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
-            self.0.lock().write(buf)
+            self.0.lock().1.write(buf)
         }
 
         fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
-            io::Write::flush(&mut *self.0.lock())
+            let mut inner = self.0.lock();
+            if inner.0 {
+                inner.0 = false;
+                Err(io::ErrorKind::WouldBlock.into())
+            } else {
+                io::Write::flush(&mut inner.1)
+            }
+        }
+    }
+
+    impl tokio::io::AsyncWrite for TestWriter {
+        fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
+            Ok(Async::Ready(()))
         }
     }
 
@@ -424,6 +486,47 @@ mod tests {
                         false
                     };
                     assert!(check, "test should be killed");
+                    drop(test_killer);
+                    Ok(())
+                },
+            );
+
+            tokio::spawn(f);
+
+            Ok(())
+        }));
+    }
+    #[test]
+    fn basic_logger_works_with_would_block() {
+        current_thread::run(future::lazy(|| {
+            let logger_params = r#"{
+                "to": ""
+            }"#;
+            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (test_killer, mut test_killed_rx) = futures_channel(1);
+            let writer = TestWriter::new();
+            writer.do_would_block_on_next_write();
+            let writer_future = future::ok(writer.clone());
+
+            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+
+            tokio::spawn(
+                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                    .then(|_| Ok(())),
+            );
+
+            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+                move |_| {
+                    let left = writer.get_string();
+                    let right = "1\n2\n";
+                    assert_eq!(left, right, "value in writer should match");
+
+                    let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
+                        false
+                    } else {
+                        true
+                    };
+                    assert!(check, "test should not be killed");
                     drop(test_killer);
                     Ok(())
                 },

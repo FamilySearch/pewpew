@@ -1,24 +1,30 @@
 # TODOs
-- every minute we print stats to console, write those results to disk, overwriting the previous file every minute
-- expressions resolve_iter functions not working as expected as evident by doing a `for_each: repeat(99999999999999)` 
-- add optional select clause for file providers
-- add `random` option to `static_list` provider
-- add multipart body support
+- results viewer: show test errors
+- results viewer: when a file can't be parsed show error message on the page
+- adjust try run complexity score so GETs score better than other verbs
+- for try run, add all the endpoint to the test that can supply a provider, in the order of their complexity score", in the event that the main endpoint cannot supply the data
+- update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
+- create a `no_auto_returns` expression function which will evaluate the inner expression while skipping any auto_returns on referenced providers, and/or add a `no_auto_returns` endpoint parameter
+- create `if_not_full_group` send option which will drop items if the current buffer is full but other provides have room in their buffers. Alternatively, change the behavior of `block` to do this (would be a breaking change). Can be implemented using `future::select_all` combined with a custom future impl that when dropped will do a `try_send` if it did not finish. 
+- Add metrics for bytes sent/received per endpoint (total per bucket?)
 - add more tests - unit and integration - get code coverage -- add in negative tests
+  - refactor to allow running pewpew as a library
+    - split config parser into sub-crate and add in unit tests
 - Adjust expression parsing errors to have line numbers which match with the yaml file
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
 - HARD - Allow declare expressions to reference other declare variables as long as there's no recursive references
-- change the default provides.send option to be `if_not_full` if the endpoint has a peak_load, otherwise `block`. *Breaking change*. Version 0.5.
-- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, disable colored output. *Breaking change*. Version 0.5.
+- change the default provides.send option to be `if_not_full` if the endpoint has a peak_load, otherwise `if_not_full_group`. *Breaking change*. Version 0.5.
+- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, option to have html output (includes the results viewer). *Breaking change*. Version 0.5.
 - Create a try run viewer. Version 0.5.
+- Have a `stats` sub-command to read, merge, and print aggregate stats summaries. Also the ability to convert a json to html. Version 0.5.
 - Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.
 - Make the inclusive/exlusiveness of `collect`, `range`, and `repeat` consistent. *Breaking change*. Version 0.5.
-- Log when a request is waiting for a provider. Waiting for Tokio Trace stability (https://github.com/tokio-rs/tokio-trace-nursery). Needs to be on crates.io and documented
+- Have ability to include endpoints (and any provider dependencies) from another config file. Post 0.5.
+- Log when a request is waiting for a provider
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296, https://github.com/est31/msvc-wine-rust)
-- update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
 - Create server mode:
   - Allows the running of tests on demand.
-  - Live UI to see the progress of a running tests.
+  - Live UI to see the progress of running tests.
   - No access to environment variables from configs.
   - Files for file providers will need to be included with the test as the server should not access any files on disk.
   - Loggers cannot write to files or stdout/stderr--everything should be displayed in the test results view.
@@ -29,4 +35,4 @@
 - Add in machine clustering (only in server mode). Machines should open up a secure connection using a PSK
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
 - Add `with` support so we can have nested selects. `with` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
-- Create a Visual Studio Code language extension for the loadtest file schema
+- Create a Visual Studio Code language extension for the loadtest file schema. Perhaps we only need a json schema (https://code.visualstudio.com/docs/languages/json#_json-schemas-settings)

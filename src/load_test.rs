@@ -208,21 +208,12 @@ impl LoadTest {
                     Ok(l) => l,
                     Err(e) => return (alias, Err(e), provides_set)
                 };
-                match &try_run {
-                    Some(target_endpoint) if &alias == target_endpoint => {
-                        let stream = Ok(Instant::now()).into_future().into_stream();
-                        mod_interval = Some(Box::new(stream));
-                    }
-                    None => {
-                        let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
-                        Box::new(stream::empty::<Instant, TestError>());
-                        let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
-                            config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
-                        });
-                        mod_interval = Some(mod_interval2);
-                    }
-                    _ => ()
-                }
+                let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
+                Box::new(stream::empty::<Instant, TestError>());
+                let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
+                    config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
+                });
+                mod_interval = Some(mod_interval2);
                 let duration2 = load_pattern
                     .iter()
                     .fold(Duration::new(0, 0), |left, right| left + right.duration());
@@ -236,6 +227,14 @@ impl LoadTest {
                 .all(|(_, p)| p.get_send_behavior().is_if_not_full())
             {
                 return (alias, Err(TestError::Other("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`".into())), provides_set);
+            }
+            if let Some(target_endpoint) = &try_run {
+                if &alias == target_endpoint {
+                    let stream = Ok(Instant::now()).into_future().into_stream();
+                    mod_interval = Some(Box::new(stream));
+                } else {
+                    mod_interval = None;
+                }
             }
             let mut headers: Vec<_> = config_config.client.headers.clone();
             headers.extend(endpoint.headers);

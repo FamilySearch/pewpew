@@ -367,8 +367,8 @@ pub enum EndpointProvidesSendOptions {
 }
 
 impl EndpointProvidesSendOptions {
-    pub fn is_if_not_full(self) -> bool {
-        if let EndpointProvidesSendOptions::IfNotFull = self {
+    pub fn is_block(self) -> bool {
+        if let EndpointProvidesSendOptions::Block = self {
             true
         } else {
             false

@@ -220,13 +220,13 @@ impl LoadTest {
                 duration = cmp::max(duration, duration2);
             } else if provides.is_empty() {
                 return (alias, Err(TestError::Other(
-                    "endpoint without peak_load must have `provides`".into(),
+                    "endpoint must have `provides` or `peak_load`".into(),
                 )), provides_set);
             } else if provides
                 .iter()
-                .all(|(_, p)| p.get_send_behavior().is_if_not_full())
+                .all(|(_, p)| !p.get_send_behavior().is_block())
             {
-                return (alias, Err(TestError::Other("endpoint without peak_load cannot have all the `provides` send behavior be `if_not_full`".into())), provides_set);
+                return (alias, Err(TestError::Other("endpoint without `peak_load` must have at least one `provides` with `send: block`".into())), provides_set);
             }
             if let Some(target_endpoint) = &try_run {
                 if &alias == target_endpoint {

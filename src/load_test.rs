@@ -254,6 +254,7 @@ impl LoadTest {
                 .logs(logs)
                 .max_parallel_requests(endpoint.max_parallel_requests)
                 .method(endpoint.method)
+                .no_auto_returns(endpoint.no_auto_returns)
                 .on_demand(on_demand)
                 .provides(provides)
                 .stats_id(endpoint.stats_id);

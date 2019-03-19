@@ -124,6 +124,7 @@ pub struct Builder {
     logs: Vec<(String, Select)>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
+    no_auto_returns: bool,
     on_demand: bool,
     provides: Vec<(String, Select)>,
     start_stream: Option<StartStream>,
@@ -140,6 +141,7 @@ impl Builder {
             logs: Vec::new(),
             max_parallel_requests: None,
             method: Method::GET,
+            no_auto_returns: false,
             on_demand: false,
             start_stream,
             provides: Vec::new(),
@@ -170,6 +172,11 @@ impl Builder {
 
     pub fn method(mut self, method: Method) -> Self {
         self.method = method;
+        self
+    }
+
+    pub fn no_auto_returns(mut self, no_auto_returns: bool) -> Self {
+        self.no_auto_returns = no_auto_returns;
         self
     }
 
@@ -333,6 +340,7 @@ impl Builder {
                 .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
             streams.push(Either3::B(stream));
         }
+        let no_auto_returns = self.no_auto_returns;
         // go through the list of required providers and make sure we have them all
         for name in &required_providers {
             let provider = ctx
@@ -346,9 +354,13 @@ impl Builder {
             let name = name.clone();
             let provider_stream = Either3::C(
                 Stream::map(receiver, move |v| {
-                    let ar = ar
-                        .clone()
-                        .map(|(send_option, tx)| AutoReturn::new(send_option, tx, vec![v.clone()]));
+                    let ar = if no_auto_returns {
+                        None
+                    } else {
+                        ar
+                            .clone()
+                            .map(|(send_option, tx)| AutoReturn::new(send_option, tx, vec![v.clone()]))
+                    };
                     StreamItem::TemplateValue(name.clone(), v, ar)
                 })
                 .map_err(|_| TestError::Internal("Unexpected error from receiver".into())),
@@ -411,6 +423,7 @@ impl Builder {
             limits,
             max_parallel_requests: self.max_parallel_requests,
             method,
+            no_auto_returns,
             outgoing,
             precheck_rr_providers,
             required_providers,
@@ -626,6 +639,7 @@ pub struct Endpoint {
     limits: Vec<channel::Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
+    no_auto_returns: bool,
     outgoing: Arc<Vec<Outgoing>>,
     precheck_rr_providers: u16,
     rr_providers: u16,
@@ -661,6 +675,7 @@ impl Endpoint {
                         rr_providers: self.rr_providers,
                         client: self.client,
                         stats_tx: self.stats_tx,
+                        no_auto_returns: self.no_auto_returns,
                         outgoing: self.outgoing,
                         precheck_rr_providers: self.precheck_rr_providers,
                         endpoint_id: self.endpoint_id,
@@ -689,6 +704,7 @@ struct RequestMaker {
         >,
     >,
     stats_tx: StatsTx,
+    no_auto_returns: bool,
     outgoing: Arc<Vec<Outgoing>>,
     precheck_rr_providers: u16,
     endpoint_id: usize,
@@ -708,7 +724,7 @@ impl RequestMaker {
                 StreamItem::None => (),
                 StreamItem::TemplateValue(name, value, auto_return) => {
                     template_values.insert(name, value);
-                    if let Some(ar) = auto_return {
+                    if let (Some(ar), false) = (auto_return, self.no_auto_returns) {
                         auto_returns.push(ar.into_future());
                     }
                 }

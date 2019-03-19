@@ -15,6 +15,7 @@ endpoints:
     [logs: <i>logs_subsection</i>]
     [alias: <i>string</i>]
     [max_parallel_requests: <i>unsigned integer</i>]
+    [no_auto_returns: <i>boolean</i>]
 </pre>
 
 The `endpoints` section declares what HTTP endpoints will be called during a test.
@@ -47,6 +48,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs subsection](#logs-subsection)
 - **`alias`** <sub><sup>*Optional*</sup></sub> - Gives this endpoint an alias for the purpose of "try runs". See the [command-line options](../cli.md).
 - **`max_parallel_requests`** <sub><sup>*Optional*</sup></sub> - Limits how many requests can be "open" at any point for the endpoint. *WARNING*: this can cause coordinated omission, invalidating the test statistics.
+- **`no_auto_returns`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that any `auto_return` providers referenced within this endpoint will have `auto_return` disabled--meaning values pulled from those providers will not be automatically pushed back to the provider after a response is received. Defaults to `false`.
 
 ## Using providers to build a request
 Providers can be referenced anywhere [templates](./common-types.md#templates) can be used and also in the `declare` subsection.

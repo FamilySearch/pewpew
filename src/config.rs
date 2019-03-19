@@ -304,6 +304,8 @@ pub struct Endpoint {
     pub logs: Vec<(String, EndpointProvidesPreProcessed)>,
     #[serde(default)]
     pub max_parallel_requests: Option<NonZeroUsize>,
+    #[serde(default)]
+    pub no_auto_returns: bool,
 }
 
 pub enum Body {

@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "pewpew"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.18 (registry+https://github.com/rust-lang/crates.io-index)",

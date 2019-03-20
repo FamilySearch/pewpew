@@ -38,7 +38,7 @@ where
                         if let Some(v) = v {
                             *result = Some(v);
                         } else {
-                            self.elems = Vec::new();
+                            self.elems.clear();
                             return Ok(Async::Ready(None));
                         }
                     }
@@ -47,7 +47,7 @@ where
                         continue;
                     }
                     Err(e) => {
-                        self.elems = Vec::new();
+                        self.elems.clear();
                         return Err(e);
                     }
                 },

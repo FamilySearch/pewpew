@@ -1095,7 +1095,6 @@ impl Select {
                     .multi_cartesian_product()
                     .map(move |v| {
                         if references_for_each {
-                            d = d.clone();
                             let v: Result<_, _> = v.into_iter().collect();
                             d.as_object_mut()
                                 .ok_or_else(|| {
@@ -1103,7 +1102,7 @@ impl Select {
                                 })?
                                 .insert("for_each".to_string(), json::Value::Array(v?));
                         }
-                        if let Some(wc) = where_clause.clone() {
+                        if let Some(wc) = &where_clause {
                             if bool_value(&*wc.evaluate(&d)?)? {
                                 Ok(Some(select.evaluate(&d)?))
                             } else {

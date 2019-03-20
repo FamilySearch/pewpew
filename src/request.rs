@@ -357,9 +357,9 @@ impl Builder {
                     let ar = if no_auto_returns {
                         None
                     } else {
-                        ar
-                            .clone()
-                            .map(|(send_option, tx)| AutoReturn::new(send_option, tx, vec![v.clone()]))
+                        ar.clone().map(|(send_option, tx)| {
+                            AutoReturn::new(send_option, tx, vec![v.clone()])
+                        })
                     };
                     StreamItem::TemplateValue(name.clone(), v, ar)
                 })

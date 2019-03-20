@@ -548,36 +548,38 @@ where
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let mut endpoint_map = BTreeMap::new();
     let f = Stream::for_each(rx, move |s| {
-            match s {
-                StatsMessage::Init(si) => {
-                    let stats_id = si.stats_id;
-                    let method = stats_id.get("method").expect("stats_id missing `method`");
-                    let url = stats_id.get("url").expect("stats_id missing `url`");
-                    endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
-                }
-                StatsMessage::ResponseStat(rs) => {
-                    if let StatKind::RecoverableError(re) = rs.kind {
-                        let endpoint = endpoint_map.get(&rs.endpoint_id).expect("endpoint_map should have endpoint id");
-                        eprint!("{}",
-                            Paint::yellow(
-                                format!(
-                                    "WARNING - recoverable error happened on endpoint `{}`: {}\n", endpoint, re
-                                )
-                            )
-                        );
-                    }
-                }
-                _ => ()
+        match s {
+            StatsMessage::Init(si) => {
+                let stats_id = si.stats_id;
+                let method = stats_id.get("method").expect("stats_id missing `method`");
+                let url = stats_id.get("url").expect("stats_id missing `url`");
+                endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
             }
-            Ok(())
-        })
-        .then(|_| Ok(()))
-        .join(
-            test_complete
-                .map_err(|e| print_test_end_message(Err(&*e)))
-                .map(|_| ()),
-        )
-        .then(|_| Ok(()));
+            StatsMessage::ResponseStat(rs) => {
+                if let StatKind::RecoverableError(re) = rs.kind {
+                    let endpoint = endpoint_map
+                        .get(&rs.endpoint_id)
+                        .expect("endpoint_map should have endpoint id");
+                    eprint!(
+                        "{}",
+                        Paint::yellow(format!(
+                            "WARNING - recoverable error happened on endpoint `{}`: {}\n",
+                            endpoint, re
+                        ))
+                    );
+                }
+            }
+            _ => (),
+        }
+        Ok(())
+    })
+    .then(|_| Ok(()))
+    .join(
+        test_complete
+            .map_err(|e| print_test_end_message(Err(&*e)))
+            .map(|_| ()),
+    )
+    .then(|_| Ok(()));
     (tx, f)
 }
 

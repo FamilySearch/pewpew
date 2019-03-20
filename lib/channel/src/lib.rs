@@ -342,14 +342,21 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
 #[derive(Clone)]
 pub struct OnDemandReceiver<T> {
     demander_inner: Arc<SegQueue<T>>,
+    demander_parked_receivers: Arc<ParkedTasks>,
     demander_parked_senders: Arc<ParkedTasks>,
     signal: Arc<AtomicUsize>,
 }
+
+const SIGNAL_INIT: usize = 0;
+const SIGNAL_WAITING_FOR_RECEIVER: usize = 1;
+const SIGNAL_WILL_TRIGGER: usize = 2;
+const SIGNAL_WAITING_FOR_CALLBACK: usize = 3;
 
 impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
     pub fn new(demander: &Receiver<T>) -> Self {
         OnDemandReceiver {
             demander_inner: demander.inner.clone(),
+            demander_parked_receivers: demander.parked_receivers.clone(),
             demander_parked_senders: demander.parked_senders.clone(),
             signal: AtomicUsize::default().into(),
         }
@@ -367,20 +374,21 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
         // this callback is called after a request finishes
         let cb = move |was_a_value_added: bool| {
             if was_a_value_added || !demander_inner.is_empty() {
-                signal.store(0, Ordering::Release);
+                signal.store(SIGNAL_WAITING_FOR_RECEIVER, Ordering::Release);
             } else {
-                signal.store(1, Ordering::Release);
+                signal.store(SIGNAL_WILL_TRIGGER, Ordering::Release);
                 demander_parked_senders.wake_all();
             }
         };
         let stream = stream::poll_fn(move || {
             if self.demander_inner.is_empty() {
+                let receivers_waiting = !self.demander_parked_receivers.0.is_empty();
                 let signal_state = self
                     .signal
                     .fetch_update(
-                        |prev| match prev {
-                            0 => Some(1),
-                            1 => Some(2),
+                        |prev| match (receivers_waiting, prev) {
+                            (true, SIGNAL_INIT) | (_, SIGNAL_WILL_TRIGGER) => Some(SIGNAL_WAITING_FOR_CALLBACK),
+                            (_, SIGNAL_WAITING_FOR_RECEIVER) => Some(SIGNAL_WILL_TRIGGER),
                             _ => None,
                         },
                         Ordering::Acquire,
@@ -388,7 +396,7 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
                     )
                     .unwrap_or_else(|e| e);
 
-                if signal_state == 1 {
+                if (receivers_waiting && signal_state == SIGNAL_INIT) || signal_state == SIGNAL_WILL_TRIGGER {
                     return Ok(Async::Ready(Some(())));
                 }
             }
@@ -549,7 +557,7 @@ mod tests {
     #[test]
     fn on_demand_receiver_works() {
         let f = future::lazy(|| {
-            let (_tx, mut rx) = channel::<bool>(Limit::auto());
+            let (tx, mut rx) = channel::<()>(Limit::auto());
 
             let (mut on_demand, done_fn) = OnDemandReceiver::new(&rx).into_stream();
 
@@ -567,7 +575,9 @@ mod tests {
 
             let left = rx.poll();
             let right = Ok(Async::NotReady);
-            assert_eq!(left, right, "receiver should still not be ready");
+            assert_eq!(left, right, "receiver should not be ready2");
+
+            tx.try_send(());
 
             let left = on_demand.poll();
             let right = Ok(Async::NotReady);
@@ -583,25 +593,34 @@ mod tests {
             );
 
             let left = rx.poll();
-            let right = Ok(Async::NotReady);
-            assert_eq!(left, right, "receiver should still not be ready");
-
-            let left = on_demand.poll();
             let right = Ok(Async::Ready(Some(())));
-            assert_eq!(left, right, "on_demand stream should be ready");
+            assert_eq!(left, right, "receiver should have a value");
 
             let left = on_demand.poll();
             let right = Ok(Async::NotReady);
-            assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled");
+            assert_eq!(left, right, "on_demand stream should not be ready2");
 
-            done_fn(false);
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receiver should not be ready3");
 
             let left = on_demand.poll();
             let right = Ok(Async::Ready(Some(())));
-            assert_eq!(
-                left, right,
-                "on_demand stream should be ready because a value was not put in the receiver"
-            );
+            assert_eq!(left, right, "on_demand stream should be ready2");
+
+            let left = rx.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "receiver should not be ready4");
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "on_demand stream should not be ready3");
+
+            tx.try_send(());
+
+            let left = on_demand.poll();
+            let right = Ok(Async::NotReady);
+            assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled2");
 
             Ok(())
         });

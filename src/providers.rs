@@ -165,26 +165,31 @@ where
     }
 
     fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-        if let Some(ref mut buf) = &mut self.buf {
-            match self.writer.write_buf(buf) {
-                Ok(Async::Ready(_)) if !buf.has_remaining() => {
-                    self.buf = None;
-                    self.writer
-                        .poll_flush()
-                        .map_err(|_| TestError::Other("could not flush logger buffer".into()))
+        loop {
+            if let Some(ref mut buf) = &mut self.buf {
+                match self.writer.write_buf(buf) {
+                    Ok(Async::Ready(_)) if !buf.has_remaining() => {
+                        self.buf = None;
+                        return self
+                            .writer
+                            .poll_flush()
+                            .map_err(|_| TestError::Other("could not flush logger buffer".into()));
+                    }
+                    Ok(Async::Ready(_)) => continue,
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Err(e) => {
+                        let e = TestError::Other(
+                            format!("writing to logger `{}`: {}", self.name, e).into(),
+                        );
+                        return Err(e);
+                    }
                 }
-                Ok(Async::NotReady) | Ok(Async::Ready(_)) => Ok(Async::NotReady),
-                Err(e) => {
-                    let e = TestError::Other(
-                        format!("writing to logger `{}`: {}", self.name, e).into(),
-                    );
-                    Err(e)
-                }
+            } else {
+                return self
+                    .writer
+                    .poll_flush()
+                    .map_err(|_| TestError::Other("could not flush logger buffer".into()));
             }
-        } else {
-            self.writer
-                .poll_flush()
-                .map_err(|_| TestError::Other("could not flush logger buffer".into()))
         }
     }
 }
@@ -434,7 +439,10 @@ mod tests {
     }
 
     impl io::Write for TestWriter {
-        fn write(&mut self, buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
+        fn write(&mut self, mut buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
+            if buf.len() > 1024 {
+                buf = &buf[0..1024];
+            }
             self.0.lock().1.write(buf)
         }
 
@@ -496,6 +504,51 @@ mod tests {
             Ok(())
         }));
     }
+
+    #[test]
+    fn basic_logger_works_with_large_data() {
+        current_thread::run(future::lazy(|| {
+            let logger_params = r#"{
+                "to": ""
+            }"#;
+            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (test_killer, mut test_killed_rx) = futures_channel(1);
+            let writer = TestWriter::new();
+            let writer_future = future::ok(writer.clone());
+
+            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+
+            let right: String = (0..1000).map(|_| {
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+            }).collect();
+
+            tokio::spawn(
+                tx.send_all(stream::iter_ok(vec![right.clone().into()]))
+                    .then(|_| Ok(())),
+            );
+
+            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+                move |_| {
+                    let left = writer.get_string();
+                    assert_eq!(left, format!("{}\n", right), "value in writer should match");
+
+                    let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
+                        false
+                    } else {
+                        true
+                    };
+                    assert!(check, "test should not be killed");
+                    drop(test_killer);
+                    Ok(())
+                },
+            );
+
+            tokio::spawn(f);
+
+            Ok(())
+        }));
+    }
+
     #[test]
     fn basic_logger_works_with_would_block() {
         current_thread::run(future::lazy(|| {

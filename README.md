@@ -12,6 +12,7 @@ Bug fixes:
 
 Changes:
 - Add `no_auto_returns` endpoint option.
+- In a try run include all endpoints which can provide data to a response provider needed by the target endpoint.
 
 ### v0.4.9
 Bug fixes:

@@ -643,7 +643,7 @@ pub struct Endpoint {
     outgoing: Arc<Vec<Outgoing>>,
     precheck_rr_providers: u16,
     rr_providers: u16,
-    pub required_providers: BTreeSet<String>,
+    required_providers: BTreeSet<String>,
     stats_id: BTreeMap<String, String>,
     stats_tx: StatsTx,
     stream: EndpointStream,
@@ -653,6 +653,14 @@ pub struct Endpoint {
 
 // This returns a boxed future because otherwise the type system runs out of memory for the type
 impl Endpoint {
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    pub fn required_providers(&self) -> &BTreeSet<String> {
+        &self.required_providers
+    }
+
     pub fn into_future(self) -> Box<dyn Future<Item = (), Error = TestError> + Send> {
         Box::new(
             self.stats_tx

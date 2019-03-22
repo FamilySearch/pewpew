@@ -18,10 +18,10 @@ use std::{
 };
 
 use crate::error::TestError;
-use crate::load_test::{LoadTest, TestEndReason};
+use crate::load_test::{LoadTest, TestEndReason, TryRun};
 
 use clap::{crate_version, App, Arg};
-use ether::Either3;
+use ether::{Either, Either3};
 use futures::{
     future::{lazy, IntoFuture},
     sync::mpsc as futures_channel,
@@ -79,23 +79,44 @@ fn main() {
             }
         };
         let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
-        let load_test = LoadTest::new(
-            config,
-            load_test_config_file,
-            (test_ended_tx.clone(), test_ended_rx),
-            try_run,
-        );
-        match load_test {
-            Ok(l) => Either3::A(l.run()),
-            Err(e) => {
-                print_test_end_message(Err(&e));
-                // we send the test_ended message as Ok so if the stats monitor
-                // is running it won't reprint the error message
-                Either3::C(
-                    test_ended_tx
-                        .send(Ok(TestEndReason::TimesUp))
-                        .then(|_| Ok(())),
-                )
+        if let Some(target_endpoint) = try_run {
+            let try_run = TryRun::new(
+                config,
+                load_test_config_file,
+                (test_ended_tx.clone(), test_ended_rx),
+                target_endpoint,
+            );
+            match try_run {
+                Ok(t) => Either3::A(Either::A(t.run())),
+                Err(e) => {
+                    print_test_end_message(Err(&e));
+                    // we send the test_ended message as Ok so if the stats monitor
+                    // is running it won't reprint the error message
+                    Either3::C(Either::A(
+                        test_ended_tx
+                            .send(Ok(TestEndReason::TimesUp))
+                            .then(|_| Ok(())),
+                    ))
+                }
+            }
+        } else {
+            let load_test = LoadTest::new(
+                config,
+                load_test_config_file,
+                (test_ended_tx.clone(), test_ended_rx),
+            );
+            match load_test {
+                Ok(l) => Either3::A(Either::B(l.run())),
+                Err(e) => {
+                    print_test_end_message(Err(&e));
+                    // we send the test_ended message as Ok so if the stats monitor
+                    // is running it won't reprint the error message
+                    Either3::C(Either::B(
+                        test_ended_tx
+                            .send(Ok(TestEndReason::TimesUp))
+                            .then(|_| Ok(())),
+                    ))
+                }
             }
         }
     }));

@@ -339,6 +339,11 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     (sender, receiver)
 }
 
+// The OnDemandReceiver is a type of stream that triggers when a receiver for a channel polls, seeking
+// an item from the channel. The task receiving from OnDemandReceiver will do its work to provide a
+// value for the channel, then call a callback indicating it is done (signifying whether it actually
+// provided a value for the channel--because sometimes the task's work is done but it still doesn't have
+// a value to provide).
 #[derive(Clone)]
 pub struct OnDemandReceiver<T> {
     demander_inner: Arc<SegQueue<T>>,
@@ -347,6 +352,10 @@ pub struct OnDemandReceiver<T> {
     signal: Arc<AtomicUsize>,
 }
 
+// The states that the OnDemandReceiver can be in. There are two states before `SIGNAL_WILL_TRIGGER`
+// because when a value is pulled from the channel with a receiver, the receiver proactively triggers
+// any parked senders to send another (in effort to keep the queue full). OnDemandReceiver ignores
+// the first unpark, and will trigger on the subsequent unpark if the queue is empty in both cases.
 const SIGNAL_INIT: usize = 0;
 const SIGNAL_WAITING_FOR_RECEIVER: usize = 1;
 const SIGNAL_WILL_TRIGGER: usize = 2;
@@ -371,10 +380,10 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
         let signal = self.signal.clone();
         let demander_inner = self.demander_inner.clone();
         let demander_parked_senders = self.demander_parked_senders.clone();
-        // this callback is called after a request finishes
+        // this callback is called after a task finishes
         let cb = move |was_a_value_added: bool| {
             if was_a_value_added || !demander_inner.is_empty() {
-                signal.store(SIGNAL_WAITING_FOR_RECEIVER, Ordering::Release);
+                signal.store(SIGNAL_INIT, Ordering::Release);
             } else {
                 signal.store(SIGNAL_WILL_TRIGGER, Ordering::Release);
                 demander_parked_senders.wake_all();
@@ -387,7 +396,9 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
                     .signal
                     .fetch_update(
                         |prev| match (receivers_waiting, prev) {
-                            (true, SIGNAL_INIT) | (_, SIGNAL_WILL_TRIGGER) => Some(SIGNAL_WAITING_FOR_CALLBACK),
+                            (true, SIGNAL_INIT) | (_, SIGNAL_WILL_TRIGGER) => {
+                                Some(SIGNAL_WAITING_FOR_CALLBACK)
+                            }
                             (_, SIGNAL_WAITING_FOR_RECEIVER) => Some(SIGNAL_WILL_TRIGGER),
                             _ => None,
                         },
@@ -396,7 +407,9 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
                     )
                     .unwrap_or_else(|e| e);
 
-                if (receivers_waiting && signal_state == SIGNAL_INIT) || signal_state == SIGNAL_WILL_TRIGGER {
+                if (receivers_waiting && signal_state == SIGNAL_INIT)
+                    || signal_state == SIGNAL_WILL_TRIGGER
+                {
                     return Ok(Async::Ready(Some(())));
                 }
             }

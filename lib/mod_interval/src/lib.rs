@@ -9,6 +9,7 @@ use tokio::timer::Delay;
 use std::{
     cmp,
     time::{Duration, Instant},
+    vec,
 };
 
 const NANOS_IN_SECOND: u32 = 1_000_000_000;
@@ -56,49 +57,124 @@ impl<'de> Deserialize<'de> for HitsPer {
 // y represents the amount of time between hits
 pub trait ScaleFn {
     fn max_x(&self) -> f64;
-    fn y(&self, x: f64) -> f64;
+    fn y(&mut self, x: f64) -> f64;
 }
 
 #[derive(Clone)]
 pub struct LinearBuilder {
-    start_percent: f64,
-    end_percent: f64,
-    pub duration: Duration,
+    pieces: Vec<LinearBuilderPiece>,
+    duration: Duration,
 }
 
 impl LinearBuilder {
     pub fn new(start_percent: f64, end_percent: f64, duration: Duration) -> Self {
-        LinearBuilder {
+        let mut ret = LinearBuilder {
+            pieces: Vec::new(),
+            duration: Duration::from_secs(0),
+        };
+        ret.append(start_percent, end_percent, duration);
+        ret
+    }
+
+    pub fn append(&mut self, start_percent: f64, end_percent: f64, duration: Duration) {
+        self.duration += duration;
+        let duration = duration.as_nanos() as f64;
+        let lb = LinearBuilderPiece::new(start_percent, end_percent, duration);
+        self.pieces.push(lb);
+    }
+
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+
+    pub fn build<E>(self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
+        ModInterval::new(LinearScaling::new(self, peak_load))
+    }
+}
+
+#[derive(Clone)]
+struct LinearBuilderPiece {
+    start_percent: f64,
+    end_percent: f64,
+    duration: f64,
+}
+
+impl LinearBuilderPiece {
+    fn new(start_percent: f64, end_percent: f64, duration: f64) -> Self {
+        LinearBuilderPiece {
             start_percent,
             end_percent,
             duration,
         }
     }
+}
 
-    pub fn build<E>(&self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
-        let peak_load = match peak_load {
-            HitsPer::Second(n) => f64::from(*n),
-            HitsPer::Minute(n) => f64::from(*n) / 60.0,
-        };
-        let duration = self.duration.as_nanos() as f64;
-        ModInterval::new(LinearScaling::new(
-            self.start_percent,
-            self.end_percent,
-            duration,
-            peak_load,
-        ))
+pub struct LinearScaling {
+    pieces: vec::IntoIter<LinearScalingPiece>,
+    current: LinearScalingPiece,
+    duration_offset: f64,
+    duration: f64,
+}
+
+impl LinearScaling {
+    pub fn new(builder: LinearBuilder, peak_load: &HitsPer) -> Self {
+        let mut pieces = builder
+            .pieces
+            .into_iter()
+            .map(|piece| {
+                let peak_load = match peak_load {
+                    HitsPer::Second(n) => f64::from(*n),
+                    HitsPer::Minute(n) => f64::from(*n) / 60.0,
+                };
+                LinearScalingPiece::new(
+                    piece.start_percent,
+                    piece.end_percent,
+                    piece.duration,
+                    peak_load,
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
+        let current = pieces.next().expect("should have at least one scale piece");
+        LinearScaling {
+            current,
+            pieces,
+            duration: builder.duration.as_nanos() as f64,
+            duration_offset: 0.0,
+        }
+    }
+}
+
+impl ScaleFn for LinearScaling {
+    #[inline]
+    fn y(&mut self, mut x: f64) -> f64 {
+        while x - self.duration_offset >= self.current.duration {
+            if let Some(current) = self.pieces.next() {
+                self.duration_offset += self.current.duration;
+                self.current = current;
+            } else {
+                break;
+            }
+        }
+        x -= self.duration_offset;
+        self.current.y(x)
+    }
+
+    #[inline]
+    fn max_x(&self) -> f64 {
+        self.duration
     }
 }
 
 #[derive(Debug)]
-pub struct LinearScaling {
+pub struct LinearScalingPiece {
     duration: f64,
     max_y: f64,
     m: f64,
     b: f64,
 }
 
-impl LinearScaling {
+impl LinearScalingPiece {
     pub fn new(start_percent: f64, end_percent: f64, duration: f64, peak_load: f64) -> Self {
         let a = f64::from(NANOS_IN_SECOND);
         let b = peak_load * start_percent;
@@ -109,7 +185,7 @@ impl LinearScaling {
         } else {
             -((b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m))
         };
-        LinearScaling {
+        LinearScalingPiece {
             b,
             duration,
             m,
@@ -118,9 +194,9 @@ impl LinearScaling {
     }
 }
 
-impl ScaleFn for LinearScaling {
+impl ScaleFn for LinearScalingPiece {
     #[inline]
-    fn y(&self, x: f64) -> f64 {
+    fn y(&mut self, x: f64) -> f64 {
         let hps = self.m * x + self.b;
         self.max_y.min(f64::from(NANOS_IN_SECOND) / hps)
     }
@@ -212,7 +288,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn linear_scaling_works2() {
+    fn linear_scaling_works() {
         let checks = vec![
             (
                 // scale from 0 to 100% over 30 seconds (100% = 12 hps)
@@ -288,18 +364,50 @@ mod tests {
             checks.into_iter().enumerate()
         {
             let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let scale_fn = lb.build::<()>(&hitsper).scale_fn;
+            let mut scale_fn = lb.build::<()>(&hitsper).scale_fn;
             for (i2, (secs, hps)) in expects.iter().enumerate() {
                 let nanos = secs * nis;
                 let right = 1.0 / (scale_fn.y(nanos) / nis);
                 let left = hps;
                 let diff = (right - left).abs();
-                let equal = diff < 0.000_001;
+                let close_enough = diff < 0.000_001;
                 assert!(
-                    equal,
+                    close_enough,
                     "index ({}, {}) left {} != right {}",
                     i, i2, left, right
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn multiple_scaling_works() {
+        let mut lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
+        lb.append(99.0, 500.0, Duration::from_secs(60));
+        lb.append(1.0, 0.5, Duration::from_secs(60));
+        let hitsper = HitsPer::Second(10);
+        let mut scale_fn = lb.build::<()>(&hitsper).scale_fn;
+        let nis = f64::from(NANOS_IN_SECOND);
+        let mut y_values: std::collections::VecDeque<_> = (0..60)
+            .step_by(10)
+            .chain((120..=180).step_by(10))
+            .map(|secs| {
+                let nanos = f64::from(secs) * nis;
+                (secs, scale_fn.y(nanos))
+            })
+            .collect();
+        while !y_values.is_empty() {
+            match (y_values.pop_front(), y_values.pop_back()) {
+                (Some((left_x, left_y)), Some((right_x, right_y))) => {
+                    let diff = (right_y - left_y).abs();
+                    let close_enough = diff < 0.000_001;
+                    assert!(
+                        close_enough,
+                        "times: ({}, {}) left {} != right {}",
+                        left_x, right_x, left_y, right_y
+                    );
+                }
+                _ => break,
             }
         }
     }

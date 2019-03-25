@@ -12,7 +12,7 @@ use crate::error::TestError;
 use channel::Limit;
 use ether::{Either, Either3};
 use hyper::Method;
-use mod_interval::{HitsPer, LinearBuilder};
+use mod_interval::{HitsPer, LinearBuilder, LinearScaling, ModInterval};
 use rand::{
     distributions::{Distribution, Uniform},
     Rng,
@@ -49,14 +49,21 @@ struct LinearBuilderPreProcessed {
     over: Duration,
 }
 
+#[derive(Clone)]
 pub enum LoadPattern {
     Linear(LinearBuilder),
 }
 
 impl LoadPattern {
+    pub fn build<E>(self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
+        match self {
+            LoadPattern::Linear(lb) => lb.build(peak_load),
+        }
+    }
+
     pub fn duration(&self) -> Duration {
         match self {
-            LoadPattern::Linear(lb) => lb.duration,
+            LoadPattern::Linear(lb) => lb.duration(),
         }
     }
 }
@@ -289,7 +296,7 @@ pub struct Endpoint {
     #[serde(default)]
     pub body: Option<Body>,
     #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
-    pub load_pattern: Option<Vec<LoadPattern>>,
+    pub load_pattern: Option<LoadPattern>,
     #[serde(default, deserialize_with = "deserialize_method")]
     pub method: Method,
     #[serde(default)]
@@ -498,7 +505,7 @@ pub struct LoadTest {
     pub config: Config,
     pub endpoints: Vec<Endpoint>,
     #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
-    pub load_pattern: Option<Vec<LoadPattern>>,
+    pub load_pattern: Option<LoadPattern>,
     #[serde(default, deserialize_with = "deserialize_providers")]
     pub providers: Vec<(String, Provider)>,
     #[serde(default, with = "tuple_vec_map")]
@@ -778,28 +785,28 @@ where
 
 fn deserialize_option_vec_load_pattern<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<LoadPattern>>, D::Error>
+) -> Result<Option<LoadPattern>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let ovlppp: Option<Vec<LoadPatternPreProcessed>> = Option::deserialize(deserializer)?;
+    let mut builder: Option<LinearBuilder> = None;
     if let Some(vec) = ovlppp {
         let mut last_end = 0f64;
-        let mut ret = Vec::new();
         for lppp in vec {
             match lppp {
                 LoadPatternPreProcessed::Linear(lbpp) => {
                     let start = lbpp.from.map(|p| p.0 / 100f64).unwrap_or(last_end);
                     let end = lbpp.to.0 / 100f64;
                     last_end = end;
-                    ret.push(LoadPattern::Linear(LinearBuilder::new(
-                        start, end, lbpp.over,
-                    )));
+                    if let Some(ref mut lb) = builder {
+                        lb.append(start, end, lbpp.over);
+                    } else {
+                        builder = Some(LinearBuilder::new(start, end, lbpp.over));
+                    }
                 }
             }
         }
-        return Ok(Some(ret));
-    } else {
-        return Ok(None);
     }
+    Ok(builder.map(LoadPattern::Linear))
 }

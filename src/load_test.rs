@@ -9,7 +9,6 @@ use ether::{Either, Either3};
 use futures::{
     future::{self, join_all, lazy, poll_fn},
     sink::Sink,
-    stream,
     sync::mpsc::{Receiver as FCReceiver, Sender as FCSender},
     Async, Future, IntoFuture, Stream,
 };
@@ -339,19 +338,10 @@ impl LoadTest {
             if let Some(peak_load) = endpoint.peak_load {
                 let load_pattern = endpoint
                     .load_pattern
-                    .as_ref()
-                    .or_else(|| global_load_pattern.as_ref())
+                    .or_else(|| global_load_pattern.clone())
                     .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
-                let start: Box<dyn Stream<Item = Instant, Error = TestError> + Send> =
-                Box::new(stream::empty::<Instant, TestError>());
-                let mod_interval2 = load_pattern.iter().fold(start, |prev, lp| match lp {
-                    config::LoadPattern::Linear(lb) => Box::new(prev.chain(lb.build(&peak_load))),
-                });
-                mod_interval = Some(mod_interval2);
-                let duration2 = load_pattern
-                    .iter()
-                    .fold(Duration::new(0, 0), |left, right| left + right.duration());
-                duration = cmp::max(duration, duration2);
+                duration = cmp::max(duration, load_pattern.duration());
+                mod_interval = Some(Box::new(load_pattern.build(&peak_load)));
             } else if provides.is_empty() {
                 return Err(TestError::Other(
                     "endpoint must have `provides` or `peak_load`".into(),

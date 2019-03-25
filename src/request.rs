@@ -1120,7 +1120,7 @@ impl BodyHandler {
         let rtt = self.now.elapsed().as_micros() as u64;
         let stats_tx = self.stats_tx.clone();
         let endpoint_id = self.endpoint_id;
-        let send_response_stat = move |kind| {
+        let send_response_stat = move |kind, rtt| {
             Either3::B(
                 stats_tx
                     .clone()
@@ -1128,7 +1128,7 @@ impl BodyHandler {
                         stats::ResponseStat {
                             endpoint_id,
                             kind,
-                            rtt: Some(rtt),
+                            rtt,
                             time: SystemTime::now(),
                         }
                         .into(),
@@ -1142,7 +1142,7 @@ impl BodyHandler {
             )
         };
         let mut template_values = self.template_values;
-        let mut futures = vec![send_response_stat(stats::StatKind::Response(self.status))];
+        let mut futures = vec![send_response_stat(stats::StatKind::Response(self.status), Some(rtt))];
         if let Some(mut f) = auto_returns.try_lock() {
             if let Some(f) = f.take() {
                 futures.push(Either3::C(f))
@@ -1170,7 +1170,7 @@ impl BodyHandler {
                         Ok(v) => v.peekable(),
                         Err(TestError::Recoverable(r)) => {
                             let kind = stats::StatKind::RecoverableError(r);
-                            futures.push(send_response_stat(kind));
+                            futures.push(send_response_stat(kind, None));
                             continue;
                         }
                         Err(e) => return Either::B(Err(e).into_future()),
@@ -1202,7 +1202,7 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(send_response_stat(kind));
+                                        futures.push(send_response_stat(kind, None));
                                         continue;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -1219,7 +1219,7 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(send_response_stat(kind));
+                                        futures.push(send_response_stat(kind, None));
                                         continue;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -1237,7 +1237,7 @@ impl BodyHandler {
             }
             Err(r) => {
                 let kind = stats::StatKind::RecoverableError(r);
-                futures.push(send_response_stat(kind));
+                futures.push(send_response_stat(kind, None));
             }
         }
         Either::A(join_all(futures).map(|_| ()))

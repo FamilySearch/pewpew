@@ -9,6 +9,7 @@ Bug fixes:
 - Fix issue where "recoverable" errors (like an invalid url), were not being logged during a try run.
 - Fix hang up that would happen with `on_demand` if the "demander" executed before the `on_demand` endpoint.
 - Fix hang up that could happen when a large amount of data was logged.
+- Fix issue where requests would be double counted in the stats if there was a "recoverable" error.
 
 Changes:
 - Add `no_auto_returns` endpoint option.

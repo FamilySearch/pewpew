@@ -4,8 +4,8 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ## Changelog
 ### v0.4.10
 Bug fixes:
-- Fix issue where endpoints without a peak_load would run infintely if targeted in a try run.
-- Enforce that an endpoint without a peak_load must have at least one provides with `send: block`.
+- Fix issue where endpoints without a `peak_load` would run infintely if targeted in a try run.
+- Enforce that an endpoint without a `peak_load` must have at least one provides with `send: block`.
 - Fix issue where "recoverable" errors (like an invalid url), were not being logged during a try run.
 - Fix hang up that would happen with `on_demand` if the "demander" executed before the `on_demand` endpoint.
 - Fix hang up that could happen when a large amount of data was logged.
@@ -17,7 +17,7 @@ Changes:
 
 ### v0.4.9
 Bug fixes:
-- Fix issue with on_demand where things would hang if the endpoint did not provide a value.
+- Fix issue with `on_demand` where things would hang if the endpoint did not provide a value.
 - Fix issue where a logger causes a fatal test error if writing to the underlying resource causes a blocking call.
 
 Changes:

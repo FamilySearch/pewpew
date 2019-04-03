@@ -40,7 +40,6 @@ pub enum TestError {
     InvalidJsonPathQuery(String),
     InvalidStatsIdReference(String),
     InvalidUrl(String),
-    KilledByLogger,
     Other(Cow<'static, str>),
     PestParseErr(PestError<config::ParserRule>),
     Recoverable(RecoverableError),
@@ -78,7 +77,6 @@ impl fmt::Display for TestError {
             InvalidJsonPathQuery(q) => write!(f, "invalid json path query: `{}`", q),
             InvalidStatsIdReference(r) => write!(f, "stats_id can only reference static providers and environment variables. Found `{}`", r),
             InvalidUrl(u) => write!(f, "invalid url `{}`", u),
-            KilledByLogger => write!(f, "killed by logger"),
             Other(s) => write!(f, "{}", s),
             PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),
             Recoverable(r) => write!(f, "{}", r),
@@ -128,6 +126,12 @@ impl From<yaml::Error> for TestError {
 
 impl From<tokio::timer::Error> for TestError {
     fn from(te: tokio::timer::Error) -> Self {
+        TestError::Internal(format!("{}", te).into())
+    }
+}
+
+impl<T: fmt::Display> From<tokio::timer::timeout::Error<T>> for TestError {
+    fn from(te: tokio::timer::timeout::Error<T>) -> Self {
         TestError::Internal(format!("{}", te).into())
     }
 }

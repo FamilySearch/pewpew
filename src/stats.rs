@@ -1,7 +1,6 @@
 use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
 use crate::load_test::TestEndReason;
-use crate::print_test_end_message;
 use crate::providers;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
@@ -168,11 +167,11 @@ impl RollingAggregateStats {
     fn persist(&self) -> impl Future<Item = (), Error = TestError> {
         let stats = self.clone();
         TokioFile::create(format!("stats-{}.json", self.time))
+            .map_err(Either::A)
             .and_then(move |mut file| {
-                if let Err(e) = stats.serialize(&mut json::Serializer::new(&mut file)) {
-                    eprint!("{}", format!("error persisting stats {:?}\n", e))
-                }
-                Ok(())
+                stats
+                    .serialize(&mut json::Serializer::new(&mut file))
+                    .map_err(Either::B)
             })
             .or_else(|e| {
                 eprint!("{}", format!("error persisting stats {:?}\n", e));
@@ -307,22 +306,16 @@ impl AggregateStats {
         }
         self.end_time = cmp::max(self.end_time, time);
         match rhs.kind {
-            StatKind::RecoverableError(RecoverableError::IndexingJson(..)) => {
-                let msg = "error indexing into json".into();
-                eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
-                self.test_errors
-                    .entry(msg)
-                    .and_modify(|n| *n += 1)
-                    .or_insert(1);
-            }
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
                 let msg = format!("{}", r);
                 eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
-                self.connection_errors
-                    .entry(msg)
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
+                let entry = if let RecoverableError::IndexingJson(..) = r {
+                    self.test_errors.entry(msg)
+                } else {
+                    self.connection_errors.entry(msg)
+                };
+                entry.and_modify(|n| *n += 1).or_insert(1);
             }
             StatKind::Response(status) => {
                 self.status_counts
@@ -574,11 +567,7 @@ where
         Ok(())
     })
     .then(|_| Ok(()))
-    .join(
-        test_complete
-            .map_err(|e| print_test_end_message(Err(&*e)))
-            .map(|_| ()),
-    )
+    .join(test_complete.then(|_| Ok::<_, ()>(())))
     .then(|_| Ok(()));
     (tx, f)
 }
@@ -719,12 +708,12 @@ where
         },
     )
     .join(print_stats)
-    .map(|_| TestEndReason::TimesUp)
+    .map(|_| TestEndReason::Completed)
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
     .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
     .map_err(|e| e.0)
     .and_then(move |(b, _)| stats2.lock().persist().map(move |_| b))
-    .then(move |result| {
+    .then(move |_| {
         let stats = stats3.lock();
         let duration = stats.duration;
         let (start, mut end) = stats
@@ -788,7 +777,6 @@ where
             print_string.push_str(&piece);
         }
         eprint!("{}", print_string);
-        print_test_end_message(result.as_ref().map(|b| *b));
         Ok(())
     });
     Ok((tx, receiver))

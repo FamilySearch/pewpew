@@ -205,10 +205,6 @@ impl Builder {
         ctx: &mut BuilderContext,
         endpoint_id: usize,
     ) -> Result<Endpoint, TestError> {
-        let mut streams = Vec::new();
-        if let Some(start_stream) = self.start_stream {
-            streams.push(Either3::A(start_stream.map(|_| StreamItem::None)));
-        };
         let mut required_providers: BTreeSet<String> = BTreeSet::new();
         let url = Template::new(&self.url, &ctx.static_providers)?;
         required_providers.extend(url.get_providers().clone());
@@ -226,12 +222,20 @@ impl Builder {
         let mut rr_providers = 0;
         let mut outgoing = Vec::new();
         let mut on_demand_streams = Vec::new();
+        let mut provides_set = if self.start_stream.is_none() && !self.provides.is_empty() {
+            Some(BTreeSet::new())
+        } else {
+            None
+        };
         for (k, v) in self.provides {
             let provider = ctx
                 .providers
                 .get(&k)
                 .ok_or_else(|| TestError::UnknownProvider(k))?;
             let tx = provider.tx.clone();
+            if let Some(set) = &mut provides_set {
+                set.insert(tx.clone());
+            }
             if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
                 limits.push(tx.limit());
             }
@@ -246,6 +250,22 @@ impl Builder {
                 None
             };
             outgoing.push(Outgoing::new(v, tx, cb));
+        }
+        let mut streams = Vec::new();
+        if let Some(start_stream) = self.start_stream {
+            streams.push(Either3::A(Either::A(
+                start_stream.map(|_| StreamItem::None),
+            )));
+        } else if let Some(set) = provides_set {
+            let stream = stream::poll_fn(move || {
+                let done = set.iter().all(channel::Sender::no_receivers);
+                if done {
+                    Ok(Async::Ready(None))
+                } else {
+                    Ok(Async::Ready(Some(StreamItem::None)))
+                }
+            });
+            streams.push(Either3::A(Either::B(stream)));
         }
         for (k, v) in self.logs {
             let (tx, _) = ctx
@@ -727,7 +747,7 @@ impl RequestMaker {
             match tv {
                 StreamItem::Declare(name, value, returns) => {
                     template_values.insert(name, value);
-                    auto_returns.extend(returns.into_iter().map(|ar| ar.into_future()));
+                    auto_returns.extend(returns.into_iter().map(AutoReturn::into_future));
                 }
                 StreamItem::None => (),
                 StreamItem::TemplateValue(name, value, auto_return) => {
@@ -842,7 +862,7 @@ impl RequestMaker {
             let url_path_and_query = request
                 .uri()
                 .path_and_query()
-                .map(|pq| pq.as_str())
+                .map(http::uri::PathAndQuery::as_str)
                 .unwrap_or("/");
             let version = request.version();
             request_obj.insert(
@@ -1019,7 +1039,7 @@ impl ResponseHandler {
                     Ok(None)
                 }
             })
-            .filter_map(|v| v.transpose())
+            .filter_map(Result::transpose)
             .collect();
         let included_outgoing_indexes = match included_outgoing_indexes {
             Ok(v) => v,
@@ -1142,7 +1162,10 @@ impl BodyHandler {
             )
         };
         let mut template_values = self.template_values;
-        let mut futures = vec![send_response_stat(stats::StatKind::Response(self.status), Some(rtt))];
+        let mut futures = vec![send_response_stat(
+            stats::StatKind::Response(self.status),
+            Some(rtt),
+        )];
         if let Some(mut f) = auto_returns.try_lock() {
             if let Some(f) = f.take() {
                 futures.push(Either3::C(f))

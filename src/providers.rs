@@ -231,7 +231,7 @@ where
         .then(move |r| match r {
             Ok(_) if kill => Either3::A(
                 test_killer
-                    .send(Err(TestError::KilledByLogger))
+                    .send(Ok(TestEndReason::KilledByLogger))
                     .then(|_| Ok(())),
             ),
             Ok(_) => Either3::B(Ok(()).into_future()),
@@ -488,7 +488,9 @@ mod tests {
                     let right = "1\n";
                     assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
+                    let check = if let Ok(Async::Ready(Some(Ok(TestEndReason::KilledByLogger)))) =
+                        test_killed_rx.poll()
+                    {
                         true
                     } else {
                         false

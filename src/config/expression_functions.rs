@@ -53,7 +53,7 @@ impl Collect {
     }
 
     pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(|v| v.into_owned())
+        self.arg.evaluate(d).map(Cow::into_owned)
     }
 
     pub(super) fn evaluate_as_iter(
@@ -874,7 +874,7 @@ impl ReversibleRange {
         } else {
             Either::B(self.range)
         };
-        i.map(|n| n.into())
+        i.map(Into::into)
     }
 }
 
@@ -1069,7 +1069,7 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let args = args.into_iter().map(|j| j.into()).collect();
+            let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
             let left = c.evaluate(&json::Value::Null).unwrap();
             assert_eq!(left, right);
@@ -1085,7 +1085,7 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let args = args.into_iter().map(|j| j.into()).collect();
+            let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
             let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null).unwrap().collect();
             assert_eq!(left, right);

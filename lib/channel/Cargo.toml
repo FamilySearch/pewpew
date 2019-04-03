@@ -9,5 +9,6 @@ doctest = false
 [dependencies]
 futures = "0.1"
 crossbeam-queue = "0.1"
+crossbeam-skiplist = { git = "https://github.com/crossbeam-rs/crossbeam" }
 serde = "1"
 tokio = "0.1"

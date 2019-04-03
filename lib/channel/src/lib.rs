@@ -1,6 +1,7 @@
 #![feature(no_more_cas)]
 use crossbeam_queue::SegQueue;
-use futures::{sink::Sink, stream, task, Async, AsyncSink, Poll, StartSend, Stream};
+use crossbeam_skiplist::SkipMap;
+use futures::{sink::Sink, stream, task, task_local, Async, AsyncSink, Poll, StartSend, Stream};
 use serde::{
     de::{Error as DeError, Unexpected},
     Deserialize, Deserializer, Serialize,
@@ -8,6 +9,8 @@ use serde::{
 
 use std::{
     error::Error as StdError,
+    marker::PhantomPinned,
+    pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -56,20 +59,29 @@ impl<'de> Deserialize<'de> for Limit {
     }
 }
 
-struct ParkedTasks(SegQueue<task::Task>);
+struct PlaceHolder(PhantomPinned, bool);
+
+task_local!(static PLACE_HOLDER: Pin<Box<PlaceHolder>> = Box::pin(PlaceHolder (PhantomPinned, true)));
+
+struct ParkedTasks(SkipMap<usize, task::Task>);
 
 impl ParkedTasks {
     fn new() -> Self {
-        ParkedTasks(SegQueue::new())
+        ParkedTasks(SkipMap::new())
     }
 
-    fn park(&self, task: task::Task) {
-        self.0.push(task)
+    // returns true if the current task was succesfully parked, false otherwise (meaning the current task has already been parked)
+    fn park(&self) -> bool {
+        let pointer: *const PlaceHolder = PLACE_HOLDER.with(|p| &**p as *const _);
+        let key = pointer as usize;
+        let ret = !self.0.contains_key(&key);
+        self.0.insert(key, task::current());
+        ret
     }
 
     fn wake_all(&self) {
-        while let Ok(task) = self.0.pop() {
-            task.notify();
+        while let Some(entry) = self.0.pop_front() {
+            entry.value().notify();
         }
     }
 
@@ -135,14 +147,18 @@ impl<T> Sender<T> {
         self.limit.clone()
     }
 
+    pub fn no_receivers(&self) -> bool {
+        self.receiver_count.load(Ordering::Acquire) == 0
+    }
+
     pub fn try_send(&self, item: T) -> SendState<T> {
-        let ret = if self.receiver_count.load(Ordering::Acquire) == 0 {
+        let ret = if self.no_receivers() {
             SendState::Closed
         } else if self.inner.len() < self.limit.get() {
             self.inner.push(item);
             SendState::Success
         } else {
-            self.parked_senders.park(task::current());
+            self.parked_senders.park();
             if self.receiver_count.load(Ordering::Acquire) == 0 {
                 SendState::Closed
             } else {
@@ -179,6 +195,26 @@ impl<T> Drop for Sender<T> {
             self.parked_receivers.wake_all();
             self.parked_senders.wake_all();
         }
+    }
+}
+
+impl<T> PartialEq for Sender<T> {
+    fn eq(&self, other: &Sender<T>) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl<T> PartialOrd for Sender<T> {
+    fn partial_cmp(&self, other: &Sender<T>) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Eq for Sender<T> {}
+
+impl<T> Ord for Sender<T> {
+    fn cmp(&self, other: &Sender<T>) -> std::cmp::Ordering {
+        Ord::cmp(&(&*self.inner as *const _), &(&*other.inner as *const _))
     }
 }
 
@@ -300,14 +336,16 @@ impl<T> Stream for Receiver<T> {
         } else if self.sender_count.load(Ordering::Acquire) == 0 {
             Ok(Async::Ready(None))
         } else {
-            self.parked_receivers.park(task::current());
+            let did_park = self.parked_receivers.park();
             if self.sender_count.load(Ordering::Acquire) == 0 {
                 Ok(Async::Ready(None))
             } else {
-                if let Limit::Auto(a) = &self.limit {
-                    a.fetch_add(1, Ordering::Release);
+                if did_park {
+                    if let Limit::Auto(a) = &self.limit {
+                        a.fetch_add(1, Ordering::Release);
+                    }
+                    self.parked_senders.wake_all();
                 }
-                self.parked_senders.wake_all();
                 Ok(Async::NotReady)
             }
         }
@@ -349,6 +387,7 @@ pub struct OnDemandReceiver<T> {
     demander_inner: Arc<SegQueue<T>>,
     demander_parked_receivers: Arc<ParkedTasks>,
     demander_parked_senders: Arc<ParkedTasks>,
+    receiver_count: Arc<AtomicUsize>,
     signal: Arc<AtomicUsize>,
 }
 
@@ -367,6 +406,7 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
             demander_inner: demander.inner.clone(),
             demander_parked_receivers: demander.parked_receivers.clone(),
             demander_parked_senders: demander.parked_senders.clone(),
+            receiver_count: demander.receiver_count.clone(),
             signal: AtomicUsize::default().into(),
         }
     }
@@ -390,6 +430,10 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
             }
         };
         let stream = stream::poll_fn(move || {
+            // end the on_demand stream if there are no more receivers
+            if self.receiver_count.load(Ordering::Acquire) == 0 {
+                return Ok(Async::Ready(None));
+            }
             if self.demander_inner.is_empty() {
                 let receivers_waiting = !self.demander_parked_receivers.0.is_empty();
                 let signal_state = self
@@ -413,7 +457,7 @@ impl<T: Send + Sync + 'static> OnDemandReceiver<T> {
                     return Ok(Async::Ready(Some(())));
                 }
             }
-            self.demander_parked_senders.park(task::current());
+            self.demander_parked_senders.park();
             Ok(Async::NotReady)
         });
 
@@ -426,6 +470,8 @@ mod tests {
     use super::*;
     use futures::future;
     use tokio::runtime::current_thread;
+
+    use std::collections::BTreeSet;
 
     #[test]
     fn channel_limit_works() {
@@ -528,6 +574,28 @@ mod tests {
             Ok(())
         });
         current_thread::run(f);
+    }
+
+    #[test]
+    fn sender_ord_works() {
+        let (tx_a, _) = channel::<bool>(Limit::auto());
+        let (tx_b, _) = channel::<bool>(Limit::auto());
+        let (tx_c, _) = channel::<bool>(Limit::auto());
+        let tx_a2 = tx_a.clone();
+        let tx_a3 = tx_a.clone();
+        let tx_b2 = tx_b.clone();
+        let tx_b3 = tx_b.clone();
+
+        let mut set = BTreeSet::new();
+        set.insert(tx_a);
+        set.insert(tx_a2);
+        set.insert(tx_b);
+        set.insert(tx_b2);
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&tx_a3));
+        assert!(set.contains(&tx_b3));
+        assert!(!set.contains(&tx_c));
     }
 
     #[test]

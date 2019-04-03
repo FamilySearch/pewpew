@@ -182,7 +182,7 @@ mod tests {
             write!(tmp, "{}", JSON_LINES.join(line_ending)).unwrap();
             fp.path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = JsonReader::new(&fp).unwrap().map(|r| r.unwrap()).collect();
+            let values: Vec<_> = JsonReader::new(&fp).unwrap().map(Result::unwrap).collect();
 
             assert_eq!(values, expect);
         }

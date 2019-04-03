@@ -253,7 +253,9 @@ fn index_json2<'a>(
             }
             (_, Either::A(s)) => return Err(RecoverableError::IndexingJson(s, json.clone()).into()),
             (_, Either::B(n)) => {
-                return Err(RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into());
+                return Err(
+                    RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into(),
+                );
             }
         };
         json = o.unwrap_or(&json::Value::Null)
@@ -1112,7 +1114,7 @@ impl Select {
                             Ok(Some(select.evaluate(&d)?))
                         }
                     })
-                    .filter_map(|v| v.transpose()),
+                    .filter_map(Result::transpose),
             )
         };
         Ok(r)

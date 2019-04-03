@@ -18,6 +18,7 @@ where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let last_yield_index = self.last_yield_index + 1;
+        let mut done_count = 0;
         for i in 0..self.elems.len() {
             let i = (i + last_yield_index) % self.elems.len();
             let stream = &mut self.elems[i];
@@ -26,11 +27,16 @@ where
                     self.last_yield_index = i;
                     return v;
                 }
+                Ok(Async::Ready(None)) => done_count += 1,
                 e @ Err(_) => return e,
                 _ => (),
             }
         }
-        Ok(Async::NotReady)
+        if done_count == self.elems.len() {
+            Ok(Async::Ready(None))
+        } else {
+            Ok(Async::NotReady)
+        }
     }
 }
 
@@ -50,7 +56,7 @@ where
 mod tests {
     use super::*;
 
-    use ether::Either3;
+    use ether::{Either, Either3};
     use futures::{stream, Future};
     use std::{
         rc::Rc,
@@ -100,6 +106,32 @@ mod tests {
                 Ok(())
             })
             .map_err(|e: ()| panic!(e));
+
+        current_thread::run(stream);
+    }
+
+    #[test]
+    fn select_any_ends_when_all_streams_finish() {
+        let a = Either::A(stream::empty::<u8, ()>());
+
+        let mut b_counter = 0u8;
+        let b = Either::B(stream::poll_fn(move || {
+            if b_counter < 3 {
+                b_counter += 1;
+                Ok(Async::Ready(Some(b_counter)))
+            } else {
+                Ok(Async::Ready(None))
+            }
+        }));
+
+        let c = Either::A(stream::empty::<u8, ()>());
+
+        let expects = Ok(vec![1, 2, 3]);
+
+        let stream = select_any(vec![a, b, c]).collect().then(move |left| {
+            assert_eq!(left, expects);
+            Ok(())
+        });
 
         current_thread::run(stream);
     }

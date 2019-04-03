@@ -12,23 +12,18 @@ mod stats;
 mod util;
 
 use std::{
-    fs::File,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::error::TestError;
-use crate::load_test::{LoadTest, TestEndReason, TryRun};
+use crate::load_test::create_run;
 
 use clap::{crate_version, App, Arg};
-use ether::{Either, Either3};
-use futures::{
-    future::{lazy, IntoFuture},
-    sync::mpsc as futures_channel,
-    Future, Sink,
+use futures::Future;
+use tokio::{
+    self,
+    io::{stderr, stdout},
 };
-use serde_yaml;
-use tokio;
 use yansi::Paint;
 
 fn main() {
@@ -60,86 +55,15 @@ fn main() {
         .value_of("CONFIG")
         .expect("should have CONFIG param")
         .into();
-    let try_run = matches.value_of("TRY").map(|s| s.to_string());
-    tokio::run(lazy(move || {
-        let file = match File::open(&load_test_config_file) {
-            Ok(f) => f,
-            Err(_) => {
-                let e = TestError::InvalidConfigFilePath(load_test_config_file);
-                print_test_end_message(Err(&e));
-                return Either3::B(Ok(()).into_future());
-            }
-        };
-        let config = match serde_yaml::from_reader(file) {
-            Ok(c) => c,
-            Err(e) => {
-                let e = TestError::YamlDeserializerErr(e.into());
-                print_test_end_message(Err(&e));
-                return Either3::B(Ok(()).into_future());
-            }
-        };
-        let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
-        if let Some(target_endpoint) = try_run {
-            let try_run = TryRun::new(
-                config,
-                load_test_config_file,
-                (test_ended_tx.clone(), test_ended_rx),
-                target_endpoint,
-            );
-            match try_run {
-                Ok(t) => Either3::A(Either::A(t.run())),
-                Err(e) => {
-                    print_test_end_message(Err(&e));
-                    // we send the test_ended message as Ok so if the stats monitor
-                    // is running it won't reprint the error message
-                    Either3::C(Either::A(
-                        test_ended_tx
-                            .send(Ok(TestEndReason::TimesUp))
-                            .then(|_| Ok(())),
-                    ))
-                }
-            }
-        } else {
-            let load_test = LoadTest::new(
-                config,
-                load_test_config_file,
-                (test_ended_tx.clone(), test_ended_rx),
-            );
-            match load_test {
-                Ok(l) => Either3::A(Either::B(l.run())),
-                Err(e) => {
-                    print_test_end_message(Err(&e));
-                    // we send the test_ended message as Ok so if the stats monitor
-                    // is running it won't reprint the error message
-                    Either3::C(Either::B(
-                        test_ended_tx
-                            .send(Ok(TestEndReason::TimesUp))
-                            .then(|_| Ok(())),
-                    ))
-                }
-            }
-        }
-    }));
+
+    let test_run = matches.value_of("TRY").map(ToString::to_string);
+    let f = create_run(load_test_config_file, test_run, stdout, stderr)
+        .map_err(|_| HAD_FATAL_ERROR.store(true, Ordering::Relaxed));
+    tokio::run(f);
+
     if HAD_FATAL_ERROR.load(Ordering::Relaxed) {
         std::process::exit(1)
     }
 }
 
 static HAD_FATAL_ERROR: AtomicBool = AtomicBool::new(false);
-
-pub fn print_test_end_message(r: Result<TestEndReason, &TestError>) {
-    match r {
-        Err(TestError::KilledByLogger) => {
-            eprintln!("\n{}", Paint::yellow("Test killed early by logger").bold())
-        }
-        Err(e) => {
-            HAD_FATAL_ERROR.store(true, Ordering::Relaxed);
-            eprintln!("\n{} {}", Paint::red("Fatal error").bold(), e);
-        }
-        Ok(TestEndReason::ProviderEnded) => eprintln!(
-            "\n{}",
-            Paint::yellow("Test ended early because a provider ended")
-        ),
-        _ => (),
-    }
-}

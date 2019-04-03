@@ -556,7 +556,7 @@ impl<'de> Deserialize<'de> for RangeProvider {
         let rppp = RangeProviderPreProcessed::deserialize(deserializer)?;
         let start = rppp.start.unwrap_or(0);
         let end = rppp.end.unwrap_or(i64::max_value());
-        let step = usize::from(rppp.step.map(|n| n.get()).unwrap_or(1));
+        let step = usize::from(rppp.step.map(NonZeroU16::get).unwrap_or(1));
         let iter = (start..=end).step_by(step);
         let iter = if rppp.repeat {
             Either::B(iter.cycle())

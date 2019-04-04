@@ -1,26 +1,33 @@
 # TODOs
-- results viewer: show test errors
-- results viewer: when a file can't be parsed show error message on the page
-- adjust try run complexity score so GETs score better than other verbs
-- for try run, add all the endpoint to the test that can supply a provider, in the order of their complexity score", in the event that the main endpoint cannot supply the data
-- update `mod_interval` code so that multiple `scale_fn`s can be added so that it handles the transition from one fn to the next, rather than using `Stream::chain`. This is important because, currently, if a provider value is delayed for a long period of time, it will start on the next `mod_interval` even though enough time may have passed that it should skip several `mod_interval`s. Should also help in allowing `load_patterns` to be dynamically changed during test run
-- create a `no_auto_returns` expression function which will evaluate the inner expression while skipping any auto_returns on referenced providers, and/or add a `no_auto_returns` endpoint parameter
-- create `if_not_full_group` send option which will drop items if the current buffer is full but other provides have room in their buffers. Alternatively, change the behavior of `block` to do this (would be a breaking change). Can be implemented using `future::select_all` combined with a custom future impl that when dropped will do a `try_send` if it did not finish. 
-- Add metrics for bytes sent/received per endpoint (total per bucket?)
+- At the end of a try run print a summary of the status counts, errors
 - add more tests - unit and integration - get code coverage -- add in negative tests
   - refactor to allow running pewpew as a library
     - split config parser into sub-crate and add in unit tests
-- Adjust expression parsing errors to have line numbers which match with the yaml file
+  - add in integration test which drops connections before the body is fully sent
+- Have a `secure` provider where values are blanked out in logs (only the original value is included in the request and trying to select it from a `provides` or `logs` should make the value appear as asterisks)
+- Allow `load_pattern`s to be parameterized with environment variables
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
 - HARD - Allow declare expressions to reference other declare variables as long as there's no recursive references
-- change the default provides.send option to be `if_not_full` if the endpoint has a peak_load, otherwise `if_not_full_group`. *Breaking change*. Version 0.5.
-- Break `run` and `try` into separate cli sub-commands. Add in different configuration options. For `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors). For `run`: stats output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, option to have html output (includes the results viewer). *Breaking change*. Version 0.5.
-- Create a try run viewer. Version 0.5.
-- Have a `stats` sub-command to read, merge, and print aggregate stats summaries. Also the ability to convert a json to html. Version 0.5.
+- change the behavior of `send: block` to drop items if the current buffer is full but other `send: block` provides have room in their buffers. Can be implemented using `future::select_all` combined with a custom future impl that when dropped will do a `try_send` if it did not finish. *Breaking change*. Version 0.5
+- change the default provides.send option to be `if_not_full` if the endpoint has a peak_load, otherwise `block`. *Breaking change*. Version 0.5.
 - Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.
+- Break `run` and `try` into separate cli sub-commands. Add in different configuration options.
+    - `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors), enable loggers (currently they are enabled but they should be disabled by default), parallel (the current default - can be implemented with a non-repeating static_list provider with a single value which is auto_returned). `try` should have the option to select one or more endpoints based upon the labels (or run everything)
+    - `run`: output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, option to have html output (includes the results viewer). *Breaking change*. Version 0.5.
+- Merge `connection_errors`, `connectionErrors`, `connectionErrorCount` in summary output into `test_errors`. *Breaking change*. Version 0.5.
+- Have a way to log recoverable errors. Request and Response may not be available, but can be beneficial for debugging. Don't log them to stderr by default. Version 0.5
 - Make the inclusive/exlusiveness of `collect`, `range`, and `repeat` consistent. *Breaking change*. Version 0.5.
-- Have ability to include endpoints (and any provider dependencies) from another config file. Post 0.5.
-- Log when a request is waiting for a provider
+- Get rid of all `[e]print[ln]!` use. 
+- Create a try run viewer. Version > 0.5.
+- Have a `stats` sub-command to read, merge, and print aggregate stats summaries. Also the ability to convert a json to html. Version > 0.5.
+- Have ability to include providers and endpoints (and any provider dependencies) from another config file. Version > 0.5.
+- Results viewer: show total summaries for each endpoint directly under the heading (instead of next to each chart). Display test time at the top of the page. Version > 0.5.
+- In the stats file record the name of the yaml file. Version > 0.5
+- Adjust expression parsing errors to have line numbers which match with the yaml file
+- Have a way to set an SLA for an endpoint and visualize that in the results. Also have a stats.SLA property that could be used to key logging off of.
+- Handle ctrl-c and write out test summary and persist result to disk.
+- Log when a request is waiting for a provider (use tokio trace)
+- Add metrics for bytes sent/received per endpoint (total per bucket?)
 - Have the Dockerfile and sh script cross compile for windows as well (see https://stackoverflow.com/a/39184296, https://github.com/est31/msvc-wine-rust)
 - Create server mode:
   - Allows the running of tests on demand.

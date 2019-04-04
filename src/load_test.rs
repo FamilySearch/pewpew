@@ -531,16 +531,6 @@ where
                 Either::B(test_ended_tx.send(e.clone()).then(|_| e))
             }
         })
-        // TODO: on_demand causes a lot of extra wakeups and crazy provider stats. Ex:
-        /*
-            - sessionId:
-            length: 0
-            limit: 628659
-            tasks waiting to send: 1
-            tasks waiting to receive: 9113
-            number of receivers: 1
-            number of senders: 2
-        */
         .select(test_ended_rx.map(|r| *r).map_err(|e| (&*e).clone()))
         .map(|r| r.0)
         .map_err(|e| e.0)

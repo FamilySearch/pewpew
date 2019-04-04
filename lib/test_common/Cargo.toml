@@ -1,0 +1,13 @@
+[package]
+name = "test_common"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+doctest = false
+path = "test_common.rs"
+
+[dependencies]
+futures = "0.1"
+parking_lot = "0.7"
+tokio = "0.1"

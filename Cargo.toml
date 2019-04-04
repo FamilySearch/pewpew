@@ -1,6 +1,6 @@
 [package]
 name = "pewpew"
-version = "0.4.10"
+version = "0.4.11"
 edition = "2018"
 
 [dependencies]
@@ -39,6 +39,7 @@ serde_derive = "1"
 serde_json = "1"
 serde-tuple-vec-map = "0.2"
 serde_yaml = "0.8"
+test_common = { path = "./lib/test_common" }
 tokio = "0.1"
 tokio-threadpool = "0.1"
 unicode-segmentation = "1"
@@ -64,5 +65,6 @@ members = [
     "lib/for_each_parallel",
     "lib/mod_interval",
     "lib/select_any",
+    "lib/test_common",
     "lib/zip_all",
 ]

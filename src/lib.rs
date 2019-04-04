@@ -1,7 +1,15 @@
-use crate::config;
+#![feature(bind_by_move_pattern_guards, existential_type, impl_trait_in_bindings)]
+#![recursion_limit = "128"]
+#![warn(rust_2018_idioms)]
+
+mod config;
+mod error;
+mod providers;
+mod request;
+mod stats;
+mod util;
+
 use crate::error::TestError;
-use crate::providers;
-use crate::request;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
 use crate::util::tweak_path;
 
@@ -15,7 +23,7 @@ use futures::{
     },
     Future, IntoFuture, Stream,
 };
-pub use hyper::{client::HttpConnector, Body, Client};
+use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use indexmap::IndexSet;
 use native_tls::TlsConnector;

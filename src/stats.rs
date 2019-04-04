@@ -1,7 +1,7 @@
 use crate::config::{self, SummaryOutputFormats};
 use crate::error::{RecoverableError, TestError};
-use crate::load_test::TestEndReason;
 use crate::providers;
+use crate::TestEndReason;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use ether::Either;

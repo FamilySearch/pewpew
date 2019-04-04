@@ -6,8 +6,8 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 
 use crate::config;
 use crate::error::TestError;
-use crate::load_test::TestEndReason;
 use crate::util::{json_value_into_string, tweak_path};
+use crate::TestEndReason;
 
 use bytes::{Buf, Bytes, IntoBuf};
 use channel::Limit;
@@ -252,14 +252,14 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use futures::{future, sync::mpsc::channel as futures_channel, Async};
     use json::json;
-    use parking_lot::Mutex;
+    use test_common::TestWriter;
     use tokio::runtime::current_thread;
 
     use std::{
         collections::BTreeSet,
-        sync::Arc,
         time::{Duration, Instant},
     };
 
@@ -419,48 +419,6 @@ mod tests {
                 Ok(())
             })
         }));
-    }
-
-    #[derive(Clone)]
-    struct TestWriter(Arc<Mutex<(bool, Vec<u8>)>>);
-
-    impl TestWriter {
-        fn new() -> Self {
-            TestWriter(Mutex::new((false, Vec::new())).into())
-        }
-
-        fn get_string(&self) -> String {
-            String::from_utf8(self.0.lock().1.split_off(0)).unwrap()
-        }
-
-        fn do_would_block_on_next_write(&self) {
-            self.0.lock().0 = true;
-        }
-    }
-
-    impl io::Write for TestWriter {
-        fn write(&mut self, mut buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
-            if buf.len() > 1024 {
-                buf = &buf[0..1024];
-            }
-            self.0.lock().1.write(buf)
-        }
-
-        fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
-            let mut inner = self.0.lock();
-            if inner.0 {
-                inner.0 = false;
-                Err(io::ErrorKind::WouldBlock.into())
-            } else {
-                io::Write::flush(&mut inner.1)
-            }
-        }
-    }
-
-    impl tokio::io::AsyncWrite for TestWriter {
-        fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
-            Ok(Async::Ready(()))
-        }
     }
 
     #[test]

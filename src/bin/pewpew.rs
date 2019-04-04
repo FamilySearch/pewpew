@@ -1,22 +1,10 @@
-#![feature(bind_by_move_pattern_guards, existential_type, impl_trait_in_bindings)]
 #![recursion_limit = "128"]
-#![type_length_limit = "2097152"]
-#![warn(rust_2018_idioms)]
-
-mod config;
-mod error;
-mod load_test;
-mod providers;
-mod request;
-mod stats;
-mod util;
-
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::load_test::create_run;
+use pewpew::create_run;
 
 use clap::{crate_version, App, Arg};
 use futures::Future;

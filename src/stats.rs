@@ -527,8 +527,6 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     format!("in approximately {}", long_time)
 }
 
-// essentially does nothing, but gives a place for stats to be sent
-// during a try run
 pub fn create_try_run_stats_channel<F>(
     test_complete: Shared<F>,
 ) -> (
@@ -538,37 +536,62 @@ pub fn create_try_run_stats_channel<F>(
 where
     F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
 {
+    let aggregates = AggregateStats::new(0, Duration::from_secs(0));
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let mut endpoint_map = BTreeMap::new();
-    let f = Stream::for_each(rx, move |s| {
-        match s {
-            StatsMessage::Init(si) => {
-                let stats_id = si.stats_id;
-                let method = stats_id.get("method").expect("stats_id missing `method`");
-                let url = stats_id.get("url").expect("stats_id missing `url`");
-                endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
-            }
-            StatsMessage::ResponseStat(rs) => {
-                if let StatKind::RecoverableError(re) = rs.kind {
-                    let endpoint = endpoint_map
-                        .get(&rs.endpoint_id)
-                        .expect("endpoint_map should have endpoint id");
-                    eprint!(
-                        "{}",
-                        Paint::yellow(format!(
-                            "WARNING - recoverable error happened on endpoint `{}`: {}\n",
-                            endpoint, re
-                        ))
-                    );
+    let f = rx
+        .fold(aggregates, move |mut summary, s| {
+            match s {
+                StatsMessage::Init(si) => {
+                    let stats_id = si.stats_id;
+                    let method = stats_id.get("method").expect("stats_id missing `method`");
+                    let url = stats_id.get("url").expect("stats_id missing `url`");
+                    endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
                 }
+                StatsMessage::ResponseStat(rs) => {
+                    if let StatKind::RecoverableError(re) = &rs.kind {
+                        let endpoint = endpoint_map
+                            .get(&rs.endpoint_id)
+                            .expect("endpoint_map should have endpoint id");
+                        eprint!(
+                            "{}",
+                            Paint::yellow(format!(
+                                "WARNING - recoverable error happened on endpoint `{}`: {}\n",
+                                endpoint, re
+                            ))
+                        );
+                    }
+                    if summary.append_response_stat(rs).is_err() {
+                        return Err(());
+                    }
+                }
+                _ => (),
             }
-            _ => (),
-        }
-        Ok(())
-    })
-    .then(|_| Ok(()))
-    .join(test_complete.then(|_| Ok::<_, ()>(())))
-    .then(|_| Ok(()));
+            Ok(summary)
+        })
+        .map(|stats| {
+            let mut output = format!(
+                "{}\n  calls made: {}\n  status counts: {:?}",
+                Paint::yellow("Try run summary:"),
+                stats.rtt_histogram.len(),
+                stats.status_counts
+            );
+            if stats.request_timeouts > 0 {
+                let piece = format!("\n  request timeouts: {:?}", stats.request_timeouts);
+                output.push_str(&piece);
+            }
+            if !stats.connection_errors.is_empty() {
+                let piece = format!("\n  connection errors: {:?}", stats.connection_errors);
+                output.push_str(&piece);
+            }
+            if !stats.test_errors.is_empty() {
+                let piece = format!("\n  test errors: {:?}", stats.test_errors);
+                output.push_str(&piece);
+            }
+            eprint!("{}", output);
+        })
+        .join(test_complete.then(|_| Ok::<_, ()>(())))
+        .then(|_| Ok(()));
     (tx, f)
 }
 

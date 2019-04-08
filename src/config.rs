@@ -301,7 +301,7 @@ pub struct Endpoint {
     pub method: Method,
     #[serde(default)]
     pub on_demand: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_options_hits_per")]
     pub peak_load: Option<HitsPer>,
     pub stats_id: Option<BTreeMap<String, String>>,
     pub url: String,
@@ -599,6 +599,11 @@ impl<'de> Deserialize<'de> for Percent {
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
+        let sp = BTreeMap::new();
+        let string = Template::new(&string, &sp)
+            .map_err(DeError::custom)?
+            .evaluate(&json::Value::Null)
+            .map_err(DeError::custom)?;
         let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").expect("should be a valid regex");
 
         let captures = re.captures(&string).ok_or_else(|| {
@@ -705,6 +710,37 @@ where
     Ok(selects)
 }
 
+fn deserialize_options_hits_per<'de, D>(deserializer: D) -> Result<Option<HitsPer>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let string: String = match Option::deserialize(deserializer)? {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    let sp = BTreeMap::new();
+    let string = Template::new(&string, &sp)
+        .map_err(DeError::custom)?
+        .evaluate(&json::Value::Null)
+        .map_err(DeError::custom)?;
+    let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
+    let captures = re.captures(&string).ok_or_else(|| {
+        DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
+    })?;
+    let n = captures
+        .get(1)
+        .expect("should have capture group")
+        .as_str()
+        .parse()
+        .expect("should be valid digits for HitsPer");
+    if captures.get(2).expect("should have capture group").as_str()[0..1].eq_ignore_ascii_case("m")
+    {
+        Ok(Some(HitsPer::Minute(n)))
+    } else {
+        Ok(Some(HitsPer::Second(n)))
+    }
+}
+
 fn deserialize_providers<'de, D, T>(deserializer: D) -> Result<Vec<(String, T)>, D::Error>
 where
     D: Deserializer<'de>,
@@ -755,7 +791,12 @@ fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let dur = String::deserialize(deserializer)?;
+    let string = String::deserialize(deserializer)?;
+    let sp = BTreeMap::new();
+    let dur = Template::new(&string, &sp)
+        .map_err(DeError::custom)?
+        .evaluate(&json::Value::Null)
+        .map_err(DeError::custom)?;
     deserialize_duration_helper(&dur)
         .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))
 }
@@ -764,10 +805,15 @@ fn deserialize_duration_option<'de, D>(deserializer: D) -> Result<Option<Duratio
 where
     D: Deserializer<'de>,
 {
-    let dur: String = match Option::deserialize(deserializer)? {
+    let string: String = match Option::deserialize(deserializer)? {
         Some(dur) => dur,
         None => return Ok(None),
     };
+    let sp = BTreeMap::new();
+    let dur = Template::new(&string, &sp)
+        .map_err(DeError::custom)?
+        .evaluate(&json::Value::Null)
+        .map_err(DeError::custom)?;
 
     deserialize_duration_helper(&dur)
         .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))

@@ -5,6 +5,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.4.11
 Changes:
 - Print a summary at the end of a try run.
+- Allow `duration`s, `percent`s and `peak_load` to be templates which can interpolate environment variables.
 
 ### v0.4.10
 Bug fixes:

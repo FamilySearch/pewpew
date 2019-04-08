@@ -1,9 +1,4 @@
 use futures::{try_ready, Async, Future, Poll, Stream};
-use regex::Regex;
-use serde::{
-    de::{Error as DeError, Unexpected},
-    Deserialize, Deserializer,
-};
 use tokio::timer::Delay;
 
 use std::{
@@ -25,32 +20,6 @@ fn nanos_to_duration(n: f64) -> Duration {
 pub enum HitsPer {
     Second(u32),
     Minute(u32),
-}
-
-impl<'de> Deserialize<'de> for HitsPer {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
-        let captures = re.captures(&string).ok_or_else(|| {
-            DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
-        })?;
-        let n = captures
-            .get(1)
-            .expect("should have capture group")
-            .as_str()
-            .parse()
-            .expect("should be valid digits for HitsPer");
-        if captures.get(2).expect("should have capture group").as_str()[0..1]
-            .eq_ignore_ascii_case("m")
-        {
-            Ok(HitsPer::Minute(n))
-        } else {
-            Ok(HitsPer::Second(n))
-        }
-    }
 }
 
 // x represents the time elapsed in the test

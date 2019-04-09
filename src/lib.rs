@@ -62,8 +62,8 @@ pub fn create_run<Se, So, Sef, Sof>(
 where
     Se: AsyncWrite + Send + Sync + 'static,
     So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se,
-    Sof: Fn() -> So,
+    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
+    Sof: Fn() -> So + Clone + Send + Sync + 'static,
 {
     let stderr2 = stderr();
     lazy(move || {
@@ -120,14 +120,17 @@ where
             Err(e) => {
                 let a = write_all(
                     stderr2,
-                    format!("\n{} {}", Paint::red("Fatal error").bold(), e),
+                    format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),
                 );
                 Either::A(a)
             }
             Ok(TestEndReason::KilledByLogger) => {
                 let a = write_all(
                     stderr2,
-                    format!("\n{}", Paint::yellow("Test killed early by logger").bold()),
+                    format!(
+                        "\n{}\n",
+                        Paint::yellow("Test killed early by logger").bold()
+                    ),
                 );
                 Either::A(a)
             }
@@ -135,7 +138,7 @@ where
                 let a = write_all(
                     stderr2,
                     format!(
-                        "\n{}",
+                        "\n{}\n",
                         Paint::yellow("Test ended early because one or more providers ended")
                     ),
                 );
@@ -161,8 +164,8 @@ fn create_try_run_future<Se, So, Sef, Sof>(
 where
     Se: AsyncWrite + Send + Sync + 'static,
     So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se,
-    Sof: Fn() -> So,
+    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
+    Sof: Fn() -> So + Clone + Send + Sync + 'static,
 {
     let (test_ended_tx, test_ended_rx) = test_ended;
     let test_ended_rx = test_ended_rx
@@ -214,7 +217,7 @@ where
         &test_ended_tx,
         &static_providers,
         stdout,
-        stderr,
+        stderr.clone(),
     )?;
 
     let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>| -> Result<Vec<(String, config::Select)>, TestError> {
@@ -271,7 +274,7 @@ where
 
     let client = create_http_client(config_config.client.keepalive)?;
 
-    let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_rx.clone());
+    let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_rx.clone(), stderr);
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {
         drop(tx);
@@ -396,8 +399,8 @@ pub fn create_load_test_future<Se, So, Sef, Sof>(
 where
     Se: AsyncWrite + Send + Sync + 'static,
     So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se,
-    Sof: Fn() -> So,
+    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
+    Sof: Fn() -> So + Clone + Send + Sync + 'static,
 {
     let (test_ended_tx, test_ended_rx) = test_ended;
     let test_ended_rx = test_ended_rx
@@ -429,7 +432,7 @@ where
         &test_ended_tx,
         &static_providers,
         stdout,
-        stderr,
+        stderr.clone(),
     )?;
 
     let global_load_pattern = config.load_pattern;
@@ -484,6 +487,7 @@ where
         test_ended_tx.clone(),
         &config_config.general,
         &providers,
+        stderr,
     )?;
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {

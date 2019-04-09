@@ -4,7 +4,7 @@ use crate::providers;
 use crate::TestEndReason;
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
-use ether::Either;
+use ether::{Either, Either3};
 use fnv::FnvHashMap;
 use futures::{
     future::Shared,
@@ -15,7 +15,11 @@ use hdrhistogram::Histogram;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
-use tokio::{fs::File as TokioFile, timer::Interval};
+use tokio::{
+    fs::File as TokioFile,
+    io::{write_all, AsyncWrite},
+    timer::Interval,
+};
 use yansi::Paint;
 
 use std::{
@@ -110,7 +114,7 @@ struct RollingAggregateStats {
     #[serde(skip_serializing)]
     duration: u64,
     #[serde(skip)]
-    end_time: Cell<Option<Instant>>,
+    end_time: Option<Instant>,
     #[serde(skip_serializing)]
     last_print_time: Cell<u64>,
     #[serde(skip_serializing)]
@@ -122,7 +126,7 @@ impl RollingAggregateStats {
         RollingAggregateStats {
             buckets: BTreeMap::new(),
             duration: duration.as_secs(),
-            end_time: Cell::new(None),
+            end_time: None,
             last_print_time: Cell::new(0),
             time,
         }
@@ -150,7 +154,7 @@ impl RollingAggregateStats {
         Ok(())
     }
 
-    fn append(&mut self, stat: ResponseStat) -> Result<(), TestError> {
+    fn append(&mut self, stat: ResponseStat) -> Result<Option<String>, TestError> {
         let duration = self.duration;
         let time = to_epoch(stat.time)? / duration * duration;
         let (_, stats_map) = self
@@ -160,11 +164,13 @@ impl RollingAggregateStats {
         let current = stats_map
             .entry(time)
             .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
-        current.append_response_stat(stat)?;
-        Ok(())
+        current.append_response_stat(stat)
     }
 
-    fn persist(&self) -> impl Future<Item = (), Error = TestError> {
+    fn persist<C: AsyncWrite + Send + Sync + 'static>(
+        &self,
+        console: C,
+    ) -> impl Future<Item = (), Error = TestError> {
         let stats = self.clone();
         TokioFile::create(format!("stats-{}.json", self.time))
             .map_err(Either::A)
@@ -174,12 +180,11 @@ impl RollingAggregateStats {
                     .map_err(Either::B)
             })
             .or_else(|e| {
-                eprint!("{}", format!("error persisting stats {:?}\n", e));
-                Ok(())
+                write_all(console, format!("error persisting stats {:?}\n", e)).then(|_| Ok(()))
             })
     }
 
-    fn print_summary(&self, time: u64, summary_output_format: SummaryOutputFormats) {
+    fn generate_summary(&self, time: u64, summary_output_format: SummaryOutputFormats) -> String {
         let mut printed = false;
         self.last_print_time.set(time);
         let is_pretty_format = summary_output_format.is_pretty();
@@ -208,7 +213,7 @@ impl RollingAggregateStats {
             if !printed {
                 print_string.push_str("no data\n");
             }
-            if let Some(et) = self.end_time.get() {
+            if let Some(et) = self.end_time {
                 if et > Instant::now() {
                     let test_end_msg = duration_till_end_to_pretty_string(et - Instant::now());
                     let piece = format!("\n{}\n", test_end_msg);
@@ -216,7 +221,7 @@ impl RollingAggregateStats {
                 }
             }
         }
-        eprint!("{}", print_string);
+        print_string
     }
 }
 
@@ -301,12 +306,13 @@ impl AggregateStats {
         }
     }
 
-    fn append_response_stat(&mut self, rhs: ResponseStat) -> Result<(), TestError> {
+    fn append_response_stat(&mut self, rhs: ResponseStat) -> Result<Option<String>, TestError> {
         let time = to_epoch(rhs.time)?;
         if self.start_time == 0 {
             self.start_time = time;
         }
         self.end_time = cmp::max(self.end_time, time);
+        let mut warning = None;
         match rhs.kind {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
@@ -314,7 +320,8 @@ impl AggregateStats {
                 match self.warnings.get(&msg) {
                     Some(last_print_time) if *last_print_time >= self.start_time => (),
                     _ => {
-                        eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
+                        warning =
+                            Some(format!("{}", Paint::yellow(format!("WARNING: {}\n", &msg))));
                         self.warnings.insert(msg.clone(), time);
                     }
                 }
@@ -335,7 +342,7 @@ impl AggregateStats {
         if let Some(rtt) = rhs.rtt {
             self.rtt_histogram += rtt;
         }
-        Ok(())
+        Ok(warning)
     }
 
     fn print_summary(
@@ -535,20 +542,25 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     format!("in approximately {}", long_time)
 }
 
-pub fn create_try_run_stats_channel<F>(
+pub fn create_try_run_stats_channel<F, C, Cf>(
     test_complete: Shared<F>,
+    console: Cf,
 ) -> (
     futures_channel::UnboundedSender<StatsMessage>,
     impl Future<Item = (), Error = ()> + Send,
 )
 where
     F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
+    C: AsyncWrite + Send + Sync + 'static,
+    Cf: Fn() -> C + Clone + Send + Sync + 'static,
 {
     let aggregates = AggregateStats::new(0, Duration::from_secs(0));
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let mut endpoint_map = BTreeMap::new();
+    let console2 = console.clone();
     let f = rx
         .fold(aggregates, move |mut summary, s| {
+            let mut msg = None;
             match s {
                 StatsMessage::Init(si) => {
                     let stats_id = si.stats_id;
@@ -561,23 +573,28 @@ where
                         let endpoint = endpoint_map
                             .get(&rs.endpoint_id)
                             .expect("endpoint_map should have endpoint id");
-                        eprint!(
+                        msg = Some(format!(
                             "{}",
                             Paint::yellow(format!(
                                 "WARNING - recoverable error happened on endpoint `{}`: {}\n",
                                 endpoint, re
                             ))
-                        );
+                        ));
                     }
                     if summary.append_response_stat(rs).is_err() {
-                        return Err(());
+                        return Either::A(Err(()).into_future());
                     }
                 }
                 _ => (),
             }
-            Ok(summary)
+            if let Some(msg) = msg {
+                let b = write_all(console(), msg).then(move |_| Ok(summary));
+                Either::B(b)
+            } else {
+                Either::A(Ok(summary).into_future())
+            }
         })
-        .map(|stats| {
+        .and_then(move |stats| {
             let mut output = format!(
                 "{}\n  calls made: {}\n  status counts: {:?}",
                 Paint::yellow("Try run summary:"),
@@ -596,20 +613,25 @@ where
                 let piece = format!("\n  test errors: {:?}", stats.test_errors);
                 output.push_str(&piece);
             }
-            eprint!("{}", output);
+            write_all(console2(), output).then(|_| Ok(()))
         })
         .join(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
     (tx, f)
 }
 
-fn create_provider_stats_printer(
+fn create_provider_stats_printer<C, Cf>(
     providers: &BTreeMap<String, providers::Provider>,
     interval: Duration,
     now: Instant,
     start_sec: u64,
     summary_output_format: SummaryOutputFormats,
-) -> impl Future<Item = (), Error = TestError> {
+    console: Cf,
+) -> impl Future<Item = (), Error = TestError>
+where
+    C: AsyncWrite + Send + Sync + 'static,
+    Cf: Fn() -> C + Clone + Send + Sync + 'static,
+{
     let first_print = start_sec / interval.as_secs() * interval.as_secs();
     let start_print =
         Duration::from_millis((interval.as_secs() - (start_sec - first_print)) * 1000 + 1);
@@ -651,24 +673,27 @@ fn create_provider_stats_printer(
                         stats.sender_count,
                     )
                 } else {
-                    let mut s = json::to_string(&stats).map_err(|_| {
+                    let mut s = match json::to_string(&stats).map_err(|_| {
                         TestError::Internal("could not serialize provider stats".into())
-                    })?;
-                    s.push_str("\n");
+                    }) {
+                        Ok(s) => s,
+                        Err(e) => return Either::B(Err(e).into_future()),
+                    };
+                    s.push('\n');
                     s
                 };
                 string_to_print.push_str(&piece);
             }
-            eprint!("{}", string_to_print);
-            Ok(())
+            Either::A(write_all(console(), string_to_print).then(|_| Ok(())))
         })
 }
 
-pub fn create_stats_channel<F>(
+pub fn create_stats_channel<F, Sef, Se>(
     test_complete: Shared<F>,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
+    stderr: Sef,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
@@ -678,6 +703,8 @@ pub fn create_stats_channel<F>(
 >
 where
     F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
+    Se: AsyncWrite + Send + Sync + 'static,
+    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
 {
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
@@ -695,6 +722,9 @@ where
     let stats4 = stats.clone();
     let summary_output_format = config.summary_output_format;
     let is_pretty_format = summary_output_format.is_pretty();
+    let stderr2 = stderr.clone();
+    let stderr3 = stderr.clone();
+    let stderr4 = stderr.clone();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
@@ -704,8 +734,12 @@ where
                 Err(e) => return Either::A(Err(e).into_future()),
             };
             let prev_time = epoch / stats.duration * stats.duration - stats.duration;
-            stats.print_summary(prev_time, summary_output_format);
-            Either::B(stats.persist().then(|_| Ok(())))
+            let summary = stats.generate_summary(prev_time, summary_output_format);
+            let stats4 = stats4.clone();
+            let stderr3 = stderr3.clone();
+            let b = write_all(stderr3(), summary)
+                .then(move |_| stats4.lock().persist(stderr3()).then(|_| Ok(())));
+            Either::B(b)
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
         let print_provider_stats = create_provider_stats_printer(
@@ -714,6 +748,7 @@ where
             now,
             start_sec,
             summary_output_format,
+            stderr.clone(),
         );
         let a = print_stats.join(print_provider_stats).map(|_| ());
         Either::A(a)
@@ -725,17 +760,29 @@ where
         move |datum| {
             let mut stats = stats.lock();
             match datum {
-                StatsMessage::Init(init) => {
-                    return stats.init(init.time, init.endpoint_id, init.stats_id);
-                }
+                StatsMessage::Init(init) => Either3::B(
+                    stats
+                        .init(init.time, init.endpoint_id, init.stats_id)
+                        .into_future(),
+                ),
                 StatsMessage::Start(d) => {
-                    stats.end_time.set(Some(Instant::now() + d));
+                    stats.end_time = Some(Instant::now() + d);
                     let test_end_message = duration_till_end_to_pretty_string(d);
-                    eprint!("{}", format!("Starting load test. {}\n", test_end_message));
+                    let a = write_all(
+                        stderr(),
+                        format!("Starting load test. {}\n", test_end_message),
+                    )
+                    .then(|_| Ok(()));
+                    Either3::A(a)
                 }
-                StatsMessage::ResponseStat(rs) => stats.append(rs)?,
+                StatsMessage::ResponseStat(rs) => match stats.append(rs) {
+                    Ok(Some(msg)) => {
+                        let a = write_all(stderr(), msg).then(|_| Ok(()));
+                        Either3::C(a)
+                    }
+                    r => Either3::B(r.map(|_| ()).into_future()),
+                },
             }
-            Ok(())
         },
     )
     .join(print_stats)
@@ -743,7 +790,7 @@ where
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
     .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
     .map_err(|e| e.0)
-    .and_then(move |(b, _)| stats2.lock().persist().map(move |_| b))
+    .and_then(move |(b, _)| stats2.lock().persist(stderr4()).map(move |_| b))
     .then(move |_| {
         let stats = stats3.lock();
         let duration = stats.duration;
@@ -763,6 +810,7 @@ where
                 (cmp::min(a1, a2), cmp::max(b1, b2))
             });
         end += duration;
+        let mut print_string = String::new();
         for (_, time_buckets) in stats.buckets.values() {
             let end_time_secs = {
                 let mut bucket_values = time_buckets.values();
@@ -773,16 +821,15 @@ where
                 bucket_values.next_back().map(|v| v.time).unwrap_or(first)
             };
             if end_time_secs > stats.last_print_time.get() {
-                stats.print_summary(end_time_secs, summary_output_format);
+                let summary = stats.generate_summary(end_time_secs, summary_output_format);
+                print_string.push_str(&summary);
             }
         }
-        let mut print_string = if is_pretty_format {
-            format!(
+        if is_pretty_format {
+            print_string.push_str(&format!(
                 "{}",
                 Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
-            )
-        } else {
-            String::new()
+            ))
         };
         for (stats_id, time_buckets) in stats.buckets.values() {
             let mut summary = {
@@ -807,8 +854,7 @@ where
             let piece = summary.print_summary(stats_id, summary_output_format, false);
             print_string.push_str(&piece);
         }
-        eprint!("{}", print_string);
-        Ok(())
+        write_all(stderr2(), print_string).then(|_| Ok(()))
     });
     Ok((tx, receiver))
 }

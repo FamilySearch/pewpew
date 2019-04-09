@@ -3,7 +3,7 @@ use crate::error::TestError;
 use crate::providers;
 use crate::util::json_value_to_string;
 
-use ether::Either;
+use ether::{Either, Either3};
 use futures::{stream, try_ready, Async, Future, IntoFuture, Stream};
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
@@ -199,6 +199,87 @@ impl Encode {
         self.arg
             .into_stream(providers)
             .map(move |(d, returns)| (encoding.encode(&d).into(), returns))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Entries {
+    arg: ValueOrExpression,
+}
+
+impl Entries {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, TestError> {
+        if args.len() == 1 {
+            Ok(Entries {
+                arg: args.remove(0),
+            })
+        } else {
+            Err(TestError::InvalidArguments("entries".into()))
+        }
+    }
+
+    fn evaluate_with_arg(
+        d: json::Value,
+    ) -> Either<json::Value, impl Iterator<Item = json::Value> + Clone> {
+        let iter = match d {
+            json::Value::Array(v) => {
+                let a = v
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, e)| json::Value::Array(vec![i.into(), e]));
+                Either3::A(a)
+            }
+            json::Value::Object(o) => {
+                let b = o
+                    .into_iter()
+                    .map(|(k, v)| json::Value::Array(vec![k.into(), v]))
+                    .collect::<Vec<_>>()
+                    .into_iter();
+                Either3::B(b)
+            }
+            json::Value::String(s) => {
+                let c = s
+                    .graphemes(true)
+                    .enumerate()
+                    .map(|(i, c)| json::Value::Array(vec![i.into(), c.into()]))
+                    .collect::<Vec<_>>()
+                    .into_iter();
+                Either3::C(c)
+            }
+            v => return Either::A(v),
+        };
+        Either::B(iter)
+    }
+
+    pub(super) fn evaluate_as_iter(
+        &self,
+        d: &json::Value,
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        let v = self.arg.evaluate(d)?;
+        let iter = Entries::evaluate_with_arg(v.into_owned()).map_a(iter::once);
+        Ok(iter)
+    }
+
+    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+        self.arg
+            .evaluate(d)
+            .map(|v| match Entries::evaluate_with_arg(v.into_owned()) {
+                Either::A(v) => v,
+                Either::B(b) => b.collect::<Vec<_>>().into(),
+            })
+    }
+
+    pub(super) fn into_stream(
+        self,
+        providers: &BTreeMap<String, providers::Provider>,
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        self.arg.into_stream(providers).map(|(v, ar)| {
+            let v = match Entries::evaluate_with_arg(v) {
+                Either::A(v) => v,
+                Either::B(b) => b.collect::<Vec<_>>().into(),
+            };
+            (v, ar)
+        })
     }
 }
 
@@ -1270,6 +1351,101 @@ mod tests {
                         .into_future()
                         .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
                     Either::B(_) => unreachable!(),
+                })
+                .collect();
+            join_all(futures).then(|_| Ok(()))
+        }));
+    }
+
+    #[test]
+    fn entries_eval() {
+        // constructor args, eval_arg, expect
+        let checks = vec![
+            (
+                vec![j!("foo").into()],
+                None,
+                j!([[0, "f"], [1, "o"], [2, "o"]]),
+            ),
+            (vec![j!(null).into()], None, j!(null)),
+            (vec![j!(false).into()], None, j!(false)),
+            (
+                vec!["a".into()],
+                Some(j!({"a": {"foo": "bar", "abc": 123}})),
+                j!([["abc", 123], ["foo", "bar"]]),
+            ),
+            (
+                vec!["a".into()],
+                Some(j!({"a": [1, 2, 3]})),
+                j!([[0, 1], [1, 2], [2, 3]]),
+            ),
+        ];
+
+        for (args, eval, right) in checks.into_iter() {
+            let e = Entries::new(args).unwrap();
+            let eval = eval.unwrap_or(json::Value::Null);
+            let left = e.evaluate(&eval).unwrap();
+            assert_eq!(left, right)
+        }
+    }
+
+    #[test]
+    fn entries_eval_iter() {
+        // constructor args, eval_arg, expect
+        let checks = vec![
+            (
+                vec![j!("foo").into()],
+                None,
+                vec![j!([0, "f"]), j!([1, "o"]), j!([2, "o"])],
+            ),
+            (vec![j!(null).into()], None, vec![j!(null)]),
+            (vec![j!(false).into()], None, vec![j!(false)]),
+            (
+                vec!["a".into()],
+                Some(j!({"a": {"foo": "bar", "abc": 123}})),
+                vec![j!(["abc", 123]), j!(["foo", "bar"])],
+            ),
+            (
+                vec!["a".into()],
+                Some(j!({"a": [1, 2, 3]})),
+                vec![j!([0, 1]), j!([1, 2]), j!([2, 3])],
+            ),
+        ];
+
+        for (args, eval, right) in checks.into_iter() {
+            let e = Entries::new(args).unwrap();
+            let eval = eval.unwrap_or(json::Value::Null);
+            let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
+            assert_eq!(left, right)
+        }
+    }
+
+    #[test]
+    fn entries_into_stream() {
+        // constructor args, expect
+        let checks = vec![
+            (vec![j!("foo").into()], j!([[0, "f"], [1, "o"], [2, "o"]])),
+            (vec![j!(null).into()], j!(null)),
+            (vec![j!(false).into()], j!(false)),
+            (vec!["a".into()], j!([["abc", 123], ["foo", "bar"]])),
+            (vec!["b".into()], j!([[0, 1], [1, 2], [2, 3]])),
+        ];
+
+        current_thread::run(lazy(move || {
+            let providers = btreemap!(
+                "a".to_string() => literals(vec!(j!({"foo": "bar", "abc": 123})).into()),
+                "b".to_string() => literals(vec!(j!([1, 2, 3])).into()),
+            );
+
+            let providers = Arc::new(providers);
+
+            let futures: Vec<_> = checks
+                .into_iter()
+                .map(|(args, right)| {
+                    Entries::new(args)
+                        .unwrap()
+                        .into_stream(&providers)
+                        .into_future()
+                        .map(move |(v, _)| assert_eq!(v.unwrap().0, right))
                 })
                 .collect();
             join_all(futures).then(|_| Ok(()))

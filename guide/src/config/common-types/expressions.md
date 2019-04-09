@@ -90,6 +90,44 @@ Pads a string or number to be minimum length. Any added padding will be added to
 </tr>
 <tr>
 <td>
+<code>entries(<i>value</i>)</code>
+</td>
+<td>
+
+Returns the "entries" which make up *value*. For an object this will yield the object's key/value pairs. For an array it yields the array's indices and elements. For a string it yields the indices and the characters. For boolean and null types it yields back those same values.
+
+**Examples**
+
+With the value `{"a": {"foo": "bar", "baz": 123}, "b": ["abc", "def"], "c": "xyz", "d": null }` coming from a provider named `test`:
+
+```
+entries(test.a)
+```
+
+would return `[["foo", "bar"], ["baz", 123]]`.
+
+```
+entries(test.b)
+```
+
+would return `[[0, "abc"], [1, "def"]]`.
+
+```
+entries(test.c)
+```
+
+would return `[[0, "x"], [1, "y"], [2, "z"]]`.
+
+```
+entries(test.d)
+```
+
+would return `null`.
+
+</td>
+</tr>
+<tr>
+<td>
 <code>epoch(<i>unit</i>)</code>
 </td>
 <td>

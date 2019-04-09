@@ -1,5 +1,5 @@
 use super::expression_functions::{
-    Collect, Encode, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
+    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
@@ -102,6 +102,7 @@ impl Future for AutoReturnFuture {
 pub(super) enum FunctionCall {
     Collect(Collect),
     Encode(Encode),
+    Entries(Entries),
     Epoch(Epoch),
     If(Box<If>),
     Join(Join),
@@ -125,6 +126,7 @@ impl FunctionCall {
             "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?)),
             "encode" => Encode::new(args)?.map_a(FunctionCall::Encode),
             "end_pad" => Pad::new(false, args)?.map_a(FunctionCall::Pad),
+            "entries" => Either::A(FunctionCall::Entries(Entries::new(args)?)),
             "epoch" => Either::A(FunctionCall::Epoch(Epoch::new(args)?)),
             "if" => If::new(args)?.map_a(|a| FunctionCall::If(a.into())),
             "join" => Join::new(args)?.map_a(FunctionCall::Join),
@@ -146,6 +148,7 @@ impl FunctionCall {
         match self {
             FunctionCall::Collect(c) => c.evaluate(d),
             FunctionCall::Encode(e) => e.evaluate(d),
+            FunctionCall::Entries(e) => e.evaluate(d),
             FunctionCall::Epoch(e) => e.evaluate(),
             FunctionCall::If(i) => i.evaluate(d),
             FunctionCall::Join(j) => j.evaluate(d),
@@ -166,8 +169,9 @@ impl FunctionCall {
         let r = match self {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(d)?)),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_iter(d)?)),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.evaluate_as_iter()?))),
-            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(i.evaluate_as_iter(d)?))),
+            FunctionCall::Entries(e) => Either3::A(Either3::C(Either3::A(e.evaluate_as_iter(d)?))),
+            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.evaluate_as_iter()?))),
+            FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(i.evaluate_as_iter(d)?))),
             FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(d)?)),
             FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
             FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(d)?)),
@@ -188,8 +192,11 @@ impl FunctionCall {
         let f = match self {
             FunctionCall::Collect(c) => Either3::A(Either3::A(c.into_stream(providers))),
             FunctionCall::Encode(e) => Either3::A(Either3::B(e.into_stream(providers))),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either::A(e.into_stream()))),
-            FunctionCall::If(i) => Either3::A(Either3::C(Either::B(i.into_stream(providers)))),
+            FunctionCall::Entries(e) => {
+                Either3::A(Either3::C(Either3::A(e.into_stream(providers))))
+            }
+            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.into_stream()))),
+            FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(i.into_stream(providers)))),
             FunctionCall::Join(j) => Either3::B(Either3::A(j.into_stream(providers))),
             FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.into_stream(providers))),
             FunctionCall::Match(m) => Either3::B(Either3::C(m.into_stream(providers))),

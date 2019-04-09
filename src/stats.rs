@@ -233,6 +233,7 @@ pub struct AggregateStats {
     status_counts: FnvHashMap<u16, u64>,
     test_errors: FnvHashMap<String, u64>,
     time: u64, // epoch in seconds, when the bucket time begins
+    warnings: FnvHashMap<String, u64>,
 }
 
 impl AddAssign<&AggregateStats> for AggregateStats {
@@ -296,6 +297,7 @@ impl AggregateStats {
             status_counts: FnvHashMap::default(),
             test_errors: FnvHashMap::default(),
             time,
+            warnings: FnvHashMap::default(),
         }
     }
 
@@ -309,7 +311,13 @@ impl AggregateStats {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
                 let msg = format!("{}", r);
-                eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
+                match self.warnings.get(&msg) {
+                    Some(last_print_time) if *last_print_time >= self.start_time => (),
+                    _ => {
+                        eprint!("{}", Paint::yellow(format!("WARNING: {}\n", &msg)));
+                        self.warnings.insert(msg.clone(), time);
+                    }
+                }
                 let entry = if let RecoverableError::IndexingJson(..) = r {
                     self.test_errors.entry(msg)
                 } else {

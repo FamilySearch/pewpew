@@ -7,6 +7,7 @@ Changes:
 - Print a summary at the end of a try run.
 - Allow `duration`s, `percent`s and `peak_load` to be templates which can interpolate environment variables.
 - Add an `entries` expression function which allows iterating over the key/value pairs in an object.
+- Add the stem part of the config file to the name of the stats output file.
 
 ### v0.4.10
 Bug fixes:

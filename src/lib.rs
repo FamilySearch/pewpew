@@ -488,6 +488,10 @@ where
         &config_config.general,
         &providers,
         stderr,
+        config_path
+            .file_stem()
+            .and_then(std::ffi::OsStr::to_str)
+            .map(ToString::to_string),
     )?;
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {

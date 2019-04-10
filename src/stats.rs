@@ -170,9 +170,15 @@ impl RollingAggregateStats {
     fn persist<C: AsyncWrite + Send + Sync + 'static>(
         &self,
         console: C,
+        test_name: Option<String>,
     ) -> impl Future<Item = (), Error = TestError> {
         let stats = self.clone();
-        TokioFile::create(format!("stats-{}.json", self.time))
+        let filename = if let Some(test_name) = test_name {
+            format!("stats-{}-{}.json", test_name, self.time)
+        } else {
+            format!("stats-{}.json", self.time)
+        };
+        TokioFile::create(filename)
             .map_err(Either::A)
             .and_then(move |mut file| {
                 stats
@@ -694,6 +700,7 @@ pub fn create_stats_channel<F, Sef, Se>(
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
     stderr: Sef,
+    test_name: Option<String>,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
@@ -725,6 +732,7 @@ where
     let stderr2 = stderr.clone();
     let stderr3 = stderr.clone();
     let stderr4 = stderr.clone();
+    let test_name2 = test_name.clone();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
@@ -737,8 +745,9 @@ where
             let summary = stats.generate_summary(prev_time, summary_output_format);
             let stats4 = stats4.clone();
             let stderr3 = stderr3.clone();
+            let test_name = test_name.clone();
             let b = write_all(stderr3(), summary)
-                .then(move |_| stats4.lock().persist(stderr3()).then(|_| Ok(())));
+                .then(move |_| stats4.lock().persist(stderr3(), test_name).then(|_| Ok(())));
             Either::B(b)
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
@@ -790,7 +799,7 @@ where
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
     .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
     .map_err(|e| e.0)
-    .and_then(move |(b, _)| stats2.lock().persist(stderr4()).map(move |_| b))
+    .and_then(move |(b, _)| stats2.lock().persist(stderr4(), test_name2).map(move |_| b))
     .then(move |_| {
         let stats = stats3.lock();
         let duration = stats.duration;

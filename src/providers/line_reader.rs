@@ -44,7 +44,8 @@ impl LineReader {
                 let random = Uniform::new(0, jr.positions.len());
                 let rand_pos = jr.positions.get(random.sample(&mut rand::thread_rng()));
                 if let Some((pos, _)) = rand_pos {
-                    jr.seek(*pos)?;
+                    let pos = *pos;
+                    jr.seek(pos)?;
                 }
                 jr.random = Some(random);
             }

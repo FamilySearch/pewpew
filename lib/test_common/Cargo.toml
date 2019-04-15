@@ -8,6 +8,10 @@ doctest = false
 path = "test_common.rs"
 
 [dependencies]
+actix = "0.7"
+actix-web = "0.7"
+ether = { path = "../either" }
 futures = "0.1"
 parking_lot = "0.7"
+rust-crypto = "0.2"
 tokio = "0.1"

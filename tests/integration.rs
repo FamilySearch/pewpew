@@ -7,11 +7,10 @@ use std::{
 };
 
 use futures::Future;
-mod common;
 
 #[test]
 fn int1() {
-    let port = common::start_test_server();
+    let port = test_common::start_test_server();
     env::set_var("PORT", port.to_string());
 
     let config_file = "tests/integration.yaml".into();

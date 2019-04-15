@@ -244,13 +244,12 @@ where
                 Ok(p) => p,
                 Err(e) => return (alias, Err(e), provides_set),
             };
-            let mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> =
-                if alias == try_run {
-                    let stream = Ok(Instant::now()).into_future().into_stream();
-                    Some(Box::new(stream))
-                } else {
-                    None
-                };
+            let mod_interval = if alias == try_run {
+                let stream = Ok(Instant::now()).into_future().into_stream();
+                Some(stream)
+            } else {
+                None
+            };
             let mut headers: Vec<_> = config_config.client.headers.clone();
             headers.extend(endpoint.headers);
             let logs = match to_select_values(endpoint.logs) {
@@ -389,7 +388,7 @@ where
     Ok(endpoint_calls)
 }
 
-pub fn create_load_test_future<Se, So, Sef, Sof>(
+fn create_load_test_future<Se, So, Sef, Sof>(
     config: config::LoadTest,
     config_path: PathBuf,
     test_ended: TestEndedChannel,
@@ -444,7 +443,7 @@ where
 
     // create the endpoints
     let builders: Vec<_> = config.endpoints.into_iter().map(|endpoint| {
-        let mut mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> = None;
+        let mut mod_interval = None;
         let provides = to_select_values(endpoint.provides)?;
         if let Some(peak_load) = endpoint.peak_load {
             let load_pattern = endpoint
@@ -452,7 +451,7 @@ where
                 .or_else(|| global_load_pattern.clone())
                 .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
             duration = cmp::max(duration, load_pattern.duration());
-            mod_interval = Some(Box::new(load_pattern.build(&peak_load)));
+            mod_interval = Some(load_pattern.build(&peak_load));
         } else if provides.is_empty() {
             return Err(TestError::Other(
                 "endpoint must have `provides` or `peak_load`".into(),
@@ -555,7 +554,7 @@ where
     Ok(endpoint_calls)
 }
 
-fn create_http_client(
+pub(crate) fn create_http_client(
     keepalive: Duration,
 ) -> Result<
     Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>>,

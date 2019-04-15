@@ -1,8 +1,15 @@
+mod body_handler;
+mod request_maker;
+mod response_handler;
+
+use self::body_handler::BodyHandler;
+use self::request_maker::RequestMaker;
+use self::response_handler::ResponseHandler;
+
 use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
 use futures::{
-    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
-    Stream,
+    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, Sink, Stream,
 };
 use hyper::{
     body::Payload,
@@ -96,8 +103,6 @@ impl Outgoing {
     }
 }
 
-type StartStream = Box<dyn Stream<Item = Instant, Error = TestError> + Send>;
-
 pub struct BuilderContext {
     pub config: config::Config,
     pub config_path: PathBuf,
@@ -117,7 +122,7 @@ pub struct BuilderContext {
     pub stats_tx: StatsTx,
 }
 
-pub struct Builder {
+pub struct Builder<S: Stream<Item = Instant, Error = TestError> + Send + 'static> {
     body: Option<config::Body>,
     declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
@@ -127,13 +132,13 @@ pub struct Builder {
     no_auto_returns: bool,
     on_demand: bool,
     provides: Vec<(String, Select)>,
-    start_stream: Option<StartStream>,
+    start_stream: Option<S>,
     stats_id: Option<BTreeMap<String, String>>,
     url: String,
 }
 
-impl Builder {
-    pub fn new(url: String, start_stream: Option<StartStream>) -> Self {
+impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
+    pub fn new(url: String, start_stream: Option<S>) -> Self {
         Builder {
             body: None,
             declare: BTreeMap::new(),
@@ -479,15 +484,15 @@ impl MultipartBody {
     fn as_hyper_body<'a>(
         &self,
         template_values: &TemplateValues,
-        ct_entry: HeaderEntry<'a, HeaderValue>,
+        content_type_entry: HeaderEntry<'a, HeaderValue>,
     ) -> Result<HyperBody, TestError> {
         let boundary: String = Alphanumeric
             .sample_iter(&mut rand::thread_rng())
             .take(20)
             .collect();
         let is_form = {
-            let content_type =
-                ct_entry.or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
+            let content_type = content_type_entry
+                .or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
             let ct_str = content_type
                 .to_str()
                 .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
@@ -624,11 +629,13 @@ impl BodyTemplate {
         template_values: &TemplateValues,
         copy_body_value: bool,
         body_value: &mut Option<String>,
-        ct_entry: HeaderEntry<'a, HeaderValue>,
+        content_type_entry: HeaderEntry<'a, HeaderValue>,
     ) -> Result<HyperBody, TestError> {
         let template = match self {
             BodyTemplate::File(_, t) => t,
-            BodyTemplate::Multipart(m) => return m.as_hyper_body(template_values, ct_entry),
+            BodyTemplate::Multipart(m) => {
+                return m.as_hyper_body(template_values, content_type_entry)
+            }
             BodyTemplate::None => return Ok(HyperBody::empty()),
             BodyTemplate::String(t) => t,
         };
@@ -671,7 +678,6 @@ pub struct Endpoint {
     url: Template,
 }
 
-// This returns a boxed future because otherwise the type system runs out of memory for the type
 impl Endpoint {
     pub fn method(&self) -> &Method {
         &self.method
@@ -681,626 +687,54 @@ impl Endpoint {
         &self.required_providers
     }
 
+    // This returns a boxed future because otherwise the type system runs out of memory for the type
     pub fn into_future(self) -> Box<dyn Future<Item = (), Error = TestError> + Send> {
+        let url = self.url;
+        let method = self.method;
+        let headers = self.headers;
+        let body = self.body;
+        let rr_providers = self.rr_providers;
+        let client = self.client;
+        let stats_tx = self.stats_tx;
+        let no_auto_returns = self.no_auto_returns;
+        let outgoing = self.outgoing;
+        let precheck_rr_providers = self.precheck_rr_providers;
+        let endpoint_id = self.endpoint_id;
+        let timeout = self.timeout;
+        let limits = self.limits;
+        let stream = self.stream;
+        let max_parallel_requests = self.max_parallel_requests;
         Box::new(
-            self.stats_tx
+            stats_tx
                 .clone()
                 .send(
                     stats::StatsInit {
                         endpoint_id: self.endpoint_id,
                         time: SystemTime::now(),
-                        stats_id: self.stats_id.clone(),
+                        stats_id: self.stats_id,
                     }
                     .into(),
                 )
                 .map_err(|_| TestError::Other("could not send init stats".into()))
                 .and_then(move |_| {
                     let rm = RequestMaker {
-                        url: self.url,
-                        method: self.method,
-                        headers: self.headers,
-                        body: self.body,
-                        rr_providers: self.rr_providers,
-                        client: self.client,
-                        stats_tx: self.stats_tx,
-                        no_auto_returns: self.no_auto_returns,
-                        outgoing: self.outgoing,
-                        precheck_rr_providers: self.precheck_rr_providers,
-                        endpoint_id: self.endpoint_id,
-                        timeout: self.timeout,
+                        url,
+                        method,
+                        headers,
+                        body,
+                        rr_providers,
+                        client,
+                        stats_tx,
+                        no_auto_returns,
+                        outgoing,
+                        precheck_rr_providers,
+                        endpoint_id,
+                        timeout,
                     };
-                    ForEachParallel::new(
-                        self.limits,
-                        self.max_parallel_requests,
-                        self.stream,
-                        move |values| rm.send_requests(values),
-                    )
+                    ForEachParallel::new(limits, max_parallel_requests, stream, move |values| {
+                        rm.send_request(values)
+                    })
                 }),
         )
-    }
-}
-
-struct RequestMaker {
-    url: Template,
-    method: Method,
-    headers: BTreeMap<String, Template>,
-    body: BodyTemplate,
-    rr_providers: u16,
-    client: Arc<
-        Client<
-            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
-        >,
-    >,
-    stats_tx: StatsTx,
-    no_auto_returns: bool,
-    outgoing: Arc<Vec<Outgoing>>,
-    precheck_rr_providers: u16,
-    endpoint_id: usize,
-    timeout: Duration,
-}
-
-impl RequestMaker {
-    fn send_requests(&self, values: Vec<StreamItem>) -> impl Future<Item = (), Error = TestError> {
-        let mut template_values = TemplateValues::new();
-        let mut auto_returns = Vec::new();
-        for tv in values {
-            match tv {
-                StreamItem::Declare(name, value, returns) => {
-                    template_values.insert(name, value);
-                    auto_returns.extend(returns.into_iter().map(AutoReturn::into_future));
-                }
-                StreamItem::None => (),
-                StreamItem::TemplateValue(name, value, auto_return) => {
-                    template_values.insert(name, value);
-                    if let (Some(ar), false) = (auto_return, self.no_auto_returns) {
-                        auto_returns.push(ar.into_future());
-                    }
-                }
-            };
-        }
-        let auto_returns: Arc<_> =
-            Mutex::new(Some(join_all(auto_returns).map(|_| ()).map_err(|_| {
-                TestError::Internal("auto returns should never error".into())
-            })))
-            .into();
-        let mut request = Request::builder();
-        let url = match self.url.evaluate(&template_values.0) {
-            Ok(u) => u,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
-        let url = match url::Url::parse(&url) {
-            Ok(u) => {
-                // set the request url from the parsed url because it will have
-                // some characters percent encoded automatically which otherwise
-                // cause hyper to error
-                request.uri(u.as_str());
-                u
-            }
-            Err(_) => return Either::B(Err(TestError::InvalidUrl(url)).into_future()),
-        };
-        request.method(self.method.clone());
-        let headers = self
-            .headers
-            .iter()
-            .map(|(k, v)| {
-                let key = HeaderName::from_bytes(k.as_bytes())
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                let value = HeaderValue::from_str(&v.evaluate(&template_values.0)?)
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                Ok::<_, TestError>((key, value))
-            })
-            .collect::<Result<HeaderMap<_>, _>>();
-        let mut headers = match headers {
-            Ok(h) => h,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
-        let ct_entry = headers
-            .entry(CONTENT_TYPE)
-            .expect("Content-Type is a valid header name");
-        let mut body_value = None;
-        let body = self.body.as_hyper_body(
-            &template_values,
-            self.rr_providers & REQUEST_BODY != 0,
-            &mut body_value,
-            ct_entry,
-        );
-        let body = match body {
-            Ok(b) => b,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
-        let mut request = match request.body(body) {
-            Ok(b) => b,
-            Err(e) => return Either::B(Err(TestError::RequestBuilderErr(e.into())).into_future()),
-        };
-        // add the host header
-        headers.insert(
-            HOST,
-            HeaderValue::from_str(url.host_str().expect("should be a valid url"))
-                .expect("url should be a valid string"),
-        );
-        // add the content-lengh header, if needed
-        // (hyper adds it automatically but we need to add it manually here so it shows up in the logs)
-        match request.body().content_length() {
-            Some(n) if n > 0 => {
-                headers.insert(CONTENT_LENGTH, n.into());
-            }
-            _ => (),
-        }
-        let mut request_provider = json::json!({});
-        let request_obj = request_provider
-            .as_object_mut()
-            .expect("should be a json object");
-        if self.rr_providers & REQUEST_URL == REQUEST_URL {
-            // add in the url
-            let mut protocol: String = url.scheme().into();
-            if !protocol.is_empty() {
-                protocol = format!("{}:", protocol);
-            }
-            let search_params: json::Map<String, json::Value> = url
-                .query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned().into()))
-                .collect();
-            request_obj.insert(
-                "url".into(),
-                json::json!({
-                    "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
-                    "host": url.host_str().unwrap_or(""),
-                    "hostname": url.domain().unwrap_or(""),
-                    "href": url.as_str(),
-                    "origin": url.origin().unicode_serialization(),
-                    "password": url.password().unwrap_or(""),
-                    "pathname": url.path(),
-                    "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
-                    "protocol": protocol,
-                    "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
-                    "searchParams": search_params,
-                    "username": url.username(),
-                }),
-            );
-        }
-        if self.rr_providers & REQUEST_STARTLINE != 0 {
-            let url_path_and_query = request
-                .uri()
-                .path_and_query()
-                .map(http::uri::PathAndQuery::as_str)
-                .unwrap_or("/");
-            let version = request.version();
-            request_obj.insert(
-                "start-line".into(),
-                format!("{} {} {:?}", self.method, url_path_and_query, version).into(),
-            );
-        }
-        if self.rr_providers & REQUEST_HEADERS != 0 {
-            let mut headers_json = json::Map::new();
-            for (k, v) in headers.iter() {
-                headers_json.insert(
-                    k.as_str().to_string(),
-                    json::Value::String(
-                        v.to_str()
-                            .expect("could not parse HTTP request header as utf8 string")
-                            .to_string(),
-                    ),
-                );
-            }
-            request_obj.insert("headers".into(), json::Value::Object(headers_json));
-        }
-        if self.rr_providers & REQUEST_BODY != 0 {
-            let body_string = body_value.unwrap_or_else(|| "".into());
-            request_obj.insert("body".into(), body_string.into());
-        }
-        request_obj.insert("method".into(), self.method.as_str().into());
-        template_values.insert("request".into(), request_provider);
-        request.headers_mut().extend(headers);
-        let response_future = self.client.request(request);
-        let now = Instant::now();
-        let stats_tx = self.stats_tx.clone();
-        let stats_tx2 = stats_tx.clone();
-        let outgoing = self.outgoing.clone();
-        let outgoing2 = outgoing.clone();
-        let timeout_in_micros = self.timeout.as_micros() as u64;
-        let precheck_rr_providers = self.precheck_rr_providers;
-        let endpoint_id = self.endpoint_id;
-
-        let auto_returns2 = auto_returns.clone();
-        let a = Timeout::new(response_future, self.timeout)
-            .map_err(move |err| {
-                if let Some(err) = err.into_inner() {
-                    let err: Arc<dyn StdError + Send + Sync> =
-                        if let Some(io_error_maybe) = err.source() {
-                            if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
-                                let io_error = err.into_cause().expect("should have a cause error");
-                                Arc::new(
-                                    *io_error
-                                        .downcast::<std::io::Error>()
-                                        .expect("should downcast as io error"),
-                                )
-                            } else {
-                                Arc::new(err)
-                            }
-                        } else {
-                            Arc::new(err)
-                        };
-                    RecoverableError::ConnectionErr(SystemTime::now(), err).into()
-                } else {
-                    RecoverableError::Timeout(SystemTime::now()).into()
-                }
-            })
-            .and_then(move |response| {
-                let rh = ResponseHandler {
-                    template_values,
-                    precheck_rr_providers,
-                    outgoing,
-                    now,
-                    stats_tx,
-                    endpoint_id,
-                };
-                rh.handle(response, auto_returns)
-            })
-            .or_else(move |te| match te {
-                TestError::Recoverable(r) => {
-                    let time = match r {
-                        RecoverableError::Timeout(t) | RecoverableError::ConnectionErr(t, _) => t,
-                        _ => SystemTime::now(),
-                    };
-                    let rtt = match r {
-                        RecoverableError::Timeout(_) => Some(timeout_in_micros),
-                        _ => None,
-                    };
-                    for o in outgoing2.iter() {
-                        if let Some(cb) = &o.cb {
-                            cb(false);
-                        }
-                    }
-                    let a = stats_tx2
-                        .send(
-                            stats::ResponseStat {
-                                endpoint_id,
-                                kind: stats::StatKind::RecoverableError(r),
-                                rtt,
-                                time,
-                            }
-                            .into(),
-                        )
-                        .then(|_| Ok(()));
-                    Either::A(a)
-                }
-                _ => Either::B(Err(te).into_future()),
-            })
-            .and_then(move |_| {
-                if let Some(mut f) = auto_returns2.try_lock() {
-                    if let Some(f) = f.take() {
-                        return Either::A(f);
-                    }
-                }
-                Either::B(Ok(()).into_future())
-            });
-        Either::A(a)
-    }
-}
-
-struct ResponseHandler {
-    template_values: TemplateValues,
-    precheck_rr_providers: u16,
-    outgoing: Arc<Vec<Outgoing>>,
-    now: Instant,
-    stats_tx: StatsTx,
-    endpoint_id: usize,
-}
-
-impl ResponseHandler {
-    fn handle<F2>(
-        self,
-        response: hyper::Response<HyperBody>,
-        auto_returns: Arc<Mutex<Option<F2>>>,
-    ) -> impl Future<Item = (), Error = TestError>
-    where
-        F2: Future<Item = (), Error = TestError>,
-    {
-        let status_code = response.status();
-        let status = status_code.as_u16();
-        let response_provider = json::json!({ "status": status });
-        let mut template_values = self.template_values;
-        template_values.insert("response".into(), response_provider);
-        let mut response_fields_added = 0b000_111;
-        handle_response_requirements(
-            self.precheck_rr_providers,
-            &mut response_fields_added,
-            template_values
-                .get_mut("response")
-                .expect("template_values should have `response`")
-                .as_object_mut()
-                .expect("`response` in template_values should be an object"),
-            &response,
-        );
-        // executing the where clause determine which of the provides and logs need
-        // to be executed
-        let included_outgoing_indexes: Result<BTreeSet<_>, _> = self
-            .outgoing
-            .iter()
-            .enumerate()
-            .map(|(i, o)| {
-                let where_clause_special_providers = o.select.get_where_clause_special_providers();
-                if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
-                    || where_clause_special_providers & STATS == STATS
-                    || o.select.execute_where(template_values.as_json())?
-                {
-                    handle_response_requirements(
-                        o.select.get_special_providers(),
-                        &mut response_fields_added,
-                        template_values
-                            .get_mut("response")
-                            .expect("template_values should have `response`")
-                            .as_object_mut()
-                            .expect("`response` in template_values should be an object"),
-                        &response,
-                    );
-                    Ok(Some(i))
-                } else {
-                    Ok(None)
-                }
-            })
-            .filter_map(Result::transpose)
-            .collect();
-        let included_outgoing_indexes = match included_outgoing_indexes {
-            Ok(v) => v,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
-        let ce_header = response.headers().get("content-encoding").map(|h| {
-            Ok::<_, TestError>(h.to_str().map_err(|_| {
-                TestError::Internal(
-                    "content-encoding header should be able to be cast to str".into(),
-                )
-            })?)
-        });
-        let ce_header = match ce_header {
-            Some(Err(e)) => return Either::B(Err(e).into_future()),
-            Some(Ok(s)) => s,
-            None => "",
-        };
-        let body_stream = match (
-            response_fields_added & RESPONSE_BODY != 0,
-            body_reader::Compression::try_from(ce_header),
-        ) {
-            (true, Some(ce)) => {
-                let mut br = body_reader::BodyReader::new(ce);
-                let a = response
-                    .into_body()
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
-                    .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
-                        br.decode(chunks.into_bytes(), &mut out_bytes)
-                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                        Ok::<_, RecoverableError>(out_bytes)
-                    })
-                    .and_then(|body| {
-                        let s = match str::from_utf8(&body) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                return Either::A(
-                                    Err(RecoverableError::BodyErr(Arc::new(e))).into_future(),
-                                );
-                            }
-                        };
-                        let value = if let Ok(value) = json::from_str(s) {
-                            value
-                        } else {
-                            json::Value::String(s.into())
-                        };
-                        Either::B(Ok(Some(value)).into_future())
-                    });
-                Either::A(a)
-            }
-            _ => {
-                // if we don't need the body, skip parsing it
-                Either::B(
-                    response
-                        .into_body()
-                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
-                        .for_each(|_| Ok(()))
-                        .and_then(|_| Ok(None)),
-                )
-            }
-        };
-        let now = self.now;
-        let outgoing = self.outgoing;
-        let stats_tx = self.stats_tx;
-        let endpoint_id = self.endpoint_id;
-        let bh = BodyHandler {
-            now,
-            template_values,
-            included_outgoing_indexes,
-            outgoing,
-            endpoint_id,
-            stats_tx,
-            status,
-        };
-        let a = body_stream.then(move |result| bh.handle(result, auto_returns));
-        Either::A(a)
-    }
-}
-
-struct BodyHandler {
-    now: Instant,
-    template_values: TemplateValues,
-    included_outgoing_indexes: BTreeSet<usize>,
-    outgoing: Arc<Vec<Outgoing>>,
-    endpoint_id: usize,
-    stats_tx: StatsTx,
-    status: u16,
-}
-
-impl BodyHandler {
-    fn handle<F2>(
-        self,
-        result: Result<Option<json::Value>, RecoverableError>,
-        auto_returns: Arc<Mutex<Option<F2>>>,
-    ) -> impl Future<Item = (), Error = TestError>
-    where
-        F2: Future<Item = (), Error = TestError>,
-    {
-        let rtt = self.now.elapsed().as_micros() as u64;
-        let stats_tx = self.stats_tx.clone();
-        let endpoint_id = self.endpoint_id;
-        let send_response_stat = move |kind, rtt| {
-            Either3::B(
-                stats_tx
-                    .clone()
-                    .send(
-                        stats::ResponseStat {
-                            endpoint_id,
-                            kind,
-                            rtt,
-                            time: SystemTime::now(),
-                        }
-                        .into(),
-                    )
-                    .map(|_| ())
-                    .map_err(|e| {
-                        TestError::Internal(
-                            format!("unexpected error trying to send stats, {}", e).into(),
-                        )
-                    }),
-            )
-        };
-        let mut template_values = self.template_values;
-        let mut futures = vec![send_response_stat(
-            stats::StatKind::Response(self.status),
-            Some(rtt),
-        )];
-        if let Some(mut f) = auto_returns.try_lock() {
-            if let Some(f) = f.take() {
-                futures.push(Either3::C(f))
-            }
-        }
-        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
-        match result {
-            Ok(body) => {
-                if let Some(body) = body {
-                    template_values
-                        .get_mut("response")
-                        .expect("template_values should have `response`")
-                        .as_object_mut()
-                        .expect("`response` in template_values should be an object")
-                        .insert("body".into(), body);
-                }
-                for (i, o) in self.outgoing.iter().enumerate() {
-                    if !self.included_outgoing_indexes.contains(&i) {
-                        if let Some(cb) = &o.cb {
-                            cb(false);
-                        }
-                        continue;
-                    }
-                    let mut iter = match o.select.as_iter(template_values.as_json().clone()) {
-                        Ok(v) => v.peekable(),
-                        Err(TestError::Recoverable(r)) => {
-                            let kind = stats::StatKind::RecoverableError(r);
-                            futures.push(send_response_stat(kind, None));
-                            continue;
-                        }
-                        Err(e) => return Either::B(Err(e).into_future()),
-                    };
-                    let not_empty = iter.peek().is_some();
-                    match o.select.get_send_behavior() {
-                        EndpointProvidesSendOptions::Block => {
-                            let tx = o.tx.clone();
-                            let cb = o.cb.clone();
-                            let fut = stream::iter_result(iter)
-                                .map_err(channel::ChannelClosed::wrapped)
-                                .forward(tx)
-                                .map(|_| ())
-                                .or_else(|e| match e.inner_cast::<TestError>() {
-                                    Some(e) => Err(*e),
-                                    None => Ok(()),
-                                })
-                                .then(move |r| {
-                                    if let Some(cb) = cb {
-                                        cb(not_empty)
-                                    }
-                                    r
-                                });
-                            futures.push(Either3::A(fut));
-                        }
-                        EndpointProvidesSendOptions::Force => {
-                            for v in iter {
-                                let v = match v {
-                                    Ok(v) => v,
-                                    Err(TestError::Recoverable(r)) => {
-                                        let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(send_response_stat(kind, None));
-                                        continue;
-                                    }
-                                    Err(e) => return Either::B(Err(e).into_future()),
-                                };
-                                o.tx.force_send(v);
-                            }
-                            if let Some(cb) = &o.cb {
-                                cb(not_empty);
-                            }
-                        }
-                        EndpointProvidesSendOptions::IfNotFull => {
-                            for v in iter {
-                                let v = match v {
-                                    Ok(v) => v,
-                                    Err(TestError::Recoverable(r)) => {
-                                        let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(send_response_stat(kind, None));
-                                        continue;
-                                    }
-                                    Err(e) => return Either::B(Err(e).into_future()),
-                                };
-                                if !o.tx.try_send(v).is_success() {
-                                    break;
-                                }
-                            }
-                            if let Some(cb) = &o.cb {
-                                cb(not_empty);
-                            }
-                        }
-                    }
-                }
-            }
-            Err(r) => {
-                let kind = stats::StatKind::RecoverableError(r);
-                futures.push(send_response_stat(kind, None));
-            }
-        }
-        Either::A(join_all(futures).map(|_| ()))
-    }
-}
-
-fn handle_response_requirements(
-    bitwise: u16,
-    response_fields_added: &mut u16,
-    rp: &mut json::map::Map<String, json::Value>,
-    response: &Response<HyperBody>,
-) {
-    // check if we need the response startline and it hasn't already been set
-    if ((bitwise & RESPONSE_STARTLINE) ^ (*response_fields_added & RESPONSE_STARTLINE)) != 0 {
-        *response_fields_added |= RESPONSE_STARTLINE;
-        let version = response.version();
-        rp.insert(
-            "start-line".into(),
-            format!("{:?} {}", version, response.status()).into(),
-        );
-    }
-    // check if we need the response headers and it hasn't already been set
-    if ((bitwise & RESPONSE_HEADERS) ^ (*response_fields_added & RESPONSE_HEADERS)) != 0 {
-        *response_fields_added |= RESPONSE_HEADERS;
-        let mut headers_json = json::Map::new();
-        for (k, v) in response.headers() {
-            headers_json.insert(
-                k.as_str().to_string(),
-                json::Value::String(
-                    v.to_str()
-                        .expect("could not parse HTTP response header as utf8 string")
-                        .to_string(),
-                ),
-            );
-        }
-        rp.insert("headers".into(), json::Value::Object(headers_json));
-    }
-    // check if we need the response body and it hasn't already been set
-    if ((bitwise & RESPONSE_BODY) ^ (*response_fields_added & RESPONSE_BODY)) != 0 {
-        *response_fields_added |= RESPONSE_BODY;
-        // the actual adding of the body happens later
     }
 }

@@ -34,12 +34,10 @@ parking_lot = "0.7"
 rand = "0.6"
 regex = "1"
 select_any = { path = "./lib/select_any" }
-serde = "1"
-serde_derive = "1"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 serde-tuple-vec-map = "0.2"
 serde_yaml = "0.8"
-test_common = { path = "./lib/test_common" }
 tokio = "0.1"
 tokio-threadpool = "0.1"
 unicode-segmentation = "1"
@@ -48,10 +46,7 @@ yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
 
 [dev-dependencies]
-actix = "0.7"
-actix-web = "0.7"
-assert_cmd = "0.11"
-rust-crypto = "0.2"
+test_common = { path = "./lib/test_common" }
 tempfile = "3"
 
 [profile.release]

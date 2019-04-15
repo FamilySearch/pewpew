@@ -1,13 +1,11 @@
 # TODOs
-- At the end of a try run print a summary of the status counts, errors
 - add more tests - unit and integration - get code coverage -- add in negative tests
-  - refactor to allow running pewpew as a library
-    - split config parser into sub-crate and add in unit tests
+  - split config parser into sub-crate and add in unit tests
   - add in integration test which drops connections before the body is fully sent
 - Have a `secure` provider where values are blanked out in logs (only the original value is included in the request and trying to select it from a `provides` or `logs` should make the value appear as asterisks)
-- Allow `load_pattern`s to be parameterized with environment variables
 - allow load_patterns/config to change while a test is running. Monitor the load test config file for changes
 - HARD - Allow declare expressions to reference other declare variables as long as there's no recursive references
+- get rid of `static` providers and have a separate `static` section in the config. Also get rid of environment variable syntax and instead allow a static variable to be from an environment variable or a literal. *Breaking change*. Version 0.5.
 - change the behavior of `send: block` to drop items if the current buffer is full but other `send: block` provides have room in their buffers. Can be implemented using `future::select_all` combined with a custom future impl that when dropped will do a `try_send` if it did not finish. *Breaking change*. Version 0.5
 - change the default provides.send option to be `if_not_full` if the endpoint has a peak_load, otherwise `block`. *Breaking change*. Version 0.5.
 - Merge `stats_id` and `alias`. New property `labels`, which would be key/value pairs just like `stats_id`. When specifying which endpoint to use for a try run key/value pairs can be specified to select 1 or more endpoints. *Breaking change*. Version 0.5.
@@ -15,9 +13,8 @@
     - `try`: peakload, file output (defaults to stdout), format (could have simple, full, json--which would be intended for a viewer), allow-http-errors (change the default behavior to exit on any 4xx or 5xx errors), enable loggers (currently they are enabled but they should be disabled by default), parallel (the current default - can be implemented with a non-repeating static_list provider with a single value which is auto_returned). `try` should have the option to select one or more endpoints based upon the labels (or run everything)
     - `run`: output format (currently in config.general.summary_output_format-- remove that option; include option to disable stats), results file, option to have html output (includes the results viewer). *Breaking change*. Version 0.5.
 - Merge `connection_errors`, `connectionErrors`, `connectionErrorCount` in summary output into `test_errors`. *Breaking change*. Version 0.5.
-- Have a way to log recoverable errors. Request and Response may not be available, but can be beneficial for debugging. Don't log them to stderr by default. Version 0.5
+- Have a way to log recoverable errors. Request and Response may not be available, but can be beneficial for debugging. Don't log them to stderr by default. *Breaking change*. Version 0.5
 - Make the inclusive/exlusiveness of `collect`, `range`, and `repeat` consistent. *Breaking change*. Version 0.5.
-- Get rid of all `[e]print[ln]!` use. 
 - Create a try run viewer. Version > 0.5.
 - Have a `stats` sub-command to read, merge, and print aggregate stats summaries. Also the ability to convert a json to html. Version > 0.5.
 - Have ability to include providers and endpoints (and any provider dependencies) from another config file. Version > 0.5.

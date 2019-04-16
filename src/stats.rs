@@ -446,6 +446,7 @@ impl AggregateStats {
     }
 }
 
+#[derive(Debug)]
 pub enum StatsMessage {
     // every endpoint sends init so the stats buckets are initialized
     Init(StatsInit),
@@ -455,6 +456,7 @@ pub enum StatsMessage {
     Start(Duration),
 }
 
+#[derive(Debug)]
 pub struct StatsInit {
     pub endpoint_id: EndpointId,
     pub stats_id: StatsId,

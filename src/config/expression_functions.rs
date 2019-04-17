@@ -39,7 +39,7 @@ impl Collect {
                     .map(|fa| {
                         let max = as_u64(&fa)
                             .ok_or_else(|| TestError::InvalidArguments("collect".into()));
-                        Ok::<_, TestError>(Uniform::new_inclusive(second, max?))
+                        Ok::<_, TestError>(Uniform::new(second, max?))
                     })
                     .transpose()?;
                 Ok(Collect {
@@ -1062,7 +1062,7 @@ impl Repeat {
                     .map(|fa| {
                         let max =
                             as_u64(&fa).ok_or_else(|| TestError::InvalidArguments("repeat".into()));
-                        Ok::<_, TestError>(Uniform::new_inclusive(min, max?))
+                        Ok::<_, TestError>(Uniform::new(min, max?))
                     })
                     .transpose()?;
                 Ok(Repeat { min, random })

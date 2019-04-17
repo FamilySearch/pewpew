@@ -1,7 +1,10 @@
 [package]
 name = "pewpew"
-version = "0.4.11"
+version = "0.5.0"
 edition = "2018"
+
+[lib]
+doctest = false
 
 [dependencies]
 atty = "0.2"

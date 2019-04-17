@@ -241,7 +241,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             if let Some(set) = &mut provides_set {
                 set.insert(tx.clone());
             }
-            if let EndpointProvidesSendOptions::Block = v.get_send_behavior() {
+            if v.get_send_behavior().is_block() {
                 limits.push(tx.limit());
             }
             rr_providers |= v.get_special_providers();

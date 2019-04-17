@@ -175,7 +175,7 @@ The request object has the properties `start-line`, `method`, `url`, `headers` a
 - **`where`** <sub><sup>*Optional*</sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is an [expression](./common-types/expressions.md) which evaluates to a boolean value, indicating whether `select` should be evaluated for the current data set.
 - **`send`** <sub><sup>*Optional*</sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. Defaults to `if_not_full` if the endpoint has a `peak_load` otherwise `block`.
 
-  `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until there's room in the provider's buffer for the value.
+  `block` indicates that if the provider's buffer is full, further endpoint calls will be blocked until there's room in the provider's buffer for the value. If an endpoint has multiple provides which are `block`, then the blocking will only wait for at least one of the providers' buffers to have room.
   
   `force` indicates that the value will be sent to the provider regardless of whether its buffer is "full". This can make a provider's buffer exceed its soft limit.
   

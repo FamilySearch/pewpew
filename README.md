@@ -2,6 +2,10 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.5.0
+Breaking changes:
+- Merge the aggregate stats "connection errors" into "test errors".
+
 ### v0.4.11
 Changes:
 - Print a summary at the end of a try run.

@@ -234,7 +234,6 @@ impl RollingAggregateStats {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AggregateStats {
-    connection_errors: FnvHashMap<String, u64>,
     duration: u64, // in seconds
     end_time: u64, // epoch in seconds, when the last request was logged
     request_timeouts: u64,
@@ -243,8 +242,8 @@ pub struct AggregateStats {
     start_time: u64, // epoch in seconds, when the first request was logged
     status_counts: FnvHashMap<u16, u64>,
     test_errors: FnvHashMap<String, u64>,
-    time: u64, // epoch in seconds, when the bucket time begins
-    warnings: FnvHashMap<String, u64>,
+    time: u64,                         // epoch in seconds, when the bucket time begins
+    warnings: FnvHashMap<String, u64>, // used to keep track of the last time a warning message was printed for a test error
 }
 
 impl AddAssign<&AggregateStats> for AggregateStats {
@@ -259,8 +258,8 @@ impl AddAssign<&AggregateStats> for AggregateStats {
                 .and_modify(|n| *n += count)
                 .or_insert(*count);
         }
-        for (description, count) in &rhs.connection_errors {
-            self.connection_errors
+        for (description, count) in &rhs.test_errors {
+            self.test_errors
                 .entry(description.clone())
                 .and_modify(|n| *n += count)
                 .or_insert(*count);
@@ -299,7 +298,6 @@ fn create_date_diff(start: u64, end: u64) -> String {
 impl AggregateStats {
     fn new(time: u64, duration: Duration) -> Self {
         AggregateStats {
-            connection_errors: FnvHashMap::default(),
             duration: duration.as_secs(),
             end_time: 0,
             request_timeouts: 0,
@@ -331,12 +329,10 @@ impl AggregateStats {
                         self.warnings.insert(msg.clone(), time);
                     }
                 }
-                let entry = if let RecoverableError::IndexingJson(..) = r {
-                    self.test_errors.entry(msg)
-                } else {
-                    self.connection_errors.entry(msg)
-                };
-                entry.and_modify(|n| *n += 1).or_insert(1);
+                self.test_errors
+                    .entry(msg)
+                    .and_modify(|n| *n += 1)
+                    .or_insert(1);
             }
             StatKind::Response(status) => {
                 self.status_counts
@@ -387,10 +383,6 @@ impl AggregateStats {
                     let piece = format!("  request timeouts: {:?}\n", self.request_timeouts);
                     print_string.push_str(&piece);
                 }
-                if !self.connection_errors.is_empty() {
-                    let piece = format!("  connection errors: {:?}\n", self.connection_errors);
-                    print_string.push_str(&piece);
-                }
                 if !self.test_errors.is_empty() {
                     let piece = format!("  test errors: {:?}\n", self.test_errors);
                     print_string.push_str(&piece);
@@ -416,14 +408,13 @@ impl AggregateStats {
                             .map(|(status, count)| json::json!({ "status": status, "count": count }))
                             .collect::<Vec<(_)>>(),
                     "requestTimeouts": self.request_timeouts,
-                    "connectionErrorCount":
-                        self.connection_errors.iter()
-                            .fold(0, |sum, (_, c)| sum + c),
-                    "connectionErrors": self.connection_errors,
                     "testErrors":
                         self.test_errors.iter()
                             .map(|(error, count)| json::json!({ "error": error, "count": count }))
                             .collect::<Vec<(_)>>(),
+                    "testErrorCount":
+                        self.test_errors.iter()
+                            .fold(0, |sum, (_, c)| sum + c),
                     "p50": p50,
                     "p90": p90,
                     "p95": p95,
@@ -611,10 +602,6 @@ where
             );
             if stats.request_timeouts > 0 {
                 let piece = format!("\n  request timeouts: {:?}", stats.request_timeouts);
-                output.push_str(&piece);
-            }
-            if !stats.connection_errors.is_empty() {
-                let piece = format!("\n  connection errors: {:?}", stats.connection_errors);
                 output.push_str(&piece);
             }
             if !stats.test_errors.is_empty() {

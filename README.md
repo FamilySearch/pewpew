@@ -6,6 +6,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 Breaking changes:
 - Merge the aggregate stats "connection errors" into "test errors".
 - Change the `collect` and `repeat` expression functions to make the optional `max` parameter exclusive.
+- For endpoints which have `provides` change the default `send` behavior to `if_not_full` if the endpoint has a `peak_load` otherwise `block`.
 
 ### v0.4.11
 Changes:

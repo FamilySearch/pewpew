@@ -236,7 +236,7 @@ where
                 .provides
                 .iter_mut()
                 .map(|(k, eppp)| {
-                    eppp.send = config::EndpointProvidesSendOptions::Block;
+                    eppp.send = Some(config::EndpointProvidesSendOptions::Block);
                     k.clone()
                 })
                 .collect::<BTreeSet<_>>();
@@ -436,15 +436,26 @@ where
 
     let global_load_pattern = config.load_pattern;
     let mut duration = Duration::new(0, 0);
-    let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>| -> Result<Vec<(String, config::Select)>, TestError> {
-        v.into_iter().map(|(s, eppp)| Ok((s, eppp_to_select(eppp)?)))
+    let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>,
+                            send_behavior_default: Option<config::EndpointProvidesSendOptions>|
+     -> Result<Vec<(String, config::Select)>, TestError> {
+        v.into_iter()
+            .map(|(s, mut eppp)| {
+                eppp.send = eppp.send.or(send_behavior_default);
+                Ok((s, eppp_to_select(eppp)?))
+            })
             .collect()
     };
 
     // create the endpoints
     let builders: Vec<_> = config.endpoints.into_iter().map(|endpoint| {
         let mut mod_interval = None;
-        let provides = to_select_values(endpoint.provides)?;
+        let send_behavior_default = if endpoint.peak_load.is_some() {
+            config::EndpointProvidesSendOptions::IfNotFull
+        } else {
+             config::EndpointProvidesSendOptions::Block
+        };
+        let provides = to_select_values(endpoint.provides, Some(send_behavior_default))?;
         if let Some(peak_load) = endpoint.peak_load {
             let load_pattern = endpoint
                 .load_pattern
@@ -464,7 +475,7 @@ where
         }
         let mut headers: Vec<_> = config_config.client.headers.clone();
         headers.extend(endpoint.headers);
-        let logs = to_select_values(endpoint.logs)?;
+        let logs = to_select_values(endpoint.logs, None)?;
         let builder = request::Builder::new(endpoint.url, mod_interval)
             .body(endpoint.body)
             .declare(endpoint.declare)

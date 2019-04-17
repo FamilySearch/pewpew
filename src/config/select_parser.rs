@@ -1046,7 +1046,7 @@ impl Select {
             providers,
             special_providers,
             select,
-            send_behavior: provides.send,
+            send_behavior: provides.send.unwrap_or_default(),
             where_clause,
             where_clause_special_providers,
         })

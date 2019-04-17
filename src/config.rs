@@ -395,7 +395,7 @@ impl Default for EndpointProvidesSendOptions {
 #[derive(Deserialize)]
 pub struct EndpointProvidesPreProcessed {
     #[serde(default)]
-    pub send: EndpointProvidesSendOptions,
+    pub send: Option<EndpointProvidesSendOptions>,
     pub select: json::Value,
     #[serde(default)]
     pub for_each: Vec<String>,
@@ -575,7 +575,7 @@ impl<'de> Deserialize<'de> for Logger {
         let lpp = LoggerPreProcessed::deserialize(deserializer)?;
         let select = if let Some(select) = lpp.select {
             Some(EndpointProvidesPreProcessed {
-                send: EndpointProvidesSendOptions::Block,
+                send: Some(EndpointProvidesSendOptions::Block),
                 select,
                 for_each: lpp.for_each,
                 where_clause: lpp.where_clause,
@@ -699,7 +699,7 @@ where
         .into_iter()
         .map(|(s, lpp)| {
             let eppp = EndpointProvidesPreProcessed {
-                send: EndpointProvidesSendOptions::Block,
+                send: Some(EndpointProvidesSendOptions::Block),
                 select: lpp.select,
                 for_each: lpp.for_each,
                 where_clause: lpp.where_clause,

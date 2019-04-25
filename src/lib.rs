@@ -11,35 +11,195 @@ mod util;
 
 use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
-use crate::util::tweak_path;
 
 use ether::{Either, Either3};
 use futures::{
     future::{self, join_all, lazy},
     sink::Sink,
+    stream,
     sync::{
         mpsc::{self as futures_channel, Receiver as FCReceiver, Sender as FCSender},
         oneshot,
     },
-    Future, IntoFuture, Stream,
+    Async, Future, IntoFuture, Stream,
 };
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
-use indexmap::IndexSet;
+use itertools::Itertools;
 use native_tls::TlsConnector;
 use serde_json as json;
 use tokio::io::{write_all, AsyncWrite};
 use yansi::Paint;
 
 use std::{
+    cell::RefCell,
     cmp,
     collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
     fs::File,
     mem,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
+
+struct Endpoints {
+    // yaml index of the endpoint, (endpoint tags, builder)
+    inner: Vec<(BTreeMap<String, String>, request::Builder)>,
+    // provider name, yaml index of endpoints which provide the provider
+    providers: BTreeMap<String, Vec<usize>>,
+}
+
+impl Endpoints {
+    fn new() -> Self {
+        Endpoints {
+            inner: Vec::new(),
+            providers: BTreeMap::new(),
+        }
+    }
+
+    fn append(
+        &mut self,
+        endpoint_tags: BTreeMap<String, String>,
+        builder: request::Builder,
+        provides: BTreeSet<String>,
+    ) {
+        let i = self.inner.len();
+        self.inner.push((endpoint_tags, builder));
+        for p in provides {
+            self.providers.entry(p).or_default().push(i);
+        }
+    }
+
+    fn build<F>(
+        self,
+        filter_fn: F,
+        builder_ctx: &mut request::BuilderContext,
+        response_providers: &BTreeSet<String>,
+    ) -> Result<Vec<Box<dyn Future<Item = (), Error = TestError> + Send>>, TestError>
+    where
+        F: Fn(&BTreeMap<String, String>) -> bool,
+    {
+        let mut endpoints = self
+            .inner
+            .into_iter()
+            .enumerate()
+            .map(|(i, (tags, builder))| {
+                let included = filter_fn(&tags);
+                Ok((i, (included, builder.build(builder_ctx, i)?)))
+            })
+            .collect::<Result<BTreeMap<_, _>, TestError>>()?;
+
+        let mut providers = self.providers;
+        let mut endpoints_needed_for_test = BTreeMap::new();
+
+        let required_indices = RefCell::new(std::collections::VecDeque::new());
+        let iter = (0..endpoints.len())
+            .map(|i| (false, i))
+            .chain(std::iter::from_fn(|| {
+                required_indices.borrow_mut().pop_front().map(|i| (true, i))
+            }));
+        for (bypass_filter, i) in iter {
+            if let Some((included, ..)) = endpoints.get(&i) {
+                if *included || bypass_filter {
+                    if let Some((_, ep)) = endpoints.remove(&i) {
+                        for request_provider in
+                            ep.required_providers().intersection(response_providers)
+                        {
+                            if let Some(indices) = providers.remove(request_provider) {
+                                required_indices.borrow_mut().extend(indices);
+                            }
+                        }
+                        endpoints_needed_for_test.insert(i, (ep, bypass_filter));
+                    }
+                }
+            } else if let Some((_, provides_needed)) = endpoints_needed_for_test.get_mut(&i) {
+                *provides_needed = true;
+            }
+        }
+        let ret = endpoints_needed_for_test
+            .into_iter()
+            .map(|(_, (mut ep, provides_needed))| {
+                if !provides_needed {
+                    ep.clear_provides();
+                    let mut ran = false;
+                    ep.add_start_stream(stream::poll_fn(move || {
+                        if ran {
+                            Ok(Async::Ready(None))
+                        } else {
+                            ran = true;
+                            Ok(Async::Ready(Some(())))
+                        }
+                    }));
+                }
+                ep.into_future()
+            })
+            .collect();
+        Ok(ret)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum RunOutputFormat {
+    Human,
+    Json,
+}
+
+impl RunOutputFormat {
+    pub fn is_human(self) -> bool {
+        match self {
+            RunOutputFormat::Human => true,
+            _ => false,
+        }
+    }
+}
+
+impl TryFrom<&str> for RunOutputFormat {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "human" => Ok(RunOutputFormat::Human),
+            "json" => Ok(RunOutputFormat::Json),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum StatsFileFormat {
+    // Html,
+    Json,
+    // None,
+}
+
+#[derive(Clone, Debug)]
+pub struct RunConfig {
+    pub config_file: PathBuf,
+    pub output_format: RunOutputFormat,
+    pub results_dir: PathBuf,
+    pub stats_file_format: StatsFileFormat,
+}
+
+#[derive(Clone)]
+pub enum TryFilter {
+    Eq(String, String),
+    Ne(String, String),
+}
+
+#[derive(Clone)]
+pub struct TryConfig {
+    pub config_file: PathBuf,
+    pub loggers_on: bool,
+    pub filters: Option<Vec<TryFilter>>,
+    pub results_dir: PathBuf,
+}
+
+#[derive(Clone)]
+pub enum ExecConfig {
+    Run(RunConfig),
+    Try(TryConfig),
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum TestEndReason {
@@ -54,8 +214,7 @@ type TestEndedChannel = (
 );
 
 pub fn create_run<Se, So, Sef, Sof>(
-    config_file: PathBuf,
-    target_endpoint: Option<String>,
+    exec_config: ExecConfig,
     stdout: Sof,
     stderr: Sef,
 ) -> impl Future<Item = (), Error = ()>
@@ -66,12 +225,20 @@ where
     Sof: Fn() -> So + Clone + Send + Sync + 'static,
 {
     let stderr2 = stderr();
+    let output_format = match &exec_config {
+        ExecConfig::Run(r) => r.output_format,
+        ExecConfig::Try(_) => RunOutputFormat::Human,
+    };
     lazy(move || {
+        let config_file = match &exec_config {
+            ExecConfig::Run(r) => &r.config_file,
+            ExecConfig::Try(t) => &t.config_file,
+        };
         // TODO: change this to use tokio::fs::File
         let file = match File::open(&config_file) {
             Ok(f) => f,
             Err(_) => {
-                let e = TestError::InvalidConfigFilePath(config_file);
+                let e = TestError::InvalidConfigFilePath(config_file.clone());
                 return Either3::B(Err(e).into_future());
             }
         };
@@ -83,25 +250,23 @@ where
             }
         };
         let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
-        let work = if let Some(target_endpoint) = target_endpoint {
-            create_try_run_future(
+        let work = match exec_config {
+            ExecConfig::Try(t) => create_try_run_future(
                 config,
-                config_file,
-                (test_ended_tx.clone(), test_ended_rx),
-                target_endpoint,
-                stdout,
-                stderr,
-            )
-            .map(Either::A)
-        } else {
-            create_load_test_future(
-                config,
-                config_file,
+                t,
                 (test_ended_tx.clone(), test_ended_rx),
                 stdout,
                 stderr,
             )
-            .map(Either::B)
+            .map(Either::A),
+            ExecConfig::Run(r) => create_load_test_future(
+                config,
+                r,
+                (test_ended_tx.clone(), test_ended_rx),
+                stdout,
+                stderr,
+            )
+            .map(Either::B),
         };
         match work {
             Ok(a) => Either3::A(a),
@@ -118,30 +283,46 @@ where
     .then(move |r| {
         let f = match &r {
             Err(e) => {
-                let a = write_all(
-                    stderr2,
-                    format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),
-                );
+                let msg = match output_format {
+                    RunOutputFormat::Human => {
+                        format!("\n{} {}\n", Paint::red("Fatal error").bold(), e)
+                    }
+                    RunOutputFormat::Json => {
+                        let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
+                        format!("{}\n", json)
+                    }
+                };
+                let a = write_all(stderr2, msg);
                 Either::A(a)
             }
             Ok(TestEndReason::KilledByLogger) => {
-                let a = write_all(
-                    stderr2,
-                    format!(
-                        "\n{}\n",
-                        Paint::yellow("Test killed early by logger").bold()
-                    ),
-                );
+                let msg = match output_format {
+                    RunOutputFormat::Human => {
+                        format!(
+                            "\n{}\n",
+                            Paint::yellow("Test killed early by logger").bold()
+                        )
+                    }
+                    RunOutputFormat::Json => {
+                        r#"{"type":"end","msg":"Test killed early by logger"}\n"#.to_string()
+                    }
+                };
+                let a = write_all(stderr2, msg);
                 Either::A(a)
             }
             Ok(TestEndReason::ProviderEnded) => {
-                let a = write_all(
-                    stderr2,
-                    format!(
-                        "\n{}\n",
-                        Paint::yellow("Test ended early because one or more providers ended")
-                    ),
-                );
+                let msg = match output_format {
+                    RunOutputFormat::Human => {
+                        format!(
+                            "\n{}\n",
+                            Paint::yellow("Test ended early because one or more providers ended")
+                        )
+                    }
+                    RunOutputFormat::Json => {
+                        r#"{"type":"end","msg":"Test ended early because one or more providers ended"}\n"#.to_string()
+                    }
+                };
+                let a = write_all(stderr2, msg);
                 Either::A(a)
             }
             _ => Either::B(Ok::<_, ()>(()).into_future()),
@@ -153,11 +334,30 @@ where
     })
 }
 
+fn create_url_and_update_tags(
+    url: &str,
+    method: &http::Method,
+    tags: &mut BTreeMap<String, String>,
+    static_providers: &BTreeMap<String, json::Value>,
+) -> Result<(config::Template), TestError> {
+    let url = config::Template::new(url, static_providers)?;
+    tags.entry("url".into())
+        .or_insert_with(|| url.evaluate_with_star());
+    tags.insert("method".into(), method.to_string());
+    for v in tags.values_mut() {
+        let t = config::Template::new(&v, static_providers)?;
+        if let Some(r) = t.get_providers().iter().nth(0) {
+            return Err(TestError::InvalidTagsReference(r.clone()));
+        }
+        *v = t.evaluate(&json::Value::Null)?;
+    }
+    Ok(url)
+}
+
 fn create_try_run_future<Se, So, Sef, Sof>(
     mut config: config::LoadTest,
-    config_path: PathBuf,
+    try_config: TryConfig,
     test_ended: TestEndedChannel,
-    try_run: String,
     stdout: Sof,
     stderr: Sef,
 ) -> Result<impl Future<Item = TestEndReason, Error = TestError>, TestError>
@@ -181,12 +381,45 @@ where
     let config_config = config.config;
 
     // build and register the providers
-    let (providers, static_providers, mut request_providers) = get_providers_from_config(
+    let (providers, static_providers, response_providers) = get_providers_from_config(
         config.providers,
         config_config.general.auto_buffer_start_size,
         &test_ended_tx,
-        &config_path,
+        &try_config.config_file,
     )?;
+
+    let filters: Vec<_> = try_config
+        .filters
+        .unwrap_or_default()
+        .into_iter()
+        .map(|try_filter| {
+            let (is_eq, key, right) = match try_filter {
+                TryFilter::Eq(key, right) => (true, key, right),
+                TryFilter::Ne(key, right) => (false, key, right),
+            };
+            let right = right.split('*').map(regex::escape).join(".*?");
+            let right = format!("^{}$", right);
+            (
+                is_eq,
+                key,
+                regex::Regex::new(&right).expect("filter should be a valid regex"),
+            )
+        })
+        .collect();
+    let filter_fn = move |tags: &BTreeMap<String, String>| -> bool {
+        filters.is_empty()
+            || filters.iter().any(|(is_eq, key, regex)| {
+                let check = tags
+                    .get(key)
+                    .map(|left| regex.is_match(left))
+                    .unwrap_or(false);
+                if *is_eq {
+                    check
+                } else {
+                    !check
+                }
+            })
+    };
 
     let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
     let select = "`\
@@ -202,9 +435,12 @@ where
                   ${if(response.body != '', '\n${response.body}', '')}\n\n`";
     let logger = json::json!({
         "select": select,
-        "to": "stdout",
+        "to": "stderr",
         "pretty": true
     });
+    if !try_config.loggers_on {
+        config.loggers.clear();
+    }
     config.loggers.push((
         "try_run".into(),
         json::from_value(logger).expect("should be valid logger"),
@@ -213,7 +449,7 @@ where
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
-        &config_path,
+        &try_config.results_dir,
         &test_ended_tx,
         &static_providers,
         stdout,
@@ -225,51 +461,46 @@ where
             .collect()
     };
 
-    // create the endpoints
-    let builders: Vec<_> = config
-        .endpoints
-        .into_iter()
-        .enumerate()
-        .map(|(i, mut endpoint)| {
-            let alias = endpoint.alias.unwrap_or_else(|| (i + 1).to_string());
-            let provides_set = endpoint
-                .provides
-                .iter_mut()
-                .map(|(k, eppp)| {
-                    eppp.send = Some(config::EndpointProvidesSendOptions::Block);
-                    k.clone()
-                })
-                .collect::<BTreeSet<_>>();
-            let provides = match to_select_values(endpoint.provides) {
-                Ok(p) => p,
-                Err(e) => return (alias, Err(e), provides_set),
-            };
-            let mod_interval = if alias == try_run {
-                let stream = Ok(Instant::now()).into_future().into_stream();
-                Some(stream)
-            } else {
-                None
-            };
-            let mut headers: Vec<_> = config_config.client.headers.clone();
-            headers.extend(endpoint.headers);
-            let logs = match to_select_values(endpoint.logs) {
-                Ok(l) => l,
-                Err(e) => return (alias, Err(e), provides_set),
-            };
-            let builder = request::Builder::new(endpoint.url, mod_interval)
-                .body(endpoint.body)
-                .declare(endpoint.declare)
-                .headers(headers)
-                .logs(logs)
-                .max_parallel_requests(endpoint.max_parallel_requests)
-                .method(endpoint.method)
-                .no_auto_returns(endpoint.no_auto_returns)
-                .on_demand(true)
-                .provides(provides)
-                .stats_id(endpoint.stats_id);
-            (alias, Ok(builder), provides_set)
-        })
-        .collect();
+    let mut endpoints = Endpoints::new();
+
+    for mut endpoint in config.endpoints.into_iter() {
+        let provides_set = endpoint
+            .provides
+            .iter_mut()
+            .map(|(k, eppp)| {
+                eppp.send = Some(config::EndpointProvidesSendOptions::Block);
+                k.clone()
+            })
+            .collect::<BTreeSet<_>>();
+        let provides = to_select_values(endpoint.provides)?;
+        let mut headers: Vec<_> = config_config.client.headers.clone();
+        headers.extend(endpoint.headers);
+        let logs = if try_config.loggers_on {
+            to_select_values(endpoint.logs)?
+        } else {
+            Vec::new()
+        };
+        let mut tags = endpoint.tags.unwrap_or_default();
+        let url = create_url_and_update_tags(
+            &endpoint.url,
+            &endpoint.method,
+            &mut tags,
+            &static_providers,
+        )?;
+
+        let builder = request::Builder::new(url, None)
+            .body(endpoint.body)
+            .declare(endpoint.declare)
+            .headers(headers)
+            .logs(logs)
+            .max_parallel_requests(endpoint.max_parallel_requests)
+            .method(endpoint.method)
+            .no_auto_returns(endpoint.no_auto_returns)
+            .on_demand(true)
+            .provides(provides)
+            .tags(tags.clone());
+        endpoints.append(tags, builder, provides_set);
+    }
 
     let client = create_http_client(config_config.client.keepalive)?;
 
@@ -282,7 +513,7 @@ where
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
-        config_path,
+        config_path: try_config.config_file,
         client: Arc::new(client),
         loggers,
         providers,
@@ -290,96 +521,11 @@ where
         stats_tx: stats_tx.clone(),
     };
 
-    let mut endpoints = BTreeMap::new();
-
-    for (i, (alias, mut builder, mut provides)) in builders.into_iter().enumerate() {
-        if alias == try_run {
-            provides.clear();
-            builder = builder.map(|b| b.provides(Vec::new()))
-        }
-        let endpoint = builder.and_then(|b| b.build(&mut builder_ctx, i)).map(|e| {
-            let mut required_request_providers = Vec::new();
-            for rp in e.required_providers() {
-                // create list of the request providers needed for this endpoint
-                if request_providers.contains_key(rp) {
-                    required_request_providers.push(rp.clone());
-                }
-                // remove any provides that the endpoint also requires
-                provides.remove(rp);
-            }
-            (e, required_request_providers)
-        });
-        if endpoint.is_err() && alias == try_run {
-            return Err(endpoint.err().expect("should be an error"));
-        }
-        endpoints.insert(alias.clone(), endpoint);
-        for p in provides {
-            if let Some(v) = request_providers.get_mut(&p) {
-                v.push(alias.clone());
-            }
-        }
-    }
-
-    if !endpoints.contains_key(&try_run) {
-        return Err(TestError::Other(
-            format!("could not find endpoint with alias `{}`", try_run).into(),
-        ));
-    }
-
-    let endpoint_scores: BTreeMap<_, _> = endpoints
-        .iter()
-        .map(|(alias, ep)| {
-            let score = ep
-                .as_ref()
-                .map_err(Clone::clone)
-                .and_then(|(endpoint, rrp)| {
-                    calc_endpoint_score(
-                        endpoint,
-                        rrp,
-                        maplit::btreeset!(alias.as_str()),
-                        &request_providers,
-                        &endpoints,
-                    )
-                });
-            (alias.as_str(), score)
-        })
-        .collect();
-
-    let mut endpoints_needed_for_test = IndexSet::new();
-    get_test_endpoints(
-        &try_run,
-        &mut endpoints_needed_for_test,
-        &request_providers,
-        &endpoint_scores,
-        &endpoints,
-    )?;
-
-    let test_ended_tx = test_ended_tx.clone();
-    let test_ended_tx2 = test_ended_tx.clone();
-
-    let endpoint_calls = endpoints_needed_for_test.into_iter().map(move |ep| {
-        let r = endpoints.remove(&ep).expect("endpoint should exist");
-        let r = if ep == try_run {
-            let test_ended_tx = test_ended_tx.clone();
-            r.map(
-                move |e| -> Box<dyn Future<Item = (), Error = TestError> + Send> {
-                    Box::new(e.0.into_future().and_then(|_| {
-                        test_ended_tx
-                            .send(Ok(TestEndReason::Completed))
-                            .map(|_| ())
-                            .map_err(|_| TestError::Internal("Sending test ended signal".into()))
-                    }))
-                },
-            )
-        } else {
-            r.map(|e| e.0.into_future())
-        };
-        r.into_future().flatten()
-    });
+    let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
 
     let endpoint_calls = join_all(endpoint_calls)
         .map(|_| TestEndReason::Completed)
-        .then(move |r| test_ended_tx2.send(r.clone()).then(|_| r))
+        .then(move |r| test_ended_tx.send(r.clone()).then(|_| r))
         .select(test_ended_rx.map(|r| *r).map_err(|e| (&*e).clone()))
         .map(|r| r.0)
         .map_err(|e| e.0)
@@ -390,7 +536,7 @@ where
 
 fn create_load_test_future<Se, So, Sef, Sof>(
     config: config::LoadTest,
-    config_path: PathBuf,
+    run_config: RunConfig,
     test_ended: TestEndedChannel,
     stdout: Sof,
     stderr: Sef,
@@ -419,15 +565,14 @@ where
         config.providers,
         config_config.general.auto_buffer_start_size,
         &test_ended_tx,
-        &config_path,
+        &run_config.config_file,
     )?;
 
     let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
-
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
-        &config_path,
+        &run_config.results_dir,
         &test_ended_tx,
         &static_providers,
         stdout,
@@ -449,7 +594,7 @@ where
 
     // create the endpoints
     let builders: Vec<_> = config.endpoints.into_iter().map(|endpoint| {
-        let mut mod_interval = None;
+        let mut mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> = None;
         let send_behavior_default = if endpoint.peak_load.is_some() {
             config::EndpointProvidesSendOptions::IfNotFull
         } else {
@@ -462,7 +607,7 @@ where
                 .or_else(|| global_load_pattern.clone())
                 .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
             duration = cmp::max(duration, load_pattern.duration());
-            mod_interval = Some(load_pattern.build(&peak_load));
+            mod_interval = Some(Box::new(load_pattern.build(&peak_load)));
         } else if provides.is_empty() {
             return Err(TestError::Other(
                 "endpoint must have `provides` or `peak_load`".into(),
@@ -475,8 +620,10 @@ where
         }
         let mut headers: Vec<_> = config_config.client.headers.clone();
         headers.extend(endpoint.headers);
+        let mut tags = endpoint.tags.unwrap_or_default();
+        let url = create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_providers)?;
         let logs = to_select_values(endpoint.logs, None)?;
-        let builder = request::Builder::new(endpoint.url, mod_interval)
+        let builder = request::Builder::new(url, mod_interval)
             .body(endpoint.body)
             .declare(endpoint.declare)
             .headers(headers)
@@ -486,7 +633,7 @@ where
             .no_auto_returns(endpoint.no_auto_returns)
             .on_demand(endpoint.on_demand)
             .provides(provides)
-            .stats_id(endpoint.stats_id);
+            .tags(tags);
         Ok(builder)
     }).collect::<Result<_, _>>()?;
 
@@ -498,10 +645,7 @@ where
         &config_config.general,
         &providers,
         stderr,
-        config_path
-            .file_stem()
-            .and_then(std::ffi::OsStr::to_str)
-            .map(ToString::to_string),
+        &run_config,
     )?;
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {
@@ -511,7 +655,7 @@ where
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
-        config_path,
+        config_path: run_config.config_file,
         client: Arc::new(client),
         loggers,
         providers,
@@ -584,140 +728,11 @@ pub(crate) fn create_http_client(
     Ok(Client::builder().set_host(false).build::<_, Body>(https))
 }
 
-fn calc_endpoint_score(
-    endpoint: &request::Endpoint,
-    required_request_providers: &[String],
-    dont_visit: BTreeSet<&str>,
-    request_providers: &BTreeMap<String, Vec<String>>,
-    endpoints: &BTreeMap<String, Result<(request::Endpoint, Vec<String>), TestError>>,
-) -> Result<usize, TestError> {
-    let mut score = if endpoint.method() == hyper::Method::GET {
-        0
-    } else {
-        5
-    };
-    for rrp in required_request_providers {
-        let endpoint_providers = request_providers
-            .get(rrp)
-            .expect("should have request provider listed");
-        let start_err = Err(format!(
-            "requires response provider `{}` but no other endpoint could provide it",
-            rrp
-        ));
-        if endpoint_providers.is_empty() {
-            return start_err.map_err(|e| TestError::Other(e.into()));
-        }
-        let v = endpoint_providers.iter().fold(start_err, |mut prev, ep| {
-            if dont_visit.contains(ep.as_str()) {
-                return prev;
-            }
-            let endpoint = endpoints.get(ep).expect("endpoint should exist");
-            match (&mut prev, endpoint) {
-                (_, Ok((endpoint, rp))) => {
-                    let mut dont_visit = dont_visit.clone();
-                    dont_visit.insert(ep);
-                    let score =
-                        calc_endpoint_score(endpoint, rp, dont_visit, request_providers, endpoints)
-                            .map(|s| s + 10);
-                    match (&prev, score) {
-                        (Ok(p), Ok(s)) => Ok(cmp::min(*p, s)),
-                        (_, Ok(s)) => Ok(s),
-                        _ => prev,
-                    }
-                }
-                (Err(p), Err(curr)) => {
-                    let msg = format!("{}", curr);
-                    let msg = msg.replace('\n', "\n\t");
-                    p.push_str(&format!(
-                        "\n`{}` could have provided `{}` but had the error:\n\t{}",
-                        ep, rrp, msg
-                    ));
-                    prev
-                }
-                (_, Err(_)) => prev,
-            }
-        });
-        if let Ok(n) = v {
-            score += n;
-        } else {
-            return v.map_err(|s| TestError::Other(s.into()));
-        }
-    }
-    Ok(score)
-}
-
-fn get_test_endpoints(
-    target_endpoint: &str,
-    endpoints_needed_for_test: &mut IndexSet<String>,
-    request_providers: &BTreeMap<String, Vec<String>>,
-    endpoint_scores: &BTreeMap<&str, Result<usize, TestError>>,
-    endpoints: &BTreeMap<String, Result<(request::Endpoint, Vec<String>), TestError>>,
-) -> Result<(), TestError> {
-    if endpoints_needed_for_test.contains(target_endpoint) {
-        return Ok(());
-    }
-    let required_request_providers = match endpoints
-        .get(target_endpoint)
-        .expect("endpoint should exist")
-    {
-        Ok((_, r)) => r,
-        Err(e) => return Err(e.clone()),
-    };
-    endpoints_needed_for_test.insert(target_endpoint.to_string());
-    for rrp in required_request_providers {
-        let request_providers2 = request_providers.get(rrp).expect("endpoint should exist");
-        let mut provider_endpoints: Vec<_> = request_providers2
-            .iter()
-            .filter_map(|ep| {
-                endpoint_scores
-                    .get(ep.as_str())
-                    .expect("endpoint score should exist")
-                    .as_ref()
-                    .ok()
-                    .map(move |score| (ep, score))
-            })
-            .collect();
-        if provider_endpoints.is_empty() {
-            let start_err_msg = format!(
-                "endpoint `{}` requires response provider `{}` but no other endpoint could provide it",
-                target_endpoint, rrp
-            );
-            let err_msg = request_providers2
-                .iter()
-                .fold(start_err_msg, |mut err_msg, rp| {
-                    let score = endpoint_scores
-                        .get(rp.as_str())
-                        .expect("endpoint score should exist");
-                    if let Err(e) = score {
-                        let msg = format!("{}", e).replace('\n', "\n\t");
-                        err_msg.push_str(&format!(
-                            "\n`{}` could have provided `{}` but had the error:\n\t{}",
-                            rp, rrp, msg
-                        ));
-                    }
-                    err_msg
-                });
-            return Err(TestError::Other(err_msg.into()));
-        }
-        provider_endpoints.sort_unstable_by_key(|(_, score)| *score);
-        for (ep, _) in provider_endpoints {
-            get_test_endpoints(
-                ep,
-                endpoints_needed_for_test,
-                request_providers,
-                endpoint_scores,
-                endpoints,
-            )?;
-        }
-    }
-    Ok(())
-}
-
 type ProvidersResult = Result<
     (
         BTreeMap<String, providers::Provider>,
         BTreeMap<String, json::Value>,
-        BTreeMap<String, Vec<String>>,
+        BTreeSet<String>,
     ),
     TestError,
 >;
@@ -730,7 +745,7 @@ fn get_providers_from_config(
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut static_providers = BTreeMap::new();
-    let mut request_providers = BTreeMap::new();
+    let mut response_providers = BTreeSet::new();
     for (name, template) in config_providers {
         let provider = match template {
             config::Provider::File(template) => {
@@ -744,7 +759,7 @@ fn get_providers_from_config(
             }
             config::Provider::Range(range) => providers::range(range),
             config::Provider::Response(template) => {
-                request_providers.insert(name.clone(), Vec::new());
+                response_providers.insert(name.clone());
                 providers::response(template)
             }
             config::Provider::Static(value) => {
@@ -755,7 +770,7 @@ fn get_providers_from_config(
         };
         providers.insert(name, provider);
     }
-    Ok((providers, static_providers, request_providers))
+    Ok((providers, static_providers, response_providers))
 }
 
 type LoggersResult =
@@ -763,7 +778,7 @@ type LoggersResult =
 
 fn get_loggers_from_config<Se, So, Sef, Sof>(
     config_loggers: Vec<(String, config::Logger)>,
-    config_path: &PathBuf,
+    results_dir: &PathBuf,
     test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
     static_providers: &BTreeMap<String, json::Value>,
     stdout: Sof,
@@ -782,10 +797,11 @@ where
                 "stderr" => Either::A(future::ok(Either3::A(stderr()))),
                 "stdout" => Either::A(future::ok(Either3::B(stdout()))),
                 _ => {
-                    let mut path = mem::replace(&mut template.to, String::new());
-                    tweak_path(&mut path, config_path);
+                    let file_name = mem::replace(&mut template.to, String::new());
+                    let mut file_path = results_dir.clone();
+                    file_path.push(file_name);
                     let name2 = name.clone();
-                    let f = tokio::fs::File::create(path)
+                    let f = tokio::fs::File::create(file_path)
                         .map(Either3::C)
                         .map_err(move |e| {
                             TestError::Other(

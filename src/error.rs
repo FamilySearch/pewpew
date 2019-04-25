@@ -22,9 +22,7 @@ impl fmt::Display for RecoverableError {
         match self {
             BodyErr(e) => write!(f, "body error: {}", e),
             ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
-            IndexingJson(p, v) => {
-                write!(f, "indexing into json. Path was `{}`, json was: `{}`", p, v)
-            }
+            IndexingJson(p, _) => write!(f, "indexing into json. Path was `{}`", p),
             Timeout(..) => write!(f, "request timed out"),
         }
     }
@@ -38,7 +36,7 @@ pub enum TestError {
     InvalidEncoding(String),
     InvalidFunction(String),
     InvalidJsonPathQuery(String),
-    InvalidStatsIdReference(String),
+    InvalidTagsReference(String),
     InvalidUrl(String),
     Other(Cow<'static, str>),
     PestParseErr(PestError<config::ParserRule>),
@@ -64,18 +62,18 @@ impl fmt::Display for TestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Internal(m) => write!(f, "internal error: {}", m),
-            InvalidArguments(func) => {
-                write!(f, "invalid arguments for function {}", func)
+            InvalidArguments(func) => write!(f, "invalid arguments for function {}", func),
+            InvalidConfigFilePath(p) => {
+                write!(f, "could not find config file at path `{}`", p.display())
             }
-            InvalidConfigFilePath(p) => write!(
-                f,
-                "could not find config file at path `{}`",
-                p.display()
-            ),
             InvalidEncoding(e) => write!(f, "invalid encoding specified `{}`", e),
             InvalidFunction(func) => write!(f, "invalid function specified `{}`", func),
             InvalidJsonPathQuery(q) => write!(f, "invalid json path query: `{}`", q),
-            InvalidStatsIdReference(r) => write!(f, "stats_id can only reference static providers and environment variables. Found `{}`", r),
+            InvalidTagsReference(r) => write!(
+                f,
+                "tags can only reference static providers and environment variables. Found `{}`",
+                r
+            ),
             InvalidUrl(u) => write!(f, "invalid url `{}`", u),
             Other(s) => write!(f, "{}", s),
             PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),
@@ -84,11 +82,7 @@ impl fmt::Display for TestError {
                 f,
                 "cannot reference 'for_each' within a for_each expression"
             ),
-            RequestBuilderErr(e) => write!(
-                f,
-                "error while building request: {}",
-                e
-            ),
+            RequestBuilderErr(e) => write!(f, "error while building request: {}", e),
             RegexErr(err) => write!(f, "invalid regex: {}", err),
             TimeSkew => write!(f, "system clock experienced time skew"),
             UnknownProvider(p) => write!(f, "unknown provider `{}`", p),

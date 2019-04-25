@@ -288,8 +288,6 @@ pub struct Logger {
 #[derive(Deserialize)]
 pub struct Endpoint {
     #[serde(default)]
-    pub alias: Option<String>,
-    #[serde(default)]
     pub declare: BTreeMap<String, String>,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
@@ -303,7 +301,7 @@ pub struct Endpoint {
     pub on_demand: bool,
     #[serde(default, deserialize_with = "deserialize_options_hits_per")]
     pub peak_load: Option<HitsPer>,
-    pub stats_id: Option<BTreeMap<String, String>>,
+    pub tags: Option<BTreeMap<String, String>>,
     pub url: String,
     #[serde(default, deserialize_with = "deserialize_providers")]
     pub provides: Vec<(String, EndpointProvidesPreProcessed)>,
@@ -403,28 +401,6 @@ pub struct EndpointProvidesPreProcessed {
     pub where_clause: Option<String>,
 }
 
-#[serde(rename_all = "snake_case")]
-#[derive(Clone, Copy, Deserialize)]
-pub enum SummaryOutputFormats {
-    Json,
-    Pretty,
-}
-
-impl SummaryOutputFormats {
-    pub fn is_pretty(self) -> bool {
-        match self {
-            SummaryOutputFormats::Pretty => true,
-            _ => false,
-        }
-    }
-}
-
-impl Default for SummaryOutputFormats {
-    fn default() -> Self {
-        SummaryOutputFormats::Pretty
-    }
-}
-
 fn default_bucket_size() -> Duration {
     Duration::from_secs(60)
 }
@@ -474,8 +450,6 @@ pub struct GeneralConfig {
     pub bucket_size: Duration,
     #[serde(default, deserialize_with = "deserialize_duration_option")]
     pub log_provider_stats: Option<Duration>,
-    #[serde(default)]
-    pub summary_output_format: SummaryOutputFormats,
 }
 
 impl Default for GeneralConfig {
@@ -484,7 +458,6 @@ impl Default for GeneralConfig {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(),
             log_provider_stats: None,
-            summary_output_format: SummaryOutputFormats::default(),
         }
     }
 }

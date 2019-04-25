@@ -1,10 +1,11 @@
-use crate::config::{self, SummaryOutputFormats};
+use crate::config;
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::TestEndReason;
+use crate::{RunConfig, RunOutputFormat};
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
-use ether::{Either, Either3};
+use ether::Either;
 use fnv::FnvHashMap;
 use futures::{
     future::Shared,
@@ -27,6 +28,7 @@ use std::{
     cmp,
     collections::BTreeMap,
     ops::AddAssign,
+    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -83,7 +85,7 @@ mod buckets_serde {
     {
         let values: Vec<(&BTreeMap<String, String>, Vec<&AggregateStats>)> = buckets
             .values()
-            .map(|(stats_id, stats_map)| (stats_id, stats_map.values().collect()))
+            .map(|(tags, stats_map)| (tags, stats_map.values().collect()))
             .collect();
         values.serialize(serializer)
     }
@@ -115,20 +117,20 @@ struct RollingAggregateStats {
     duration: u64,
     #[serde(skip)]
     end_time: Option<Instant>,
+    #[serde(skip)]
+    file_name: PathBuf,
     #[serde(skip_serializing)]
     last_print_time: Cell<u64>,
-    #[serde(skip_serializing)]
-    time: u64,
 }
 
 impl RollingAggregateStats {
-    fn new(time: u64, duration: Duration) -> Self {
+    fn new(duration: Duration, file_name: PathBuf) -> Self {
         RollingAggregateStats {
             buckets: BTreeMap::new(),
             duration: duration.as_secs(),
             end_time: None,
+            file_name,
             last_print_time: Cell::new(0),
-            time,
         }
     }
 
@@ -136,11 +138,11 @@ impl RollingAggregateStats {
         &mut self,
         time: SystemTime,
         endpoint_id: usize,
-        stats_id: StatsId,
+        tags: StatsId,
     ) -> Result<(), TestError> {
-        if !stats_id.contains_key("url") || !stats_id.contains_key("method") {
+        if !tags.contains_key("url") || !tags.contains_key("method") {
             return Err(TestError::Internal(
-                format!("stats_id missing `url` and/or `method`. {:?}", stats_id).into(),
+                format!("tags missing `url` and/or `method`. {:?}", tags).into(),
             ));
         }
         let duration = self.duration;
@@ -150,7 +152,7 @@ impl RollingAggregateStats {
             time,
             AggregateStats::new(time, Duration::from_secs(duration)),
         );
-        self.buckets.insert(endpoint_id, (stats_id, stats_map));
+        self.buckets.insert(endpoint_id, (tags, stats_map));
         Ok(())
     }
 
@@ -170,15 +172,9 @@ impl RollingAggregateStats {
     fn persist<C: AsyncWrite + Send + Sync + 'static>(
         &self,
         console: C,
-        test_name: Option<String>,
     ) -> impl Future<Item = (), Error = TestError> {
         let stats = self.clone();
-        let filename = if let Some(test_name) = test_name {
-            format!("stats-{}-{}.json", test_name, self.time)
-        } else {
-            format!("stats-{}.json", self.time)
-        };
-        TokioFile::create(filename)
+        TokioFile::create(self.file_name.clone())
             .map_err(Either::A)
             .and_then(move |mut file| {
                 stats
@@ -190,10 +186,10 @@ impl RollingAggregateStats {
             })
     }
 
-    fn generate_summary(&self, time: u64, summary_output_format: SummaryOutputFormats) -> String {
+    fn generate_summary(&self, time: u64, output_format: RunOutputFormat) -> String {
         let mut printed = false;
         self.last_print_time.set(time);
-        let is_pretty_format = summary_output_format.is_pretty();
+        let is_pretty_format = output_format.is_human();
         let mut print_string = if is_pretty_format {
             format!(
                 "{}",
@@ -206,9 +202,9 @@ impl RollingAggregateStats {
         } else {
             String::new()
         };
-        for (stats_id, stats_map) in self.buckets.values() {
+        for (tags, stats_map) in self.buckets.values() {
             if let Some(stats) = stats_map.get(&time) {
-                let piece = stats.print_summary(stats_id, summary_output_format, true);
+                let piece = stats.print_summary(tags, output_format, true);
                 print_string.push_str(&piece);
                 if !printed && !piece.is_empty() {
                     printed = true;
@@ -240,10 +236,9 @@ pub struct AggregateStats {
     #[serde(with = "histogram_serde")]
     rtt_histogram: Histogram<u64>,
     start_time: u64, // epoch in seconds, when the first request was logged
-    status_counts: FnvHashMap<u16, u64>,
+    status_counts: BTreeMap<u16, u64>,
     test_errors: FnvHashMap<String, u64>,
-    time: u64,                         // epoch in seconds, when the bucket time begins
-    warnings: FnvHashMap<String, u64>, // used to keep track of the last time a warning message was printed for a test error
+    time: u64, // epoch in seconds, when the bucket time begins
 }
 
 impl AddAssign<&AggregateStats> for AggregateStats {
@@ -303,10 +298,9 @@ impl AggregateStats {
             request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             start_time: 0,
-            status_counts: FnvHashMap::default(),
+            status_counts: BTreeMap::new(),
             test_errors: FnvHashMap::default(),
             time,
-            warnings: FnvHashMap::default(),
         }
     }
 
@@ -321,14 +315,7 @@ impl AggregateStats {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
                 let msg = format!("{}", r);
-                match self.warnings.get(&msg) {
-                    Some(last_print_time) if *last_print_time >= self.start_time => (),
-                    _ => {
-                        warning =
-                            Some(format!("{}", Paint::yellow(format!("WARNING: {}\n", &msg))));
-                        self.warnings.insert(msg.clone(), time);
-                    }
-                }
+                warning = Some(msg.clone());
                 self.test_errors
                     .entry(msg)
                     .and_modify(|n| *n += 1)
@@ -349,8 +336,8 @@ impl AggregateStats {
 
     fn print_summary(
         &self,
-        stats_id: &StatsId,
-        format: SummaryOutputFormats,
+        tags: &StatsId,
+        format: RunOutputFormat,
         bucket_summary: bool,
     ) -> String {
         let calls_made = self.rtt_histogram.len();
@@ -359,8 +346,8 @@ impl AggregateStats {
             return print_string;
         }
         const MICROS_TO_MS: f64 = 1_000.0;
-        let method = stats_id.get("method").expect("stats_id missing `method`");
-        let url = stats_id.get("url").expect("stats_id missing `url`");
+        let method = tags.get("method").expect("tags missing `method`");
+        let url = tags.get("url").expect("tags missing `url`");
         let p50 = self.rtt_histogram.value_at_quantile(0.5) as f64 / MICROS_TO_MS;
         let p90 = self.rtt_histogram.value_at_quantile(0.90) as f64 / MICROS_TO_MS;
         let p95 = self.rtt_histogram.value_at_quantile(0.95) as f64 / MICROS_TO_MS;
@@ -371,7 +358,7 @@ impl AggregateStats {
         let mean = self.rtt_histogram.mean().round() / MICROS_TO_MS;
         let stddev = self.rtt_histogram.stdev().round() / MICROS_TO_MS;
         match format {
-            SummaryOutputFormats::Pretty => {
+            RunOutputFormat::Human => {
                 let piece = format!(
                     "\n{}\n  calls made: {}\n  status counts: {:?}\n",
                     Paint::yellow(format!("- {} {}:", method, url)).dimmed(),
@@ -394,9 +381,10 @@ impl AggregateStats {
                 );
                 print_string.push_str(&piece);
             }
-            SummaryOutputFormats::Json => {
+            RunOutputFormat::Json => {
                 let summary_type = if bucket_summary { "bucket" } else { "test" };
                 let output = json::json!({
+                    "type": "summary",
                     "startTime": self.time,
                     "timestamp": self.time + self.duration,
                     "summaryType": summary_type,
@@ -425,7 +413,7 @@ impl AggregateStats {
                     "mean": mean,
                     "stddev": stddev,
                     "statsId":
-                        stats_id.iter()
+                        tags.iter()
                             .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
                             .collect::<BTreeMap<_, _>>(),
                 });
@@ -450,7 +438,7 @@ pub enum StatsMessage {
 #[derive(Debug)]
 pub struct StatsInit {
     pub endpoint_id: EndpointId,
-    pub stats_id: StatsId,
+    pub tags: StatsId,
     pub time: SystemTime,
 }
 
@@ -562,26 +550,28 @@ where
             let mut msg = None;
             match s {
                 StatsMessage::Init(si) => {
-                    let stats_id = si.stats_id;
-                    let method = stats_id.get("method").expect("stats_id missing `method`");
-                    let url = stats_id.get("url").expect("stats_id missing `url`");
+                    let tags = si.tags;
+                    let method = tags.get("method").expect("tags missing `method`");
+                    let url = tags.get("url").expect("tags missing `url`");
                     endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
                 }
                 StatsMessage::ResponseStat(rs) => {
-                    if let StatKind::RecoverableError(re) = &rs.kind {
-                        let endpoint = endpoint_map
-                            .get(&rs.endpoint_id)
-                            .expect("endpoint_map should have endpoint id");
-                        msg = Some(format!(
-                            "{}",
-                            Paint::yellow(format!(
-                                "WARNING - recoverable error happened on endpoint `{}`: {}\n",
-                                endpoint, re
-                            ))
-                        ));
-                    }
-                    if summary.append_response_stat(rs).is_err() {
-                        return Either::A(Err(()).into_future());
+                    let endpoint_id = rs.endpoint_id;
+                    match summary.append_response_stat(rs) {
+                        Err(_) => return Either::A(Err(()).into_future()),
+                        Ok(Some(s)) => {
+                            let endpoint = endpoint_map
+                                .get(&endpoint_id)
+                                .expect("endpoint_map should have endpoint id");
+                            msg = Some(format!(
+                                "{}",
+                                Paint::yellow(format!(
+                                    "WARNING - recoverable error happened on endpoint `{}`: {}\n",
+                                    endpoint, s
+                                ))
+                            ));
+                        }
+                        _ => (),
                     }
                 }
                 _ => (),
@@ -608,6 +598,7 @@ where
                 let piece = format!("\n  test errors: {:?}", stats.test_errors);
                 output.push_str(&piece);
             }
+            output.push('\n');
             write_all(console2(), output).then(|_| Ok(()))
         })
         .join(test_complete.then(|_| Ok::<_, ()>(())))
@@ -620,7 +611,7 @@ fn create_provider_stats_printer<C, Cf>(
     interval: Duration,
     now: Instant,
     start_sec: u64,
-    summary_output_format: SummaryOutputFormats,
+    output_format: RunOutputFormat,
     console: Cf,
 ) -> impl Future<Item = (), Error = TestError>
 where
@@ -638,8 +629,8 @@ where
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
             let time = Local::now();
-            let is_pretty_format = summary_output_format.is_pretty();
-            let mut string_to_print = if is_pretty_format {
+            let is_human_format = output_format.is_human();
+            let mut string_to_print = if is_human_format {
                 format!(
                     "{}",
                     Paint::new(format!(
@@ -654,7 +645,7 @@ where
             let time = time.timestamp();
             for reader in providers.iter() {
                 let stats = reader.get_stats(time);
-                let piece = if is_pretty_format {
+                let piece = if is_human_format {
                     format!(
                         "\n- {}:\n  length: {}\n  limit: {}\n  \
                          tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
@@ -689,7 +680,7 @@ pub fn create_stats_channel<F, Sef, Se>(
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
     stderr: Sef,
-    test_name: Option<String>,
+    run_config: &RunConfig,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
@@ -709,19 +700,29 @@ where
     let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
     let next_bucket =
         Duration::from_millis((bucket_size.as_secs() - (start_sec - start_bucket)) * 1000 + 1);
+    let test_name = run_config
+        .config_file
+        .file_stem()
+        .and_then(std::ffi::OsStr::to_str);
+    let file_name = if let Some(test_name) = test_name {
+        format!("stats-{}-{}.json", test_name, start_sec)
+    } else {
+        format!("stats-{}.json", start_sec)
+    };
+    let mut file_path = run_config.results_dir.clone();
+    file_path.push(file_name);
     let stats = Arc::new(Mutex::new(RollingAggregateStats::new(
-        start_bucket,
         bucket_size,
+        file_path,
     )));
     let stats2 = stats.clone();
     let stats3 = stats.clone();
     let stats4 = stats.clone();
-    let summary_output_format = config.summary_output_format;
-    let is_pretty_format = summary_output_format.is_pretty();
+    let output_format = run_config.output_format;
+    let is_human_format = output_format.is_human();
     let stderr2 = stderr.clone();
     let stderr3 = stderr.clone();
     let stderr4 = stderr.clone();
-    let test_name2 = test_name.clone();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_| TestError::Internal("something happened while printing stats".into()))
         .for_each(move |_| {
@@ -731,12 +732,11 @@ where
                 Err(e) => return Either::A(Err(e).into_future()),
             };
             let prev_time = epoch / stats.duration * stats.duration - stats.duration;
-            let summary = stats.generate_summary(prev_time, summary_output_format);
+            let summary = stats.generate_summary(prev_time, output_format);
             let stats4 = stats4.clone();
             let stderr3 = stderr3.clone();
-            let test_name = test_name.clone();
             let b = write_all(stderr3(), summary)
-                .then(move |_| stats4.lock().persist(stderr3(), test_name).then(|_| Ok(())));
+                .then(move |_| stats4.lock().persist(stderr3()).then(|_| Ok(())));
             Either::B(b)
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
@@ -745,7 +745,7 @@ where
             interval,
             now,
             start_sec,
-            summary_output_format,
+            output_format,
             stderr.clone(),
         );
         let a = print_stats.join(print_provider_stats).map(|_| ());
@@ -758,28 +758,31 @@ where
         move |datum| {
             let mut stats = stats.lock();
             match datum {
-                StatsMessage::Init(init) => Either3::B(
+                StatsMessage::Init(init) => Either::B(
                     stats
-                        .init(init.time, init.endpoint_id, init.stats_id)
+                        .init(init.time, init.endpoint_id, init.tags)
                         .into_future(),
                 ),
                 StatsMessage::Start(d) => {
                     stats.end_time = Some(Instant::now() + d);
                     let test_end_message = duration_till_end_to_pretty_string(d);
-                    let a = write_all(
-                        stderr(),
-                        format!("Starting load test. {}\n", test_end_message),
-                    )
-                    .then(|_| Ok(()));
-                    Either3::A(a)
+                    let msg = match output_format {
+                        RunOutputFormat::Human => {
+                            format!("Starting load test. {}\n", test_end_message)
+                        }
+                        RunOutputFormat::Json => format!(
+                            "{{\"type\":\"start\",\"msg\":\"{}\",\"binVersion\":\"{}\"}}\n",
+                            test_end_message,
+                            clap::crate_version!()
+                        ),
+                    };
+                    let a = write_all(stderr(), msg).then(|_| Ok(()));
+                    Either::A(a)
                 }
-                StatsMessage::ResponseStat(rs) => match stats.append(rs) {
-                    Ok(Some(msg)) => {
-                        let a = write_all(stderr(), msg).then(|_| Ok(()));
-                        Either3::C(a)
-                    }
-                    r => Either3::B(r.map(|_| ()).into_future()),
-                },
+                StatsMessage::ResponseStat(rs) => {
+                    let r = stats.append(rs);
+                    Either::B(r.map(|_| ()).into_future())
+                }
             }
         },
     )
@@ -788,7 +791,7 @@ where
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
     .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
     .map_err(|e| e.0)
-    .and_then(move |(b, _)| stats2.lock().persist(stderr4(), test_name2).map(move |_| b))
+    .and_then(move |(b, _)| stats2.lock().persist(stderr4()).map(move |_| b))
     .then(move |_| {
         let stats = stats3.lock();
         let duration = stats.duration;
@@ -819,17 +822,17 @@ where
                 bucket_values.next_back().map(|v| v.time).unwrap_or(first)
             };
             if end_time_secs > stats.last_print_time.get() {
-                let summary = stats.generate_summary(end_time_secs, summary_output_format);
+                let summary = stats.generate_summary(end_time_secs, output_format);
                 print_string.push_str(&summary);
             }
         }
-        if is_pretty_format {
+        if is_human_format {
             print_string.push_str(&format!(
                 "{}",
                 Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
             ))
         };
-        for (stats_id, time_buckets) in stats.buckets.values() {
+        for (tags, time_buckets) in stats.buckets.values() {
             let mut summary = {
                 let (start_time_secs, mut end_time_secs) = {
                     let mut bucket_values = time_buckets.values();
@@ -849,7 +852,7 @@ where
             for agg_stats in time_buckets.values() {
                 summary += &*agg_stats;
             }
-            let piece = summary.print_summary(stats_id, summary_output_format, false);
+            let piece = summary.print_summary(tags, output_format, false);
             print_string.push_str(&piece);
         }
         write_all(stderr2(), print_string).then(|_| Ok(()))

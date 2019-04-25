@@ -89,6 +89,7 @@ impl From<json::Value> for TemplateValues {
 
 struct Outgoing {
     cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
+    logger: bool,
     select: Select,
     tx: channel::Sender<json::Value>,
 }
@@ -98,8 +99,14 @@ impl Outgoing {
         select: Select,
         tx: channel::Sender<json::Value>,
         cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
+        logger: bool,
     ) -> Self {
-        Outgoing { cb, select, tx }
+        Outgoing {
+            cb,
+            select,
+            tx,
+            logger,
+        }
     }
 }
 
@@ -122,7 +129,7 @@ pub struct BuilderContext {
     pub stats_tx: StatsTx,
 }
 
-pub struct Builder<S: Stream<Item = Instant, Error = TestError> + Send + 'static> {
+pub struct Builder {
     body: Option<config::Body>,
     declare: BTreeMap<String, String>,
     headers: Vec<(String, String)>,
@@ -132,13 +139,16 @@ pub struct Builder<S: Stream<Item = Instant, Error = TestError> + Send + 'static
     no_auto_returns: bool,
     on_demand: bool,
     provides: Vec<(String, Select)>,
-    start_stream: Option<S>,
-    stats_id: Option<BTreeMap<String, String>>,
-    url: String,
+    start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
+    tags: BTreeMap<String, String>,
+    url: Template,
 }
 
-impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
-    pub fn new(url: String, start_stream: Option<S>) -> Self {
+impl Builder {
+    pub fn new(
+        url: Template,
+        start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
+    ) -> Self {
         Builder {
             body: None,
             declare: BTreeMap::new(),
@@ -150,7 +160,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             on_demand: false,
             start_stream,
             provides: Vec::new(),
-            stats_id: None,
+            tags: BTreeMap::new(),
             url,
         }
     }
@@ -200,8 +210,8 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
         self
     }
 
-    pub fn stats_id(mut self, stats_id: Option<BTreeMap<String, String>>) -> Self {
-        self.stats_id = stats_id;
+    pub fn tags(mut self, tags: BTreeMap<String, String>) -> Self {
+        self.tags = tags;
         self
     }
 
@@ -210,9 +220,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
         ctx: &mut BuilderContext,
         endpoint_id: usize,
     ) -> Result<Endpoint, TestError> {
-        let mut required_providers: BTreeSet<String> = BTreeSet::new();
-        let url = Template::new(&self.url, &ctx.static_providers)?;
-        required_providers.extend(url.get_providers().clone());
+        let mut required_providers = self.url.get_providers().clone();
         let headers: BTreeMap<_, _> = self
             .headers
             .into_iter()
@@ -226,12 +234,13 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
         let mut precheck_rr_providers = 0;
         let mut rr_providers = 0;
         let mut outgoing = Vec::new();
-        let mut on_demand_streams = Vec::new();
+        let mut on_demand_streams: OnDemandStreams = Vec::new();
         let mut provides_set = if self.start_stream.is_none() && !self.provides.is_empty() {
             Some(BTreeSet::new())
         } else {
             None
         };
+        let mut provides = Vec::new();
         for (k, v) in self.provides {
             let provider = ctx
                 .providers
@@ -249,18 +258,16 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             required_providers.extend(v.get_providers().clone());
             let cb = if self.on_demand {
                 let (stream, cb) = provider.on_demand.clone().into_stream();
-                on_demand_streams.push(stream);
+                on_demand_streams.push(Box::new(stream));
                 Some(cb)
             } else {
                 None
             };
-            outgoing.push(Outgoing::new(v, tx, cb));
+            provides.push(Outgoing::new(v, tx, cb, false));
         }
-        let mut streams = Vec::new();
+        let mut streams: StreamCollection = Vec::new();
         if let Some(start_stream) = self.start_stream {
-            streams.push(Either3::A(Either::A(
-                start_stream.map(|_| StreamItem::None),
-            )));
+            streams.push((true, Box::new(start_stream.map(|_| StreamItem::None))));
         } else if let Some(set) = provides_set {
             let stream = stream::poll_fn(move || {
                 let done = set.iter().all(channel::Sender::no_receivers);
@@ -270,7 +277,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
                     Ok(Async::Ready(Some(StreamItem::None)))
                 }
             });
-            streams.push(Either3::A(Either::B(stream)));
+            streams.push((true, Box::new(stream)));
         }
         for (k, v) in self.logs {
             let (tx, _) = ctx
@@ -280,14 +287,14 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             rr_providers |= v.get_special_providers();
             precheck_rr_providers |= v.get_where_clause_special_providers();
             required_providers.extend(v.get_providers().clone());
-            outgoing.push(Outgoing::new(v, tx.clone(), None));
+            outgoing.push(Outgoing::new(v, tx.clone(), None, true));
         }
         outgoing.extend(ctx.loggers.values().filter_map(|(tx, select)| {
             if let Some(select) = select {
                 required_providers.extend(select.get_providers().clone());
                 rr_providers |= select.get_special_providers();
                 precheck_rr_providers |= select.get_where_clause_special_providers();
-                Some(Outgoing::new(select.clone(), tx.clone(), None))
+                Some(Outgoing::new(select.clone(), tx.clone(), None, true))
             } else {
                 None
             }
@@ -363,7 +370,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             let stream = vce
                 .into_stream(&ctx.providers)
                 .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
-            streams.push(Either3::B(stream));
+            streams.push((false, Box::new(stream)));
         }
         let no_auto_returns = self.no_auto_returns;
         // go through the list of required providers and make sure we have them all
@@ -377,7 +384,7 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
                 .auto_return
                 .map(|send_option| (send_option, provider.tx.clone()));
             let name = name.clone();
-            let provider_stream = Either3::C(
+            let provider_stream = Box::new(
                 Stream::map(receiver, move |v| {
                     let ar = if no_auto_returns {
                         None
@@ -390,55 +397,12 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
                 })
                 .map_err(|_| TestError::Internal("Unexpected error from receiver".into())),
             );
-            streams.push(provider_stream);
+            streams.push((false, provider_stream));
         }
         required_providers.extend(required_providers2);
-        let outgoing = Arc::new(outgoing);
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
         let method = self.method;
-        let mut stats_id = self.stats_id.unwrap_or_default();
-        for v in stats_id.values_mut() {
-            let t = Template::new(&v, &ctx.static_providers)?;
-            if let Some(r) = t.get_providers().iter().nth(0) {
-                return Err(TestError::InvalidStatsIdReference(r.clone()));
-            }
-            *v = t.evaluate(&json::Value::Null)?;
-        }
-        stats_id.insert("url".into(), url.evaluate_with_star());
-        stats_id.insert("method".into(), method.to_string());
-        // using existential types here to avoid the boxed stream causes ICE https://github.com/rust-lang/rust/issues/54899
-        let stream: EndpointStream = if !on_demand_streams.is_empty() {
-            let mut on_demand_streams = select_any(on_demand_streams);
-            let mut zipped_streams = zip_all(streams);
-            let mut od_continue = false;
-            let stream = stream::poll_fn(move || {
-                let p = on_demand_streams.poll();
-                if !od_continue {
-                    match p {
-                        Ok(Async::Ready(Some(_))) => od_continue = true,
-                        Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-                        Ok(Async::NotReady) => return Ok(Async::NotReady),
-                        Err(_) => {
-                            return Err(TestError::Internal(
-                                "on demand streams should never error".into(),
-                            ));
-                        }
-                    }
-                }
-                let p = zipped_streams.poll();
-                match p {
-                    Ok(Async::NotReady) => (),
-                    _ => {
-                        od_continue = false;
-                    }
-                }
-                p
-            });
-            Box::new(stream)
-        } else {
-            Box::new(zip_all(streams))
-        };
         let timeout = ctx.config.client.request_timeout;
         Ok(Endpoint {
             body,
@@ -449,14 +413,16 @@ impl<S: Stream<Item = Instant, Error = TestError> + Send + 'static> Builder<S> {
             max_parallel_requests: self.max_parallel_requests,
             method,
             no_auto_returns,
+            on_demand_streams,
             outgoing,
             precheck_rr_providers,
+            provides,
             required_providers,
             rr_providers,
-            stats_id,
+            tags: self.tags,
             stats_tx,
-            stream,
-            url,
+            stream_collection: streams,
+            url: self.url,
             timeout,
         })
     }
@@ -651,7 +617,11 @@ impl BodyTemplate {
     }
 }
 
-type EndpointStream = Box<dyn Stream<Item = Vec<StreamItem>, Error = TestError> + 'static + Send>;
+type StreamCollection = Vec<(
+    bool,
+    Box<dyn Stream<Item = StreamItem, Error = TestError> + Send + 'static>,
+)>;
+type OnDemandStreams = Vec<Box<dyn Stream<Item = (), Error = ()> + Send + 'static>>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
@@ -667,24 +637,39 @@ pub struct Endpoint {
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     no_auto_returns: bool,
-    outgoing: Arc<Vec<Outgoing>>,
+    on_demand_streams: OnDemandStreams,
+    outgoing: Vec<Outgoing>,
     precheck_rr_providers: u16,
+    provides: Vec<Outgoing>,
     rr_providers: u16,
     required_providers: BTreeSet<String>,
-    stats_id: BTreeMap<String, String>,
+    tags: BTreeMap<String, String>,
     stats_tx: StatsTx,
-    stream: EndpointStream,
+    stream_collection: StreamCollection,
     timeout: Duration,
     url: Template,
 }
 
 impl Endpoint {
-    pub fn method(&self) -> &Method {
-        &self.method
-    }
-
     pub fn required_providers(&self) -> &BTreeSet<String> {
         &self.required_providers
+    }
+
+    pub fn clear_provides(&mut self) {
+        self.provides.clear();
+    }
+
+    pub fn add_start_stream<S>(&mut self, stream: S)
+    where
+        S: Stream<Item = (), Error = TestError> + Send + 'static,
+    {
+        let stream = Box::new(stream.map(|_| StreamItem::None));
+        match self.stream_collection.get_mut(0) {
+            Some((true, s)) => {
+                *s = stream;
+            }
+            _ => self.stream_collection.push((true, stream)),
+        }
     }
 
     // This returns a boxed future because otherwise the type system runs out of memory for the type
@@ -697,12 +682,45 @@ impl Endpoint {
         let client = self.client;
         let stats_tx = self.stats_tx;
         let no_auto_returns = self.no_auto_returns;
-        let outgoing = self.outgoing;
+        let streams = self.stream_collection.into_iter().map(|t| t.1);
+        let stream = if !self.on_demand_streams.is_empty() && !self.provides.is_empty() {
+            let mut on_demand_streams = select_any(self.on_demand_streams);
+            let mut zipped_streams = zip_all(streams);
+            let mut od_continue = false;
+            let stream = stream::poll_fn(move || {
+                let p = on_demand_streams.poll();
+                if !od_continue {
+                    match p {
+                        Ok(Async::Ready(Some(_))) => od_continue = true,
+                        Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+                        Ok(Async::NotReady) => return Ok(Async::NotReady),
+                        Err(_) => {
+                            return Err(TestError::Internal(
+                                "on demand streams should never error".into(),
+                            ));
+                        }
+                    }
+                }
+                let p = zipped_streams.poll();
+                match p {
+                    Ok(Async::NotReady) => (),
+                    _ => {
+                        od_continue = false;
+                    }
+                }
+                p
+            });
+            Either::A(stream)
+        } else {
+            Either::B(zip_all(streams))
+        };
+        let mut outgoing = self.outgoing;
+        outgoing.extend(self.provides);
+        let outgoing = Arc::new(outgoing);
         let precheck_rr_providers = self.precheck_rr_providers;
         let endpoint_id = self.endpoint_id;
         let timeout = self.timeout;
         let limits = self.limits;
-        let stream = self.stream;
         let max_parallel_requests = self.max_parallel_requests;
         Box::new(
             stats_tx
@@ -711,7 +729,7 @@ impl Endpoint {
                     stats::StatsInit {
                         endpoint_id: self.endpoint_id,
                         time: SystemTime::now(),
-                        stats_id: self.stats_id,
+                        tags: self.tags,
                     }
                     .into(),
                 )

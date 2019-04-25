@@ -8,12 +8,11 @@ endpoints:
     [load_pattern: <i>load_pattern_subsection</i>]
     [method: <i>method</i>]
     [peak_load: <i>peak_load</i>]
-    [stats_id: <i>stats_id</i>]
+    [tags: <i>tags</i>]
     url: <i>template</i>
     [provides: <i>provides_subsection</i>]
     [on_demand: <i>boolean</i>]
     [logs: <i>logs_subsection</i>]
-    [alias: <i>string</i>]
     [max_parallel_requests: <i>unsigned integer</i>]
     [no_auto_returns: <i>boolean</i>]
 </pre>
@@ -37,16 +36,13 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-- **`stats_id`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs indicating additional keys which will be added to an endpoint's stats identifier. Unlike templates in other places only static providers and environment variables can be interpolated.
+- **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs. Unlike templates in other places only static providers and environment variables can be interpolated.
 
-  A stats identifier is a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. By default every endpoint has a stats identifier of the HTTP method and the url (with the dynamic pieces being replaces with an asterisk).
-
-  In most cases it is not nececessary to specify additional key/value pairs for the `stats_id`, but it can be helpful if multiple endpoints have the same url and method pair and the default `stats_id` is not descriptive enough.
+  Tags are a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. Every endpoint has the implicitly defined tags of `method` (which is the HTTP method for the endpoint) and `url` (which is the endpoint url with the dynamic pieces being replaced with an asterisk). The implicitly defined `url` tag can be overwritten which is helpful in cases such as when an entire url is dynamically generated and it would otherwise show up as `*`.
 - **`url`** - A [template](./common-types.md#templates) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides subsection](#provides-subsection)
 - **`on_demand`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that this endpoint should only be called when another endpoint first needs data that this endpoint provides. If the endpoint has no `provides` it has no affect.
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs subsection](#logs-subsection)
-- **`alias`** <sub><sup>*Optional*</sup></sub> - Gives this endpoint an alias for the purpose of "try runs". See the [command-line options](../cli.md).
 - **`max_parallel_requests`** <sub><sup>*Optional*</sup></sub> - Limits how many requests can be "open" at any point for the endpoint. *WARNING*: this can cause coordinated omission, invalidating the test statistics.
 - **`no_auto_returns`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that any `auto_return` providers referenced within this endpoint will have `auto_return` disabled--meaning values pulled from those providers will not be automatically pushed back to the provider after a response is received. Defaults to `false`.
 

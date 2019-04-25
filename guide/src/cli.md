@@ -1,23 +1,71 @@
 # Command-line options
 
-There are two ways that Pewpew can execute a test from the command-line: either a full load test or a "try run". For reference here's the output of `pewpew --help`:
+There are two ways that Pewpew can execute: either a full load test or a try run. For reference here's the output of `pewpew --help`:
+<br/><br/>
 
 ```
 USAGE:
-    pewpew.exe <CONFIG> [TRY]
+    pewpew <SUBCOMMAND>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
-ARGS:
-    <CONFIG>    the load test config file to use [default: loadtest.yaml]
-    <TRY>       the alias name of a single endpoint which will be run a single time with the raw http request and
-                response printed to STDOUT
+SUBCOMMANDS:
+    run    Runs a full load test
+    try    Runs the specified endpoint(s) a single time for testing purposes
 ```
 
-In both cases a [config file](./config.md) is specified. The try run option will run a single endpoint a single time and print out the raw HTTP request and response to stdout. This is useful for testing things out before running a full load test. Pewpew will automatically determine and execute any other endpoints needed to provide data for the desired endpoint.
+As signified in the above help output, there are two subcommands `run` and `try`.
+<br/><br/>
+Here's the output of `pewpew run --help`:
+<br/><br/>
 
-To execute a try run specify the config file and the alias for the endpoint to be run. By default every endpoint has an alias of its numerical index in the config file, starting with endpoint `1`. An explicit alias can also be provided to an endpoint by using the optional `alias` property within the [endpoint's definition](./config/endpoints-section.md) in the config file.
+```
+USAGE:
+    pewpew run <CONFIG>
 
-**Example** If your config file were named `loadtest.yaml` and you wanted to do a try run of the third endpoint, whose alias was `3` (the default), you would run `pewpew loadtest.yaml 3`.
+OPTIONS:
+    -h, --help                             Prints help information
+    -f, --output-format <FORMAT>           Formatting for stats printed to stderr [default: human]  [possible values:
+                                           human, json]
+    -d, --results-directory <DIRECTORY>    Directory to store results and logs
+    -s, --stats-file-format <FORMAT>       Format for the stats file [default: json]  [possible values: json]
+
+ARGS:
+    <CONFIG>    Load test config file to use
+```
+
+The `-f`, `--output-format` parameter allows changing the formatting of the stats which are printed to stderr.
+
+The `-d`, `--results-directory` parameter will store the results file and any output logs in the specified directory. If the directory does not exist it is created.
+<br/><br/>
+Here's the output of `pewpew try --help`:
+<br/><br/>
+
+```
+USAGE:
+    pewpew try [OPTIONS] <CONFIG>
+
+OPTIONS:
+    -h, --help                             Prints help information
+    -i, --include <INCLUDE>...             Filter which endpoints are included in the try run. Filters work based on an
+                                           endpoint's tags. Filters are specified in the format "key=value" where "*" is
+                                           a wildcard. Any endpoint matching the filter is included in the test
+    -l, --loggers                          Enable loggers defined in the config file
+    -d, --results-directory <DIRECTORY>    Directory to store logs (if enabled with --loggers)
+
+ARGS:
+    <CONFIG>    Load test config file to use
+```
+
+A try run will run one or more endpoints a single time and print out the raw HTTP requests and responses to stdout. By default all endpoints are included in the try run. This is useful for testing out a [config file](./config.md) before running a full load test. When the `--include` parameter is used, pewpew will automatically include any other endpoints needed to provide data for the explicitly included endpoints.
+
+The `-i`, `--include` parameter allows the filtering of which endpoints are included in the try run. Filtering works based on an endpoint's `tags` (see the `tags` parameter in the [endpoints](./config/endpoints-section.md) section). The `INCLUDE` pattern is specified in the format `key=value` or `key!=value` and an asterisk `*` can be used as a wildcard. This parameter can be used multiple times to specify multiple patterns. An endpoint which matches any of the patterns is included in the try run.
+
+The `-l`, `--loggers` flag specifies that any loggers defined in the config file should be enabled. By default, during a try run, loggers are disabled.
+
+The `-d`, `--results-directory` parameter will store any log files (if the `--loggers` flag is used) in the specified directory. If the directory does not exist it is created.
+<br/><br/>
+
+In both the `run` and `try` subcommands a [config file](./config.md) is required.

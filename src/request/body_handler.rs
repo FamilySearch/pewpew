@@ -94,7 +94,11 @@ impl BodyHandler {
                                     Either::B(Err(e).into_future())
                                 }
                             });
-                            blocked.push(f);
+                            if o.logger {
+                                futures.push(Either3::A(Either::A(f)));
+                            } else {
+                                blocked.push(f);
+                            }
                         }
                         EndpointProvidesSendOptions::Force => {
                             let mut value_added = false;
@@ -139,8 +143,15 @@ impl BodyHandler {
                     }
                 }
                 if !blocked.is_empty() {
-                    let f = select_all(blocked).map(|_| ()).map_err(|(e, ..)| e);
-                    futures.push(Either3::A(f));
+                    let f = select_all(blocked)
+                        .map_err(|(e, ..)| e)
+                        .and_then(|(_, _, rest)| {
+                            for mut f in rest {
+                                f.poll()?;
+                            }
+                            Ok(())
+                        });
+                    futures.push(Either3::A(Either::B(f)));
                 }
             }
             Err(r) => {
@@ -241,7 +252,7 @@ mod tests {
             cb_called.store(b as usize + 1, Ordering::Relaxed);
         };
         (
-            Outgoing::new(select, tx, Some(Arc::new(cb))),
+            Outgoing::new(select, tx, Some(Arc::new(cb)), false),
             rx,
             cb_called2,
         )

@@ -8,6 +8,9 @@ Breaking changes:
 - Change the `collect` and `repeat` expression functions to make the optional `max` parameter exclusive.
 - For endpoints which have `provides` change the default `send` behavior to `if_not_full` if the endpoint has a `peak_load` otherwise `block`.
 - When an endpoint has multiple `provides` which are `send: block` the blocking will only wait for there to be room in at least one of the providers' buffers.
+- Moved the `config.general` `summary_output_format` option to be a command-line argument.
+- Change the command-line interface to have two sub-commands: `run` and `try`. With this change is the ability to select more than one endpoint for a try run and specifing a directory for test results.
+- Dropped the `alias` parameter for an endpoint and renamed `stats_id` to `tags`.
 
 ### v0.4.11
 Changes:

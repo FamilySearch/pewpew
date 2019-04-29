@@ -681,6 +681,7 @@ pub fn create_stats_channel<F, Sef, Se>(
     providers: &BTreeMap<String, providers::Provider>,
     stderr: Sef,
     run_config: &RunConfig,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
@@ -696,7 +697,12 @@ where
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch()?;
-    let bucket_size = config.bucket_size;
+    let bucket_size = config
+        .bucket_size
+        .as_ref()
+        .map(|b| b.evaluate(static_vars))
+        .transpose()?
+        .unwrap_or_else(|| Duration::from_secs(60));
     let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
     let next_bucket =
         Duration::from_millis((bucket_size.as_secs() - (start_sec - start_bucket)) * 1000 + 1);
@@ -739,7 +745,8 @@ where
                 .then(move |_| stats4.lock().persist(stderr3()).then(|_| Ok(())));
             Either::B(b)
         });
-    let print_stats = if let Some(interval) = config.log_provider_stats {
+    let print_stats = if let Some(interval) = &config.log_provider_stats {
+        let interval = interval.evaluate(&static_vars)?;
         let print_provider_stats = create_provider_stats_printer(
             providers,
             interval,

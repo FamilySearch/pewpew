@@ -534,7 +534,7 @@ impl JsonPath {
     pub(super) fn new(
         args: Vec<ValueOrExpression>,
         providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>,
+        static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::String(json_path)))] => {
@@ -564,7 +564,7 @@ impl JsonPath {
                     (true, Ok(s)) => {
                         Some(json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s)))
                     }
-                    _ => static_providers.get(provider).cloned(),
+                    _ => static_vars.get(provider).cloned(),
                 };
                 if let Some(v) = v {
                     let v = json::json!({ provider: v });
@@ -1749,15 +1749,14 @@ mod tests {
         for do_static in [false, true].iter() {
             for (arg, eval, right, providers_expect) in checks.iter() {
                 let mut providers = BTreeSet::new();
-                let static_providers = if *do_static {
+                let static_vars = if *do_static {
                     eval.as_object().unwrap().clone().into_iter().collect()
                 } else {
                     BTreeMap::new()
                 };
                 match (
                     *do_static,
-                    JsonPath::new(vec![arg.clone().into()], &mut providers, &static_providers)
-                        .unwrap(),
+                    JsonPath::new(vec![arg.clone().into()], &mut providers, &static_vars).unwrap(),
                 ) {
                     (false, Either::A(j)) => {
                         assert_eq!(&providers, providers_expect);
@@ -1793,8 +1792,8 @@ mod tests {
         ];
         for (arg, eval, right, providers_expect) in checks.into_iter() {
             let mut providers = BTreeSet::new();
-            let static_providers = BTreeMap::new();
-            match JsonPath::new(vec![arg.into()], &mut providers, &static_providers).unwrap() {
+            let static_vars = BTreeMap::new();
+            match JsonPath::new(vec![arg.into()], &mut providers, &static_vars).unwrap() {
                 Either::A(j) => {
                     assert_eq!(providers, providers_expect);
                     let left: Vec<_> = j.evaluate_as_iter(&eval).collect();
@@ -1824,10 +1823,8 @@ mod tests {
                 .into_iter()
                 .map(|(arg, right, providers_expect)| {
                     let mut providers2 = BTreeSet::new();
-                    let static_providers = BTreeMap::new();
-                    match JsonPath::new(vec![arg.into()], &mut providers2, &static_providers)
-                        .unwrap()
-                    {
+                    let static_vars = BTreeMap::new();
+                    match JsonPath::new(vec![arg.into()], &mut providers2, &static_vars).unwrap() {
                         Either::A(j) => {
                             assert_eq!(providers2, providers_expect);
                             j.into_stream(&providers).into_future().map(move |(v, _)| {

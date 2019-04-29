@@ -23,12 +23,12 @@ providers:
       repeat: true
 ```
 
-There are five *provider_type*s: [file](#file), [response](#response), [static](#static), [static_list](#static_list) and [range](#range).
+There are four *provider_type*s: [file](#file), [response](#response), [list](#list) and [range](#range).
 
 ## file
 The `file` *provider_type* reads data from a file. Every line in the file is read as a value. In the future, the ability to specify the format of the data (csv, json, etc) may be implemented. A `file` provider has the following parameters:
 
-- **`path`** - A [template](./common-types.md#templates) value indicating the path to the file on the file system. Unlike templates used elsewhere, only environment variables can be interopolated. When a relative path is specified it is interpreted as relative to the config file. Absolute paths are supported though discouraged as they prevent the config file from being platform agnostic.
+- **`path`** - A [template](./common-types.md#templates) value indicating the path to the file on the file system. Unlike templates used elsewhere, only variables defined in the [vars section](./vars-section.md) can be interopolated. When a relative path is specified it is interpreted as relative to the config file. Absolute paths are supported though discouraged as they prevent the config file from being platform agnostic.
 - **`repeat`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` indicates when the provider `file` provider gets to the end of the file it should start back at the beginning. Defaults to `false`.
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used by a request, after a response is received the value is automatically returned to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from becoming empty again in the future. Defaults to `auto`.
@@ -173,46 +173,22 @@ Unlike other *provider_type*s `response` does not automatically receive data fro
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from becoming empty again in the future. Defaults to `auto`.
 
-## static
-The `static` *provider_type* is used for having a single pre-defined value used throughout a test. A `static` provider will make copies of the value every time a value is required from the provider. When defining a `static` provider the only parameter is the literal value which should be used. Any string value in the literal will be interpreted as a [template](./common-types.md#templates), but only environment variables can be interpolated.
-
-**Examples**:
-```yaml
-providers:
-  foo:
-    static: bar
-```
-
-creates a single `static` provider named `foo` where the value is the string "bar".
-
-More complex values are automatically interpreted as JSON so the following:
-```yaml
-providers:
-  bar:
-    static:
-      a: 1
-      b: 2
-      c: 3
-```
-
-creates a `static` provider named `bar` where the value is equivalent to the JSON `{"a": 1, "b": 2, "c": 3}`.
-
-## static_list
-The `static_list` *provider_type* acts like the `static` *provider_type* except an array of values is specified.
+## list
+The `list` *provider_type* creates a means of specifying an array of static values to be used as a provider.
 
 **Example**, the following:
 ```yaml
 providers:
   foo:
-    static_list:
+    list:
       - 123
       - 456
       - 789
 ```
 
-creates a `static_list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
+creates a `list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
 
-`static_list` provider can be specified in two forms, either implicitly (example above) or explicitly. The explicit form has the following parameters:
+`list` provider can be specified in two forms, either implicitly (example above) or explicitly. The explicit form has the following parameters:
 
 - **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that entries in the values array should provided in random order. When combined with `repeat` there is no sense of "fairness" in the randomization. Defaults to *false*.
 - **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that the array should repeat infitely. Defaults to *true*.

@@ -15,6 +15,7 @@ Framing a load test with these concepts enables Pewpew to accomplish one of its 
 A config file has five main sections, though not all are required:
 - [config](./config/config-section.md) - Allows customization of various test options.
 - [load_pattern](./config/load_pattern-section.md) - Specifies how load fluctuates during a test.
+- [vars](./config/vars-section.md) - Declare static variables which can be used in expressions.
 - [providers](./config/providers-section.md) - Declares providers which will are used to manage the flow of data needed for a test.
 - [loggers](./config/loggers-section.md) - Declares loggers which, as their name suggests, provide a means of logging data.
 - [endpoints](./config/endpoints-section.md) - Specifies the HTTP endpoints which are part of a test and various parameters to build each request.

@@ -38,15 +38,12 @@ enum LoadPatternPreProcessed {
     Linear(LinearBuilderPreProcessed),
 }
 
-struct Percent(f64);
-
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 struct LinearBuilderPreProcessed {
-    from: Option<Percent>,
-    to: Percent,
-    #[serde(deserialize_with = "deserialize_duration")]
-    over: Duration,
+    from: Option<PrePercent>,
+    to: PrePercent,
+    over: PreDuration,
 }
 
 #[derive(Clone)]
@@ -152,9 +149,7 @@ pub enum Provider {
     File(FileProvider),
     Range(RangeProvider),
     Response(ResponseProvider),
-    #[serde(deserialize_with = "deserialize_static_json")]
-    Static(json::Value),
-    StaticList(StaticList),
+    List(StaticList),
 }
 
 type RangeProviderIteratorA = iter::StepBy<std::ops::RangeInclusive<i64>>;
@@ -229,8 +224,7 @@ pub struct FileProvider {
     pub buffer: Limit,
     #[serde(default)]
     pub format: FileFormat,
-    #[serde(deserialize_with = "deserialize_path")]
-    pub path: String,
+    pub path: PreTemplate,
     #[serde(default)]
     pub random: bool,
     #[serde(default)]
@@ -255,8 +249,7 @@ struct LoggerPreProcessed {
     for_each: Vec<String>,
     #[serde(default, rename = "where")]
     where_clause: Option<String>,
-    #[serde(deserialize_with = "deserialize_path")]
-    to: String,
+    to: PreTemplate,
     #[serde(default)]
     pretty: bool,
     #[serde(default)]
@@ -278,7 +271,7 @@ struct LogsPreProcessed {
 
 pub struct Logger {
     pub select: Option<EndpointProvidesPreProcessed>,
-    pub to: String,
+    pub to: PreTemplate,
     pub pretty: bool,
     pub limit: Option<usize>,
     pub kill: bool,
@@ -293,14 +286,14 @@ pub struct Endpoint {
     pub headers: Vec<(String, String)>,
     #[serde(default)]
     pub body: Option<Body>,
-    #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
-    pub load_pattern: Option<LoadPattern>,
+    #[serde(default)]
+    pub load_pattern: Option<PreLoadPattern>,
     #[serde(default, deserialize_with = "deserialize_method")]
     pub method: Method,
     #[serde(default)]
     pub on_demand: bool,
-    #[serde(default, deserialize_with = "deserialize_options_hits_per")]
-    pub peak_load: Option<HitsPer>,
+    #[serde(default)]
+    pub peak_load: Option<PreHitsPer>,
     pub tags: Option<BTreeMap<String, String>>,
     pub url: String,
     #[serde(default, deserialize_with = "deserialize_providers")]
@@ -401,10 +394,6 @@ pub struct EndpointProvidesPreProcessed {
     pub where_clause: Option<String>,
 }
 
-fn default_bucket_size() -> Duration {
-    Duration::from_secs(60)
-}
-
 fn default_keepalive() -> Duration {
     Duration::from_secs(90)
 }
@@ -418,7 +407,7 @@ fn default_auto_buffer_start_size() -> usize {
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct ClientConfig {
     #[serde(default = "default_request_timeout")]
     pub request_timeout: Duration,
@@ -439,31 +428,28 @@ impl Default for ClientConfig {
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct GeneralConfig {
     #[serde(default = "default_auto_buffer_start_size")]
     pub auto_buffer_start_size: usize,
-    #[serde(
-        default = "default_bucket_size",
-        deserialize_with = "deserialize_duration"
-    )]
-    pub bucket_size: Duration,
-    #[serde(default, deserialize_with = "deserialize_duration_option")]
-    pub log_provider_stats: Option<Duration>,
+    #[serde(default)]
+    pub bucket_size: Option<PreDuration>,
+    #[serde(default)]
+    pub log_provider_stats: Option<PreDuration>,
 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
         GeneralConfig {
             auto_buffer_start_size: default_auto_buffer_start_size(),
-            bucket_size: default_bucket_size(),
+            bucket_size: None,
             log_provider_stats: None,
         }
     }
 }
 
 #[serde(deny_unknown_fields)]
-#[derive(Clone, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub client: ClientConfig,
@@ -477,12 +463,152 @@ pub struct LoadTest {
     #[serde(default)]
     pub config: Config,
     pub endpoints: Vec<Endpoint>,
-    #[serde(default, deserialize_with = "deserialize_option_vec_load_pattern")]
-    pub load_pattern: Option<LoadPattern>,
+    #[serde(default)]
+    pub load_pattern: Option<PreLoadPattern>,
     #[serde(default, deserialize_with = "deserialize_providers")]
     pub providers: Vec<(String, Provider)>,
     #[serde(default, with = "tuple_vec_map")]
     pub loggers: Vec<(String, Logger)>,
+    #[serde(default, deserialize_with = "deserialize_vars")]
+    pub vars: BTreeMap<String, json::Value>,
+}
+
+#[derive(Default, Deserialize)]
+pub struct PreTemplate(String);
+
+impl PreTemplate {
+    pub fn evaluate(
+        &self,
+        static_vars: &BTreeMap<String, json::Value>,
+    ) -> Result<String, TestError> {
+        Template::new(&self.0, static_vars).and_then(|t| t.evaluate(&json::Value::Null))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PreDuration(PreTemplate);
+
+impl PreDuration {
+    pub fn evaluate(
+        &self,
+        static_vars: &BTreeMap<String, json::Value>,
+    ) -> Result<Duration, TestError> {
+        let dur = self.0.evaluate(static_vars)?;
+        let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
+        let sanity_re =
+            Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
+        if !sanity_re.is_match(&dur) {
+            return Err(TestError::Other(
+                format!("invalid duration: `{}`", dur).into(),
+            ));
+        }
+        let mut total_secs = 0;
+        let re = Regex::new(base_re).expect("should be a valid regex");
+        for captures in re.captures_iter(&dur) {
+            let n: u64 = captures
+                .get(1)
+                .expect("should have capture group")
+                .as_str()
+                .parse()
+                .expect("should parse into u64 for duration");
+            let unit = &captures.get(2).expect("should have capture group").as_str()[0..1];
+            let secs = if unit.eq_ignore_ascii_case("h") {
+                n * 60 * 60 // hours
+            } else if unit.eq_ignore_ascii_case("m") {
+                n * 60 // minutes
+            } else {
+                n // seconds
+            };
+            total_secs += secs;
+        }
+        Ok(Duration::from_secs(total_secs))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PrePercent(PreTemplate);
+
+impl PrePercent {
+    pub fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<f64, TestError> {
+        let string = self.0.evaluate(static_vars)?;
+        let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").expect("should be a valid regex");
+
+        let captures = re
+            .captures(&string)
+            .ok_or_else(|| TestError::Other(format!("invalid percent: `{}`", string).into()))?;
+
+        Ok(captures
+            .get(1)
+            .expect("should have capture group")
+            .as_str()
+            .parse()
+            .expect("should be valid digits for percent"))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PreLoadPattern(Vec<LoadPatternPreProcessed>);
+
+impl PreLoadPattern {
+    pub fn evaluate(
+        &self,
+        static_vars: &BTreeMap<String, json::Value>,
+    ) -> Result<LoadPattern, TestError> {
+        let mut builder: Option<LinearBuilder> = None;
+        let mut last_end = 0f64;
+        for lppp in &self.0 {
+            match lppp {
+                LoadPatternPreProcessed::Linear(lbpp) => {
+                    let start = lbpp
+                        .from
+                        .as_ref()
+                        .map(|p| Ok::<_, TestError>(p.evaluate(static_vars)? / 100f64))
+                        .unwrap_or_else(|| Ok(last_end))?;
+                    let to = lbpp.to.evaluate(static_vars)?;
+                    let end = to / 100f64;
+                    let over = lbpp.over.evaluate(static_vars)?;
+                    last_end = end;
+                    if let Some(ref mut lb) = builder {
+                        lb.append(start, end, over);
+                    } else {
+                        builder = Some(LinearBuilder::new(start, end, over));
+                    }
+                }
+            }
+        }
+        builder
+            .ok_or_else(|| TestError::Other("invalid load pattern".into()))
+            .map(LoadPattern::Linear)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PreHitsPer(PreTemplate);
+
+impl PreHitsPer {
+    pub fn evaluate(
+        &self,
+        static_vars: &BTreeMap<String, json::Value>,
+    ) -> Result<HitsPer, TestError> {
+        let string = self.0.evaluate(static_vars)?;
+        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
+        let captures = re
+            .captures(&string)
+            .ok_or_else(|| TestError::Other(format!("invalid peak_load: `{}`", string).into()))?;
+        let n = captures
+            .get(1)
+            .expect("should have capture group")
+            .as_str()
+            .parse()
+            .expect("should be valid digits for HitsPer");
+        if captures.get(2).expect("should have capture group").as_str()[0..1]
+            .eq_ignore_ascii_case("m")
+        {
+            Ok(HitsPer::Minute(n))
+        } else {
+            Ok(HitsPer::Second(n))
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Body {
@@ -566,79 +692,6 @@ impl<'de> Deserialize<'de> for Logger {
     }
 }
 
-impl<'de> Deserialize<'de> for Percent {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        let sp = BTreeMap::new();
-        let string = Template::new(&string, &sp)
-            .map_err(DeError::custom)?
-            .evaluate(&json::Value::Null)
-            .map_err(DeError::custom)?;
-        let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").expect("should be a valid regex");
-
-        let captures = re.captures(&string).ok_or_else(|| {
-            DeError::invalid_value(Unexpected::Str(&string), &"a percentage like `30%`")
-        })?;
-
-        Ok(Percent(
-            captures
-                .get(1)
-                .expect("should have capture group")
-                .as_str()
-                .parse()
-                .expect("should be valid digits for percent"),
-        ))
-    }
-}
-
-fn static_json_helper(v: json::Value) -> Result<json::Value, TestError> {
-    let v = match v {
-        json::Value::Null | json::Value::Bool(_) | json::Value::Number(_) => v,
-        json::Value::Object(m) => {
-            let m = m
-                .into_iter()
-                .map(|(k, v)| Ok::<_, TestError>((k, static_json_helper(v)?)))
-                .collect::<Result<_, _>>()?;
-            json::Value::Object(m)
-        }
-        json::Value::Array(v) => {
-            let v = v
-                .into_iter()
-                .map(static_json_helper)
-                .collect::<Result<_, _>>()?;
-            json::Value::Array(v)
-        }
-        json::Value::String(s) => {
-            let sp = BTreeMap::new();
-            Template::new(&s, &sp)?.evaluate(&json::Value::Null)?.into()
-        }
-    };
-    Ok(v)
-}
-
-fn deserialize_static_json<'de, D>(deserializer: D) -> Result<json::Value, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let v = json::Value::deserialize(deserializer)?;
-    static_json_helper(v).map_err(DeError::custom)
-}
-
-fn deserialize_path<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let template = String::deserialize(deserializer)?;
-    let vars = BTreeMap::new();
-    let template = Template::new(&template, &vars).map_err(DeError::custom)?;
-    template
-        .evaluate(&json::Value::Null)
-        .map_err(DeError::custom)
-}
-
 fn deserialize_option_char<'de, D>(deserializer: D) -> Result<Option<u8>, D::Error>
 where
     D: Deserializer<'de>,
@@ -683,37 +736,6 @@ where
     Ok(selects)
 }
 
-fn deserialize_options_hits_per<'de, D>(deserializer: D) -> Result<Option<HitsPer>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let string: String = match Option::deserialize(deserializer)? {
-        Some(s) => s,
-        None => return Ok(None),
-    };
-    let sp = BTreeMap::new();
-    let string = Template::new(&string, &sp)
-        .map_err(DeError::custom)?
-        .evaluate(&json::Value::Null)
-        .map_err(DeError::custom)?;
-    let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
-    let captures = re.captures(&string).ok_or_else(|| {
-        DeError::invalid_value(Unexpected::Str(&string), &"example '150 hpm' or '300 hps'")
-    })?;
-    let n = captures
-        .get(1)
-        .expect("should have capture group")
-        .as_str()
-        .parse()
-        .expect("should be valid digits for HitsPer");
-    if captures.get(2).expect("should have capture group").as_str()[0..1].eq_ignore_ascii_case("m")
-    {
-        Ok(Some(HitsPer::Minute(n)))
-    } else {
-        Ok(Some(HitsPer::Second(n)))
-    }
-}
-
 fn deserialize_providers<'de, D, T>(deserializer: D) -> Result<Vec<(String, T)>, D::Error>
 where
     D: Deserializer<'de>,
@@ -731,66 +753,51 @@ where
     Ok(map)
 }
 
-fn deserialize_duration_helper(dur: &str) -> Option<Duration> {
-    let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
-    let sanity_re =
-        Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
-    if !sanity_re.is_match(dur) {
-        return None;
-    }
-    let mut total_secs = 0;
-    let re = Regex::new(base_re).expect("should be a valid regex");
-    for captures in re.captures_iter(dur) {
-        let n: u64 = captures
-            .get(1)
-            .expect("should have capture group")
-            .as_str()
-            .parse()
-            .expect("should parse into u64 for duration");
-        let unit = &captures.get(2).expect("should have capture group").as_str()[0..1];
-        let secs = if unit.eq_ignore_ascii_case("h") {
-            n * 60 * 60 // hours
-        } else if unit.eq_ignore_ascii_case("m") {
-            n * 60 // minutes
-        } else {
-            n // seconds
-        };
-        total_secs += secs;
-    }
-    Some(Duration::from_secs(total_secs))
-}
-
-fn deserialize_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+fn deserialize_vars<'de, D>(deserializer: D) -> Result<BTreeMap<String, json::Value>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let string = String::deserialize(deserializer)?;
-    let sp = BTreeMap::new();
-    let dur = Template::new(&string, &sp)
-        .map_err(DeError::custom)?
-        .evaluate(&json::Value::Null)
-        .map_err(DeError::custom)?;
-    deserialize_duration_helper(&dur)
-        .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))
-}
+    fn json_transform(
+        v: &mut json::Value,
+        env_vars: &BTreeMap<String, json::Value>,
+    ) -> Result<(), TestError> {
+        match v {
+            json::Value::String(s) => {
+                let t = Template::new(s, env_vars)?;
+                let s = t.evaluate(&json::Value::Null)?;
+                *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
+            }
+            json::Value::Array(a) => {
+                for v in a.iter_mut() {
+                    json_transform(v, env_vars)?;
+                }
+            }
+            json::Value::Object(o) => {
+                for v in o.values_mut() {
+                    json_transform(v, env_vars)?;
+                }
+            }
+            _ => (),
+        }
+        Ok(())
+    }
 
-fn deserialize_duration_option<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let string: String = match Option::deserialize(deserializer)? {
-        Some(dur) => dur,
-        None => return Ok(None),
-    };
-    let sp = BTreeMap::new();
-    let dur = Template::new(&string, &sp)
-        .map_err(DeError::custom)?
-        .evaluate(&json::Value::Null)
-        .map_err(DeError::custom)?;
+    let mut map = BTreeMap::deserialize(deserializer)?;
 
-    deserialize_duration_helper(&dur)
-        .ok_or_else(|| DeError::invalid_value(Unexpected::Str(&dur), &"example '15m' or '2 hours'"))
-        .map(Some)
+    let env_vars: BTreeMap<String, json::Value> = std::env::vars_os()
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().to_owned().to_string(),
+                v.to_string_lossy().into(),
+            )
+        })
+        .collect();
+
+    for (_, v) in map.iter_mut() {
+        json_transform(v, &env_vars).map_err(DeError::custom)?;
+    }
+
+    Ok(map)
 }
 
 fn deserialize_method<'de, D>(deserializer: D) -> Result<Method, D::Error>
@@ -798,34 +805,6 @@ where
     D: Deserializer<'de>,
 {
     let string = String::deserialize(deserializer)?;
-    Method::from_bytes(&string.as_bytes())
+    Method::from_bytes(string.as_bytes())
         .map_err(|_| DeError::invalid_value(Unexpected::Str(&string), &"a valid HTTP method verb"))
-}
-
-fn deserialize_option_vec_load_pattern<'de, D>(
-    deserializer: D,
-) -> Result<Option<LoadPattern>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let ovlppp: Option<Vec<LoadPatternPreProcessed>> = Option::deserialize(deserializer)?;
-    let mut builder: Option<LinearBuilder> = None;
-    if let Some(vec) = ovlppp {
-        let mut last_end = 0f64;
-        for lppp in vec {
-            match lppp {
-                LoadPatternPreProcessed::Linear(lbpp) => {
-                    let start = lbpp.from.map(|p| p.0 / 100f64).unwrap_or(last_end);
-                    let end = lbpp.to.0 / 100f64;
-                    last_end = end;
-                    if let Some(ref mut lb) = builder {
-                        lb.append(start, end, lbpp.over);
-                    } else {
-                        builder = Some(LinearBuilder::new(start, end, lbpp.over));
-                    }
-                }
-            }
-        }
-    }
-    Ok(builder.map(LoadPattern::Linear))
 }

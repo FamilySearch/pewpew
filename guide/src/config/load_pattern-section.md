@@ -26,8 +26,8 @@ load_pattern:
 ## linear
 The linear *load_pattern_type* allows generated traffic to increase or decrease linearly. There are three parameters which can be specified for each linear segment:
 
-- **`from`** <sub><sup>*Optional*</sup></sub> - A [template](./common-types.md#templates]) indicating the starting point to scale from, specified as a percentage. Defaults to `0%` if the current segment is the first entry in `load_pattern`, or the `to` value of the previous segment otherwise. Only environmenet variables can be interpolated.
+- **`from`** <sub><sup>*Optional*</sup></sub> - A [template](./common-types.md#templates]) indicating the starting point to scale from, specified as a percentage. Defaults to `0%` if the current segment is the first entry in `load_pattern`, or the `to` value of the previous segment otherwise. Only variables defined in the [vars section](./vars-section.md) can be interopolated.
 
   A valid percentage is any unsigned number, integer or decimal, immediately followed by the percent symbol (`%`). Percentages can exceed `100%` but cannot be negative. For example `15.25%` or `150%`. 
-- **`to`** - A [template](./common-types.md#templates]) indicating the end point to scale to, specified as a percentage. Only environmenet variables can be interpolated.
+- **`to`** - A [template](./common-types.md#templates]) indicating the end point to scale to, specified as a percentage. Only variables defined in the [vars section](./vars-section.md) can be interopolated.
 - **`over`** - The [duration](./common-types.md#duration) for how long the current segment should last.

@@ -11,6 +11,11 @@ Breaking changes:
 - Moved the `config.general` `summary_output_format` option to be a command-line argument.
 - Change the command-line interface to have two sub-commands: `run` and `try`. With this change is the ability to select more than one endpoint for a try run and specifing a directory for test results.
 - Dropped the `alias` parameter for an endpoint and renamed `stats_id` to `tags`.
+- Split `static` providers out to their own section, `vars`, and make it so environment variables can only be referenced from within a variable defined in `vars`. This includes no longer requiring environment variables to be prefaced with a `$`.
+- Rename the `static_list` provider type to `list`.
+
+Bugfix:
+- Fix an issue where loggers would not log for a request if a warning level error happened.
 
 ### v0.4.11
 Changes:
@@ -23,10 +28,10 @@ Changes:
 Bug fixes:
 - Fix issue where endpoints without a `peak_load` would run infintely if targeted in a try run.
 - Enforce that an endpoint without a `peak_load` must have at least one provides with `send: block`.
-- Fix issue where "recoverable" errors (like an invalid url), were not being logged during a try run.
+- Fix issue where warnings (like an invalid url), were not being logged during a try run.
 - Fix hang up that would happen with `on_demand` if the "demander" executed before the `on_demand` endpoint.
 - Fix hang up that could happen when a large amount of data was logged.
-- Fix issue where requests would be double counted in the stats if there was a "recoverable" error.
+- Fix issue where requests would be double counted in the stats if there was a warning level error.
 
 Changes:
 - Add `no_auto_returns` endpoint option.

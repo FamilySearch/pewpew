@@ -274,9 +274,9 @@ mod tests {
     fn sends_request() {
         current_thread::run(lazy(|| {
             let port = test_common::start_test_server();
-            let mut static_providers = BTreeMap::new();
-            static_providers.insert("port".into(), port.into());
-            let url = Template::new("https://127.0.0.1:${port}", &static_providers).unwrap();
+            let mut static_vars = BTreeMap::new();
+            static_vars.insert("port".into(), port.into());
+            let url = Template::new("https://127.0.0.1:${port}", &static_vars).unwrap();
             let method = Method::GET;
             let headers = BTreeMap::new();
             let body = BodyTemplate::None;

@@ -20,14 +20,14 @@ pub struct JsonReader {
 }
 
 impl JsonReader {
-    pub fn new(config: &config::FileProvider) -> Result<Self, io::Error> {
+    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
         let mut jr = JsonReader {
             staging_buffer: vec![0; 8 * (1 << 10)],
             buffer: Vec::new(),
             position: 0,
             positions: Vec::new(),
             random: None,
-            reader: File::open(&config.path)?,
+            reader: File::open(file)?,
             repeat: config.repeat,
         };
         if config.random {
@@ -181,9 +181,12 @@ mod tests {
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", JSON_LINES.join(line_ending)).unwrap();
-            fp.path = tmp.path().to_str().unwrap().to_string();
+            let path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = JsonReader::new(&fp).unwrap().map(Result::unwrap).collect();
+            let values: Vec<_> = JsonReader::new(&fp, &path)
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
 
             assert_eq!(values, expect);
         }

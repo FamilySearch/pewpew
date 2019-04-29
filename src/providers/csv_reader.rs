@@ -14,8 +14,8 @@ pub struct CsvReader {
 }
 
 impl CsvReader {
-    pub fn new(config: &config::FileProvider) -> Result<Self, io::Error> {
-        let file = File::open(&config.path)?;
+    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
+        let file = File::open(file)?;
         let csv = &config.csv;
         let mut builder = csv::ReaderBuilder::new();
         builder.comment(csv.comment).escape(csv.escape);
@@ -176,9 +176,12 @@ mod tests {
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", CSV_LINES.join(line_ending)).unwrap();
-            fp.path = tmp.path().to_str().unwrap().to_string();
+            let path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = CsvReader::new(&fp).unwrap().map(Result::unwrap).collect();
+            let values: Vec<_> = CsvReader::new(&fp, &path)
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
 
             assert_eq!(values, expect);
         }

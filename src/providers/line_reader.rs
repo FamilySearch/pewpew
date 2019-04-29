@@ -20,14 +20,14 @@ pub struct LineReader {
 }
 
 impl LineReader {
-    pub fn new(config: &config::FileProvider) -> Result<Self, io::Error> {
+    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
         let mut jr = LineReader {
             buffer: String::with_capacity(8 * (1 << 10)),
             byte_buffer: vec![0; 8 * (1 << 10)],
             position: 0,
             positions: Vec::new(),
             random: None,
-            reader: File::open(&config.path)?,
+            reader: File::open(file)?,
             repeat: config.repeat,
         };
         if config.random {
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn line_reader_basics_works() {
-        let mut fp = config::FileProvider::default();
+        let fp = config::FileProvider::default();
 
         let expect = vec![
             json::json!([1, 2, 3]),
@@ -185,9 +185,12 @@ mod tests {
         for line_ending in &["\n", "\r\n"] {
             let mut tmp = NamedTempFile::new().unwrap();
             write!(tmp, "{}", LINES.join(line_ending)).unwrap();
-            fp.path = tmp.path().to_str().unwrap().to_string();
+            let path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = LineReader::new(&fp).unwrap().map(Result::unwrap).collect();
+            let values: Vec<_> = LineReader::new(&fp, &path)
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
 
             assert_eq!(values, expect);
         }

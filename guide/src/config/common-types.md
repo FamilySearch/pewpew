@@ -1,6 +1,6 @@
 # Common types
 ## Duration
-A duration is an integer followed by an optional space and a string value indicating the time unit. Hours can be specified with "h", "hr", "hrs", "hour", or "hours", minutes with "m", "min", "mins", "minute", or "minutes", and seconds with "s", "sec", "secs", "second", or "seconds". Durations are [templates](#templates), but can only be interpolated with environment variables.
+A duration is an integer followed by an optional space and a string value indicating the time unit. Hours can be specified with "h", "hr", "hrs", "hour", or "hours", minutes with "m", "min", "mins", "minute", or "minutes", and seconds with "s", "sec", "secs", "second", or "seconds". Durations are [templates](#templates), but can only be interpolated with variables defined in the [vars section](./vars-section.md).
 
 Examples:
 
@@ -33,7 +33,3 @@ specifies that an "Authorization" header will be sent with the request with a va
 
 ## Templates
 Templates are special string values which can be interpolated with [expressions](./common-types/expressions.md). Interpolation is done by enclosing the [expression](./common-types/expressions.md) in `${ }`. For example: `${foo}-bar` creates a string where a value from a provider named "foo" is interpolated before the string value `-bar`. `${join(baz, ".")}` uses the `join` helper to create a string value derived from a value coming from the provider "baz".
-
-Templates also have the ability to pull from environment variables. Environment variables are referenced like providers except they start with a `$` character. If an environment variable does not exist with that name, then it is assumed to refer to a provider. For example: `${$FOO}` will pull from the environment variable "FOO" if it exists or a provider named "$FOO".
-
-When referencing an environment variable, the value will be parsed as JSON when possible or will otherwise be interpreted as a string.

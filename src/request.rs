@@ -120,7 +120,7 @@ pub struct BuilderContext {
         >,
     >,
     // a mapping of names to their prospective static (single value) providers
-    pub static_providers: BTreeMap<String, json::Value>,
+    pub static_vars: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Provider>,
     // a mapping of names to their prospective loggers
@@ -225,7 +225,7 @@ impl Builder {
             .headers
             .into_iter()
             .map(|(key, v)| {
-                let value = Template::new(&v, &ctx.static_providers)?;
+                let value = Template::new(&v, &ctx.static_vars)?;
                 required_providers.extend(value.get_providers().clone());
                 Ok::<_, TestError>((key.to_lowercase(), value))
             })
@@ -304,12 +304,12 @@ impl Builder {
             .map(|body| {
                 let value = match body {
                     config::Body::File(body) => {
-                        let template = Template::new(&body, &ctx.static_providers)?;
+                        let template = Template::new(&body, &ctx.static_vars)?;
                         required_providers.extend(template.get_providers().clone());
                         BodyTemplate::File(ctx.config_path.clone(), template)
                     }
                     config::Body::String(body) => {
-                        let template = Template::new(&body, &ctx.static_providers)?;
+                        let template = Template::new(&body, &ctx.static_vars)?;
                         required_providers.extend(template.get_providers().clone());
                         BodyTemplate::String(template)
                     }
@@ -319,12 +319,12 @@ impl Builder {
                             .map(|(name, v)| {
                                 let (is_file, template) = match v.body {
                                     config::BodyMultipartPieceBody::File(f) => {
-                                        let template = Template::new(&f, &ctx.static_providers)?;
+                                        let template = Template::new(&f, &ctx.static_vars)?;
                                         required_providers.extend(template.get_providers().clone());
                                         (true, template)
                                     }
                                     config::BodyMultipartPieceBody::String(s) => {
-                                        let template = Template::new(&s, &ctx.static_providers)?;
+                                        let template = Template::new(&s, &ctx.static_vars)?;
                                         required_providers.extend(template.get_providers().clone());
                                         (false, template)
                                     }
@@ -333,7 +333,7 @@ impl Builder {
                                     .headers
                                     .into_iter()
                                     .map(|(k, v)| {
-                                        let template = Template::new(&v, &ctx.static_providers)?;
+                                        let template = Template::new(&v, &ctx.static_vars)?;
                                         required_providers.extend(template.get_providers().clone());
                                         Ok::<_, TestError>((k, template))
                                     })
@@ -362,11 +362,8 @@ impl Builder {
         let mut required_providers2 = BTreeSet::new();
         for (name, d) in self.declare {
             required_providers.remove(&name);
-            let vce = config::ValueOrExpression::new(
-                &d,
-                &mut required_providers2,
-                &ctx.static_providers,
-            )?;
+            let vce =
+                config::ValueOrExpression::new(&d, &mut required_providers2, &ctx.static_vars)?;
             let stream = vce
                 .into_stream(&ctx.providers)
                 .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));

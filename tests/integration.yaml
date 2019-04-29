@@ -27,19 +27,19 @@ loggers:
   l2:
     limit: 1
     to: stdout
+vars:
+  b: "foo"
+  e2: ["foo", "foo", "foo"]
+  port: "${PORT}"
 providers:
   a:
     range: {}
-  b:
-    static: "foo"
   c:
-    static_list:
+    list:
       - 123
       - 456
   d:
     response: {}
-  e2:
-    static: ["foo", "foo", "foo"]
   f:
     file:
       path: integration.data
@@ -48,7 +48,7 @@ endpoints:
   - method: POST
     declare:
       e: collect(b, 3)
-    url: http://localhost:${$PORT}/
+    url: http://localhost:${port}/
     body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
     peak_load: 1hps
     headers:
@@ -56,7 +56,7 @@ endpoints:
   - method: POST
     declare:
       e: collect(b, 3)
-    url: http://localhost:${$PORT}/multipart
+    url: http://localhost:${port}/multipart
     body:
       multipart:
         test: 

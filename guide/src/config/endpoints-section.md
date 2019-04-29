@@ -24,7 +24,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`body`** <sub><sup>*Optional*</sup></sub> - See the [body subsection](#body-subsection)
 - **`load_pattern`** <sub><sup>*Optional*</sup></sub> - See the [load_pattern section](./load_pattern-section.md)
 - **`method`** <sub><sup>*Optional*</sup></sub> - A string representation for a valid HTTP method verb. Defaults to `GET`
-- **`peak_load`** <sub><sup>*Optional**</sup></sub> - A [template](./common-types.md#templates]) representing what the "peak load" for this endpoint should be. The term "peak load" represents how much traffic is generated for this endpoint when the [load_pattern](./load_pattern-section.md) reaches `100%`. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`. Only environment variables can be interpolated.
+- **`peak_load`** <sub><sup>*Optional**</sup></sub> - A [template](./common-types.md#templates]) representing what the "peak load" for this endpoint should be. The term "peak load" represents how much traffic is generated for this endpoint when the [load_pattern](./load_pattern-section.md) reaches `100%`. A `load_pattern` can go higher than `100%`, so a `load_pattern` of `200%`, for example, would mean it would go double the defined `peak_load`. Only variables defined in the [vars section](./vars-section.md) can be interpolated.
 
   \* While `peak_load` is marked as *optional* that is only true if the current endpoint has a *provides_subsection*, and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.
 
@@ -36,7 +36,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-- **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs. Unlike templates in other places only static providers and environment variables can be interpolated.
+- **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs. Only variables defined in the [vars section](./vars-section.md) can be interpolated, which is to say providers cannot be referenced here.
 
   Tags are a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. Every endpoint has the implicitly defined tags of `method` (which is the HTTP method for the endpoint) and `url` (which is the endpoint url with the dynamic pieces being replaced with an asterisk). The implicitly defined `url` tag can be overwritten which is helpful in cases such as when an entire url is dynamically generated and it would otherwise show up as `*`.
 - **`url`** - A [template](./common-types.md#templates) specifying the fully qualified url to the endpoint which will be requested.

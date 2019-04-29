@@ -242,9 +242,9 @@ mod tests {
     use crate::config::Select;
 
     fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
-        let static_providers = BTreeMap::new();
+        let static_vars = BTreeMap::new();
         let eppp = json::from_value(s).unwrap();
-        let select = Select::new(eppp, &static_providers).unwrap();
+        let select = Select::new(eppp, &static_vars).unwrap();
         let (tx, rx) = channel::channel(Limit::Integer(1));
         let cb_called = Arc::new(AtomicUsize::new(0));
         let cb_called2 = cb_called.clone();

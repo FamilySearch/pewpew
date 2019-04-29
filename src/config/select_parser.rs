@@ -22,7 +22,7 @@ use zip_all::zip_all;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    env, iter,
+    iter,
     sync::Arc,
 };
 
@@ -120,7 +120,7 @@ impl FunctionCall {
         ident: &str,
         args: Vec<ValueOrExpression>,
         providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>,
+        static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         let r = match ident {
             "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?)),
@@ -131,7 +131,7 @@ impl FunctionCall {
             "if" => If::new(args)?.map_a(|a| FunctionCall::If(a.into())),
             "join" => Join::new(args)?.map_a(FunctionCall::Join),
             "json_path" => {
-                JsonPath::new(args, providers, static_providers)?.map_a(FunctionCall::JsonPath)
+                JsonPath::new(args, providers, static_vars)?.map_a(FunctionCall::JsonPath)
             }
             "match" => Match::new(args)?.map_a(FunctionCall::Match),
             "max" => MinMax::new(false, args)?.map_a(FunctionCall::MinMax),
@@ -395,10 +395,10 @@ impl ValueOrExpression {
     pub fn new(
         expr: &str,
         providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>,
+        static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Self, TestError> {
         let pairs = Parser::parse(Rule::entry_point, expr)?;
-        let e = parse_expression(pairs, providers, static_providers)?;
+        let e = parse_expression(pairs, providers, static_vars)?;
         ValueOrExpression::from_expression(e)
     }
 
@@ -527,9 +527,9 @@ impl PathSegment {
     fn from_str(
         s: &str,
         providers: &mut BTreeSet<String>,
-        static_providers: &BTreeMap<String, json::Value>,
+        static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Self, TestError> {
-        let template = Template::new(s, static_providers)?;
+        let template = Template::new(s, static_vars)?;
         let r = match template.simplify_to_string() {
             Either::A(s) => PathSegment::String(s),
             Either::B(t) => {
@@ -851,10 +851,7 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn new(
-        t: &str,
-        static_providers: &BTreeMap<String, json::Value>,
-    ) -> Result<Self, TestError> {
+    pub fn new(t: &str, static_vars: &BTreeMap<String, json::Value>) -> Result<Self, TestError> {
         let pairs = Parser::parse(Rule::template_entry_point, t)?
             .nth(0)
             .ok_or_else(|| TestError::Internal("Expected 1 pair from parser".into()))?
@@ -865,7 +862,7 @@ impl Template {
         for pair in pairs {
             let piece = match pair.as_rule() {
                 Rule::template_expression => {
-                    let e = parse_expression(pair.into_inner(), &mut providers, static_providers)?;
+                    let e = parse_expression(pair.into_inner(), &mut providers, static_vars)?;
                     match e.simplify_to_string()? {
                         Either::A(s2) => {
                             if let Some(TemplatePiece::NotExpression(s)) = pieces.last_mut() {
@@ -1008,7 +1005,7 @@ fn providers_helper(incoming: &mut BTreeSet<String>, bitwise: &mut u16) {
 impl Select {
     pub fn new(
         provides: EndpointProvidesPreProcessed,
-        static_providers: &BTreeMap<String, json::Value>,
+        static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Self, TestError> {
         let mut providers = BTreeSet::new();
         let mut special_providers = 0;
@@ -1017,7 +1014,7 @@ impl Select {
             .iter()
             .map(|s| {
                 let pairs = Parser::parse(Rule::entry_point, s)?;
-                let e = parse_expression(pairs, &mut providers, static_providers)?;
+                let e = parse_expression(pairs, &mut providers, static_vars)?;
                 if providers.contains("for_each") {
                     Err(TestError::RecursiveForEachReference)
                 } else {
@@ -1032,14 +1029,14 @@ impl Select {
             .map(|s| {
                 let mut providers2 = BTreeSet::new();
                 let pairs = Parser::parse(Rule::entry_point, s).map_err(TestError::PestParseErr)?;
-                let e = parse_expression(pairs, &mut providers2, static_providers)?;
+                let e = parse_expression(pairs, &mut providers2, static_vars)?;
                 providers_helper(&mut providers2, &mut where_clause_special_providers);
                 providers.extend(providers2);
                 Ok::<_, TestError>(e)
             })
             .transpose()?;
         special_providers |= where_clause_special_providers;
-        let select = parse_select(provides.select, &mut providers, static_providers)?;
+        let select = parse_select(provides.select, &mut providers, static_vars)?;
         providers_helper(&mut providers, &mut special_providers);
         Ok(Select {
             join,
@@ -1131,29 +1128,27 @@ impl Select {
 fn parse_select(
     select: json::Value,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<ParsedSelect, TestError> {
     let r = match select {
         json::Value::Null => ParsedSelect::Null,
         json::Value::Bool(b) => ParsedSelect::Bool(b),
         json::Value::Number(n) => ParsedSelect::Number(n),
         json::Value::String(s) => {
-            let expression = ValueOrExpression::new(&s, providers, static_providers)?;
+            let expression = ValueOrExpression::new(&s, providers, static_vars)?;
             ParsedSelect::Expression(expression)
         }
         json::Value::Array(a) => {
             let new = a
                 .into_iter()
-                .map(|v| parse_select(v, providers, static_providers))
+                .map(|v| parse_select(v, providers, static_vars))
                 .collect::<Result<_, _>>()?;
             ParsedSelect::Array(new)
         }
         json::Value::Object(m) => {
             let new = m
                 .into_iter()
-                .map(|(k, v)| {
-                    Ok::<_, TestError>((k, parse_select(v, providers, static_providers)?))
-                })
+                .map(|(k, v)| Ok::<_, TestError>((k, parse_select(v, providers, static_vars)?)))
                 .collect::<Result<_, _>>()?;
             ParsedSelect::Object(new)
         }
@@ -1164,7 +1159,7 @@ fn parse_select(
 fn parse_function_call(
     pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<Either<FunctionCall, json::Value>, TestError> {
     let mut ident = None;
     let mut args = Vec::new();
@@ -1175,7 +1170,7 @@ fn parse_function_call(
             }
             Rule::function_arg => {
                 args.push(
-                    parse_expression(pair.into_inner(), providers, static_providers)
+                    parse_expression(pair.into_inner(), providers, static_vars)
                         .and_then(ValueOrExpression::from_expression)?,
                 );
             }
@@ -1191,20 +1186,20 @@ fn parse_function_call(
             .ok_or_else(|| TestError::Internal("expected to have a function identifier".into()))?,
         args,
         providers,
-        static_providers,
+        static_vars,
     )
 }
 
 fn parse_indexed_property(
     pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<PathSegment, TestError> {
     let pair = pair.into_inner().next().ok_or_else(|| {
         TestError::Internal("Expected 1 rule while parsing indexed property".into())
     })?;
     match pair.as_rule() {
-        Rule::string => PathSegment::from_str(pair.as_str(), providers, static_providers),
+        Rule::string => PathSegment::from_str(pair.as_str(), providers, static_vars),
         Rule::integer => Ok(PathSegment::Number(pair.as_str().parse().map_err(
             |_| {
                 TestError::Internal(
@@ -1221,7 +1216,7 @@ fn parse_indexed_property(
 fn parse_path(
     pair: Pair<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<Either<json::Value, Path>, TestError> {
     let mut start = None;
     let mut rest = Vec::new();
@@ -1230,7 +1225,7 @@ fn parse_path(
         match pair.as_rule() {
             Rule::function_call => {
                 if start.is_none() {
-                    let jps = match parse_function_call(pair, &mut providers2, static_providers)? {
+                    let jps = match parse_function_call(pair, &mut providers2, static_vars)? {
                         Either::A(fc) => PathStart::FunctionCall(fc),
                         Either::B(v) => PathStart::Value(v),
                     };
@@ -1244,21 +1239,12 @@ fn parse_path(
             Rule::json_ident => {
                 let s = pair.as_str();
                 if start.is_none() {
-                    start = match (
-                        s.starts_with('$'),
-                        env::var(&s[1..]),
-                        static_providers.get(s),
-                    ) {
-                        (true, Ok(s), _) => {
-                            let v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
-                            Some(PathStart::Value(v))
-                        }
-                        (_, _, Some(v)) => Some(PathStart::Value(v.clone())),
-                        _ => Some(PathStart::Ident(s.into())),
-                    };
+                    start = static_vars
+                        .get(s)
+                        .map(|v| PathStart::Value(v.clone()))
+                        .or_else(|| Some(PathStart::Ident(s.into())));
                 } else {
-                    let ps =
-                        PathSegment::from_str(pair.as_str(), &mut providers2, static_providers)?;
+                    let ps = PathSegment::from_str(pair.as_str(), &mut providers2, static_vars)?;
                     rest.push(ps);
                 }
             }
@@ -1268,11 +1254,7 @@ fn parse_path(
                         "Encountered unexpected indexed property while parsing path".into(),
                     ));
                 } else {
-                    rest.push(parse_indexed_property(
-                        pair,
-                        &mut providers2,
-                        static_providers,
-                    )?);
+                    rest.push(parse_indexed_property(pair, &mut providers2, static_vars)?);
                 }
             }
             r => {
@@ -1309,7 +1291,7 @@ fn parse_path(
 fn parse_value(
     mut pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<Value, TestError> {
     let pair = pairs.next().ok_or_else(|| {
         TestError::Internal("Expected 1 rule while parsing indexed property".into())
@@ -1328,12 +1310,12 @@ fn parse_value(
             Value::Json(b.into())
         }
         Rule::null => Value::Json(json::Value::Null),
-        Rule::json_path => match parse_path(pair, providers, static_providers)? {
+        Rule::json_path => match parse_path(pair, providers, static_vars)? {
             Either::A(v) => Value::Json(v),
             Either::B(p) => Value::Path(p.into()),
         },
         Rule::string => {
-            let template = Template::new(pair.as_str(), static_providers)?;
+            let template = Template::new(pair.as_str(), static_vars)?;
             match template.simplify_to_string() {
                 Either::A(s) => Value::Json(s.into()),
                 Either::B(t) => {
@@ -1432,7 +1414,7 @@ fn expression_helper(
 fn parse_expression_pieces(
     pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
     pieces: &mut Vec<ExpressionOrOperator>,
 ) -> Result<(), TestError> {
     let mut not_count = 0;
@@ -1442,7 +1424,7 @@ fn parse_expression_pieces(
         match rule {
             Rule::unary_operator => not_count += 1,
             Rule::value => {
-                let v = parse_value(pair.into_inner(), providers, static_providers)?;
+                let v = parse_value(pair.into_inner(), providers, static_vars)?;
                 let not = match not_count {
                     0 => None,
                     n => Some(n % 2 == 1),
@@ -1463,7 +1445,7 @@ fn parse_expression_pieces(
                     parse_expression_pieces(
                         pair.into_inner(),
                         providers,
-                        static_providers,
+                        static_vars,
                         &mut pieces2,
                     )?;
                     let mut e = expression_helper(pieces2, 0)?;
@@ -1479,12 +1461,7 @@ fn parse_expression_pieces(
                     let eoo = ExpressionOrOperator::Expression(e);
                     pieces.push(eoo);
                 } else {
-                    parse_expression_pieces(
-                        pair.into_inner(),
-                        providers,
-                        static_providers,
-                        pieces,
-                    )?;
+                    parse_expression_pieces(pair.into_inner(), providers, static_vars, pieces)?;
                 }
             }
             Rule::infix_operator => {
@@ -1529,10 +1506,10 @@ fn parse_expression_pieces(
 fn parse_expression(
     pairs: Pairs<'_, Rule>,
     providers: &mut BTreeSet<String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<Expression, TestError> {
     let mut pieces = Vec::new();
-    parse_expression_pieces(pairs, providers, static_providers, &mut pieces)?;
+    parse_expression_pieces(pairs, providers, static_vars, &mut pieces)?;
     expression_helper(pieces, 0)
 }
 
@@ -1627,8 +1604,6 @@ mod tests {
             ]
         });
 
-        env::set_var("ZED", "26");
-
         // (select json, expected out data)
         let check_table = vec![
             (json::json!([1, 2, 3]), vec![json::json!([1, 2, 3])]),
@@ -1674,7 +1649,6 @@ mod tests {
                 vec![json::json!({"z": 42, "dees": [1, 2, 3]})],
             ),
             (json::json!("collect(a, 3)"), vec![json::json!(3)]),
-            (json::json!("$ZED"), vec![json::json!(26)]),
             (
                 json::json!("collect(b.e, 39)"),
                 vec![json::json!([5, 6, 7, 8])],
@@ -1761,11 +1735,11 @@ mod tests {
             ];
 
             let mut required_providers = BTreeSet::new();
-            let static_providers = BTreeMap::new();
+            let static_vars = BTreeMap::new();
             let mut futures = Vec::new();
             for (i, (expr, expect)) in tests.into_iter().enumerate() {
-                let voe = ValueOrExpression::new(expr, &mut required_providers, &static_providers)
-                    .unwrap();
+                let voe =
+                    ValueOrExpression::new(expr, &mut required_providers, &static_vars).unwrap();
                 let fut = voe
                     .into_stream(&providers)
                     .map(|(v, _)| v)

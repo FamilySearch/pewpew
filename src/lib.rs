@@ -37,7 +37,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fs::File,
-    mem,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
@@ -338,14 +337,14 @@ fn create_url_and_update_tags(
     url: &str,
     method: &http::Method,
     tags: &mut BTreeMap<String, String>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<(config::Template), TestError> {
-    let url = config::Template::new(url, static_providers)?;
+    let url = config::Template::new(url, static_vars)?;
     tags.entry("url".into())
         .or_insert_with(|| url.evaluate_with_star());
     tags.insert("method".into(), method.to_string());
     for v in tags.values_mut() {
-        let t = config::Template::new(&v, static_providers)?;
+        let t = config::Template::new(&v, static_vars)?;
         if let Some(r) = t.get_providers().iter().nth(0) {
             return Err(TestError::InvalidTagsReference(r.clone()));
         }
@@ -380,12 +379,14 @@ where
 
     let config_config = config.config;
 
+    let static_vars = config.vars;
     // build and register the providers
-    let (providers, static_providers, response_providers) = get_providers_from_config(
+    let (providers, response_providers) = get_providers_from_config(
         config.providers,
         config_config.general.auto_buffer_start_size,
         &test_ended_tx,
         &try_config.config_file,
+        &static_vars,
     )?;
 
     let filters: Vec<_> = try_config
@@ -421,7 +422,7 @@ where
             })
     };
 
-    let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
+    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars);
     let select = "`\
                   Request\n\
                   ========================================\n\
@@ -451,7 +452,7 @@ where
         config.loggers,
         &try_config.results_dir,
         &test_ended_tx,
-        &static_providers,
+        &static_vars,
         stdout,
         stderr.clone(),
     )?;
@@ -481,12 +482,8 @@ where
             Vec::new()
         };
         let mut tags = endpoint.tags.unwrap_or_default();
-        let url = create_url_and_update_tags(
-            &endpoint.url,
-            &endpoint.method,
-            &mut tags,
-            &static_providers,
-        )?;
+        let url =
+            create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_vars)?;
 
         let builder = request::Builder::new(url, None)
             .body(endpoint.body)
@@ -517,7 +514,7 @@ where
         client: Arc::new(client),
         loggers,
         providers,
-        static_providers,
+        static_vars,
         stats_tx: stats_tx.clone(),
     };
 
@@ -560,26 +557,31 @@ where
 
     let config_config = config.config;
 
+    let static_vars = config.vars;
     // build and register the providers
-    let (providers, static_providers, _) = get_providers_from_config(
+    let (providers, _) = get_providers_from_config(
         config.providers,
         config_config.general.auto_buffer_start_size,
         &test_ended_tx,
         &run_config.config_file,
+        &static_vars,
     )?;
 
-    let eppp_to_select = |eppp| config::Select::new(eppp, &static_providers);
+    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars);
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
         &run_config.results_dir,
         &test_ended_tx,
-        &static_providers,
+        &static_vars,
         stdout,
         stderr.clone(),
     )?;
 
-    let global_load_pattern = config.load_pattern;
+    let global_load_pattern = config
+        .load_pattern
+        .map(|l| l.evaluate(&static_vars))
+        .transpose()?;
     let mut duration = Duration::new(0, 0);
     let to_select_values = |v: Vec<(String, config::EndpointProvidesPreProcessed)>,
                             send_behavior_default: Option<config::EndpointProvidesSendOptions>|
@@ -602,8 +604,11 @@ where
         };
         let provides = to_select_values(endpoint.provides, Some(send_behavior_default))?;
         if let Some(peak_load) = endpoint.peak_load {
+            let peak_load = peak_load.evaluate(&static_vars)?;
             let load_pattern = endpoint
                 .load_pattern
+                .map(|l| l.evaluate(&static_vars))
+                .transpose()?
                 .or_else(|| global_load_pattern.clone())
                 .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
             duration = cmp::max(duration, load_pattern.duration());
@@ -621,7 +626,7 @@ where
         let mut headers: Vec<_> = config_config.client.headers.clone();
         headers.extend(endpoint.headers);
         let mut tags = endpoint.tags.unwrap_or_default();
-        let url = create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_providers)?;
+        let url = create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_vars)?;
         let logs = to_select_values(endpoint.logs, None)?;
         let builder = request::Builder::new(url, mod_interval)
             .body(endpoint.body)
@@ -646,6 +651,7 @@ where
         &providers,
         stderr,
         &run_config,
+        &static_vars,
     )?;
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {
@@ -659,7 +665,7 @@ where
         client: Arc::new(client),
         loggers,
         providers,
-        static_providers,
+        static_vars,
         stats_tx: stats_tx.clone(),
     };
 
@@ -728,23 +734,16 @@ pub(crate) fn create_http_client(
     Ok(Client::builder().set_host(false).build::<_, Body>(https))
 }
 
-type ProvidersResult = Result<
-    (
-        BTreeMap<String, providers::Provider>,
-        BTreeMap<String, json::Value>,
-        BTreeSet<String>,
-    ),
-    TestError,
->;
+type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<String>), TestError>;
 
 fn get_providers_from_config(
     config_providers: Vec<(String, config::Provider)>,
     auto_size: usize,
     test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
+    static_vars: &BTreeMap<String, json::Value>,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
-    let mut static_providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();
     for (name, template) in config_providers {
         let provider = match template {
@@ -755,22 +754,20 @@ fn get_providers_from_config(
                         limit.store(auto_size, Ordering::Relaxed);
                     }
                 }
-                providers::file(template, test_ended_tx.clone(), config_path)?
+                let mut path = template.path.evaluate(static_vars)?;
+                util::tweak_path(&mut path, config_path);
+                providers::file(template, test_ended_tx.clone(), path)?
             }
             config::Provider::Range(range) => providers::range(range),
             config::Provider::Response(template) => {
                 response_providers.insert(name.clone());
                 providers::response(template)
             }
-            config::Provider::Static(value) => {
-                static_providers.insert(name, value);
-                continue;
-            }
-            config::Provider::StaticList(values) => providers::literals(values),
+            config::Provider::List(values) => providers::literals(values),
         };
         providers.insert(name, provider);
     }
-    Ok((providers, static_providers, response_providers))
+    Ok((providers, response_providers))
 }
 
 type LoggersResult =
@@ -780,7 +777,7 @@ fn get_loggers_from_config<Se, So, Sef, Sof>(
     config_loggers: Vec<(String, config::Logger)>,
     results_dir: &PathBuf,
     test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
-    static_providers: &BTreeMap<String, json::Value>,
+    static_vars: &BTreeMap<String, json::Value>,
     stdout: Sof,
     stderr: Sef,
 ) -> LoggersResult
@@ -793,13 +790,13 @@ where
     config_loggers
         .into_iter()
         .map(|(name, mut template)| {
-            let writer_future = match template.to.as_str() {
+            let to = template.to.evaluate(&static_vars)?;
+            let writer_future = match to.as_str() {
                 "stderr" => Either::A(future::ok(Either3::A(stderr()))),
                 "stdout" => Either::A(future::ok(Either3::B(stdout()))),
                 _ => {
-                    let file_name = mem::replace(&mut template.to, String::new());
                     let mut file_path = results_dir.clone();
-                    file_path.push(file_name);
+                    file_path.push(to);
                     let name2 = name.clone();
                     let f = tokio::fs::File::create(file_path)
                         .map(Either3::C)
@@ -814,7 +811,7 @@ where
             let select = template
                 .select
                 .take()
-                .map(|eppp| config::Select::new(eppp, &static_providers))
+                .map(|eppp| config::Select::new(eppp, &static_vars))
                 .transpose()?;
             let sender =
                 providers::logger(name.clone(), template, test_ended_tx.clone(), writer_future);

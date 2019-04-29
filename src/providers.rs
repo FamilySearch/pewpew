@@ -6,7 +6,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 
 use crate::config;
 use crate::error::TestError;
-use crate::util::{json_value_into_string, tweak_path};
+use crate::util::json_value_into_string;
 use crate::TestEndReason;
 
 use bytes::{Buf, Bytes, IntoBuf};
@@ -18,7 +18,7 @@ use futures::{
 use serde_json as json;
 use tokio_threadpool::blocking;
 
-use std::{io, path::PathBuf};
+use std::io;
 
 pub struct Provider {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
@@ -43,16 +43,14 @@ impl Provider {
 }
 
 pub fn file(
-    mut template: config::FileProvider,
+    template: config::FileProvider,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
-    config_path: &PathBuf,
+    file: String,
 ) -> Result<Provider, TestError> {
-    tweak_path(&mut template.path, config_path);
-    let file = template.path.clone();
     let test_killer2 = test_killer.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
-            CsvReader::new(&template)
+            CsvReader::new(&template, &file)
                 .map_err(|e| {
                     TestError::Other(
                         format!("creating file reader from file `{}`: {}", file, e).into(),
@@ -61,7 +59,7 @@ pub fn file(
                 .into_stream(),
         ),
         config::FileFormat::Json => Either3::B(
-            JsonReader::new(&template)
+            JsonReader::new(&template, &file)
                 .map_err(|e| {
                     TestError::Other(
                         format!("creating file reader from file `{}`: {}", file, e).into(),
@@ -70,7 +68,7 @@ pub fn file(
                 .into_stream(),
         ),
         config::FileFormat::Line => Either3::C(
-            LineReader::new(&template)
+            LineReader::new(&template, &file)
                 .map_err(|e| {
                     TestError::Other(
                         format!("creating file reader from file `{}`: {}", file, e).into(),

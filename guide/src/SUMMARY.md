@@ -4,6 +4,7 @@
 - [Config file](./config.md)
   - [config section](./config/config-section.md)
   - [load_pattern section](./config/load_pattern-section.md)
+  - [vars section](./config/vars-section.md)
   - [providers section](./config/providers-section.md)
   - [loggers section](./config/loggers-section.md)
   - [endpoints section](./config/endpoints-section.md)

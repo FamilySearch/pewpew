@@ -17,6 +17,17 @@ pub enum RecoverableError {
 
 use RecoverableError::*;
 
+impl RecoverableError {
+    pub fn code(&self) -> u32 {
+        match self {
+            BodyErr(_) => 1,
+            ConnectionErr(..) => 2,
+            IndexingJson(..) => 3,
+            Timeout(_) => 4,
+        }
+    }
+}
+
 impl fmt::Display for RecoverableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -27,6 +38,8 @@ impl fmt::Display for RecoverableError {
         }
     }
 }
+
+
 
 #[derive(Clone, Debug)]
 pub enum TestError {

@@ -481,7 +481,7 @@ impl PreTemplate {
         &self,
         static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<String, TestError> {
-        Template::new(&self.0, static_vars).and_then(|t| t.evaluate(&json::Value::Null))
+        Template::new(&self.0, static_vars, false).and_then(|t| t.evaluate(&json::Value::Null))
     }
 }
 
@@ -763,7 +763,7 @@ where
     ) -> Result<(), TestError> {
         match v {
             json::Value::String(s) => {
-                let t = Template::new(s, env_vars)?;
+                let t = Template::new(s, env_vars, false)?;
                 let s = t.evaluate(&json::Value::Null)?;
                 *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
             }

@@ -339,12 +339,12 @@ fn create_url_and_update_tags(
     tags: &mut BTreeMap<String, String>,
     static_vars: &BTreeMap<String, json::Value>,
 ) -> Result<(config::Template), TestError> {
-    let url = config::Template::new(url, static_vars)?;
+    let url = config::Template::new(url, static_vars, false)?;
     tags.entry("url".into())
         .or_insert_with(|| url.evaluate_with_star());
     tags.insert("method".into(), method.to_string());
     for v in tags.values_mut() {
-        let t = config::Template::new(&v, static_vars)?;
+        let t = config::Template::new(&v, static_vars, false)?;
         if let Some(r) = t.get_providers().iter().nth(0) {
             return Err(TestError::InvalidTagsReference(r.clone()));
         }
@@ -422,7 +422,7 @@ where
             })
     };
 
-    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars);
+    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars, false);
     let select = "`\
                   Request\n\
                   ========================================\n\
@@ -567,7 +567,7 @@ where
         &static_vars,
     )?;
 
-    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars);
+    let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars, false);
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
@@ -811,7 +811,7 @@ where
             let select = template
                 .select
                 .take()
-                .map(|eppp| config::Select::new(eppp, &static_vars))
+                .map(|eppp| config::Select::new(eppp, &static_vars, true))
                 .transpose()?;
             let sender =
                 providers::logger(name.clone(), template, test_ended_tx.clone(), writer_future);

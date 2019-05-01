@@ -15,6 +15,8 @@ Loggers provide a means of logging data to a file, stderr or stdout. Any string 
 
 There are two types of loggers: plain loggers which have data logged to them by explicitly referencing them within an `endpoints.log` subsection, and global loggers which are evaluated for every HTTP response.
 
+In addition to the special variables "request", "response" and "stats", a logger also has access to a variable "error" which represents an error which happens during the test. It can be helpful to log such errors along with the request or response (if they are available) when diagnosing problems.
+
 Loggers support the following parameters:
 - **`select`** <sub><sup>*Optional*</sup></sub> - When specified, the logger becomes a global logger. See the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on how to define a *select*.
 - **`for_each`** <sub><sup>*Optional*</sup></sub> - Used in conjunction with `select` on global loggers.  See the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on how to define a *for_each*.

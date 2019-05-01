@@ -1,6 +1,6 @@
 use super::*;
 
-use futures::future::{select_all, IntoFuture};
+use futures::future::{join_all, select_all, IntoFuture};
 
 pub(super) struct BodyHandler {
     pub(super) now: Instant,
@@ -23,8 +23,28 @@ impl BodyHandler {
     {
         let stats_tx = self.stats_tx.clone();
         let endpoint_id = self.endpoint_id;
-        let send_response_stat = move |kind, rtt| {
-            stats_tx
+        let outgoing = self.outgoing.clone();
+        let has_logger = outgoing.iter().any(|o| o.logger);
+        let send_response_stat = move |kind, rtt, template_values: Option<Arc<TemplateValues>>| {
+            let mut futures = Vec::new();
+            if let (stats::StatKind::RecoverableError(e), Some(template_values)) = (&kind, &template_values) {
+                if has_logger {
+                    let error = json::json!({
+                        "msg": format!("{}", e),
+                        "code": e.code(),
+                    });
+                    let mut tv = (&**template_values).clone();
+                    tv.insert("error".into(), error);
+                    for o in outgoing.iter() {
+                        if let (true, Ok(iter)) =  (o.logger, o.select.as_iter(tv.as_json().clone())) {
+                            let tx = o.tx.clone();
+                            let cb = o.cb.clone();
+                            futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                        }
+                    }
+                }
+            }
+            let b = stats_tx
                 .clone()
                 .send(
                     stats::ResponseStat {
@@ -35,25 +55,28 @@ impl BodyHandler {
                     }
                     .into(),
                 )
-                .map(|_| ())
+                .map(|_v| ())
                 .map_err(|e| {
                     TestError::Internal(
                         format!("unexpected error trying to send stats, {}", e).into(),
                     )
-                })
+                });
+            futures.push(Either::B(b));
+            join_all(futures).map(|_| ())
         };
         let rtt = self.now.elapsed().as_micros() as u64;
         let mut template_values = self.template_values;
+        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
         let mut futures = vec![Either3::B(send_response_stat(
             stats::StatKind::Response(self.status),
             Some(rtt),
+            None,
         ))];
         if let Some(mut f) = auto_returns.try_lock() {
             if let Some(f) = f.take() {
                 futures.push(Either3::C(f))
             }
         }
-        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
         match result {
             Ok(body) => {
                 if let Some(body) = body {
@@ -64,6 +87,7 @@ impl BodyHandler {
                         .expect("`response` in template_values should be an object")
                         .insert("body".into(), body);
                 }
+                let template_values = Arc::new(template_values);
                 let mut blocked = Vec::new();
                 for (i, o) in self.outgoing.iter().enumerate() {
                     if !self.included_outgoing_indexes.contains(&i) {
@@ -76,7 +100,7 @@ impl BodyHandler {
                         Ok(v) => v,
                         Err(TestError::Recoverable(r)) => {
                             let kind = stats::StatKind::RecoverableError(r);
-                            futures.push(Either3::B(send_response_stat(kind, None)));
+                            futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
                             continue;
                         }
                         Err(e) => return Either::B(Err(e).into_future()),
@@ -86,10 +110,11 @@ impl BodyHandler {
                             let tx = o.tx.clone();
                             let cb = o.cb.clone();
                             let send_response_stat = send_response_stat.clone();
+                            let template_values = template_values.clone();
                             let f = BlockSender::new(iter, tx, cb).or_else(move |e| {
                                 if let TestError::Recoverable(r) = e {
                                     let kind = stats::StatKind::RecoverableError(r);
-                                    Either::A(send_response_stat(kind, None))
+                                    Either::A(send_response_stat(kind, None, Some(template_values)))
                                 } else {
                                     Either::B(Err(e).into_future())
                                 }
@@ -107,7 +132,7 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(kind, None)));
+                                        futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
                                         break;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -126,7 +151,7 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(kind, None)));
+                                        futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
                                         break;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -155,77 +180,12 @@ impl BodyHandler {
                 }
             }
             Err(r) => {
+                let template_values = Arc::new(template_values);
                 let kind = stats::StatKind::RecoverableError(r);
-                futures.push(Either3::B(send_response_stat(kind, None)));
+                futures.push(Either3::B(send_response_stat(kind, None, Some(template_values))));
             }
         }
         Either::A(join_all(futures).map(|_| ()))
-    }
-}
-
-struct BlockSender<V: Iterator<Item = Result<json::Value, TestError>>> {
-    cb: Option<
-        std::sync::Arc<(dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static)>,
-    >,
-    last_value: Option<json::Value>,
-    tx: channel::Sender<serde_json::value::Value>,
-    value_added: bool,
-    values: V,
-}
-
-impl<V: Iterator<Item = Result<json::Value, TestError>>> BlockSender<V> {
-    fn new(
-        values: V,
-        tx: channel::Sender<serde_json::value::Value>,
-        cb: Option<
-            std::sync::Arc<
-                (dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static),
-            >,
-        >,
-    ) -> Self {
-        BlockSender {
-            cb,
-            last_value: None,
-            tx,
-            value_added: false,
-            values,
-        }
-    }
-}
-
-impl<V: Iterator<Item = Result<json::Value, TestError>>> Future for BlockSender<V> {
-    type Item = ();
-    type Error = TestError;
-
-    fn poll(&mut self) -> Result<Async<()>, TestError> {
-        loop {
-            let v = if let Some(v) = self.last_value.take() {
-                v
-            } else if let Some(r) = self.values.next() {
-                r?
-            } else {
-                return Ok(Async::Ready(()));
-            };
-            match self.tx.try_send(v) {
-                channel::SendState::Closed => return Ok(Async::Ready(())),
-                channel::SendState::Full(v) => {
-                    self.last_value = Some(v);
-                    return Ok(Async::NotReady);
-                }
-                channel::SendState::Success => {
-                    self.value_added = true;
-                }
-            }
-        }
-    }
-}
-
-impl<V: Iterator<Item = Result<json::Value, TestError>>> Drop for BlockSender<V> {
-    fn drop(&mut self) {
-        let _ = self.poll();
-        if let Some(cb) = &self.cb {
-            cb(self.value_added);
-        }
     }
 }
 
@@ -244,7 +204,7 @@ mod tests {
     fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
         let static_vars = BTreeMap::new();
         let eppp = json::from_value(s).unwrap();
-        let select = Select::new(eppp, &static_vars).unwrap();
+        let select = Select::new(eppp, &static_vars, false).unwrap();
         let (tx, rx) = channel::channel(Limit::Integer(1));
         let cb_called = Arc::new(AtomicUsize::new(0));
         let cb_called2 = cb_called.clone();

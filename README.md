@@ -17,6 +17,9 @@ Breaking changes:
 Bugfix:
 - Fix an issue where loggers would not log for a request if a warning level error happened.
 
+Changes:
+- Allow a logger to log test errors. This is done by making another variable available to loggers--`error` (in addition to `request`, `response` and `stats`). A logger can no longer have an error "indexing into json", instead it will resolve to `null`. This enables a logger which logs test errors along with the `request` and `response` if they are available.
+
 ### v0.4.11
 Changes:
 - Print a summary at the end of a try run.

@@ -52,23 +52,25 @@ impl Collect {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(Cow::into_owned)
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool,) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d, no_recoverable_error).map(Cow::into_owned)
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let mut value = None;
-        let mut arg_stream = self.arg.into_stream(providers);
+        let mut arg_stream = self.arg.into_stream(providers, no_recoverable_error);
         let random = self.random;
         let min = self.min;
         stream::poll_fn(move || {
@@ -180,24 +182,26 @@ impl Encode {
         self.encoding.encode(d).into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d).map(|v| self.evaluate_with_arg(&*v))
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool,) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d, no_recoverable_error).map(|v| self.evaluate_with_arg(&*v))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let encoding = self.encoding;
         self.arg
-            .into_stream(providers)
+            .into_stream(providers, no_recoverable_error)
             .map(move |(d, returns)| (encoding.encode(&d).into(), returns))
     }
 }
@@ -254,15 +258,16 @@ impl Entries {
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        let v = self.arg.evaluate(d)?;
+        let v = self.arg.evaluate(d, no_recoverable_error)?;
         let iter = Entries::evaluate_with_arg(v.into_owned()).map_a(iter::once);
         Ok(iter)
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
         self.arg
-            .evaluate(d)
+            .evaluate(d, no_recoverable_error)
             .map(|v| match Entries::evaluate_with_arg(v.into_owned()) {
                 Either::A(v) => v,
                 Either::B(b) => b.collect::<Vec<_>>().into(),
@@ -272,8 +277,9 @@ impl Entries {
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        self.arg.into_stream(providers).map(|(v, ar)| {
+        self.arg.into_stream(providers, no_recoverable_error).map(|(v, ar)| {
             let v = match Entries::evaluate_with_arg(v) {
                 Either::A(v) => v,
                 Either::B(b) => b.collect::<Vec<_>>().into(),
@@ -373,29 +379,31 @@ impl If {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        let first = self.first.evaluate(d)?;
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+        let first = self.first.evaluate(d, no_recoverable_error)?;
         if bool_value(&*first)? {
-            Ok(self.second.evaluate(d)?.into_owned())
+            Ok(self.second.evaluate(d, no_recoverable_error)?.into_owned())
         } else {
-            Ok(self.third.evaluate(d)?.into_owned())
+            Ok(self.third.evaluate(d, no_recoverable_error)?.into_owned())
         }
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let mut first = self.first.into_stream(providers);
-        let mut second = self.second.into_stream(providers);
-        let mut third = self.third.into_stream(providers);
+        let mut first = self.first.into_stream(providers, no_recoverable_error);
+        let mut second = self.second.into_stream(providers, no_recoverable_error);
+        let mut third = self.third.into_stream(providers, no_recoverable_error);
         let mut holder = None;
         stream::poll_fn(move || {
             if holder.is_none() {
@@ -493,27 +501,29 @@ impl Join {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
         self.arg
-            .evaluate(d)
+            .evaluate(d, no_recoverable_error)
             .map(|d| Join::evaluate_with_arg(&self.sep, &self.sep2, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let sep = self.sep;
         let sep2 = self.sep2;
         self.arg
-            .into_stream(providers)
+            .into_stream(providers, no_recoverable_error)
             .map(move |(d, returns)| (Join::evaluate_with_arg(&sep, &sep2, &d), returns))
     }
 }
@@ -684,26 +694,28 @@ impl Match {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
         self.arg
-            .evaluate(d)
+            .evaluate(d, no_recoverable_error)
             .map(|d| Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let capture_names = self.capture_names;
         let regex = self.regex;
-        self.arg.into_stream(providers).map(move |(d, returns)| {
+        self.arg.into_stream(providers, no_recoverable_error).map(move |(d, returns)| {
             (
                 Match::evaluate_with_arg(&regex, &capture_names, &d),
                 returns,
@@ -761,23 +773,25 @@ impl MinMax {
         )
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        let iter = self.args.iter().map(|fa| fa.evaluate(d));
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+        let iter = self.args.iter().map(|fa| fa.evaluate(d, no_recoverable_error));
         MinMax::eval_iter(self.min, iter).map(|d| d.0.into_owned())
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        self.evaluate(d).map(iter::once)
+        self.evaluate(d, no_recoverable_error).map(iter::once)
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let streams = self.args.into_iter().map(|fa| fa.into_stream(providers));
+        let streams = self.args.into_iter().map(|fa| fa.into_stream(providers, no_recoverable_error));
         let min = self.min;
         zip_all(streams).and_then(move |values| {
             let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
@@ -854,27 +868,29 @@ impl Pad {
         output.into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
         self.arg
-            .evaluate(d)
+            .evaluate(d, no_recoverable_error)
             .map(|d| Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d)?))
+        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
     }
 
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let padding = self.padding;
         let min_length = self.min_length;
         let start = self.start;
-        self.arg.into_stream(providers).map(move |(d, returns)| {
+        self.arg.into_stream(providers, no_recoverable_error).map(move |(d, returns)| {
             (
                 Pad::evaluate_with_arg(&padding, min_length, start, &d),
                 returns,
@@ -988,22 +1004,23 @@ impl Range {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> Result<json::Value, TestError> {
-        Ok(json::Value::Array(self.evaluate_as_iter(d)?.collect()))
+    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+        Ok(json::Value::Array(self.evaluate_as_iter(d, no_recoverable_error)?.collect()))
     }
 
     pub(super) fn evaluate_as_iter(
         &self,
         d: &json::Value,
+        no_recoverable_error: bool,
     ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
         let r = match self {
             Range::Args(first, second) => {
                 let first = first
-                    .evaluate(d)?
+                    .evaluate(d, no_recoverable_error)?
                     .as_u64()
                     .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 let second = second
-                    .evaluate(d)?
+                    .evaluate(d, no_recoverable_error)?
                     .as_u64()
                     .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 ReversibleRange::new(first, second)
@@ -1016,12 +1033,13 @@ impl Range {
     pub(super) fn into_stream(
         self,
         providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         match self {
             Range::Args(first, second) => {
                 let a = first
-                    .into_stream(providers)
-                    .zip(second.into_stream(providers))
+                    .into_stream(providers, no_recoverable_error)
+                    .zip(second.into_stream(providers, no_recoverable_error))
                     .and_then(|((first, mut returns), (second, returns2))| {
                         let first = first
                             .as_u64()
@@ -1038,7 +1056,7 @@ impl Range {
                 Either::A(a)
             }
             Range::Range(..) => {
-                let r = self.evaluate(&json::Value::Null).map(|v| (v, Vec::new()));
+                let r = self.evaluate(&json::Value::Null, no_recoverable_error).map(|v| (v, Vec::new()));
                 Either::B(stream::iter_result(iter::repeat(r)))
             }
         }
@@ -1152,7 +1170,7 @@ mod tests {
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
-            let left = c.evaluate(&json::Value::Null).unwrap();
+            let left = c.evaluate(&json::Value::Null, false).unwrap();
             assert_eq!(left, right);
         }
     }
@@ -1168,7 +1186,7 @@ mod tests {
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
-            let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null).unwrap().collect();
+            let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null, false).unwrap().collect();
             assert_eq!(left, right);
         }
     }
@@ -1194,7 +1212,7 @@ mod tests {
                 .into_iter()
                 .map(|(args, right, range)| {
                     let c = Collect::new(args).unwrap();
-                    c.into_stream(&providers).into_future().map(move |(v, _)| {
+                    c.into_stream(&providers, false).into_future().map(move |(v, _)| {
                         let (left, _) = v.unwrap();
                         if let Some((min, max)) = range {
                             if let json::Value::Array(v) = left {
@@ -1265,7 +1283,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Encode::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval).unwrap();
+                    let left = e.evaluate(&eval, false).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -1303,7 +1321,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Encode::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
                     assert_eq!(left, right)
                 }
                 Either::B(_) => unreachable!(),
@@ -1347,7 +1365,7 @@ mod tests {
                 .into_iter()
                 .map(|(args, right)| match Encode::new(args).unwrap() {
                     Either::A(e) => e
-                        .into_stream(&providers)
+                        .into_stream(&providers, false)
                         .into_future()
                         .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
                     Either::B(_) => unreachable!(),
@@ -1383,7 +1401,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             let e = Entries::new(args).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
-            let left = e.evaluate(&eval).unwrap();
+            let left = e.evaluate(&eval, false).unwrap();
             assert_eq!(left, right)
         }
     }
@@ -1414,7 +1432,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             let e = Entries::new(args).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
-            let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
+            let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
             assert_eq!(left, right)
         }
     }
@@ -1443,7 +1461,7 @@ mod tests {
                 .map(|(args, right)| {
                     Entries::new(args)
                         .unwrap()
-                        .into_stream(&providers)
+                        .into_stream(&providers, false)
                         .into_future()
                         .map(move |(v, _)| assert_eq!(v.unwrap().0, right))
                 })
@@ -1579,7 +1597,7 @@ mod tests {
                 Either::A(i) => i,
                 Either::B(_) => unreachable!(),
             };
-            let left: Vec<_> = i.evaluate_as_iter(&eval_arg).unwrap().collect();
+            let left: Vec<_> = i.evaluate_as_iter(&eval_arg, false).unwrap().collect();
             assert_eq!(left, expect);
         }
     }
@@ -1604,7 +1622,7 @@ mod tests {
                 .into_iter()
                 .map(|(args, right)| match If::new(args).unwrap() {
                     Either::A(e) => e
-                        .into_stream(&providers)
+                        .into_stream(&providers, false)
                         .into_future()
                         .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
                     Either::B(_) => unreachable!(),
@@ -1654,7 +1672,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Join::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval).unwrap();
+                    let left = e.evaluate(&eval, false).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -1683,7 +1701,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Join::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 Either::B(_) => unreachable!(),
@@ -1711,7 +1729,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match Join::new(args).unwrap() {
-                    Either::A(j) => j.into_stream(&providers).into_future().map(move |(v, _)| {
+                    Either::A(j) => j.into_stream(&providers, false).into_future().map(move |(v, _)| {
                         assert_eq!(v.unwrap().0, right);
                     }),
                     Either::B(_) => unreachable!(),
@@ -1871,7 +1889,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Match::new(args)) {
                 (Some(eval), Ok(Either::A(e))) => {
-                    let left = e.evaluate(&eval).unwrap();
+                    let left = e.evaluate(&eval, false).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Ok(Either::B(left))) => assert_eq!(left, right),
@@ -1899,7 +1917,7 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Match::new(args) {
                 Ok(Either::A(e)) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval).unwrap().collect();
+                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -1931,7 +1949,7 @@ mod tests {
                 .into_iter()
                 .map(|(args, right)| match Match::new(args) {
                     Ok(Either::A(m)) => {
-                        m.into_stream(&providers).into_future().map(move |(v, _)| {
+                        m.into_stream(&providers, false).into_future().map(move |(v, _)| {
                             assert_eq!(v.unwrap().0, right);
                         })
                     }
@@ -1989,7 +2007,7 @@ mod tests {
         for (min, args, eval, right) in checks.into_iter() {
             match (eval, MinMax::new(min, args).unwrap()) {
                 (Some(eval), Either::A(m)) => {
-                    let left = m.evaluate(&eval).unwrap();
+                    let left = m.evaluate(&eval, false).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -2018,7 +2036,7 @@ mod tests {
 
         for (min, args, eval, right) in checks.into_iter() {
             if let Either::A(m) = MinMax::new(min, args).unwrap() {
-                let left: Vec<_> = m.evaluate_as_iter(&eval).unwrap().collect();
+                let left: Vec<_> = m.evaluate_as_iter(&eval, false).unwrap().collect();
                 assert_eq!(left, vec!(right))
             } else {
                 unreachable!();
@@ -2045,7 +2063,7 @@ mod tests {
                 .into_iter()
                 .map(|(min, args, right)| {
                     if let Either::A(m) = MinMax::new(min, args).unwrap() {
-                        m.into_stream(&providers).into_future().map(move |(v, _)| {
+                        m.into_stream(&providers, false).into_future().map(move |(v, _)| {
                             assert_eq!(v.unwrap().0, right);
                         })
                     } else {
@@ -2114,7 +2132,7 @@ mod tests {
         for (start, args, eval, right) in checks.into_iter() {
             match (eval, Pad::new(start, args).unwrap()) {
                 (Some(eval), Either::A(p)) => {
-                    let left = p.evaluate(&eval).unwrap();
+                    let left = p.evaluate(&eval, false).unwrap();
                     assert_eq!(left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
@@ -2156,7 +2174,7 @@ mod tests {
         for (start, args, eval, right) in checks.into_iter() {
             match Pad::new(start, args).unwrap() {
                 Either::A(p) => {
-                    let left: Vec<_> = p.evaluate_as_iter(&eval).unwrap().collect();
+                    let left: Vec<_> = p.evaluate_as_iter(&eval, false).unwrap().collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -2201,7 +2219,7 @@ mod tests {
                 .map(
                     |(start, args, right)| match Pad::new(start, args).unwrap() {
                         Either::A(p) => {
-                            p.into_stream(&providers).into_future().map(move |(v, _)| {
+                            p.into_stream(&providers, false).into_future().map(move |(v, _)| {
                                 assert_eq!(v.unwrap().0, right);
                             })
                         }
@@ -2284,7 +2302,7 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let r = Range::new(args).unwrap();
-            let left = r.evaluate(&data).unwrap();
+            let left = r.evaluate(&data, false).unwrap();
             assert_eq!(left, right);
         }
     }
@@ -2305,7 +2323,7 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let r = Range::new(args).unwrap();
-            let left: Vec<_> = r.evaluate_as_iter(&data).unwrap().collect();
+            let left: Vec<_> = r.evaluate_as_iter(&data, false).unwrap().collect();
             let right = if let json::Value::Array(v) = right {
                 v
             } else {
@@ -2336,7 +2354,7 @@ mod tests {
                 .into_iter()
                 .map(move |(args, right)| {
                     let r = Range::new(args).unwrap();
-                    r.into_stream(&providers).into_future().map(move |(v, _)| {
+                    r.into_stream(&providers, false).into_future().map(move |(v, _)| {
                         assert_eq!(v.unwrap().0, right);
                     })
                 })

@@ -48,7 +48,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TemplateValues(json::Value);
 
 impl TemplateValues {
@@ -225,7 +225,7 @@ impl Builder {
             .headers
             .into_iter()
             .map(|(key, v)| {
-                let value = Template::new(&v, &ctx.static_vars)?;
+                let value = Template::new(&v, &ctx.static_vars, false)?;
                 required_providers.extend(value.get_providers().clone());
                 Ok::<_, TestError>((key.to_lowercase(), value))
             })
@@ -304,12 +304,12 @@ impl Builder {
             .map(|body| {
                 let value = match body {
                     config::Body::File(body) => {
-                        let template = Template::new(&body, &ctx.static_vars)?;
+                        let template = Template::new(&body, &ctx.static_vars, false)?;
                         required_providers.extend(template.get_providers().clone());
                         BodyTemplate::File(ctx.config_path.clone(), template)
                     }
                     config::Body::String(body) => {
-                        let template = Template::new(&body, &ctx.static_vars)?;
+                        let template = Template::new(&body, &ctx.static_vars, false)?;
                         required_providers.extend(template.get_providers().clone());
                         BodyTemplate::String(template)
                     }
@@ -319,12 +319,12 @@ impl Builder {
                             .map(|(name, v)| {
                                 let (is_file, template) = match v.body {
                                     config::BodyMultipartPieceBody::File(f) => {
-                                        let template = Template::new(&f, &ctx.static_vars)?;
+                                        let template = Template::new(&f, &ctx.static_vars, false)?;
                                         required_providers.extend(template.get_providers().clone());
                                         (true, template)
                                     }
                                     config::BodyMultipartPieceBody::String(s) => {
-                                        let template = Template::new(&s, &ctx.static_vars)?;
+                                        let template = Template::new(&s, &ctx.static_vars, false)?;
                                         required_providers.extend(template.get_providers().clone());
                                         (false, template)
                                     }
@@ -333,7 +333,7 @@ impl Builder {
                                     .headers
                                     .into_iter()
                                     .map(|(k, v)| {
-                                        let template = Template::new(&v, &ctx.static_vars)?;
+                                        let template = Template::new(&v, &ctx.static_vars, false)?;
                                         required_providers.extend(template.get_providers().clone());
                                         Ok::<_, TestError>((k, template))
                                     })
@@ -363,9 +363,9 @@ impl Builder {
         for (name, d) in self.declare {
             required_providers.remove(&name);
             let vce =
-                config::ValueOrExpression::new(&d, &mut required_providers2, &ctx.static_vars)?;
+                config::ValueOrExpression::new(&d, &mut required_providers2, &ctx.static_vars, false)?;
             let stream = vce
-                .into_stream(&ctx.providers)
+                .into_stream(&ctx.providers, false)
                 .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
             streams.push((false, Box::new(stream)));
         }
@@ -751,5 +751,71 @@ impl Endpoint {
                     })
                 }),
         )
+    }
+}
+
+struct BlockSender<V: Iterator<Item = Result<json::Value, TestError>>> {
+    cb: Option<
+        std::sync::Arc<(dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static)>,
+    >,
+    last_value: Option<json::Value>,
+    tx: channel::Sender<serde_json::value::Value>,
+    value_added: bool,
+    values: V,
+}
+
+impl<V: Iterator<Item = Result<json::Value, TestError>>> BlockSender<V> {
+    fn new(
+        values: V,
+        tx: channel::Sender<serde_json::value::Value>,
+        cb: Option<
+            std::sync::Arc<
+                (dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static),
+            >,
+        >,
+    ) -> Self {
+        BlockSender {
+            cb,
+            last_value: None,
+            tx,
+            value_added: false,
+            values,
+        }
+    }
+}
+
+impl<V: Iterator<Item = Result<json::Value, TestError>>> Future for BlockSender<V> {
+    type Item = ();
+    type Error = TestError;
+
+    fn poll(&mut self) -> Result<Async<()>, TestError> {
+        loop {
+            let v = if let Some(v) = self.last_value.take() {
+                v
+            } else if let Some(r) = self.values.next() {
+                r?
+            } else {
+                return Ok(Async::Ready(()));
+            };
+            match self.tx.try_send(v) {
+                channel::SendState::Closed => return Ok(Async::Ready(())),
+                channel::SendState::Full(v) => {
+                    self.last_value = Some(v);
+                    return Ok(Async::NotReady);
+                }
+                channel::SendState::Success => {
+                    self.value_added = true;
+                }
+            }
+        }
+    }
+}
+
+impl<V: Iterator<Item = Result<json::Value, TestError>>> Drop for BlockSender<V> {
+    fn drop(&mut self) {
+        let _ = self.poll();
+        if let Some(cb) = &self.cb {
+            cb(self.value_added);
+        }
     }
 }

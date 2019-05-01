@@ -8,20 +8,6 @@ config:
       test: 123
 loggers:
   l:
-    select: >-
-      (response.body.b == "foo"
-        && response.body.e == response.body.e2
-        && request.headers.test == "123")
-      &&
-      (
-        (response.body.a == 0
-          && response.body.c == 123
-          && response.body.f == "line1")
-        ||
-        (response.body.a == 1
-          && response.body.c == 456
-          && response.body.f == "line2")
-      )
     limit: 2
     to: stdout
   l2:
@@ -53,6 +39,22 @@ endpoints:
     peak_load: 1hps
     headers:
       Content-Type: application/json
+    logs:
+      l:
+        select: >-
+          (response.body.b == "foo"
+            && response.body.e == response.body.e2
+            && request.headers.test == "123")
+          &&
+          (
+            (response.body.a == 0
+              && response.body.c == 123
+              && response.body.f == "line1")
+            ||
+            (response.body.a == 1
+              && response.body.c == 456
+              && response.body.f == "line2")
+          )
   - method: POST
     declare:
       e: collect(b, 3)

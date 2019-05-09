@@ -1250,7 +1250,7 @@ impl Select {
                     .filter_map(Result::transpose),
             )
         };
-        Ok(r)
+        Ok(r.fuse())
     }
 }
 

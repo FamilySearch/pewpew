@@ -159,7 +159,7 @@ impl<T> Sender<T> {
             SendState::Success
         } else {
             self.parked_senders.park();
-            if self.receiver_count.load(Ordering::Acquire) == 0 {
+            if self.no_receivers() {
                 SendState::Closed
             } else {
                 SendState::Full(item)

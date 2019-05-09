@@ -12,7 +12,7 @@ use crate::error::TestError;
 use channel::Limit;
 use ether::{Either, Either3};
 use hyper::Method;
-use mod_interval::{HitsPer, LinearBuilder, LinearScaling, ModInterval};
+use mod_interval::{HitsPer, LinearBuilder, ModInterval};
 use rand::{
     distributions::{Distribution, Uniform},
     Rng,
@@ -52,15 +52,25 @@ pub enum LoadPattern {
 }
 
 impl LoadPattern {
-    pub fn build<E>(self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
+    pub fn build(
+        self,
+        peak_load: &HitsPer,
+        scale_fn_updater: Option<mod_interval::LoadUpdateChannel>,
+    ) -> ModInterval<TestError> {
         match self {
-            LoadPattern::Linear(lb) => lb.build(peak_load),
+            LoadPattern::Linear(lb) => lb.build(peak_load, scale_fn_updater),
         }
     }
 
     pub fn duration(&self) -> Duration {
         match self {
             LoadPattern::Linear(lb) => lb.duration(),
+        }
+    }
+
+    pub fn builder(self) -> LinearBuilder {
+        match self {
+            LoadPattern::Linear(lb) => lb,
         }
     }
 }
@@ -436,6 +446,8 @@ pub struct GeneralConfig {
     pub bucket_size: Option<PreDuration>,
     #[serde(default)]
     pub log_provider_stats: Option<PreDuration>,
+    #[serde(default)]
+    pub watch_transition_time: Option<PreDuration>,
 }
 
 impl Default for GeneralConfig {
@@ -444,6 +456,7 @@ impl Default for GeneralConfig {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: None,
             log_provider_stats: None,
+            watch_transition_time: None,
         }
     }
 }

@@ -18,6 +18,7 @@ fn int1() {
         output_format: pewpew::RunOutputFormat::Human,
         results_dir: "./".into(),
         stats_file_format: pewpew::StatsFileFormat::Json,
+        watch_config_file: false,
     };
     let exec_config = pewpew::ExecConfig::Run(run_config);
 

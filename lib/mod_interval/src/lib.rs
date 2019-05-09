@@ -7,19 +7,18 @@ use std::{
     vec,
 };
 
-const NANOS_IN_SECOND: u32 = 1_000_000_000;
+const NANOS_IN_SECOND: f64 = 1_000_000_000.0;
 
-#[inline]
+pub type LoadUpdateChannel = channel::Receiver<(LinearScaling, Option<Duration>)>;
+
 fn nanos_to_duration(n: f64) -> Duration {
-    let secs = n as u64 / u64::from(NANOS_IN_SECOND);
-    let nanos = (n % f64::from(NANOS_IN_SECOND)) as u32;
-    Duration::new(secs, nanos)
+    Duration::from_nanos(n as u64)
 }
 
 #[derive(Debug)]
 pub enum HitsPer {
-    Second(u32),
-    Minute(u32),
+    Second(f32),
+    Minute(f32),
 }
 
 // x represents the time elapsed in the test
@@ -56,8 +55,12 @@ impl LinearBuilder {
         self.duration
     }
 
-    pub fn build<E>(self, peak_load: &HitsPer) -> ModInterval<LinearScaling, E> {
-        ModInterval::new(LinearScaling::new(self, peak_load))
+    pub fn build<E>(
+        self,
+        peak_load: &HitsPer,
+        scale_fn_updater: Option<channel::Receiver<(LinearScaling, Option<Duration>)>>,
+    ) -> ModInterval<E> {
+        ModInterval::new(LinearScaling::new(self, peak_load), scale_fn_updater)
     }
 }
 
@@ -112,10 +115,46 @@ impl LinearScaling {
             duration_offset: 0.0,
         }
     }
+
+    fn transition_from(
+        &mut self,
+        from: &mut LinearScaling,
+        transition_time: Duration,
+        time_elapsed: Duration,
+    ) {
+        let time_elapsed = time_elapsed.as_nanos() as f64;
+        let elapsed_plus_transition_time = transition_time.as_nanos() as f64 + time_elapsed;
+
+        // create the transition piece for the load_pattern
+        let x1 = time_elapsed;
+        let y1 = NANOS_IN_SECOND / from.y(x1);
+        let x2 = elapsed_plus_transition_time.min(self.duration);
+        let y2 = NANOS_IN_SECOND / self.y(x2);
+        let current = LinearScalingPiece::new_from_points(x1, y1, x2, y2);
+        let current = std::mem::replace(&mut self.current, current);
+
+        self.duration_offset += x1 - self.duration_offset;
+        let next_piece = if elapsed_plus_transition_time > self.duration {
+            None
+        } else {
+            Some(current)
+        };
+        // splice the transition into the next piece
+        if let Some(mut next_piece) = next_piece {
+            let x_diff = x2 - x1;
+            let x1 = x2;
+            let y1 = y2;
+            let x2 = next_piece.duration + x2 - x_diff;
+            let y2 = NANOS_IN_SECOND / next_piece.y(next_piece.duration);
+            let next_piece = LinearScalingPiece::new_from_points(x1, y1, x2, y2);
+            let mut pieces = vec![next_piece];
+            pieces.extend(&mut self.pieces);
+            self.pieces = pieces.into_iter();
+        }
+    }
 }
 
 impl ScaleFn for LinearScaling {
-    #[inline]
     fn y(&mut self, mut x: f64) -> f64 {
         while x - self.duration_offset >= self.current.duration {
             if let Some(current) = self.pieces.next() {
@@ -129,13 +168,12 @@ impl ScaleFn for LinearScaling {
         self.current.y(x)
     }
 
-    #[inline]
     fn max_x(&self) -> f64 {
         self.duration
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LinearScalingPiece {
     duration: f64,
     max_y: f64,
@@ -145,15 +183,9 @@ pub struct LinearScalingPiece {
 
 impl LinearScalingPiece {
     pub fn new(start_percent: f64, end_percent: f64, duration: f64, peak_load: f64) -> Self {
-        let a = f64::from(NANOS_IN_SECOND);
         let b = peak_load * start_percent;
         let m = (end_percent * peak_load - b) / duration;
-        // find y where y = 0.5x
-        let max_y = if m >= 0.0 {
-            (-b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m)
-        } else {
-            -((b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m))
-        };
+        let max_y = LinearScalingPiece::calc_max_y(b, m);
         LinearScalingPiece {
             b,
             duration,
@@ -161,16 +193,35 @@ impl LinearScalingPiece {
             max_y,
         }
     }
+
+    fn new_from_points(x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
+        let m = (y2 - y1) / (x2 - x1);
+        let max_y = LinearScalingPiece::calc_max_y(y1, m);
+        LinearScalingPiece {
+            b: y1,
+            duration: x2 - x1,
+            m,
+            max_y,
+        }
+    }
+
+    fn calc_max_y(b: f64, m: f64) -> f64 {
+        let a = NANOS_IN_SECOND;
+        // find y where y = 0.5x
+        if m >= 0.0 {
+            (-b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m)
+        } else {
+            -((b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m))
+        }
+    }
 }
 
 impl ScaleFn for LinearScalingPiece {
-    #[inline]
     fn y(&mut self, x: f64) -> f64 {
         let hps = self.m * x + self.b;
-        self.max_y.min(f64::from(NANOS_IN_SECOND) / hps)
+        self.max_y.min(NANOS_IN_SECOND / hps)
     }
 
-    #[inline]
     fn max_x(&self) -> f64 {
         self.duration
     }
@@ -179,56 +230,78 @@ impl ScaleFn for LinearScalingPiece {
 /// A stream representing notifications at a modulating interval.
 /// This stream also has a built in end time
 #[must_use = "streams do nothing unless polled"]
-pub struct ModInterval<T, E>
-where
-    T: ScaleFn + Send,
-{
+pub struct ModInterval<E> {
     _e: std::marker::PhantomData<E>,
     delay: Delay,
-    scale_fn: T,
+    scale_fn: LinearScaling,
+    scale_fn_updater: Option<LoadUpdateChannel>,
     start_end_time: Option<(Instant, Instant)>,
 }
 
-impl<T, E> ModInterval<T, E>
-where
-    T: ScaleFn + Send,
-{
-    pub fn new(scale_fn: T) -> Self {
+impl<E> ModInterval<E> {
+    pub fn new(scale_fn: LinearScaling, scale_fn_updater: Option<LoadUpdateChannel>) -> Self {
         ModInterval {
             _e: std::marker::PhantomData,
             delay: Delay::new(Instant::now()),
             scale_fn,
+            scale_fn_updater,
             start_end_time: None,
         }
     }
 }
 
-impl<T, E> Stream for ModInterval<T, E>
+impl<E> Stream for ModInterval<E>
 where
-    T: ScaleFn + Send,
     E: From<tokio::timer::Error>,
 {
     type Item = Instant;
     type Error = E;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let now = Instant::now();
         // deadline represents a time when the next item will be provided from the stream
         let mut deadline = Delay::deadline(&self.delay);
-        let (start_time, end_time) = match self.start_end_time {
+        let (start_time, mut end_time) = match self.start_end_time {
             // the first time `poll` is called
             None => {
-                let start = Instant::now();
-                let end = start + nanos_to_duration(self.scale_fn.max_x());
-                deadline = start + nanos_to_duration(self.scale_fn.y(0.0));
+                let end = now + nanos_to_duration(self.scale_fn.max_x());
+                deadline = now + nanos_to_duration(self.scale_fn.y(0.0));
                 self.delay.reset(deadline);
-                self.start_end_time = Some((start, end));
-                (start, end)
+                self.start_end_time = Some((now, end));
+                (now, end)
             }
             // subsequent calls to `poll`
             Some(t) => t,
         };
 
-        let now = Instant::now();
+        let update_delay = move |s: &mut Self, current: Instant| {
+            // Calculate how long the next delay should be
+            let next_deadline = {
+                let x = (current - start_time).as_nanos() as f64;
+                let y = s.scale_fn.y(x);
+                cmp::min(start_time + nanos_to_duration(y + x), end_time)
+            };
+
+            // set the next delay
+            s.delay.reset(next_deadline);
+        };
+
+        if let Some(updater) = &mut self.scale_fn_updater {
+            let mut update = None;
+            while let Ok(Async::Ready(u @ Some(_))) = updater.poll() {
+                update = u;
+            }
+            if let Some((mut scale_fn, transition_time)) = update {
+                if let Some(transition_time) = transition_time {
+                    scale_fn.transition_from(&mut self.scale_fn, transition_time, now - start_time);
+                    end_time = start_time + nanos_to_duration(scale_fn.max_x());
+                    self.start_end_time = Some((start_time, end_time));
+                }
+                self.scale_fn = scale_fn;
+                update_delay(self, now);
+            }
+        }
+
         // if we've reached the end
         if now >= end_time {
             return Ok(Async::Ready(None));
@@ -237,15 +310,7 @@ where
             try_ready!(self.delay.poll());
         }
 
-        // Calculate how long the next delay should be
-        let next_deadline = {
-            let x = (deadline - start_time).as_nanos() as f64;
-            let y = self.scale_fn.y(x);
-            cmp::min(start_time + nanos_to_duration(y + x), end_time)
-        };
-
-        // set the next delay
-        self.delay.reset(next_deadline);
+        update_delay(self, deadline);
 
         // Return the current instant
         Ok(Some(deadline).into())
@@ -264,7 +329,7 @@ mod tests {
                 0.0,
                 1.0,
                 30,
-                HitsPer::Second(12),
+                HitsPer::Second(12.0),
                 // at time t (in seconds), we should be at x hps
                 vec![(0.0, 0.447_213), (10.0, 4.0), (15.0, 6.0), (30.0, 12.0)],
             ),
@@ -272,28 +337,28 @@ mod tests {
                 0.0,
                 1.0,
                 30,
-                HitsPer::Minute(720),
+                HitsPer::Minute(720.0),
                 vec![(0.0, 0.447_213), (10.0, 4.0), (15.0, 6.0), (30.0, 12.0)],
             ),
             (
                 0.5,
                 1.0,
                 30,
-                HitsPer::Second(12),
+                HitsPer::Second(12.0),
                 vec![(0.0, 6.0), (10.0, 8.0), (15.0, 9.0), (30.0, 12.0)],
             ),
             (
                 0.0,
                 1.0,
                 60,
-                HitsPer::Second(1),
+                HitsPer::Second(1.0),
                 vec![(0.0, 0.091_287), (15.0, 0.25), (30.0, 0.5), (60.0, 1.0)],
             ),
             (
                 1.0,
                 0.0,
                 60 * 60 * 12,
-                HitsPer::Second(12),
+                HitsPer::Second(12.0),
                 vec![
                     (0.0, 12.0),
                     (21_600.0, 6.0),
@@ -305,7 +370,7 @@ mod tests {
                 0.1,
                 0.0,
                 60 * 60 * 12,
-                HitsPer::Second(10),
+                HitsPer::Second(10.0),
                 vec![
                     (0.0, 1.0),
                     (21_600.0, 0.5),
@@ -317,23 +382,23 @@ mod tests {
                 1.0,
                 1.0,
                 60,
-                HitsPer::Second(10),
+                HitsPer::Second(10.0),
                 vec![(0.0, 10.0), (15.0, 10.0), (30.0, 10.0), (60.0, 10.0)],
             ),
             (
                 0.5,
                 0.5,
                 60,
-                HitsPer::Second(10),
+                HitsPer::Second(10.0),
                 vec![(0.0, 5.0), (15.0, 5.0), (30.0, 5.0), (60.0, 5.0)],
             ),
         ];
-        let nis = f64::from(NANOS_IN_SECOND);
+        let nis = NANOS_IN_SECOND;
         for (i, (start_percent, end_percent, duration, hitsper, expects)) in
             checks.into_iter().enumerate()
         {
             let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let mut scale_fn = lb.build::<()>(&hitsper).scale_fn;
+            let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
             for (i2, (secs, hps)) in expects.iter().enumerate() {
                 let nanos = secs * nis;
                 let right = 1.0 / (scale_fn.y(nanos) / nis);
@@ -354,9 +419,9 @@ mod tests {
         let mut lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
-        let hitsper = HitsPer::Second(10);
-        let mut scale_fn = lb.build::<()>(&hitsper).scale_fn;
-        let nis = f64::from(NANOS_IN_SECOND);
+        let hitsper = HitsPer::Second(10.0);
+        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        let nis = NANOS_IN_SECOND;
         let mut y_values: std::collections::VecDeque<_> = (0..60)
             .step_by(10)
             .chain((120..=180).step_by(10))
@@ -379,5 +444,139 @@ mod tests {
                 _ => break,
             }
         }
+    }
+
+    #[test]
+    fn transitions_work() {
+        let mut lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
+        lb.append(99.0, 500.0, Duration::from_secs(60));
+        lb.append(1.0, 0.5, Duration::from_secs(60));
+        let hitsper = HitsPer::Second(10.0);
+        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
+        lb.append(99.0, 500.0, Duration::from_secs(60));
+        lb.append(1.0, 0.5, Duration::from_secs(60));
+        lb.append(1.0, 1.0, Duration::from_secs(60));
+        let mut scale_fn2 = lb.build::<()>(&hitsper, None).scale_fn;
+        scale_fn2.transition_from(
+            &mut scale_fn,
+            Duration::from_secs(10),
+            Duration::from_secs(3 * 60),
+        );
+
+        let left = scale_fn2.duration;
+        let right = 240_000_000_000.0;
+        assert!(left.eq(&right), "total duration {} != {}", left, right);
+
+        let left = scale_fn2.current.duration;
+        let right = 10_000_000_000.0;
+        assert!(left.eq(&right), "transition duration {} != {}", left, right);
+
+        let left = scale_fn2.current.y(0.0).trunc();
+        let right = 200_000_000.0;
+        assert!(left.eq(&right), "transition @ x = 0 {} != {}", left, right);
+
+        let left = scale_fn2.y(scale_fn2.duration_offset).trunc();
+        let right = 200_000_000.0;
+        assert!(
+            left.eq(&right),
+            "scale_fn @ x = duration offset {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
+        let right = 100_000_000.0;
+        assert!(
+            left.eq(&right),
+            "transition @ x = end {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2
+            .y(scale_fn2.duration_offset + scale_fn2.current.duration)
+            .trunc();
+        let right = 100_000_000.0;
+        assert!(
+            left.eq(&right),
+            "scale_fn @ x = current duration {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2.current.duration;
+        let right = 50_000_000_000.0;
+        assert!(
+            left.eq(&right),
+            "spliced piece duration {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2.current.y(0.0).trunc();
+        let right = 100_000_000.0;
+        assert!(
+            left.eq(&right),
+            "spliced piece @ x = 0 {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
+        let right = 100_000_000.0;
+        assert!(
+            left.eq(&right),
+            "spliced piece @ x = end {} != {}",
+            left,
+            right
+        );
+
+        let next = scale_fn2.pieces.next();
+        assert!(
+            next.is_none(),
+            "there should not be any pieces after spliced piece"
+        );
+
+        let mut lb = LinearBuilder::new(0.4, 1.0, Duration::from_secs(60));
+        lb.append(99.0, 500.0, Duration::from_secs(60));
+        lb.append(1.0, 0.5, Duration::from_secs(60));
+        let hitsper = HitsPer::Second(10.0);
+        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        lb = LinearBuilder::new(1.2, 1.8, Duration::from_secs(60));
+        let mut scale_fn2 = lb.build::<()>(&hitsper, None).scale_fn;
+        scale_fn2.transition_from(
+            &mut scale_fn,
+            Duration::from_secs(20),
+            Duration::from_secs(50),
+        );
+
+        let left = scale_fn2.current.duration;
+        let right = 10_000_000_000.0;
+        assert!(
+            left.eq(&right),
+            "transition2 duration (should be cut short) {} != {}",
+            left,
+            right
+        );
+
+        let left = scale_fn2.current.y(0.0).trunc();
+        let right = 111_111_111.0;
+        assert!(left.eq(&right), "transition2 @ x = 0 {} != {}", left, right);
+
+        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
+        let right = 55_555_555.0;
+        assert!(
+            left.eq(&right),
+            "transition2 @ x = end {} != {}",
+            left,
+            right
+        );
+
+        let next = scale_fn2.pieces.next();
+        assert!(
+            next.is_none(),
+            "there should not be any pieces after transition2"
+        );
     }
 }

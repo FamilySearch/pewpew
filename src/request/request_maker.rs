@@ -210,70 +210,69 @@ impl RequestMaker {
                     RecoverableError::Timeout(SystemTime::now()).into()
                 }
             })
-            .then(move |result| {
-                match result {
-                    Ok(response) => {
-                        let rh = ResponseHandler {
-                            template_values,
-                            precheck_rr_providers,
-                            outgoing,
-                            now,
-                            stats_tx,
-                            endpoint_id,
-                        };
-                        Either3::A(rh.handle(response, auto_returns))
-                    }
-                    Err(te) => {
-                        match te {
-                            TestError::Recoverable(r) => {
-                                let mut futures = Vec::new();
-                                if outgoing.iter().any(|o| o.logger) {
-                                    let error = json::json!({
-                                        "msg": format!("{}", r),
-                                        "code": r.code(),
-                                    });
-                                    template_values.insert("error".into(), error);
-                                    for o in outgoing.iter() {
-                                        if let (true, Ok(iter)) =  (o.logger, o.select.as_iter(template_values.as_json().clone())) {
-                                            let tx = o.tx.clone();
-                                            let cb = o.cb.clone();
-                                            futures.push(Either::A(BlockSender::new(iter, tx, cb)));
-                                        }
-                                    }
-                                }
-                                let time = match r {
-                                    RecoverableError::Timeout(t) | RecoverableError::ConnectionErr(t, _) => t,
-                                    _ => SystemTime::now(),
-                                };
-                                let rtt = match r {
-                                    RecoverableError::Timeout(_) => Some(timeout_in_micros),
-                                    _ => None,
-                                };
-                                for o in outgoing2.iter() {
-                                    if let Some(cb) = &o.cb {
-                                        cb(false);
-                                    }
-                                }
-                                let f = stats_tx2
-                                    .send(
-                                        stats::ResponseStat {
-                                            endpoint_id,
-                                            kind: stats::StatKind::RecoverableError(r),
-                                            rtt,
-                                            time,
-                                        }
-                                        .into(),
-                                    )
-                                    .then(|_| Ok(()));
-                                futures.push(Either::B(f));
-                                let b = join_all(futures)
-                                    .map(|_| ());
-                                Either3::B(b)
-                            }
-                            _ => Either3::C(Err(te).into_future()),
-                        }
-                    }
+            .then(move |result| match result {
+                Ok(response) => {
+                    let rh = ResponseHandler {
+                        template_values,
+                        precheck_rr_providers,
+                        outgoing,
+                        now,
+                        stats_tx,
+                        endpoint_id,
+                    };
+                    Either3::A(rh.handle(response, auto_returns))
                 }
+                Err(te) => match te {
+                    TestError::Recoverable(r) => {
+                        let mut futures = Vec::new();
+                        if outgoing.iter().any(|o| o.logger) {
+                            let error = json::json!({
+                                "msg": format!("{}", r),
+                                "code": r.code(),
+                            });
+                            template_values.insert("error".into(), error);
+                            for o in outgoing.iter() {
+                                if let (true, Ok(iter)) = (
+                                    o.logger,
+                                    o.select.as_iter(template_values.as_json().clone()),
+                                ) {
+                                    let tx = o.tx.clone();
+                                    let cb = o.cb.clone();
+                                    futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                                }
+                            }
+                        }
+                        let time = match r {
+                            RecoverableError::Timeout(t)
+                            | RecoverableError::ConnectionErr(t, _) => t,
+                            _ => SystemTime::now(),
+                        };
+                        let rtt = match r {
+                            RecoverableError::Timeout(_) => Some(timeout_in_micros),
+                            _ => None,
+                        };
+                        for o in outgoing2.iter() {
+                            if let Some(cb) = &o.cb {
+                                cb(false);
+                            }
+                        }
+                        let f = stats_tx2
+                            .send(
+                                stats::ResponseStat {
+                                    endpoint_id,
+                                    kind: stats::StatKind::RecoverableError(r),
+                                    rtt,
+                                    time,
+                                }
+                                .into(),
+                            )
+                            .then(|_| Ok(()));
+                        futures.push(Either::B(f));
+                        let b = join_all(futures).map(|_| ());
+                        Either3::B(b)
+                    }
+                    _ => Either3::C(Err(te).into_future()),
+                },
             })
             .and_then(move |_| {
                 if let Some(mut f) = auto_returns2.try_lock() {

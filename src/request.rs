@@ -362,8 +362,12 @@ impl Builder {
         let mut required_providers2 = BTreeSet::new();
         for (name, d) in self.declare {
             required_providers.remove(&name);
-            let vce =
-                config::ValueOrExpression::new(&d, &mut required_providers2, &ctx.static_vars, false)?;
+            let vce = config::ValueOrExpression::new(
+                &d,
+                &mut required_providers2,
+                &ctx.static_vars,
+                false,
+            )?;
             let stream = vce
                 .into_stream(&ctx.providers, false)
                 .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));

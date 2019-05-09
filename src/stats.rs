@@ -121,6 +121,8 @@ struct RollingAggregateStats {
     file_name: PathBuf,
     #[serde(skip_serializing)]
     last_print_time: Cell<u64>,
+    #[serde(skip)]
+    start_time: Option<Instant>,
 }
 
 impl RollingAggregateStats {
@@ -131,6 +133,7 @@ impl RollingAggregateStats {
             end_time: None,
             file_name,
             last_print_time: Cell::new(0),
+            start_time: None,
         }
     }
 
@@ -771,18 +774,40 @@ where
                         .into_future(),
                 ),
                 StatsMessage::Start(d) => {
-                    stats.end_time = Some(Instant::now() + d);
-                    let test_end_message = duration_till_end_to_pretty_string(d);
-                    let msg = match output_format {
-                        RunOutputFormat::Human => {
-                            format!("Starting load test. {}\n", test_end_message)
-                        }
-                        RunOutputFormat::Json => format!(
-                            "{{\"type\":\"start\",\"msg\":\"{}\",\"binVersion\":\"{}\"}}\n",
-                            test_end_message,
-                            clap::crate_version!()
-                        ),
+                    let (start_time, msg) = if let Some(start_time) = stats.start_time {
+                        let msg = if Some(start_time + d) == stats.end_time {
+                            String::new()
+                        } else {
+                            let test_end_message =
+                                duration_till_end_to_pretty_string(start_time + d - Instant::now());
+                            match output_format {
+                                RunOutputFormat::Human => {
+                                    format!("Test duration updated. {}\n", test_end_message)
+                                }
+                                RunOutputFormat::Json => format!(
+                                    "{{\"type\":\"duration_updated\",\"msg\":\"{}\"}}\n",
+                                    test_end_message
+                                ),
+                            }
+                        };
+                        (start_time, msg)
+                    } else {
+                        let now = Instant::now();
+                        let test_end_message = duration_till_end_to_pretty_string(d);
+                        let msg = match output_format {
+                            RunOutputFormat::Human => {
+                                format!("Starting load test. {}\n", test_end_message)
+                            }
+                            RunOutputFormat::Json => format!(
+                                "{{\"type\":\"start\",\"msg\":\"{}\",\"binVersion\":\"{}\"}}\n",
+                                test_end_message,
+                                clap::crate_version!()
+                            ),
+                        };
+                        (now, msg)
                     };
+                    stats.start_time = Some(start_time);
+                    stats.end_time = Some(start_time + d);
                     let a = write_all(stderr(), msg).then(|_| Ok(()));
                     Either::A(a)
                 }

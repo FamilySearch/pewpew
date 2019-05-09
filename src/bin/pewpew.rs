@@ -32,7 +32,7 @@ fn main() {
         .about("The HTTP load test tool https://fs-eng.github.io/pewpew")
         .version(crate_version!())
         .setting(AppSettings::DisableHelpSubcommand)
-        .setting(AppSettings::InferSubcommands)
+        // .setting(AppSettings::InferSubcommands) // disabled until https://github.com/clap-rs/clap/issues/1463 is fixed
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::VersionlessSubcommands)
         .subcommand(SubCommand::with_name("run")
@@ -66,6 +66,12 @@ fn main() {
                     // .possible_value("html")
                     // .possible_value("none")
                     .default_value("json")
+            )
+            .arg(
+                Arg::with_name("watch")
+                    .short("w")
+                    .long("watch")
+                    .help("Watch the config file for changes in load_patterns and peak_loads and update the test accordingly")
             )
             .arg(
                 Arg::with_name("CONFIG")
@@ -145,11 +151,13 @@ fn main() {
             }
         };
         let stats_file_format = StatsFileFormat::Json;
+        let watch_config_file = matches.is_present("watch");
         let run_config = RunConfig {
             output_format,
             results_dir,
             stats_file_format,
             config_file,
+            watch_config_file,
         };
         ExecConfig::Run(run_config)
     } else if let Some(matches) = matches.subcommand_matches("try") {

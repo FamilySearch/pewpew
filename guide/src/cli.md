@@ -31,6 +31,8 @@ OPTIONS:
                                            human, json]
     -d, --results-directory <DIRECTORY>    Directory to store results and logs
     -s, --stats-file-format <FORMAT>       Format for the stats file [default: json]  [possible values: json]
+    -w, --watch                            Watch the config file for changes in load_patterns and peak_loads and update
+                                           the test accordingly
 
 ARGS:
     <CONFIG>    Load test config file to use
@@ -39,6 +41,8 @@ ARGS:
 The `-f`, `--output-format` parameter allows changing the formatting of the stats which are printed to stderr.
 
 The `-d`, `--results-directory` parameter will store the results file and any output logs in the specified directory. If the directory does not exist it is created.
+
+The `-w`, `--watch` parameter makes pewpew watch the config file for changes to `load_pattern`s and `peak_load`s. The `watch_transition_time` [general config option](./config/config-section.md#general) allows specifying a transition time for switching to the new `load_pattern`s and `peak_load`s.
 <br/><br/>
 Here's the output of `pewpew try --help`:
 <br/><br/>

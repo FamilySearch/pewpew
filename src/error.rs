@@ -39,8 +39,6 @@ impl fmt::Display for RecoverableError {
     }
 }
 
-
-
 #[derive(Clone, Debug)]
 pub enum TestError {
     Internal(Cow<'static, str>),

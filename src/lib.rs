@@ -12,9 +12,10 @@ mod util;
 use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
 
+use bytes::BytesMut;
 use ether::{Either, Either3};
 use futures::{
-    future::{self, join_all, lazy},
+    future::{self, join_all},
     sink::Sink,
     stream,
     sync::{
@@ -28,7 +29,7 @@ use hyper_tls::HttpsConnector;
 use itertools::Itertools;
 use native_tls::TlsConnector;
 use serde_json as json;
-use tokio::io::{write_all, AsyncWrite};
+use tokio::io::{read_to_end, write_all, AsyncRead, AsyncWrite};
 use yansi::Paint;
 
 use std::{
@@ -36,7 +37,7 @@ use std::{
     cmp,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
-    fs::File,
+    io::SeekFrom,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
@@ -178,6 +179,7 @@ pub struct RunConfig {
     pub output_format: RunOutputFormat,
     pub results_dir: PathBuf,
     pub stats_file_format: StatsFileFormat,
+    pub watch_config_file: bool,
 }
 
 #[derive(Clone)]
@@ -212,6 +214,11 @@ type TestEndedChannel = (
     FCReceiver<Result<TestEndReason, TestError>>,
 );
 
+type LoadPatternUpdates = Option<(
+    Vec<mod_interval::LoadUpdateChannel>,
+    channel::Receiver<Duration>,
+)>;
+
 pub fn create_run<Se, So, Sef, Sof>(
     exec_config: ExecConfig,
     stdout: Sof,
@@ -228,109 +235,252 @@ where
         ExecConfig::Run(r) => r.output_format,
         ExecConfig::Try(_) => RunOutputFormat::Human,
     };
-    lazy(move || {
-        let config_file = match &exec_config {
-            ExecConfig::Run(r) => &r.config_file,
-            ExecConfig::Try(t) => &t.config_file,
-        };
-        // TODO: change this to use tokio::fs::File
-        let file = match File::open(&config_file) {
-            Ok(f) => f,
-            Err(_) => {
-                let e = TestError::InvalidConfigFilePath(config_file.clone());
-                return Either3::B(Err(e).into_future());
+    let config_file = match &exec_config {
+        ExecConfig::Run(r) => &r.config_file,
+        ExecConfig::Try(t) => &t.config_file,
+    };
+    let config_file = config_file.clone();
+    tokio::fs::File::open(config_file.clone())
+        .map_err(move |_| TestError::InvalidConfigFilePath(config_file))
+        .and_then(|file| {
+            read_to_end(file, Vec::new())
+                .map_err(|e| TestError::Other(format!("could not read config file: {}", e).into()))
+        })
+        .and_then(move |(file, config_bytes)| {
+            let config = match serde_yaml::from_slice(&config_bytes[..]) {
+                Ok(c) => c,
+                Err(e) => {
+                    let e = TestError::YamlDeserializerErr(e.into());
+                    return Either3::B(Err(e).into_future());
+                }
+            };
+            let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
+            let work = match exec_config {
+                ExecConfig::Try(t) => create_try_run_future(
+                    config,
+                    t,
+                    (test_ended_tx.clone(), test_ended_rx),
+                    stdout,
+                    stderr,
+                )
+                .map(Either::A),
+                ExecConfig::Run(r) => {
+                    let load_pattern_updates = if r.watch_config_file {
+                        let lpu = create_load_watcher(&config, file);
+                        Some(lpu)
+                    } else {
+                        None
+                    };
+                    create_load_test_future(
+                        config,
+                        r,
+                        (test_ended_tx.clone(), test_ended_rx),
+                        stdout,
+                        stderr,
+                        load_pattern_updates,
+                    )
+                    .map(Either::B)
+                },
+            };
+            match work {
+                Ok(a) => Either3::A(a),
+                Err(e) => {
+                    // send the test_ended message in case the stats monitor
+                    // is running
+                    let c = test_ended_tx
+                        .send(Ok(TestEndReason::Completed))
+                        .then(|_| Err::<TestEndReason, _>(e));
+                    Either3::C(c)
+                }
             }
-        };
-        let config = match serde_yaml::from_reader(file) {
-            Ok(c) => c,
-            Err(e) => {
-                let e = TestError::YamlDeserializerErr(e.into());
-                return Either3::B(Err(e).into_future());
+        })
+        .then(move |r| {
+            let f = match &r {
+                Err(e) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => {
+                            format!("\n{} {}\n", Paint::red("Fatal error").bold(), e)
+                        }
+                        RunOutputFormat::Json => {
+                            let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
+                            format!("{}\n", json)
+                        }
+                    };
+                    let a = write_all(stderr2, msg);
+                    Either::A(a)
+                }
+                Ok(TestEndReason::KilledByLogger) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => {
+                            format!(
+                                "\n{}\n",
+                                Paint::yellow("Test killed early by logger").bold()
+                            )
+                        }
+                        RunOutputFormat::Json => {
+                            r#"{"type":"end","msg":"Test killed early by logger"}\n"#.to_string()
+                        }
+                    };
+                    let a = write_all(stderr2, msg);
+                    Either::A(a)
+                }
+                Ok(TestEndReason::ProviderEnded) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => {
+                            format!(
+                                "\n{}\n",
+                                Paint::yellow("Test ended early because one or more providers ended")
+                            )
+                        }
+                        RunOutputFormat::Json => {
+                            r#"{"type":"end","msg":"Test ended early because one or more providers ended"}\n"#.to_string()
+                        }
+                    };
+                    let a = write_all(stderr2, msg);
+                    Either::A(a)
+                }
+                _ => Either::B(Ok::<_, ()>(()).into_future()),
+            };
+            f.map_a(|a| a.then(|_| Ok(())))
+                .then(move |_| r)
+                .map(|_| ())
+                .map_err(|_| ())
+        })
+}
+
+fn create_load_watcher(
+    config: &config::LoadTest,
+    mut file: tokio::fs::File,
+) -> (
+    Vec<mod_interval::LoadUpdateChannel>,
+    channel::Receiver<Duration>,
+) {
+    let (senders, receivers): (Vec<_>, Vec<_>) = (0..config.endpoints.len())
+        .map(|_| channel::channel(channel::Limit::auto()))
+        .unzip();
+    let (duration_sender, duration_receiver) = channel::channel(channel::Limit::auto());
+    let mut interval = tokio::timer::Interval::new_interval(Duration::from_millis(1000));
+    let mut file_seeked = false;
+    let mut interval_triggered = false;
+    let mut modified = None;
+    let mut last_modified = None;
+    let mut file_bytes = BytesMut::with_capacity(4096);
+    let f = future::poll_fn(move || {
+        if senders.iter().all(channel::Sender::no_receivers) {
+            return Ok(Async::Ready(()));
+        }
+        let mut should_reset = false;
+        'outer: loop {
+            if should_reset {
+                interval_triggered = false;
+                modified = None;
+                file_seeked = false;
+                file_bytes.clear();
             }
-        };
-        let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
-        let work = match exec_config {
-            ExecConfig::Try(t) => create_try_run_future(
-                config,
-                t,
-                (test_ended_tx.clone(), test_ended_rx),
-                stdout,
-                stderr,
-            )
-            .map(Either::A),
-            ExecConfig::Run(r) => create_load_test_future(
-                config,
-                r,
-                (test_ended_tx.clone(), test_ended_rx),
-                stdout,
-                stderr,
-            )
-            .map(Either::B),
-        };
-        match work {
-            Ok(a) => Either3::A(a),
-            Err(e) => {
-                // send the test_ended message in case the stats monitor
-                // is running
-                let c = test_ended_tx
-                    .send(Ok(TestEndReason::Completed))
-                    .then(|_| Err::<TestEndReason, _>(e));
-                Either3::C(c)
+            should_reset = true;
+            if !interval_triggered {
+                match interval.poll() {
+                    Ok(Async::Ready(Some(_))) => {
+                        interval_triggered = true;
+                    }
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
+                    Err(_) => return Err(()),
+                }
+            }
+            if !file_seeked {
+                match file.poll_seek(SeekFrom::Start(0)) {
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Ok(Async::Ready(_)) => file_seeked = true,
+                    Err(_) => continue,
+                }
+            }
+            let modified_time = if let Some(m) = modified {
+                m
+            } else {
+                match file.poll_metadata() {
+                    Ok(Async::Ready(md)) => {
+                        let m = match md.modified() {
+                            Ok(m) => m,
+                            Err(_) => continue,
+                        };
+                        modified = Some(m);
+                        m
+                    }
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Err(_) => continue,
+                }
+            };
+            match last_modified {
+                Some(time) if modified_time > time => {
+                    loop {
+                        file_bytes.reserve(1024);
+                        match file.read_buf(&mut file_bytes) {
+                            Ok(Async::Ready(n)) if n == 0 => break,
+                            Ok(Async::Ready(_)) => (),
+                            Ok(Async::NotReady) => return Ok(Async::NotReady),
+                            Err(_) => continue,
+                        }
+                    }
+                    last_modified = Some(modified_time);
+                    let config: config::LoadTest = match serde_yaml::from_slice(&file_bytes[..]) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    let static_vars = config.vars;
+                    let transition_time = config
+                        .config
+                        .general
+                        .watch_transition_time
+                        .map(|d| d.evaluate(&static_vars))
+                        .transpose();
+                    let transition_time = match transition_time {
+                        Ok(t) => t,
+                        Err(_) => continue,
+                    };
+                    let global_load_pattern = config
+                        .load_pattern
+                        .map(|l| l.evaluate(&static_vars))
+                        .transpose();
+                    let global_load_pattern = match global_load_pattern {
+                        Ok(g) => g,
+                        Err(_) => continue,
+                    };
+                    let mut duration = Duration::new(0, 0);
+                    for (endpoint, sender) in config.endpoints.iter().zip(senders.iter()) {
+                        if let Some(peak_load) = &endpoint.peak_load {
+                            let peak_load = match peak_load.evaluate(&static_vars) {
+                                Ok(p) => p,
+                                Err(_) => continue 'outer,
+                            };
+                            let load_pattern = endpoint
+                                .load_pattern
+                                .as_ref()
+                                .map(|l| l.evaluate(&static_vars));
+                            let load_pattern = match (load_pattern, &global_load_pattern) {
+                                (Some(Ok(l)), _) => l,
+                                (None, Some(g)) => g.clone(),
+                                _ => continue 'outer,
+                            };
+                            duration = cmp::max(duration, load_pattern.duration());
+                            let builder = load_pattern.builder();
+                            let ls = mod_interval::LinearScaling::new(builder, &peak_load);
+                            if !sender.no_receivers() {
+                                sender.force_send((ls, transition_time));
+                            }
+                        }
+                    }
+                    duration_sender.force_send(duration);
+                }
+                None => {
+                    last_modified = Some(modified_time);
+                }
+                _ => (),
             }
         }
-    })
-    .then(move |r| {
-        let f = match &r {
-            Err(e) => {
-                let msg = match output_format {
-                    RunOutputFormat::Human => {
-                        format!("\n{} {}\n", Paint::red("Fatal error").bold(), e)
-                    }
-                    RunOutputFormat::Json => {
-                        let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
-                        format!("{}\n", json)
-                    }
-                };
-                let a = write_all(stderr2, msg);
-                Either::A(a)
-            }
-            Ok(TestEndReason::KilledByLogger) => {
-                let msg = match output_format {
-                    RunOutputFormat::Human => {
-                        format!(
-                            "\n{}\n",
-                            Paint::yellow("Test killed early by logger").bold()
-                        )
-                    }
-                    RunOutputFormat::Json => {
-                        r#"{"type":"end","msg":"Test killed early by logger"}\n"#.to_string()
-                    }
-                };
-                let a = write_all(stderr2, msg);
-                Either::A(a)
-            }
-            Ok(TestEndReason::ProviderEnded) => {
-                let msg = match output_format {
-                    RunOutputFormat::Human => {
-                        format!(
-                            "\n{}\n",
-                            Paint::yellow("Test ended early because one or more providers ended")
-                        )
-                    }
-                    RunOutputFormat::Json => {
-                        r#"{"type":"end","msg":"Test ended early because one or more providers ended"}\n"#.to_string()
-                    }
-                };
-                let a = write_all(stderr2, msg);
-                Either::A(a)
-            }
-            _ => Either::B(Ok::<_, ()>(()).into_future()),
-        };
-        f.map_a(|a| a.then(|_| Ok(())))
-            .then(move |_| r)
-            .map(|_| ())
-            .map_err(|_| ())
-    })
+    });
+    tokio::spawn(f);
+    (receivers, duration_receiver)
 }
 
 fn create_url_and_update_tags(
@@ -537,6 +687,7 @@ fn create_load_test_future<Se, So, Sef, Sof>(
     test_ended: TestEndedChannel,
     stdout: Sof,
     stderr: Sef,
+    load_pattern_updates: LoadPatternUpdates,
 ) -> Result<impl Future<Item = TestEndReason, Error = TestError>, TestError>
 where
     Se: AsyncWrite + Send + Sync + 'static,
@@ -595,7 +746,20 @@ where
     };
 
     // create the endpoints
-    let builders: Vec<_> = config.endpoints.into_iter().map(|endpoint| {
+    let (endpoints_iter, mut duration_updater) = if let Some((receivers, du)) = load_pattern_updates
+    {
+        let ei = Either::A(
+            config
+                .endpoints
+                .into_iter()
+                .zip_eq(receivers.into_iter().map(Some)),
+        );
+        (ei, Some(du))
+    } else {
+        let ei = Either::B(config.endpoints.into_iter().map(|ep| (ep, None)));
+        (ei, None)
+    };
+    let builders: Vec<_> = endpoints_iter.map(|(endpoint, receiver)| {
         let mut mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> = None;
         let send_behavior_default = if endpoint.peak_load.is_some() {
             config::EndpointProvidesSendOptions::IfNotFull
@@ -612,7 +776,7 @@ where
                 .or_else(|| global_load_pattern.clone())
                 .ok_or_else(|| TestError::Other("missing load_pattern".into()))?;
             duration = cmp::max(duration, load_pattern.duration());
-            mod_interval = Some(Box::new(load_pattern.build(&peak_load)));
+            mod_interval = Some(Box::new(load_pattern.build(&peak_load, receiver)));
         } else if provides.is_empty() {
             return Err(TestError::Other(
                 "endpoint must have `provides` or `peak_load`".into(),
@@ -682,8 +846,10 @@ where
         .send(StatsMessage::Start(duration))
         .map_err(|_| TestError::Internal("Error sending test start signal".into()))
         .then(move |r| match r {
-            Ok(_) => {
-                let test_end = Instant::now() + duration;
+            Ok(stats_tx) => {
+                let test_start = Instant::now();
+                let test_end = test_start + duration;
+                let mut test_end_delay = tokio::timer::Delay::new(test_end);
                 let a = join_all(endpoint_calls)
                     .map(move |_r| {
                         if Instant::now() >= test_end {
@@ -692,11 +858,36 @@ where
                             TestEndReason::ProviderEnded
                         }
                     })
-                    .select(
-                        tokio::timer::Delay::new(test_end)
-                            .map(|_| TestEndReason::Completed)
-                            .map_err(Into::into),
-                    )
+                    .select(future::poll_fn(move || {
+                        if let Async::Ready(_) =
+                            test_end_delay.poll().map_err::<TestError, _>(Into::into)?
+                        {
+                            return Ok(Async::Ready(TestEndReason::Completed));
+                        }
+                        if let Some(duration_updater2) = &mut duration_updater {
+                            let mut duration = None;
+                            loop {
+                                match duration_updater2.poll() {
+                                    Ok(Async::Ready(Some(d))) => duration = Some(d),
+                                    Ok(Async::Ready(None)) | Err(_) => {
+                                        duration_updater = None;
+                                        break;
+                                    }
+                                    Ok(Async::NotReady) => break,
+                                }
+                            }
+                            if let Some(duration) = duration {
+                                test_end_delay.reset(test_start + duration);
+                                if stats_tx
+                                    .unbounded_send(StatsMessage::Start(duration))
+                                    .is_err()
+                                {
+                                    duration_updater = None;
+                                }
+                            }
+                        }
+                        Ok(Async::NotReady)
+                    }))
                     .map(|r| r.0)
                     .map_err(|e| e.0)
                     .then(|r| test_ended_tx2.send(r.clone()).then(|_| r));

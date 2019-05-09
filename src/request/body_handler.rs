@@ -27,7 +27,9 @@ impl BodyHandler {
         let has_logger = outgoing.iter().any(|o| o.logger);
         let send_response_stat = move |kind, rtt, template_values: Option<Arc<TemplateValues>>| {
             let mut futures = Vec::new();
-            if let (stats::StatKind::RecoverableError(e), Some(template_values)) = (&kind, &template_values) {
+            if let (stats::StatKind::RecoverableError(e), Some(template_values)) =
+                (&kind, &template_values)
+            {
                 if has_logger {
                     let error = json::json!({
                         "msg": format!("{}", e),
@@ -36,7 +38,8 @@ impl BodyHandler {
                     let mut tv = (&**template_values).clone();
                     tv.insert("error".into(), error);
                     for o in outgoing.iter() {
-                        if let (true, Ok(iter)) =  (o.logger, o.select.as_iter(tv.as_json().clone())) {
+                        if let (true, Ok(iter)) = (o.logger, o.select.as_iter(tv.as_json().clone()))
+                        {
                             let tx = o.tx.clone();
                             let cb = o.cb.clone();
                             futures.push(Either::A(BlockSender::new(iter, tx, cb)));
@@ -100,7 +103,11 @@ impl BodyHandler {
                         Ok(v) => v,
                         Err(TestError::Recoverable(r)) => {
                             let kind = stats::StatKind::RecoverableError(r);
-                            futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
+                            futures.push(Either3::B(send_response_stat(
+                                kind,
+                                None,
+                                Some(template_values.clone()),
+                            )));
                             continue;
                         }
                         Err(e) => return Either::B(Err(e).into_future()),
@@ -132,7 +139,11 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
+                                        futures.push(Either3::B(send_response_stat(
+                                            kind,
+                                            None,
+                                            Some(template_values.clone()),
+                                        )));
                                         break;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -151,7 +162,11 @@ impl BodyHandler {
                                     Ok(v) => v,
                                     Err(TestError::Recoverable(r)) => {
                                         let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(kind, None, Some(template_values.clone()))));
+                                        futures.push(Either3::B(send_response_stat(
+                                            kind,
+                                            None,
+                                            Some(template_values.clone()),
+                                        )));
                                         break;
                                     }
                                     Err(e) => return Either::B(Err(e).into_future()),
@@ -182,7 +197,11 @@ impl BodyHandler {
             Err(r) => {
                 let template_values = Arc::new(template_values);
                 let kind = stats::StatKind::RecoverableError(r);
-                futures.push(Either3::B(send_response_stat(kind, None, Some(template_values))));
+                futures.push(Either3::B(send_response_stat(
+                    kind,
+                    None,
+                    Some(template_values),
+                )));
             }
         }
         Either::A(join_all(futures).map(|_| ()))

@@ -52,8 +52,14 @@ impl Collect {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool,) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d, no_recoverable_error).map(Cow::into_owned)
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        self.arg
+            .evaluate(d, no_recoverable_error)
+            .map(Cow::into_owned)
     }
 
     pub(super) fn evaluate_as_iter(
@@ -182,8 +188,14 @@ impl Encode {
         self.encoding.encode(d).into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool,) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d, no_recoverable_error).map(|v| self.evaluate_with_arg(&*v))
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        self.arg
+            .evaluate(d, no_recoverable_error)
+            .map(|v| self.evaluate_with_arg(&*v))
     }
 
     pub(super) fn evaluate_as_iter(
@@ -265,13 +277,17 @@ impl Entries {
         Ok(iter)
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
-        self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(|v| match Entries::evaluate_with_arg(v.into_owned()) {
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        self.arg.evaluate(d, no_recoverable_error).map(|v| {
+            match Entries::evaluate_with_arg(v.into_owned()) {
                 Either::A(v) => v,
                 Either::B(b) => b.collect::<Vec<_>>().into(),
-            })
+            }
+        })
     }
 
     pub(super) fn into_stream(
@@ -279,13 +295,15 @@ impl Entries {
         providers: &BTreeMap<String, providers::Provider>,
         no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        self.arg.into_stream(providers, no_recoverable_error).map(|(v, ar)| {
-            let v = match Entries::evaluate_with_arg(v) {
-                Either::A(v) => v,
-                Either::B(b) => b.collect::<Vec<_>>().into(),
-            };
-            (v, ar)
-        })
+        self.arg
+            .into_stream(providers, no_recoverable_error)
+            .map(|(v, ar)| {
+                let v = match Entries::evaluate_with_arg(v) {
+                    Either::A(v) => v,
+                    Either::B(b) => b.collect::<Vec<_>>().into(),
+                };
+                (v, ar)
+            })
     }
 }
 
@@ -379,7 +397,11 @@ impl If {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
         let first = self.first.evaluate(d, no_recoverable_error)?;
         if bool_value(&*first)? {
             Ok(self.second.evaluate(d, no_recoverable_error)?.into_owned())
@@ -501,7 +523,11 @@ impl Join {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
         self.arg
             .evaluate(d, no_recoverable_error)
             .map(|d| Join::evaluate_with_arg(&self.sep, &self.sep2, &*d))
@@ -694,7 +720,11 @@ impl Match {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
         self.arg
             .evaluate(d, no_recoverable_error)
             .map(|d| Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d))
@@ -715,12 +745,14 @@ impl Match {
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
         let capture_names = self.capture_names;
         let regex = self.regex;
-        self.arg.into_stream(providers, no_recoverable_error).map(move |(d, returns)| {
-            (
-                Match::evaluate_with_arg(&regex, &capture_names, &d),
-                returns,
-            )
-        })
+        self.arg
+            .into_stream(providers, no_recoverable_error)
+            .map(move |(d, returns)| {
+                (
+                    Match::evaluate_with_arg(&regex, &capture_names, &d),
+                    returns,
+                )
+            })
     }
 }
 
@@ -773,8 +805,15 @@ impl MinMax {
         )
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
-        let iter = self.args.iter().map(|fa| fa.evaluate(d, no_recoverable_error));
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        let iter = self
+            .args
+            .iter()
+            .map(|fa| fa.evaluate(d, no_recoverable_error));
         MinMax::eval_iter(self.min, iter).map(|d| d.0.into_owned())
     }
 
@@ -791,7 +830,10 @@ impl MinMax {
         providers: &BTreeMap<String, providers::Provider>,
         no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let streams = self.args.into_iter().map(|fa| fa.into_stream(providers, no_recoverable_error));
+        let streams = self
+            .args
+            .into_iter()
+            .map(|fa| fa.into_stream(providers, no_recoverable_error));
         let min = self.min;
         zip_all(streams).and_then(move |values| {
             let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
@@ -868,7 +910,11 @@ impl Pad {
         output.into()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
         self.arg
             .evaluate(d, no_recoverable_error)
             .map(|d| Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d))
@@ -890,12 +936,14 @@ impl Pad {
         let padding = self.padding;
         let min_length = self.min_length;
         let start = self.start;
-        self.arg.into_stream(providers, no_recoverable_error).map(move |(d, returns)| {
-            (
-                Pad::evaluate_with_arg(&padding, min_length, start, &d),
-                returns,
-            )
-        })
+        self.arg
+            .into_stream(providers, no_recoverable_error)
+            .map(move |(d, returns)| {
+                (
+                    Pad::evaluate_with_arg(&padding, min_length, start, &d),
+                    returns,
+                )
+            })
     }
 }
 
@@ -1004,8 +1052,14 @@ impl Range {
         }
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value, no_recoverable_error: bool) -> Result<json::Value, TestError> {
-        Ok(json::Value::Array(self.evaluate_as_iter(d, no_recoverable_error)?.collect()))
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        Ok(json::Value::Array(
+            self.evaluate_as_iter(d, no_recoverable_error)?.collect(),
+        ))
     }
 
     pub(super) fn evaluate_as_iter(
@@ -1056,7 +1110,9 @@ impl Range {
                 Either::A(a)
             }
             Range::Range(..) => {
-                let r = self.evaluate(&json::Value::Null, no_recoverable_error).map(|v| (v, Vec::new()));
+                let r = self
+                    .evaluate(&json::Value::Null, no_recoverable_error)
+                    .map(|v| (v, Vec::new()));
                 Either::B(stream::iter_result(iter::repeat(r)))
             }
         }
@@ -1186,7 +1242,10 @@ mod tests {
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
-            let left: Vec<_> = c.evaluate_as_iter(&json::Value::Null, false).unwrap().collect();
+            let left: Vec<_> = c
+                .evaluate_as_iter(&json::Value::Null, false)
+                .unwrap()
+                .collect();
             assert_eq!(left, right);
         }
     }
@@ -1212,22 +1271,24 @@ mod tests {
                 .into_iter()
                 .map(|(args, right, range)| {
                     let c = Collect::new(args).unwrap();
-                    c.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                        let (left, _) = v.unwrap();
-                        if let Some((min, max)) = range {
-                            if let json::Value::Array(v) = left {
-                                let len = v.len();
-                                assert!(len >= min && min <= max);
-                                for left in v {
-                                    assert_eq!(left, right)
+                    c.into_stream(&providers, false)
+                        .into_future()
+                        .map(move |(v, _)| {
+                            let (left, _) = v.unwrap();
+                            if let Some((min, max)) = range {
+                                if let json::Value::Array(v) = left {
+                                    let len = v.len();
+                                    assert!(len >= min && min <= max);
+                                    for left in v {
+                                        assert_eq!(left, right)
+                                    }
+                                } else {
+                                    unreachable!()
                                 }
                             } else {
-                                unreachable!()
+                                assert_eq!(left, right);
                             }
-                        } else {
-                            assert_eq!(left, right);
-                        }
-                    })
+                        })
                 })
                 .collect();
             join_all(futures).then(|_| Ok(()))
@@ -1729,9 +1790,13 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| match Join::new(args).unwrap() {
-                    Either::A(j) => j.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                        assert_eq!(v.unwrap().0, right);
-                    }),
+                    Either::A(j) => {
+                        j.into_stream(&providers, false)
+                            .into_future()
+                            .map(move |(v, _)| {
+                                assert_eq!(v.unwrap().0, right);
+                            })
+                    }
                     Either::B(_) => unreachable!(),
                 })
                 .collect();
@@ -1949,9 +2014,11 @@ mod tests {
                 .into_iter()
                 .map(|(args, right)| match Match::new(args) {
                     Ok(Either::A(m)) => {
-                        m.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                            assert_eq!(v.unwrap().0, right);
-                        })
+                        m.into_stream(&providers, false)
+                            .into_future()
+                            .map(move |(v, _)| {
+                                assert_eq!(v.unwrap().0, right);
+                            })
                     }
                     _ => unreachable!(),
                 })
@@ -2063,9 +2130,11 @@ mod tests {
                 .into_iter()
                 .map(|(min, args, right)| {
                     if let Either::A(m) = MinMax::new(min, args).unwrap() {
-                        m.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                            assert_eq!(v.unwrap().0, right);
-                        })
+                        m.into_stream(&providers, false)
+                            .into_future()
+                            .map(move |(v, _)| {
+                                assert_eq!(v.unwrap().0, right);
+                            })
                     } else {
                         unreachable!()
                     }
@@ -2219,9 +2288,11 @@ mod tests {
                 .map(
                     |(start, args, right)| match Pad::new(start, args).unwrap() {
                         Either::A(p) => {
-                            p.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                                assert_eq!(v.unwrap().0, right);
-                            })
+                            p.into_stream(&providers, false)
+                                .into_future()
+                                .map(move |(v, _)| {
+                                    assert_eq!(v.unwrap().0, right);
+                                })
                         }
                         _ => unreachable!(),
                     },
@@ -2354,9 +2425,11 @@ mod tests {
                 .into_iter()
                 .map(move |(args, right)| {
                     let r = Range::new(args).unwrap();
-                    r.into_stream(&providers, false).into_future().map(move |(v, _)| {
-                        assert_eq!(v.unwrap().0, right);
-                    })
+                    r.into_stream(&providers, false)
+                        .into_future()
+                        .map(move |(v, _)| {
+                            assert_eq!(v.unwrap().0, right);
+                        })
                 })
                 .collect();
             join_all(futures).then(|_| Ok(()))

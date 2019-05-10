@@ -718,7 +718,11 @@ where
     } else {
         format!("stats-{}.json", start_sec)
     };
-    let mut file_path = run_config.results_dir.clone();
+    let mut file_path = if let Some(results_dir) = &run_config.results_dir {
+        results_dir.clone()
+    } else {
+        PathBuf::new()
+    };
     file_path.push(file_name);
     let stats = Arc::new(Mutex::new(RollingAggregateStats::new(
         bucket_size,

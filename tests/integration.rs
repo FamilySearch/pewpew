@@ -16,7 +16,7 @@ fn int1() {
     let run_config = pewpew::RunConfig {
         config_file: "tests/integration.yaml".into(),
         output_format: pewpew::RunOutputFormat::Human,
-        results_dir: "./".into(),
+        results_dir: Some("./".into()),
         stats_file_format: pewpew::StatsFileFormat::Json,
         watch_config_file: false,
     };

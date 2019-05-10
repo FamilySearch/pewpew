@@ -139,17 +139,10 @@ fn main() {
                 .expect("should have output_format cli arg"),
         )
         .expect("output_format cli arg unrecognized");
-        let results_dir = match results_dir {
-            Some(d) => {
-                create_dir_all(d).unwrap();
-                d.into()
-            }
-            None => {
-                let mut config_file = config_file.clone();
-                config_file.pop();
-                config_file
-            }
-        };
+        let results_dir = results_dir.map(|d| {
+            create_dir_all(d).unwrap();
+            d.into()
+        });
         let stats_file_format = StatsFileFormat::Json;
         let watch_config_file = matches.is_present("watch");
         let run_config = RunConfig {
@@ -170,13 +163,9 @@ fn main() {
         let results_dir = match (results_dir, loggers_on) {
             (Some(d), true) => {
                 create_dir_all(d).unwrap();
-                d.into()
+                Some(d.into())
             }
-            _ => {
-                let mut config_file = config_file.clone();
-                config_file.pop();
-                config_file
-            }
+            _ => None,
         };
         let filters = matches.values_of("filter").map(|v| {
             v.map(|s| {

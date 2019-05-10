@@ -177,7 +177,7 @@ pub enum StatsFileFormat {
 pub struct RunConfig {
     pub config_file: PathBuf,
     pub output_format: RunOutputFormat,
-    pub results_dir: PathBuf,
+    pub results_dir: Option<PathBuf>,
     pub stats_file_format: StatsFileFormat,
     pub watch_config_file: bool,
 }
@@ -193,7 +193,7 @@ pub struct TryConfig {
     pub config_file: PathBuf,
     pub loggers_on: bool,
     pub filters: Option<Vec<TryFilter>>,
-    pub results_dir: PathBuf,
+    pub results_dir: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -600,7 +600,7 @@ where
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
-        &try_config.results_dir,
+        try_config.results_dir.as_ref(),
         &test_ended_tx,
         &static_vars,
         stdout,
@@ -722,7 +722,7 @@ where
     // create the loggers
     let loggers = get_loggers_from_config(
         config.loggers,
-        &run_config.results_dir,
+        run_config.results_dir.as_ref(),
         &test_ended_tx,
         &static_vars,
         stdout,
@@ -966,7 +966,7 @@ type LoggersResult =
 
 fn get_loggers_from_config<Se, So, Sef, Sof>(
     config_loggers: Vec<(String, config::Logger)>,
-    results_dir: &PathBuf,
+    results_dir: Option<&PathBuf>,
     test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
     static_vars: &BTreeMap<String, json::Value>,
     stdout: Sof,
@@ -986,7 +986,11 @@ where
                 "stderr" => Either::A(future::ok(Either3::A(stderr()))),
                 "stdout" => Either::A(future::ok(Either3::B(stdout()))),
                 _ => {
-                    let mut file_path = results_dir.clone();
+                    let mut file_path = if let Some(results_dir) = results_dir {
+                        results_dir.clone()
+                    } else {
+                        PathBuf::new()
+                    };
                     file_path.push(to);
                     let name2 = name.clone();
                     let f = tokio::fs::File::create(file_path)

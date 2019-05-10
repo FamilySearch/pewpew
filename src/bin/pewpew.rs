@@ -167,24 +167,24 @@ fn main() {
             }
             _ => None,
         };
-        let filters = matches.values_of("filter").map(|v| {
+        let filters = matches.values_of("include").map(|v| {
             v.map(|s| {
                 let captures = filter_reg
                     .captures(s)
-                    .expect("filter cli arg should match regex");
+                    .expect("include cli arg should match regex");
                 let left = captures
                     .get(1)
-                    .expect("filter arg should match regex")
+                    .expect("include arg should match regex")
                     .as_str()
                     .to_string();
                 let right = captures
                     .get(3)
-                    .expect("filter arg should match regex")
+                    .expect("include arg should match regex")
                     .as_str()
                     .to_string();
                 let comparator = captures
                     .get(2)
-                    .expect("filter arg should match regex")
+                    .expect("include arg should match regex")
                     .as_str();
                 match comparator {
                     "=" => TryFilter::Eq(left, right),

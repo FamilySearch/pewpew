@@ -341,9 +341,6 @@ impl<T> Stream for Receiver<T> {
                 Ok(Async::Ready(None))
             } else {
                 if did_park {
-                    if let Limit::Auto(a) = &self.limit {
-                        a.fetch_add(1, Ordering::Release);
-                    }
                     self.parked_senders.wake_all();
                 }
                 Ok(Async::NotReady)
@@ -519,15 +516,14 @@ mod tests {
                 assert_eq!(left, right, "receives work");
             }
 
-            let mut new_limit = start_limit + 1;
+            let new_limit = start_limit + 1;
             assert_eq!(limit.get(), new_limit, "limit has increased");
 
             let left = rx.poll();
             let right = Ok(Async::NotReady);
             assert_eq!(left, right, "receive doesn't work because it's empty");
 
-            new_limit += 1;
-            assert_eq!(limit.get(), new_limit, "limit has increased again");
+            assert_eq!(limit.get(), new_limit, "limit still the same");
 
             for _ in 0..new_limit {
                 let left = tx.start_send(true);

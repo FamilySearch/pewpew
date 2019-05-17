@@ -225,7 +225,7 @@ Hello, Jean! Today's date is 2038-01-19. So glad you made it!
 Then the following expression:
 
 ```
-match("response.body", "Hello, (?P<name>\w+).*(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")
+match(response.body, "Hello, (?P<name>\w+).*(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")
 ```
 
 Would return:

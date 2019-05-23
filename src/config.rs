@@ -412,7 +412,7 @@ fn default_request_timeout() -> Duration {
     Duration::from_secs(60)
 }
 
-fn default_auto_buffer_start_size() -> usize {
+pub fn default_auto_buffer_start_size() -> usize {
     5
 }
 

@@ -936,11 +936,12 @@ fn get_providers_from_config(
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();
+    let default_buffer_size = config::default_auto_buffer_start_size();
     for (name, template) in config_providers {
         let provider = match template {
             config::Provider::File(template) => {
                 // the auto_buffer_start_size is not the default
-                if auto_size != 5 {
+                if auto_size != default_buffer_size {
                     if let channel::Limit::Auto(limit) = &template.buffer {
                         limit.store(auto_size, Ordering::Relaxed);
                     }
@@ -951,6 +952,12 @@ fn get_providers_from_config(
             }
             config::Provider::Range(range) => providers::range(range),
             config::Provider::Response(template) => {
+                // the auto_buffer_start_size is not the default
+                if auto_size != default_buffer_size {
+                    if let channel::Limit::Auto(limit) = &template.buffer {
+                        limit.store(auto_size, Ordering::Relaxed);
+                    }
+                }
                 response_providers.insert(name.clone());
                 providers::response(template)
             }

@@ -10,7 +10,7 @@ use futures::Future;
 
 #[test]
 fn int1() {
-    let port = test_common::start_test_server();
+    let (port, _) = test_common::start_test_server(None);
     env::set_var("PORT", port.to_string());
 
     let run_config = pewpew::RunConfig {

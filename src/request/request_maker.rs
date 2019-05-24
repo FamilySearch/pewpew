@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn sends_request() {
         current_thread::run(lazy(|| {
-            let port = test_common::start_test_server();
+            let (port, _) = test_common::start_test_server(None);
             let mut static_vars = BTreeMap::new();
             static_vars.insert("port".into(), port.into());
             let url = Template::new("https://127.0.0.1:${port}", &static_vars, false).unwrap();

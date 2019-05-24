@@ -1,4 +1,9 @@
-use std::{io, net, sync::Arc, thread};
+use std::{
+    io, net,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 
 use actix::prelude::*;
 use actix_web::{
@@ -11,16 +16,16 @@ use ether::Either;
 use futures::{Async, Future, IntoFuture, Stream};
 use parking_lot::Mutex;
 
-fn echo(req: &HttpRequest) -> HttpResponse {
+fn echo(req: HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
     let headers = req.headers();
+    let query = req.query();
     let content_type = headers
         .get(header::CONTENT_TYPE)
         .cloned()
         .unwrap_or_else(|| header::HeaderValue::from_static("text/plain"));
-    match *req.method() {
+    let response = match *req.method() {
         http::Method::GET => {
-            let q = req.query();
-            if let Some(b) = q.get("echo") {
+            if let Some(b) = query.get("echo") {
                 HttpResponse::build(StatusCode::OK)
                     .header(header::CONTENT_TYPE, content_type)
                     .body(b)
@@ -32,7 +37,9 @@ fn echo(req: &HttpRequest) -> HttpResponse {
             .header(header::CONTENT_TYPE, content_type)
             .streaming(req.payload()),
         _ => HttpResponse::new(StatusCode::NO_CONTENT),
-    }
+    };
+    let ms = query.get("wait").and_then(|s| s.parse().ok()).unwrap_or(0);
+    tokio::timer::Delay::new(Instant::now() + Duration::from_millis(ms)).then(move |_| Ok(response))
 }
 
 fn multipart(
@@ -91,21 +98,23 @@ fn multipart(
         .or_else(Ok)
 }
 
-pub fn start_test_server() -> u16 {
-    let listener = net::TcpListener::bind("127.0.0.1:0").expect("could not bind to a port");
+pub fn start_test_server(port: Option<u16>) -> (u16, thread::JoinHandle<()>) {
+    let port = port.unwrap_or(0);
+    let address = format!("127.0.0.1:{}", port);
+    let listener = net::TcpListener::bind(address).expect("could not bind to a port");
 
     let port = listener
         .local_addr()
         .expect("should have a local listenening address")
         .port();
 
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let sys = System::new("test");
 
         // start http server
         server::new(move || {
             App::new()
-                .resource("/", |r| r.f(echo))
+                .resource("/", |r| r.with_async(echo))
                 .resource("/multipart", |r| {
                     r.method(http::Method::POST).with_async(multipart);
                 })
@@ -116,7 +125,7 @@ pub fn start_test_server() -> u16 {
         let _ = sys.run();
     });
 
-    port
+    (port, handle)
 }
 
 #[derive(Clone)]

@@ -1,4 +1,5 @@
 # TODOs
+- When a test is killed by logger it includes the characters '\n' in the message
 - document and create release for the test server, along with an [issue template](https://help.github.com/en/articles/about-issue-and-pull-request-templates)
 - add more tests - unit and integration - get code coverage -- add in negative tests
   - split config parser into sub-crate and add in unit tests

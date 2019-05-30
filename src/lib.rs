@@ -318,7 +318,7 @@ where
                             )
                         }
                         RunOutputFormat::Json => {
-                            r#"{"type":"end","msg":"Test killed early by logger"}\n"#.to_string()
+                            "{\"type\":\"end\",\"msg\":\"Test killed early by logger\"}\n".to_string()
                         }
                     };
                     let a = write_all(stderr2, msg);
@@ -333,7 +333,7 @@ where
                             )
                         }
                         RunOutputFormat::Json => {
-                            r#"{"type":"end","msg":"Test ended early because one or more providers ended"}\n"#.to_string()
+                            "{\"type\":\"end\",\"msg\":\"Test ended early because one or more providers ended\"}\n".to_string()
                         }
                     };
                     let a = write_all(stderr2, msg);

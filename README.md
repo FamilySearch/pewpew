@@ -19,6 +19,7 @@ Bugfix:
 - Fix performance regression introduced in v0.4.9.
 - Fix performance regression introduced in v0.4.10.
 - Fix bug where `auto_buffer_start_size` was not working for `response` providers.
+- Fix bug where some json outputs would have `\n` at the end.
 
 Changes:
 - Allow a logger to log test errors. This is done by making another variable available to loggers--`error` (in addition to `request`, `response` and `stats`). A logger can no longer have an error "indexing into json", instead it will resolve to `null`. This enables a logger which logs test errors along with the `request` and `response` if they are available.

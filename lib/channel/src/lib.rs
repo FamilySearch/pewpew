@@ -1,7 +1,6 @@
 #![feature(no_more_cas)]
 use crossbeam_queue::SegQueue;
-use crossbeam_skiplist::SkipMap;
-use futures::{sink::Sink, stream, task, task_local, Async, AsyncSink, Poll, StartSend, Stream};
+use futures::{sink::Sink, stream, task, Async, AsyncSink, Poll, StartSend, Stream};
 use serde::{
     de::{Error as DeError, Unexpected},
     Deserialize, Deserializer, Serialize,
@@ -9,8 +8,6 @@ use serde::{
 
 use std::{
     error::Error as StdError,
-    marker::PhantomPinned,
-    pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -59,29 +56,20 @@ impl<'de> Deserialize<'de> for Limit {
     }
 }
 
-struct PlaceHolder(PhantomPinned, bool);
-
-task_local!(static PLACE_HOLDER: Pin<Box<PlaceHolder>> = Box::pin(PlaceHolder (PhantomPinned, true)));
-
-struct ParkedTasks(SkipMap<usize, task::Task>);
+struct ParkedTasks(SegQueue<task::Task>);
 
 impl ParkedTasks {
     fn new() -> Self {
-        ParkedTasks(SkipMap::new())
+        ParkedTasks(SegQueue::new())
     }
 
-    // returns true if the current task was succesfully parked, false otherwise (meaning the current task has already been parked)
-    fn park(&self) -> bool {
-        let pointer: *const PlaceHolder = PLACE_HOLDER.with(|p| &**p as *const _);
-        let key = pointer as usize;
-        let ret = !self.0.contains_key(&key);
-        self.0.insert(key, task::current());
-        ret
+    fn park(&self) {
+        self.0.push(task::current());
     }
 
     fn wake_all(&self) {
-        while let Some(entry) = self.0.pop_front() {
-            entry.value().notify();
+        while let Ok(task) = self.0.pop() {
+            task.notify();
         }
     }
 
@@ -336,13 +324,11 @@ impl<T> Stream for Receiver<T> {
         } else if self.sender_count.load(Ordering::Acquire) == 0 {
             Ok(Async::Ready(None))
         } else {
-            let did_park = self.parked_receivers.park();
+            self.parked_receivers.park();
             if self.sender_count.load(Ordering::Acquire) == 0 {
                 Ok(Async::Ready(None))
             } else {
-                if did_park {
-                    self.parked_senders.wake_all();
-                }
+                self.parked_senders.wake_all();
                 Ok(Async::NotReady)
             }
         }

@@ -17,6 +17,7 @@ Breaking changes:
 Bugfix:
 - Fix an issue where loggers would not log for a request if a warning level error happened.
 - Fix performance regression introduced in v0.4.9.
+- Fix performance regression introduced in v0.4.10.
 - Fix bug where `auto_buffer_start_size` was not working for `response` providers.
 
 Changes:

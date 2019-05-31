@@ -5,7 +5,7 @@ use futures::future::IntoFuture;
 pub(super) struct RequestMaker {
     pub(super) url: Template,
     pub(super) method: Method,
-    pub(super) headers: BTreeMap<String, Template>,
+    pub(super) headers: Vec<(String, Template)>,
     pub(super) body: BodyTemplate,
     pub(super) rr_providers: u16,
     pub(super) client: Arc<
@@ -301,7 +301,7 @@ mod tests {
             static_vars.insert("port".into(), port.into());
             let url = Template::new("https://127.0.0.1:${port}", &static_vars, false).unwrap();
             let method = Method::GET;
-            let headers = BTreeMap::new();
+            let headers = Vec::new();
             let body = BodyTemplate::None;
             let rr_providers = 0;
             let precheck_rr_providers = 0;

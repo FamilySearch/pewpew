@@ -19,7 +19,9 @@ Examples:
 As seen above an optional space can be used to delimit the individual duration pieces.
 
 ## Headers
-Key/value pairs where the key is a string and the value is a [template](#templates) which specify the headers which will be sent with a request. Note that the `host` header is added automatically to every request and cannot be overwritten.
+Key/value pairs where the key is a string and the value is a [template](#templates) which specify the headers which will be sent with a request. Note that the `host` and `content-length` headers are added automatically to requests and any headers with the same name will be overwritten.
+
+In an [endpoints](./endpoints-section.md) `headers` sub-section, a YAML `null` can be specified as the value which will unset any global header with that name. Because HTTP specs allow a header to be specified multiple times in a request, to override a global header it is necessary to specify the header twice in the [endpoints](./endpoints-section.md) `headers` sub-section, once with a `null` value and once with the new value. Not including the `null` value will mean the request will have the header specified twice.
 
 For example:
 

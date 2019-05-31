@@ -221,7 +221,7 @@ impl Builder {
         endpoint_id: usize,
     ) -> Result<Endpoint, TestError> {
         let mut required_providers = self.url.get_providers().clone();
-        let headers: BTreeMap<_, _> = self
+        let headers = self
             .headers
             .into_iter()
             .map(|(key, v)| {
@@ -633,7 +633,7 @@ pub struct Endpoint {
         >,
     >,
     endpoint_id: usize,
-    headers: BTreeMap<String, Template>,
+    headers: Vec<(String, Template)>,
     limits: Vec<channel::Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,

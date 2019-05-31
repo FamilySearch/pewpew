@@ -624,8 +624,28 @@ where
             })
             .collect::<BTreeSet<_>>();
         let provides = to_select_values(endpoint.provides)?;
-        let mut headers: Vec<_> = config_config.client.headers.clone();
-        headers.extend(endpoint.headers);
+        let mut headers_to_remove = BTreeSet::new();
+        let mut headers_to_add = Vec::new();
+        for (k, v) in endpoint.headers {
+            if let Some(v) = v {
+                headers_to_add.push((k, v));
+            } else {
+                headers_to_remove.insert(k);
+            }
+        }
+        let mut headers: Vec<_> = config_config
+            .client
+            .headers
+            .iter()
+            .filter_map(|(k, v)| {
+                if headers_to_remove.contains(k) {
+                    None
+                } else {
+                    Some((k.clone(), v.clone()))
+                }
+            })
+            .collect();
+        headers.extend(headers_to_add);
         let logs = if try_config.loggers_on {
             to_select_values(endpoint.logs)?
         } else {
@@ -787,8 +807,25 @@ where
         {
             return Err(TestError::Other("endpoint without `peak_load` must have at least one `provides` with `send: block`".into()));
         }
-        let mut headers: Vec<_> = config_config.client.headers.clone();
-        headers.extend(endpoint.headers);
+        let mut headers_to_remove = BTreeSet::new();
+        let mut headers_to_add = Vec::new();
+        for (k, v) in endpoint.headers {
+            if let Some(v) = v {
+                headers_to_add.push((k, v));
+            } else {
+                headers_to_remove.insert(k);
+            }
+        }
+        let mut headers: Vec<_> = config_config.client.headers.iter()
+            .filter_map(|(k, v)| {
+                if headers_to_remove.contains(k) {
+                    None
+                } else {
+                    Some((k.clone(), v.clone()))
+                }
+            })
+            .collect();
+        headers.extend(headers_to_add);
         let mut tags = endpoint.tags.unwrap_or_default();
         let url = create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_vars)?;
         let logs = to_select_values(endpoint.logs, None)?;

@@ -52,22 +52,26 @@ impl Collect {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(Cow::into_owned)
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        self.arg.evaluate(d, no_recoverable_error, for_each)
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -175,7 +179,7 @@ impl Encode {
                     encoding,
                 };
                 if let ValueOrExpression::Value(Value::Json(json)) = &e.arg {
-                    Ok(Either::B(e.evaluate_with_arg(json)))
+                    Ok(Either::B(Encode::evaluate_with_arg(e.encoding, json)))
                 } else {
                     Ok(Either::A(e))
                 }
@@ -184,26 +188,32 @@ impl Encode {
         }
     }
 
-    fn evaluate_with_arg(&self, d: &json::Value) -> json::Value {
-        self.encoding.encode(d).into()
+    fn evaluate_with_arg(encoding: Encoding, d: &json::Value) -> json::Value {
+        encoding.encode(d).into()
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(|v| self.evaluate_with_arg(&*v))
+            .evaluate(d, no_recoverable_error, for_each)
+            .map(|v| Cow::Owned(Encode::evaluate_with_arg(self.encoding, &*v)))
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -235,31 +245,55 @@ impl Entries {
     }
 
     fn evaluate_with_arg(
-        d: json::Value,
-    ) -> Either<json::Value, impl Iterator<Item = json::Value> + Clone> {
+        d: Cow<'_, json::Value>,
+    ) -> Either<Cow<'_, json::Value>, impl Iterator<Item = Cow<'_, json::Value>> + Clone> {
         let iter = match d {
-            json::Value::Array(v) => {
-                let a = v
+            Cow::Owned(json::Value::Array(v)) => {
+                let aa = v
                     .into_iter()
                     .enumerate()
-                    .map(|(i, e)| json::Value::Array(vec![i.into(), e]));
-                Either3::A(a)
+                    .map(|(i, e)| json::Value::Array(vec![i.into(), e]))
+                    .map(Cow::Owned);
+                Either3::A(Either::A(aa))
             }
-            json::Value::Object(o) => {
-                let b = o
+            Cow::Borrowed(json::Value::Array(v)) => {
+                let ab = v
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| json::Value::Array(vec![i.into(), e.clone()]))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(Cow::Owned);
+                Either3::A(Either::B(ab))
+            }
+            Cow::Owned(json::Value::Object(o)) => {
+                let ba = o
                     .into_iter()
                     .map(|(k, v)| json::Value::Array(vec![k.into(), v]))
                     .collect::<Vec<_>>()
-                    .into_iter();
-                Either3::B(b)
+                    .into_iter()
+                    .map(Cow::Owned);
+                Either3::B(Either::A(ba))
             }
-            json::Value::String(s) => {
-                let c = s
+            Cow::Borrowed(json::Value::Object(o)) => {
+                let bb = o
+                    .iter()
+                    .map(|(k, v)| json::Value::Array(vec![k.as_str().into(), v.clone()]))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(Cow::Owned);
+                Either3::B(Either::B(bb))
+            }
+            v if v.is_string() => {
+                let c = v
+                    .as_str()
+                    .expect("value should be a string")
                     .graphemes(true)
                     .enumerate()
                     .map(|(i, c)| json::Value::Array(vec![i.into(), c.into()]))
                     .collect::<Vec<_>>()
-                    .into_iter();
+                    .into_iter()
+                    .map(Cow::Owned);
                 Either3::C(c)
             }
             v => return Either::A(v),
@@ -267,27 +301,31 @@ impl Entries {
         Either::B(iter)
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        let v = self.arg.evaluate(d, no_recoverable_error)?;
-        let iter = Entries::evaluate_with_arg(v.into_owned()).map_a(iter::once);
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        let v = self.arg.evaluate(d, no_recoverable_error, for_each)?;
+        let iter = Entries::evaluate_with_arg(v).map_a(iter::once);
         Ok(iter)
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        self.arg.evaluate(d, no_recoverable_error).map(|v| {
-            match Entries::evaluate_with_arg(v.into_owned()) {
-                Either::A(v) => v,
-                Either::B(b) => b.collect::<Vec<_>>().into(),
-            }
-        })
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let v = self.arg.evaluate(d, no_recoverable_error, for_each)?;
+        let v = Entries::evaluate_with_arg(v)
+            .map_b(|i| {
+                let v = i.map(Cow::into_owned).collect::<Vec<_>>().into();
+                Cow::Owned(v)
+            })
+            .unwrap();
+        Ok(v)
     }
 
     pub(super) fn into_stream(
@@ -298,10 +336,10 @@ impl Entries {
         self.arg
             .into_stream(providers, no_recoverable_error)
             .map(|(v, ar)| {
-                let v = match Entries::evaluate_with_arg(v) {
-                    Either::A(v) => v,
-                    Either::B(b) => b.collect::<Vec<_>>().into(),
-                };
+                let v = Entries::evaluate_with_arg(Cow::Owned(v))
+                    .map_a(Cow::into_owned)
+                    .map_b(|i| i.map(Cow::into_owned).collect::<Vec<_>>().into())
+                    .unwrap();
                 (v, ar)
             })
     }
@@ -331,7 +369,7 @@ impl Epoch {
         }
     }
 
-    pub(super) fn evaluate(self) -> Result<json::Value, TestError> {
+    pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, TestError> {
         let start = SystemTime::now();
         let since_the_epoch = start
             .duration_since(UNIX_EPOCH)
@@ -342,19 +380,20 @@ impl Epoch {
             Epoch::Microseconds => since_the_epoch.as_micros(),
             Epoch::Nanoseconds => since_the_epoch.as_nanos(),
         };
-        Ok(n.to_string().into())
+        let v = Cow::Owned(n.to_string().into());
+        Ok(v)
     }
 
-    pub(super) fn evaluate_as_iter(
+    pub(super) fn evaluate_as_iter<'a>(
         self,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
         Ok(iter::once(self.evaluate()?))
     }
 
     pub(super) fn into_stream(
         self,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        let iter = iter::repeat_with(move || self.evaluate().map(|v| (v, Vec::new())));
+        let iter = iter::repeat_with(move || self.evaluate().map(|v| (v.into_owned(), Vec::new())));
         stream::iter_result(iter)
     }
 }
@@ -397,25 +436,33 @@ impl If {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        let first = self.first.evaluate(d, no_recoverable_error)?;
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let first =
+            self.first
+                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
         if bool_value(&*first)? {
-            Ok(self.second.evaluate(d, no_recoverable_error)?.into_owned())
+            Ok(self.second.evaluate(d, no_recoverable_error, for_each)?)
         } else {
-            Ok(self.third.evaluate(d, no_recoverable_error)?.into_owned())
+            Ok(self.third.evaluate(d, no_recoverable_error, for_each)?)
         }
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -471,7 +518,8 @@ impl Join {
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
-                    Ok(Either::B(Join::evaluate_with_arg(&two, &None, json)))
+                    let b = Join::evaluate_with_arg(&two, &None, json);
+                    Ok(Either::B(b))
                 } else {
                     let j = Join {
                         arg: one,
@@ -489,7 +537,8 @@ impl Join {
                     .ok_or_else(|| TestError::InvalidArguments("join".into()))?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
-                    Ok(Either::B(Join::evaluate_with_arg(&two, &Some(three), json)))
+                    let b = Join::evaluate_with_arg(&two, &Some(three), json);
+                    Ok(Either::B(b))
                 } else {
                     let j = Join {
                         arg: one,
@@ -523,22 +572,28 @@ impl Join {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(|d| Join::evaluate_with_arg(&self.sep, &self.sep2, &*d))
+            .evaluate(d, no_recoverable_error, for_each)
+            .map(|d| Cow::Owned(Join::evaluate_with_arg(&self.sep, &self.sep2, &*d)))
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -604,7 +659,7 @@ impl JsonPath {
                 };
                 if let Some(v) = v {
                     let v = json::json!({ provider: v });
-                    let v = j.evaluate(&v);
+                    let v = j.evaluate_to_vec(&v).into();
                     Ok(Either::B(v))
                 } else {
                     providers.insert(provider.into());
@@ -619,16 +674,16 @@ impl JsonPath {
         self.selector.find(d).cloned().collect()
     }
 
-    pub(super) fn evaluate(&self, d: &json::Value) -> json::Value {
-        let v = self.evaluate_to_vec(d);
-        json::Value::Array(v)
+    pub(super) fn evaluate<'a, 'b: 'a>(&'b self, d: Cow<'a, json::Value>) -> Cow<'a, json::Value> {
+        let v = self.evaluate_to_vec(&*d);
+        Cow::Owned(v.into())
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
-    ) -> impl Iterator<Item = json::Value> + Clone {
-        self.evaluate_to_vec(d).into_iter()
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
+    ) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
+        self.evaluate_to_vec(&*d).into_iter().map(Cow::Owned)
     }
 
     pub(super) fn into_stream(
@@ -650,8 +705,8 @@ impl JsonPath {
                         } else {
                             Vec::new()
                         };
-                        let v = json::json!({ self.provider.as_str(): &v });
-                        let result = self.evaluate(&v);
+                        let v = json::json!({ self.provider.as_str(): v });
+                        let result = self.evaluate_to_vec(&v).into();
                         (result, outgoing)
                     })
             })
@@ -682,11 +737,8 @@ impl Match {
                     .collect();
                 let arg = args.into_iter().nth(0).expect("match should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &arg {
-                    Ok(Either::B(Match::evaluate_with_arg(
-                        &regex,
-                        &capture_names,
-                        json,
-                    )))
+                    let b = Match::evaluate_with_arg(&regex, &capture_names, json);
+                    Ok(Either::B(b))
                 } else {
                     let m = Match {
                         arg,
@@ -720,22 +772,31 @@ impl Match {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(|d| Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d))
+            .evaluate(d, no_recoverable_error, for_each)
+            .map(|d| {
+                let v = Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d);
+                Cow::Owned(v)
+            })
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -805,24 +866,40 @@ impl MinMax {
         )
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        let iter = self
-            .args
-            .iter()
-            .map(|fa| fa.evaluate(d, no_recoverable_error));
-        MinMax::eval_iter(self.min, iter).map(|d| d.0.into_owned())
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let mut left: Option<(f64, json::Value)> = None;
+        for fa in &self.args {
+            let right = fa.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+            let r = f64_value(&*right);
+            if let Some((l, _)) = &left {
+                match (l.partial_cmp(&r), self.min, l.is_finite()) {
+                    (Some(Ordering::Less), true, _)
+                    | (Some(Ordering::Greater), false, _)
+                    | (None, _, true) => (),
+                    _ if r.is_finite() => left = Some((r, right.into_owned())),
+                    _ => (),
+                };
+            } else if r.is_finite() {
+                left = Some((r, right.into_owned()));
+            }
+        }
+        let v = left.map(|l| l.1).unwrap_or(json::Value::Null);
+        Ok(Cow::Owned(v))
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        self.evaluate(d, no_recoverable_error).map(iter::once)
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        self.evaluate(d, no_recoverable_error, for_each)
+            .map(iter::once)
     }
 
     pub(super) fn into_stream(
@@ -872,17 +949,16 @@ impl Pad {
                 let second = as_usize(args.pop().expect("pad should have three args"))?;
                 let first = args.pop().expect("pad should have three args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &first {
-                    Ok(Either::B(Pad::evaluate_with_arg(
-                        &third, second, start, json,
-                    )))
+                    let b = Pad::evaluate_with_arg(&third, second, start, json);
+                    Ok(Either::B(b))
                 } else {
-                    let p = Pad {
+                    let a = Pad {
                         start,
                         arg: first,
                         min_length: second,
                         padding: third,
                     };
-                    Ok(Either::A(p))
+                    Ok(Either::A(a))
                 }
             }
             _ => Err(TestError::InvalidArguments("pad".into())),
@@ -910,22 +986,31 @@ impl Pad {
         output.into()
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         self.arg
-            .evaluate(d, no_recoverable_error)
-            .map(|d| Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d))
+            .evaluate(d, no_recoverable_error, for_each)
+            .map(|d| {
+                let v = Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d);
+                Cow::Owned(v)
+            })
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        Ok(iter::once(self.evaluate(d, no_recoverable_error)?))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
     }
 
     pub(super) fn into_stream(
@@ -975,21 +1060,25 @@ impl Random {
         }
     }
 
-    pub(super) fn evaluate(&self) -> json::Value {
+    pub(super) fn evaluate<'a>(&self) -> Cow<'a, json::Value> {
         match self {
-            Random::Integer(r) => r.sample(&mut rand::thread_rng()).into(),
-            Random::Float(r) => r.sample(&mut rand::thread_rng()).into(),
+            Random::Integer(r) => Cow::Owned(r.sample(&mut rand::thread_rng()).into()),
+            Random::Float(r) => Cow::Owned(r.sample(&mut rand::thread_rng()).into()),
         }
     }
 
-    pub(super) fn evaluate_as_iter(&self) -> impl Iterator<Item = json::Value> + Clone {
+    pub(super) fn evaluate_as_iter<'a>(
+        &self,
+    ) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
         iter::once(self.evaluate())
     }
 
     pub(super) fn into_stream(
         self,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        stream::iter_ok(iter::repeat_with(move || (self.evaluate(), Vec::new())))
+        stream::iter_ok(iter::repeat_with(move || {
+            (self.evaluate().into_owned(), Vec::new())
+        }))
     }
 }
 
@@ -1013,13 +1102,13 @@ impl ReversibleRange {
         ReversibleRange { range, reverse }
     }
 
-    fn into_iter(self) -> impl Iterator<Item = json::Value> + Clone {
+    fn into_iter<'a>(self) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
         let i = if self.reverse {
             Either::A(self.range.rev())
         } else {
             Either::B(self.range)
         };
-        i.map(Into::into)
+        i.map(|n| Cow::Owned(n.into()))
     }
 }
 
@@ -1052,29 +1141,34 @@ impl Range {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        Ok(json::Value::Array(
-            self.evaluate_as_iter(d, no_recoverable_error)?.collect(),
-        ))
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let v = json::Value::Array(
+            self.evaluate_as_iter(d, no_recoverable_error, for_each)?
+                .map(Cow::into_owned)
+                .collect(),
+        );
+        Ok(Cow::Owned(v))
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
         let r = match self {
             Range::Args(first, second) => {
                 let first = first
-                    .evaluate(d, no_recoverable_error)?
+                    .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
                     .as_u64()
                     .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 let second = second
-                    .evaluate(d, no_recoverable_error)?
+                    .evaluate(d, no_recoverable_error, for_each)?
                     .as_u64()
                     .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                 ReversibleRange::new(first, second)
@@ -1102,7 +1196,10 @@ impl Range {
                             .as_u64()
                             .ok_or_else(|| TestError::InvalidArguments("range".into()))?;
                         let v = json::Value::Array(
-                            ReversibleRange::new(first, second).into_iter().collect(),
+                            ReversibleRange::new(first, second)
+                                .into_iter()
+                                .map(Cow::into_owned)
+                                .collect(),
                         );
                         returns.extend(returns2);
                         Ok((v, returns))
@@ -1111,8 +1208,8 @@ impl Range {
             }
             Range::Range(..) => {
                 let r = self
-                    .evaluate(&json::Value::Null, no_recoverable_error)
-                    .map(|v| (v, Vec::new()));
+                    .evaluate(Cow::Owned(json::Value::Null), no_recoverable_error, None)
+                    .map(|v| (v.into_owned(), Vec::new()));
                 Either::B(stream::iter_result(iter::repeat(r)))
             }
         }
@@ -1145,23 +1242,27 @@ impl Repeat {
         }
     }
 
-    pub(super) fn evaluate(&self) -> json::Value {
-        json::Value::Array(self.evaluate_as_iter().collect())
+    pub(super) fn evaluate<'a>(&self) -> Cow<'a, json::Value> {
+        Cow::Owned(json::Value::Array(
+            self.evaluate_as_iter().map(Cow::into_owned).collect(),
+        ))
     }
 
-    pub(super) fn evaluate_as_iter(&self) -> impl Iterator<Item = json::Value> + Clone {
+    pub(super) fn evaluate_as_iter<'a>(
+        &self,
+    ) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
         let n = if let Some(r) = self.random {
             r.sample(&mut rand::thread_rng())
         } else {
             self.min
         };
-        iter::repeat(json::Value::Null).take(n as usize)
+        iter::repeat(Cow::Owned(json::Value::Null)).take(n as usize)
     }
 
     pub(super) fn into_stream(
         self,
     ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
-        stream::repeat((self.evaluate(), Vec::new()))
+        stream::repeat((self.evaluate().into_owned(), Vec::new()))
     }
 }
 
@@ -1248,29 +1349,33 @@ impl Replace {
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate<'a>(
+        &'a self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        let mut haystack = self
-            .haystack
-            .evaluate(d, no_recoverable_error)?
-            .into_owned();
-        let needle_value = self.needle.evaluate(d, no_recoverable_error)?;
-        let replacer_value = self.replacer.evaluate(d, no_recoverable_error)?;
-        let needle = json_value_to_string(&*needle_value);
-        let replacer = json_value_to_string(&*replacer_value);
-        Replace::replace(&mut haystack, &*needle, &*replacer);
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let needle_value =
+            self.needle
+                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+        let needle = json_value_to_string(&*needle_value).into_owned();
+        let replacer_value =
+            self.replacer
+                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+        let replacer = json_value_to_string(&*replacer_value).into_owned();
+        let mut haystack = self.haystack.evaluate(d, no_recoverable_error, for_each)?;
+        Replace::replace(haystack.to_mut(), &*needle, &*replacer);
         Ok(haystack)
     }
 
-    pub(super) fn evaluate_as_iter(
-        &self,
-        d: &json::Value,
+    pub(super) fn evaluate_as_iter<'a>(
+        &'a self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        self.evaluate(d, no_recoverable_error).map(iter::once)
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        self.evaluate(d, no_recoverable_error, for_each)
+            .map(iter::once)
     }
 
     pub(super) fn into_stream(
@@ -1338,8 +1443,10 @@ mod tests {
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
-            let left = c.evaluate(&json::Value::Null, false).unwrap();
-            assert_eq!(left, right);
+            let left = c
+                .evaluate(Cow::Owned(json::Value::Null), false, None)
+                .unwrap();
+            assert_eq!(*left, right);
         }
     }
 
@@ -1355,8 +1462,9 @@ mod tests {
             let args = args.into_iter().map(Into::into).collect();
             let c = Collect::new(args).unwrap();
             let left: Vec<_> = c
-                .evaluate_as_iter(&json::Value::Null, false)
+                .evaluate_as_iter(Cow::Owned(json::Value::Null), false, None)
                 .unwrap()
+                .map(Cow::into_owned)
                 .collect();
             assert_eq!(left, right);
         }
@@ -1456,8 +1564,8 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Encode::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval, false).unwrap();
-                    assert_eq!(left, right)
+                    let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
+                    assert_eq!(*left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
                 _ => unreachable!(),
@@ -1494,7 +1602,11 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Encode::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
+                    let left: Vec<_> = e
+                        .evaluate_as_iter(Cow::Owned(eval), false, None)
+                        .unwrap()
+                        .map(Cow::into_owned)
+                        .collect();
                     assert_eq!(left, right)
                 }
                 Either::B(_) => unreachable!(),
@@ -1574,8 +1686,8 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             let e = Entries::new(args).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
-            let left = e.evaluate(&eval, false).unwrap();
-            assert_eq!(left, right)
+            let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
+            assert_eq!(*left, right)
         }
     }
 
@@ -1605,7 +1717,11 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             let e = Entries::new(args).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
-            let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
+            let left: Vec<_> = e
+                .evaluate_as_iter(Cow::Owned(eval), false, None)
+                .unwrap()
+                .map(Cow::into_owned)
+                .collect();
             assert_eq!(left, right)
         }
     }
@@ -1650,7 +1766,7 @@ mod tests {
 
         for arg in checks.into_iter() {
             let e = Epoch::new(vec![arg.into()]).unwrap();
-            let left = json_value_into_string(e.evaluate().unwrap())
+            let left = json_value_into_string(e.evaluate().unwrap().into_owned())
                 .parse::<u128>()
                 .unwrap();
             let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -1679,7 +1795,7 @@ mod tests {
             let e = Epoch::new(vec![arg.into()]).unwrap();
             let mut left: Vec<_> = e.evaluate_as_iter().unwrap().collect();
             assert_eq!(left.len(), 1);
-            let left = json_value_into_string(left.pop().unwrap())
+            let left = json_value_into_string(left.pop().unwrap().into_owned())
                 .parse::<u128>()
                 .unwrap();
             let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -1765,12 +1881,16 @@ mod tests {
             ),
         ];
 
-        for (args, eval_arg, expect) in checks.into_iter() {
+        for (args, eval, expect) in checks.into_iter() {
             let i = match If::new(args).unwrap() {
                 Either::A(i) => i,
                 Either::B(_) => unreachable!(),
             };
-            let left: Vec<_> = i.evaluate_as_iter(&eval_arg, false).unwrap().collect();
+            let left: Vec<_> = i
+                .evaluate_as_iter(Cow::Owned(eval), false, None)
+                .unwrap()
+                .map(Cow::into_owned)
+                .collect();
             assert_eq!(left, expect);
         }
     }
@@ -1845,8 +1965,8 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Join::new(args).unwrap()) {
                 (Some(eval), Either::A(e)) => {
-                    let left = e.evaluate(&eval, false).unwrap();
-                    assert_eq!(left, right)
+                    let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
+                    assert_eq!(*left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
                 _ => unreachable!(),
@@ -1874,7 +1994,11 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Join::new(args).unwrap() {
                 Either::A(e) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
+                    let left: Vec<_> = e
+                        .evaluate_as_iter(Cow::Owned(eval), false, None)
+                        .unwrap()
+                        .map(Cow::into_owned)
+                        .collect();
                     assert_eq!(left, vec!(right))
                 }
                 Either::B(_) => unreachable!(),
@@ -1955,8 +2079,8 @@ mod tests {
                 ) {
                     (false, Either::A(j)) => {
                         assert_eq!(&providers, providers_expect);
-                        let left = j.evaluate(eval);
-                        assert_eq!(&left, right)
+                        let left = j.evaluate(Cow::Borrowed(eval));
+                        assert_eq!(&*left, right)
                     }
                     (true, Either::B(left)) => {
                         assert_eq!(providers.len(), 0);
@@ -1991,7 +2115,10 @@ mod tests {
             match JsonPath::new(vec![arg.into()], &mut providers, &static_vars).unwrap() {
                 Either::A(j) => {
                     assert_eq!(providers, providers_expect);
-                    let left: Vec<_> = j.evaluate_as_iter(&eval).collect();
+                    let left: Vec<_> = j
+                        .evaluate_as_iter(Cow::Owned(eval))
+                        .map(Cow::into_owned)
+                        .collect();
                     assert_eq!(left, right)
                 }
                 _ => unreachable!(),
@@ -2066,8 +2193,8 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match (eval, Match::new(args)) {
                 (Some(eval), Ok(Either::A(e))) => {
-                    let left = e.evaluate(&eval, false).unwrap();
-                    assert_eq!(left, right)
+                    let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
+                    assert_eq!(*left, right)
                 }
                 (None, Ok(Either::B(left))) => assert_eq!(left, right),
                 _ => unreachable!(),
@@ -2094,7 +2221,11 @@ mod tests {
         for (args, eval, right) in checks.into_iter() {
             match Match::new(args) {
                 Ok(Either::A(e)) => {
-                    let left: Vec<_> = e.evaluate_as_iter(&eval, false).unwrap().collect();
+                    let left: Vec<_> = e
+                        .evaluate_as_iter(Cow::Owned(eval), false, None)
+                        .unwrap()
+                        .map(Cow::into_owned)
+                        .collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -2183,13 +2314,13 @@ mod tests {
             (false, vec![j!("foo").into()], None, j!(null)),
         ];
 
-        for (min, args, eval, right) in checks.into_iter() {
+        for (i, (min, args, eval, right)) in checks.into_iter().enumerate() {
             match (eval, MinMax::new(min, args).unwrap()) {
                 (Some(eval), Either::A(m)) => {
-                    let left = m.evaluate(&eval, false).unwrap();
-                    assert_eq!(left, right)
+                    let left = m.evaluate(Cow::Owned(eval), false, None).unwrap();
+                    assert_eq!(*left, right, "index: {}", i)
                 }
-                (None, Either::B(left)) => assert_eq!(left, right),
+                (None, Either::B(left)) => assert_eq!(left, right, "index: {}", i),
                 _ => unreachable!(),
             }
         }
@@ -2215,7 +2346,11 @@ mod tests {
 
         for (min, args, eval, right) in checks.into_iter() {
             if let Either::A(m) = MinMax::new(min, args).unwrap() {
-                let left: Vec<_> = m.evaluate_as_iter(&eval, false).unwrap().collect();
+                let left: Vec<_> = m
+                    .evaluate_as_iter(Cow::Owned(eval), false, None)
+                    .unwrap()
+                    .map(Cow::into_owned)
+                    .collect();
                 assert_eq!(left, vec!(right))
             } else {
                 unreachable!();
@@ -2313,8 +2448,8 @@ mod tests {
         for (start, args, eval, right) in checks.into_iter() {
             match (eval, Pad::new(start, args).unwrap()) {
                 (Some(eval), Either::A(p)) => {
-                    let left = p.evaluate(&eval, false).unwrap();
-                    assert_eq!(left, right)
+                    let left = p.evaluate(Cow::Owned(eval), false, None).unwrap();
+                    assert_eq!(*left, right)
                 }
                 (None, Either::B(left)) => assert_eq!(left, right),
                 _ => unreachable!(),
@@ -2355,7 +2490,11 @@ mod tests {
         for (start, args, eval, right) in checks.into_iter() {
             match Pad::new(start, args).unwrap() {
                 Either::A(p) => {
-                    let left: Vec<_> = p.evaluate_as_iter(&eval, false).unwrap().collect();
+                    let left: Vec<_> = p
+                        .evaluate_as_iter(Cow::Owned(eval), false, None)
+                        .unwrap()
+                        .map(Cow::into_owned)
+                        .collect();
                     assert_eq!(left, vec!(right))
                 }
                 _ => unreachable!(),
@@ -2485,8 +2624,8 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let r = Range::new(args).unwrap();
-            let left = r.evaluate(&data, false).unwrap();
-            assert_eq!(left, right);
+            let left = r.evaluate(Cow::Borrowed(&data), false, None).unwrap();
+            assert_eq!(*left, right);
         }
     }
 
@@ -2506,7 +2645,11 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let r = Range::new(args).unwrap();
-            let left: Vec<_> = r.evaluate_as_iter(&data, false).unwrap().collect();
+            let left: Vec<_> = r
+                .evaluate_as_iter(Cow::Borrowed(&data), false, None)
+                .unwrap()
+                .map(Cow::into_owned)
+                .collect();
             let right = if let json::Value::Array(v) = right {
                 v
             } else {
@@ -2558,7 +2701,7 @@ mod tests {
 
         for (args, count) in checks.into_iter() {
             let r = Repeat::new(args).unwrap();
-            let v = if let json::Value::Array(v) = r.evaluate() {
+            let v = if let json::Value::Array(v) = r.evaluate().into_owned() {
                 v
             } else {
                 unreachable!();
@@ -2583,7 +2726,7 @@ mod tests {
         for (args, count) in checks.into_iter() {
             let r = Repeat::new(args).unwrap();
             let v: Vec<_> = r.evaluate_as_iter().collect();
-            assert!(v.iter().all(|v| *v == json::Value::Null));
+            assert!(v.iter().all(|v| **v == json::Value::Null));
             let len = v.len();
             match count {
                 Either::A(n) => assert_eq!(len, n),
@@ -2678,7 +2821,11 @@ mod tests {
             } else {
                 unreachable!();
             };
-            let result: Vec<_> = r.evaluate_as_iter(&data, false).unwrap().collect();
+            let result: Vec<_> = r
+                .evaluate_as_iter(Cow::Borrowed(&data), false, None)
+                .unwrap()
+                .map(Cow::into_owned)
+                .collect();
             assert_eq!(result, vec!(expect));
         }
     }

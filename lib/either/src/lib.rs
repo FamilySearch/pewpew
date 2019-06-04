@@ -18,6 +18,25 @@ impl<A, B> Either<A, B> {
             Either::B(b) => Either::B(b),
         }
     }
+
+    pub fn map_b<F, R>(self, t_fn: F) -> Either<A, R>
+    where
+        F: FnOnce(B) -> R,
+    {
+        match self {
+            Either::A(a) => Either::A(a),
+            Either::B(b) => Either::B(t_fn(b)),
+        }
+    }
+}
+
+impl<A> Either<A, A> {
+    pub fn unwrap(self) -> A {
+        match self {
+            Either::A(a) => a,
+            Either::B(b) => b,
+        }
+    }
 }
 
 impl<A, B> Stream for Either<A, B>

@@ -26,6 +26,7 @@ use serde_json as json;
 use tuple_vec_map;
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     iter,
     num::{NonZeroU16, NonZeroUsize},
@@ -494,7 +495,8 @@ impl PreTemplate {
         &self,
         static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<String, TestError> {
-        Template::new(&self.0, static_vars, false).and_then(|t| t.evaluate(&json::Value::Null))
+        Template::new(&self.0, static_vars, false)
+            .and_then(|t| t.evaluate(Cow::Owned(json::Value::Null), None))
     }
 }
 
@@ -777,7 +779,7 @@ where
         match v {
             json::Value::String(s) => {
                 let t = Template::new(s, env_vars, false)?;
-                let s = t.evaluate(&json::Value::Null)?;
+                let s = t.evaluate(Cow::Owned(json::Value::Null), None)?;
                 *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
             }
             json::Value::Array(a) => {

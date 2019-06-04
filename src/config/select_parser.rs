@@ -1406,8 +1406,9 @@ impl Select {
             let iter2 = match &mut iter {
                 Some(i) => i,
                 None => {
-                    // let select: &'static _ = &self;
-                    // let data: &'static _ = &d;
+                    // TODO: get rid of unsafe by creating a custom iterator which will do the
+                    // `map` -> `multi_cartesian_product` -> `map` of the above `as_iter` in one closure/method
+                    // this should be safe because the Arc will outlive the references (and iterator) created below
                     let (select, data) = unsafe {
                         let select: &'_ Self = &*(&*self as *const _);
                         let data: &'_ json::Value = &*(&*d as *const _);

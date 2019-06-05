@@ -173,6 +173,11 @@ Unlike other *provider_type*s `response` does not automatically receive data fro
 
 ## list
 The `list` *provider_type* creates a means of specifying an array of static values to be used as a provider.
+A `list` provider can be specified in two forms, either implicitly or explicitly. The explicit form has the following parameters:
+
+- **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that entries in the values array should provided in random order. When combined with `repeat` there is no sense of "fairness" in the randomization. Defaults to *false*.
+- **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that the array should repeat infitely. Defaults to *true*.
+- **`values`** - An array of json values.
 
 **Example**, the following:
 ```yaml
@@ -184,13 +189,21 @@ providers:
       - 789
 ```
 
-creates a `list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
+is an example of an implicit `list` provider. It creates a `list` provider named `foo` where the first value provided will be `123`, the second `456`, third `789` then for subsequent values it will start over at the beginning.
 
-`list` provider can be specified in two forms, either implicitly (example above) or explicitly. The explicit form has the following parameters:
+**Example**, the following:
+```yaml
+providers:
+  foo:
+    list:
+      values:
+        - 123
+        - 456
+        - 789
+      random: true
+```
 
-- **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that entries in the values array should provided in random order. When combined with `repeat` there is no sense of "fairness" in the randomization. Defaults to *false*.
-- **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that the array should repeat infitely. Defaults to *true*.
-- **`values`** - An array of json values.
+is an example of an explicit `list` provider. It creates a `list` provider named `foo` where the value provided will be randomized between the values listed.
 
 ## range
 The `range` *provider_type* provides an incrementing sequence of numbers in a given range. A `range` provider takes three optional parameters.

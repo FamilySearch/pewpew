@@ -18,6 +18,7 @@ channel = { path = "./lib/channel" }
 clap = "2"
 crossbeam = "0.7"
 csv = "1"
+ctrlc = "3"
 chrono = "0.4"
 ether = { path = "./lib/either" }
 fnv = "1"

@@ -26,6 +26,7 @@ Changes:
 - Allow a logger to log test errors. This is done by making another variable available to loggers--`error` (in addition to `request`, `response` and `stats`). A logger can no longer have an error "indexing into json", instead it will resolve to `null`. This enables a logger which logs test errors along with the `request` and `response` if they are available.
 - Add the `watch` command-line flag for the `run` subcommand, along with the `watch_transition_time` general config option to allow `load_pattern`s and `peak_load`s to change while a test is running. This enables the duration of a test to change and the amount of load generated.
 - Allow a global header to be unset with a `null` value in the `endpoints.headers` sub-section.
+- Better handle Ctrl-c killing of the test and persist any unsaved data to disk.
 
 ### v0.4.11
 Changes:

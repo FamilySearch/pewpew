@@ -205,6 +205,7 @@ pub enum ExecConfig {
 #[derive(Copy, Clone, Debug)]
 pub enum TestEndReason {
     Completed,
+    CtrlC,
     KilledByLogger,
     ProviderEnded,
 }
@@ -319,6 +320,21 @@ where
                         }
                         RunOutputFormat::Json => {
                             "{\"type\":\"end\",\"msg\":\"Test killed early by logger\"}\n".to_string()
+                        }
+                    };
+                    let a = write_all(stderr2, msg);
+                    Either::A(a)
+                }
+                Ok(TestEndReason::CtrlC) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => {
+                            format!(
+                                "\n{}\n",
+                                Paint::yellow("Test killed early by Ctrl-c").bold()
+                            )
+                        }
+                        RunOutputFormat::Json => {
+                            "{\"type\":\"end\",\"msg\":\"Test killed early by Ctrl-c\"}\n".to_string()
                         }
                     };
                     let a = write_all(stderr2, msg);
@@ -878,6 +894,12 @@ where
             .flatten()
     });
 
+    let (ctrl_c_tx, mut ctrl_c_rx) = futures_channel::unbounded();
+
+    let _ = ctrlc::set_handler(move || {
+        let _ = ctrl_c_tx.unbounded_send(());
+    });
+
     let test_ended_tx2 = test_ended_tx.clone();
     let endpoint_calls = stats_tx
         .send(StatsMessage::Start(duration))
@@ -900,6 +922,9 @@ where
                             test_end_delay.poll().map_err::<TestError, _>(Into::into)?
                         {
                             return Ok(Async::Ready(TestEndReason::Completed));
+                        }
+                        if let Ok(Async::Ready(_)) = ctrl_c_rx.poll() {
+                            return Ok(Async::Ready(TestEndReason::CtrlC));
                         }
                         if let Some(duration_updater2) = &mut duration_updater {
                             let mut duration = None;

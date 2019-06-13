@@ -334,5 +334,21 @@ Pads a string or number to be minimum length. Any added padding will be added to
 
 </td>
 </tr>
+<tr>
+<td>
+<code>replace(<i>needle</i>, <i>haystack</i>, <i>replacer</i>)</code>
+</td>
+<td>
+
+Replaces any instance of a string (*needle*) within a JSON value (*haystack*) with another string (*replacer*). This function will recursively check the JSON for any string value of *needle* and replace it with *replacer*. This includes checking within a nested object's key and value pairs, within arrays and within strings.
+
+*needle* - an expression whose value will be coerced to a string if needed.<br/>
+*haystack* - the JSON value to search<br/>
+*replacer* - an expression whose value will be coerced to a string if needed.<br/>
+
+**Example**: with the value `{"foo": "baz", "zed": ["abc", 123, "fooo"]}` from a provider named `a`, then the expression `replace("foo", a, "bar")` would resolve to `{"bar": "baz", "zed": ["abc", 123, "baro"]}`.
+
+</td>
+</tr>
 </tbody>
 </table>

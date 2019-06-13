@@ -27,6 +27,7 @@ Changes:
 - Add the `watch` command-line flag for the `run` subcommand, along with the `watch_transition_time` general config option to allow `load_pattern`s and `peak_load`s to change while a test is running. This enables the duration of a test to change and the amount of load generated.
 - Allow a global header to be unset with a `null` value in the `endpoints.headers` sub-section.
 - Better handle Ctrl-c killing of the test and persist any unsaved data to disk.
+- Add in `replace` expression function which replaces any occurances of a string in a JSON value with another string.
 
 ### v0.4.11
 Changes:

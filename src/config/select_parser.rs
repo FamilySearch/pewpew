@@ -1,5 +1,6 @@
 use super::expression_functions::{
     Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
+    Replace,
 };
 use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
@@ -113,6 +114,7 @@ pub(super) enum FunctionCall {
     Random(Random),
     Range(Box<Range>),
     Repeat(Repeat),
+    Replace(Box<Replace>),
 }
 
 impl FunctionCall {
@@ -140,6 +142,7 @@ impl FunctionCall {
             "random" => Either::A(FunctionCall::Random(Random::new(args)?)),
             "range" => Either::A(FunctionCall::Range(Range::new(args)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?)),
+            "replace" => Replace::new(args)?.map_a(|r| FunctionCall::Replace(r.into())),
             _ => return Err(TestError::InvalidFunction(ident.into())),
         };
         Ok(r)
@@ -163,6 +166,7 @@ impl FunctionCall {
             FunctionCall::Range(r) => r.evaluate(d, no_recoverable_error),
             FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
+            FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error),
         }
     }
 
@@ -202,7 +206,10 @@ impl FunctionCall {
             FunctionCall::Range(r) => {
                 Either3::C(Either3::B(r.evaluate_as_iter(d, no_recoverable_error)?))
             }
-            FunctionCall::Repeat(r) => Either3::C(Either3::C(r.evaluate_as_iter())),
+            FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.evaluate_as_iter()))),
+            FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(
+                r.evaluate_as_iter(d, no_recoverable_error)?,
+            ))),
         };
         Ok(r)
     }
@@ -244,7 +251,10 @@ impl FunctionCall {
             FunctionCall::Range(r) => {
                 Either3::C(Either3::B(r.into_stream(providers, no_recoverable_error)))
             }
-            FunctionCall::Repeat(r) => Either3::C(Either3::C(r.into_stream())),
+            FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.into_stream()))),
+            FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(
+                r.into_stream(providers, no_recoverable_error),
+            ))),
         };
         // boxed to prevent recursive impl Stream
         Box::new(f)

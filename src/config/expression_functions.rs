@@ -1185,6 +1185,118 @@ fn as_u64(fa: &ValueOrExpression) -> Option<u64> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct Replace {
+    needle: ValueOrExpression,
+    haystack: ValueOrExpression,
+    replacer: ValueOrExpression,
+}
+
+impl Replace {
+    pub(super) fn new(
+        mut args: Vec<ValueOrExpression>,
+    ) -> Result<Either<Self, json::Value>, TestError> {
+        match args.as_mut_slice() {
+            [ValueOrExpression::Value(Value::Json(json::Value::String(needle))), ValueOrExpression::Value(Value::Json(haystack)), ValueOrExpression::Value(Value::Json(json::Value::String(replacer)))] =>
+            {
+                let mut haystack = haystack.take();
+                Replace::replace(&mut haystack, needle, replacer);
+                Ok(Either::B(haystack))
+            }
+            [_, _, _] => {
+                let replacer = args.pop().expect("replace should have three args");
+                let haystack = args.pop().expect("replace should have three args");
+                let needle = args.pop().expect("replace should have three args");
+                Ok(Either::A(Replace {
+                    needle,
+                    haystack,
+                    replacer,
+                }))
+            }
+            _ => Err(TestError::InvalidArguments("match".into())),
+        }
+    }
+
+    fn replace(value: &mut json::Value, needle: &str, replacer: &str) {
+        match value {
+            json::Value::String(s) => {
+                if s.contains(needle) {
+                    *s = s.replace(needle, replacer);
+                }
+            }
+            json::Value::Array(a) => {
+                for el in a {
+                    Replace::replace(el, needle, replacer);
+                }
+            }
+            json::Value::Object(o) => {
+                // mutate values
+                let mut key_changes = Vec::new();
+                for (key, value) in o.iter_mut() {
+                    Replace::replace(value, needle, replacer);
+                    if key.contains(needle) {
+                        key_changes.push((key.clone(), key.replace(needle, replacer)));
+                    }
+                }
+                // mutate keys
+                for (old_key, new_key) in key_changes {
+                    let value = o.remove(&old_key).expect("key should exist");
+                    o.insert(new_key, value);
+                }
+            }
+            _ => (),
+        }
+    }
+
+    pub(super) fn evaluate(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<json::Value, TestError> {
+        let mut haystack = self
+            .haystack
+            .evaluate(d, no_recoverable_error)?
+            .into_owned();
+        let needle_value = self.needle.evaluate(d, no_recoverable_error)?;
+        let replacer_value = self.replacer.evaluate(d, no_recoverable_error)?;
+        let needle = json_value_to_string(&*needle_value);
+        let replacer = json_value_to_string(&*replacer_value);
+        Replace::replace(&mut haystack, &*needle, &*replacer);
+        Ok(haystack)
+    }
+
+    pub(super) fn evaluate_as_iter(
+        &self,
+        d: &json::Value,
+        no_recoverable_error: bool,
+    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
+        self.evaluate(d, no_recoverable_error).map(iter::once)
+    }
+
+    pub(super) fn into_stream(
+        self,
+        providers: &BTreeMap<String, providers::Provider>,
+        no_recoverable_error: bool,
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+        let streams = vec![
+            self.haystack.into_stream(providers, no_recoverable_error),
+            self.needle.into_stream(providers, no_recoverable_error),
+            self.replacer.into_stream(providers, no_recoverable_error),
+        ];
+        zip_all(streams).map(move |mut v| {
+            let (replacer, mut returns) = v.pop().expect("should have 3 elements");
+            let (needle, returns2) = v.pop().expect("should have 3 elements");
+            returns.extend(returns2);
+            let (mut haystack, returns2) = v.pop().expect("should have 3 elements");
+            returns.extend(returns2);
+            let replacer = json_value_to_string(&replacer);
+            let needle = json_value_to_string(&needle);
+            Replace::replace(&mut haystack, &needle, &replacer);
+            (haystack, returns)
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::select_parser::{Path, PathStart};
@@ -2507,6 +2619,104 @@ mod tests {
                             Either::B((min, max)) => assert!(len >= min && len <= max),
                         }
                     })
+                })
+                .collect();
+            join_all(futures).then(|_| Ok(()))
+        }));
+    }
+
+    #[test]
+    fn replace_eval() {
+        // constructor args, expect
+        let checks = vec![
+            (
+                vec![
+                    j!("foo").into(),
+                    j!({"abc": [123, "defoozle"], "def": { "fooo": "blah", "baz": "foo"} }).into(),
+                    j!("bar").into(),
+                ],
+                j!({"abc": [123, "debarzle"], "def": { "baro": "blah", "baz": "bar"} }),
+            ),
+            (
+                vec![j!("foo").into(), j!("foo").into(), j!("bar").into()],
+                j!("bar"),
+            ),
+        ];
+
+        for (args, expect) in checks.into_iter() {
+            let result = if let Ok(Either::B(r)) = Replace::new(args) {
+                r
+            } else {
+                unreachable!();
+            };
+            assert_eq!(result, expect);
+        }
+    }
+
+    #[test]
+    fn replace_eval_iter() {
+        let data = j!({
+            "a": { "abc": [123, "defoozle"], "def": { "fooo": "blah", "baz": "foo"} },
+            "b": "foo"
+        });
+
+        // constructor args, expect
+        let checks = vec![
+            (
+                vec![j!("foo").into(), "a".into(), j!("bar").into()],
+                j!({"abc": [123, "debarzle"], "def": { "baro": "blah", "baz": "bar"} }),
+            ),
+            (
+                vec![j!("foo").into(), "b".into(), j!("bar").into()],
+                j!("bar"),
+            ),
+        ];
+
+        for (args, expect) in checks.into_iter() {
+            let r = if let Ok(Either::A(r)) = Replace::new(args) {
+                r
+            } else {
+                unreachable!();
+            };
+            let result: Vec<_> = r.evaluate_as_iter(&data, false).unwrap().collect();
+            assert_eq!(result, vec!(expect));
+        }
+    }
+
+    #[test]
+    fn replace_into_stream() {
+        // constructor args, expect
+        let checks = vec![
+            (
+                vec![j!("foo").into(), "a".into(), j!("bar").into()],
+                j!({"abc": [123, "debarzle"], "def": { "baro": "blah", "baz": "bar"} }),
+            ),
+            (
+                vec![j!("foo").into(), "b".into(), j!("bar").into()],
+                j!("bar"),
+            ),
+        ];
+
+        current_thread::run(lazy(move || {
+            let providers = btreemap!(
+                "a".to_string() => literals(vec!(j!({ "abc": [123, "defoozle"], "def": { "fooo": "blah", "baz": "foo"} })).into()),
+                "b".to_string() => literals(vec!(j!("foo")).into()),
+            );
+
+            let providers = Arc::new(providers);
+            let futures: Vec<_> = checks
+                .into_iter()
+                .map(move |(args, right)| {
+                    let r = if let Ok(Either::A(r)) = Replace::new(args) {
+                        r
+                    } else {
+                        unreachable!();
+                    };
+                    r.into_stream(&providers, false)
+                        .into_future()
+                        .map(move |(v, _)| {
+                            assert_eq!(v.unwrap().0, right);
+                        })
                 })
                 .collect();
             join_all(futures).then(|_| Ok(()))

@@ -173,9 +173,10 @@ pub enum StatsFileFormat {
     // None,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RunConfig {
     pub config_file: PathBuf,
+    pub ctrlc_channel: futures_channel::UnboundedReceiver<()>,
     pub output_format: RunOutputFormat,
     pub results_dir: Option<PathBuf>,
     pub stats_file_format: StatsFileFormat,
@@ -196,7 +197,6 @@ pub struct TryConfig {
     pub results_dir: Option<PathBuf>,
 }
 
-#[derive(Clone)]
 pub enum ExecConfig {
     Run(RunConfig),
     Try(TryConfig),
@@ -359,7 +359,10 @@ where
             };
             f.map_a(|a| a.then(|_| Ok(())))
                 .then(move |_| r)
-                .map(|_| ())
+                .map(|_| {
+                    // FIXME: the event loop doesn't immediately shutdown on ctrl c 
+                    std::process::exit(0);
+                })
                 .map_err(|_| ())
         })
 }
@@ -894,12 +897,7 @@ where
             .flatten()
     });
 
-    let (ctrl_c_tx, mut ctrl_c_rx) = futures_channel::unbounded();
-
-    let _ = ctrlc::set_handler(move || {
-        let _ = ctrl_c_tx.unbounded_send(());
-    });
-
+    let mut ctrlc_channel = run_config.ctrlc_channel;
     let test_ended_tx2 = test_ended_tx.clone();
     let endpoint_calls = stats_tx
         .send(StatsMessage::Start(duration))
@@ -923,7 +921,7 @@ where
                         {
                             return Ok(Async::Ready(TestEndReason::Completed));
                         }
-                        if let Ok(Async::Ready(_)) = ctrl_c_rx.poll() {
+                        if let Ok(Async::Ready(_)) = ctrlc_channel.poll() {
                             return Ok(Async::Ready(TestEndReason::CtrlC));
                         }
                         if let Some(duration_updater2) = &mut duration_updater {

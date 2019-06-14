@@ -13,8 +13,11 @@ fn int1() {
     let (port, _) = test_common::start_test_server(None);
     env::set_var("PORT", port.to_string());
 
+    let (_, ctrlc_channel) = futures::sync::mpsc::unbounded();
+
     let run_config = pewpew::RunConfig {
         config_file: "tests/integration.yaml".into(),
+        ctrlc_channel,
         output_format: pewpew::RunOutputFormat::Human,
         results_dir: Some("./".into()),
         stats_file_format: pewpew::StatsFileFormat::Json,

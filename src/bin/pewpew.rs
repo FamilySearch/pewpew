@@ -7,7 +7,7 @@ use std::{
 };
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
-use futures::Future;
+use futures::{sync::mpsc as futures_channel, Future};
 use pewpew::{create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter};
 use regex::Regex;
 use tokio::{
@@ -143,13 +143,19 @@ fn main() {
             create_dir_all(d).unwrap();
             d.into()
         });
+        let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();
+
+        let _ = ctrlc::set_handler(move || {
+            let _ = ctrl_c_tx.unbounded_send(());
+        });
         let stats_file_format = StatsFileFormat::Json;
         let watch_config_file = matches.is_present("watch");
         let run_config = RunConfig {
+            config_file,
+            ctrlc_channel,
             output_format,
             results_dir,
             stats_file_format,
-            config_file,
             watch_config_file,
         };
         ExecConfig::Run(run_config)

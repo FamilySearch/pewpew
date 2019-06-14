@@ -123,10 +123,11 @@ struct RollingAggregateStats {
     last_print_time: Cell<u64>,
     #[serde(skip)]
     start_time: Option<Instant>,
+    test_name: Option<String>,
 }
 
 impl RollingAggregateStats {
-    fn new(duration: Duration, file_name: PathBuf) -> Self {
+    fn new(duration: Duration, file_name: PathBuf, test_name: Option<String>) -> Self {
         RollingAggregateStats {
             buckets: BTreeMap::new(),
             duration: duration.as_secs(),
@@ -134,6 +135,7 @@ impl RollingAggregateStats {
             file_name,
             last_print_time: Cell::new(0),
             start_time: None,
+            test_name,
         }
     }
 
@@ -727,6 +729,7 @@ where
     let stats = Arc::new(Mutex::new(RollingAggregateStats::new(
         bucket_size,
         file_path,
+        test_name.map(str::to_string),
     )));
     let stats2 = stats.clone();
     let stats3 = stats.clone();

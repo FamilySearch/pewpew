@@ -1,4 +1,9 @@
-#![feature(bind_by_move_pattern_guards, existential_type, impl_trait_in_bindings)]
+#![feature(
+    bind_by_move_pattern_guards,
+    existential_type,
+    label_break_value,
+    impl_trait_in_bindings
+)]
 #![recursion_limit = "128"]
 #![warn(rust_2018_idioms)]
 
@@ -33,6 +38,7 @@ use tokio::io::{read_to_end, write_all, AsyncRead, AsyncWrite};
 use yansi::Paint;
 
 use std::{
+    borrow::Cow,
     cell::RefCell,
     cmp,
     collections::{BTreeMap, BTreeSet},
@@ -517,7 +523,7 @@ fn create_url_and_update_tags(
         if let Some(r) = t.get_providers().iter().nth(0) {
             return Err(TestError::InvalidTagsReference(r.clone()));
         }
-        *v = t.evaluate(&json::Value::Null)?;
+        *v = t.evaluate(Cow::Owned(json::Value::Null), None)?;
     }
     Ok(url)
 }

@@ -147,70 +147,92 @@ impl FunctionCall {
         };
         Ok(r)
     }
-    fn evaluate(
-        &self,
-        d: &json::Value,
+
+    fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         match self {
-            FunctionCall::Collect(c) => c.evaluate(d, no_recoverable_error),
-            FunctionCall::Encode(e) => e.evaluate(d, no_recoverable_error),
-            FunctionCall::Entries(e) => e.evaluate(d, no_recoverable_error),
+            FunctionCall::Collect(c) => c.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::Encode(e) => e.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::Entries(e) => e.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::Epoch(e) => e.evaluate(),
-            FunctionCall::If(i) => i.evaluate(d, no_recoverable_error),
-            FunctionCall::Join(j) => j.evaluate(d, no_recoverable_error),
+            FunctionCall::If(i) => i.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::Join(j) => j.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::JsonPath(j) => Ok(j.evaluate(d)),
-            FunctionCall::Match(m) => m.evaluate(d, no_recoverable_error),
-            FunctionCall::MinMax(m) => m.evaluate(d, no_recoverable_error),
-            FunctionCall::Pad(p) => p.evaluate(d, no_recoverable_error),
-            FunctionCall::Range(r) => r.evaluate(d, no_recoverable_error),
+            FunctionCall::Match(m) => m.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::MinMax(m) => m.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::Pad(p) => p.evaluate(d, no_recoverable_error, for_each),
+            FunctionCall::Range(r) => r.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
-            FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error),
+            FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error, for_each),
         }
     }
 
-    fn evaluate_as_iter<'a>(
-        &self,
-        d: &'a json::Value,
+    fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = json::Value> + Clone, TestError> {
-        let r = match self {
-            FunctionCall::Collect(c) => {
-                Either3::A(Either3::A(c.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            FunctionCall::Encode(e) => {
-                Either3::A(Either3::B(e.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            FunctionCall::Entries(e) => Either3::A(Either3::C(Either3::A(
-                e.evaluate_as_iter(d, no_recoverable_error)?,
-            ))),
-            FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.evaluate_as_iter()?))),
-            FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(
-                i.evaluate_as_iter(d, no_recoverable_error)?,
-            ))),
-            FunctionCall::Join(j) => {
-                Either3::B(Either3::A(j.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
-            FunctionCall::Match(m) => {
-                Either3::B(Either3::C(m.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(
-                m.evaluate_as_iter(d, no_recoverable_error)?,
-            ))),
-            FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(
-                p.evaluate_as_iter(d, no_recoverable_error)?,
-            ))),
-            FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_iter()))),
-            FunctionCall::Range(r) => {
-                Either3::C(Either3::B(r.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.evaluate_as_iter()))),
-            FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(
-                r.evaluate_as_iter(d, no_recoverable_error)?,
-            ))),
-        };
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+        let r =
+            match self {
+                FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?)),
+                FunctionCall::Encode(e) => Either3::A(Either3::B(e.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?)),
+                FunctionCall::Entries(e) => Either3::A(Either3::C(Either3::A(
+                    e.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.evaluate_as_iter()?))),
+                FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(i.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?))),
+                FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?)),
+                FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
+                FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?)),
+                FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(m.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?))),
+                FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(p.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?))),
+                FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_iter()))),
+                FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?)),
+                FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.evaluate_as_iter()))),
+                FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(r.evaluate_as_iter(
+                    d,
+                    no_recoverable_error,
+                    for_each,
+                )?))),
+            };
         Ok(r)
     }
 
@@ -262,14 +284,15 @@ impl FunctionCall {
 }
 
 fn index_json<'a>(
-    json: &'a json::Value,
+    json: Cow<'a, json::Value>,
     index: Either<&PathSegment, &str>,
     no_err: bool,
+    for_each: Option<&[Cow<'a, json::Value>]>,
 ) -> Result<Cow<'a, json::Value>, TestError> {
     #[allow(unused_assignments)]
     let mut holder = None;
     let str_or_number = match index {
-        Either::A(jps) => match jps.evaluate(json)? {
+        Either::A(jps) => match jps.evaluate(Cow::Borrowed(&*json), for_each)? {
             Either::A(s) => {
                 holder = Some(s);
                 Either::A(holder.as_ref().expect("should have a value").as_str())
@@ -279,56 +302,66 @@ fn index_json<'a>(
         Either::B(s) => Either::A(s),
     };
     let o = match (json, str_or_number) {
-        (json::Value::Object(m), Either::A(s)) => m.get(s),
-        (json::Value::Array(a), Either::B(n)) => a.get(n),
-        (json::Value::Array(a), Either::A(s)) if s == "length" => {
-            return Ok(Cow::Owned((a.len() as u64).into()));
+        (Cow::Borrowed(json::Value::Object(m)), Either::A(s)) => m.get(s).map(Cow::Borrowed),
+        (Cow::Owned(json::Value::Object(mut m)), Either::A(s)) => m.remove(s).map(Cow::Owned),
+        (Cow::Borrowed(json::Value::Array(a)), Either::B(n)) => a.get(n).map(Cow::Borrowed),
+        (Cow::Owned(json::Value::Array(mut a)), Either::B(n)) => {
+            a.get_mut(n).map(|v| Cow::Owned(v.take()))
         }
-        (_, Either::A(s)) if !no_err => {
-            return Err(RecoverableError::IndexingJson(s.into(), json.clone()).into());
+        (j, Either::A(s)) if s == "length" && j.is_array() => {
+            let ret = (j.as_array().expect("json should be an array").len() as u64).into();
+            Some(Cow::Owned(ret))
         }
-        (_, Either::B(n)) if !no_err => {
-            return Err(RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into());
+        (json, Either::A(s)) if !no_err => {
+            return Err(RecoverableError::IndexingJson(s.into(), json.into_owned()).into());
+        }
+        (json, Either::B(n)) if !no_err => {
+            return Err(
+                RecoverableError::IndexingJson(format!("[{}]", n), json.into_owned()).into(),
+            );
         }
         _ => None,
     };
-    Ok(Cow::Borrowed(o.unwrap_or(&json::Value::Null)))
+    let o = o.unwrap_or_else(|| Cow::Owned(json::Value::Null));
+    Ok(o)
 }
 
 fn index_json2<'a>(
-    mut json: &'a json::Value,
+    mut json: Cow<'a, json::Value>,
     indexes: &[PathSegment],
     no_err: bool,
-) -> Result<json::Value, TestError> {
-    for (i, index) in indexes.iter().enumerate() {
-        let o = match (json, index.evaluate(json)?) {
-            (json::Value::Object(m), Either::A(ref s)) => m.get(s),
-            (json::Value::Array(a), Either::B(n)) => a.get(n),
-            (json::Value::Array(a), Either::A(ref s)) if s == "length" => {
-                let ret = (a.len() as u64).into();
-                if i != indexes.len() - 1 {
-                    if !no_err {
-                        return Err(RecoverableError::IndexingJson(s.clone(), ret).into());
-                    } else {
-                        None
-                    }
-                } else {
-                    return Ok(ret);
-                }
+    for_each: Option<&[Cow<'a, json::Value>]>,
+) -> Result<Cow<'a, json::Value>, TestError> {
+    for index in indexes.iter() {
+        let r = index.evaluate(Cow::Borrowed(&*json), for_each.clone())?;
+        let o = match (json, r) {
+            (Cow::Borrowed(json::Value::Object(m)), Either::A(ref s)) => {
+                m.get(s).map(Cow::Borrowed)
             }
-            (_, Either::A(s)) if !no_err => {
-                return Err(RecoverableError::IndexingJson(s, json.clone()).into())
+            (Cow::Owned(json::Value::Object(ref mut m)), Either::A(ref s)) => {
+                m.remove(s).map(Cow::Owned)
             }
-            (_, Either::B(n)) if !no_err => {
+            (Cow::Borrowed(json::Value::Array(a)), Either::B(n)) => a.get(n).map(Cow::Borrowed),
+            (Cow::Owned(json::Value::Array(mut a)), Either::B(n)) => {
+                a.get_mut(n).map(|v| Cow::Owned(v.take()))
+            }
+            (ref mut j, Either::A(ref s)) if s == "length" && j.is_array() => {
+                let ret = (j.as_array().expect("json should be an array").len() as u64).into();
+                Some(Cow::Owned(ret))
+            }
+            (json, Either::A(s)) if !no_err => {
+                return Err(RecoverableError::IndexingJson(s, json.into_owned()).into())
+            }
+            (json, Either::B(n)) if !no_err => {
                 return Err(
-                    RecoverableError::IndexingJson(format!("[{}]", n), json.clone()).into(),
+                    RecoverableError::IndexingJson(format!("[{}]", n), json.into_owned()).into(),
                 );
             }
             _ => None,
         };
-        json = o.unwrap_or(&json::Value::Null)
+        json = o.unwrap_or_else(|| Cow::Owned(json::Value::Null))
     }
-    Ok(json.clone())
+    Ok(json)
 }
 
 #[derive(Clone, Debug)]
@@ -338,41 +371,84 @@ pub struct Path {
 }
 
 impl Path {
-    fn evaluate(
-        &self,
-        d: &json::Value,
+    fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
-        let v = match &self.start {
-            PathStart::FunctionCall(f) => Cow::Owned(f.evaluate(d, no_recoverable_error)?),
-            PathStart::Ident(s) => index_json(d, Either::B(s), no_recoverable_error)?,
-            PathStart::Value(v) => Cow::Borrowed(v),
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
+        let (v, rest) = match (&self.start, for_each) {
+            (PathStart::FunctionCall(f), _) => (
+                f.evaluate(d, no_recoverable_error, for_each.clone())?,
+                self.rest.as_slice(),
+            ),
+            (PathStart::Ident(s), Some(v)) if s == "for_each" => {
+                if self.rest.is_empty() {
+                    let v = v.iter().map(|c| (**c).clone()).collect();
+                    return Ok(Cow::Owned(json::Value::Array(v)));
+                } else if let PathSegment::Number(n) = self.rest[0] {
+                    let c = v
+                        .get(n)
+                        .cloned()
+                        .unwrap_or_else(|| Cow::Owned(json::Value::Null));
+                    (c, &self.rest[1..])
+                } else {
+                    (Cow::Owned(json::Value::Null), &self.rest[1..])
+                }
+            }
+            (PathStart::Ident(s), _) => (
+                index_json(d, Either::B(s), no_recoverable_error, for_each)?,
+                self.rest.as_slice(),
+            ),
+            (PathStart::Value(v), _) => (Cow::Borrowed(v), self.rest.as_slice()),
         };
-        index_json2(&*v, &self.rest, no_recoverable_error)
+        index_json2(v, rest, no_recoverable_error, for_each)
     }
 
-    fn evaluate_as_iter<'a>(
-        &self,
-        d: &'a json::Value,
+    fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
+    {
         let r = match &self.start {
             PathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
                 Either::A(
-                    fnc.evaluate_as_iter(d, no_recoverable_error)?
-                        .map(move |j| index_json2(&j, &rest, no_recoverable_error)),
+                    fnc.evaluate_as_iter(d, no_recoverable_error, for_each)?
+                        .map(move |j| index_json2(j, &rest, no_recoverable_error, None)),
                 )
             }
             PathStart::Ident(s) => {
-                let j = index_json(d, Either::B(s), no_recoverable_error)?;
+                let (j, rest) = if let ("for_each", Some(v)) = (s.as_str(), for_each) {
+                    if self.rest.is_empty() {
+                        let v = v.iter().map(|c| (**c).clone()).collect();
+                        let b = iter::once(Ok(Cow::Owned(json::Value::Array(v))));
+                        return Ok(Either::B(b));
+                    } else if let PathSegment::Number(n) = self.rest[0] {
+                        let c = v
+                            .get(n)
+                            .cloned()
+                            .unwrap_or_else(|| Cow::Owned(json::Value::Null));
+                        (c, &self.rest[1..])
+                    } else {
+                        (Cow::Owned(json::Value::Null), &self.rest[1..])
+                    }
+                } else {
+                    (
+                        index_json(d, Either::B(s), no_recoverable_error, for_each)?,
+                        self.rest.as_slice(),
+                    )
+                };
                 Either::B(iter::once(Ok(index_json2(
-                    &*j,
-                    &self.rest,
+                    j,
+                    rest,
                     no_recoverable_error,
+                    for_each,
                 )?)))
             }
-            PathStart::Value(v) => Either::B(iter::once(Ok(v.clone()))),
+            PathStart::Value(v) => Either::B(iter::once(Ok(Cow::Borrowed(v)))),
         };
         Ok(r)
     }
@@ -388,7 +464,9 @@ impl Path {
             PathStart::FunctionCall(fnc) => {
                 let a = fnc.into_stream(providers, no_recoverable_error).and_then(
                     move |(j, returns)| {
-                        Ok((index_json2(&j, &rest, no_recoverable_error)?, returns))
+                        let v = index_json2(Cow::Owned(j), &rest, no_recoverable_error, None)?
+                            .into_owned();
+                        Ok((v, returns))
                     },
                 );
                 Either3::A(a)
@@ -415,7 +493,9 @@ impl Path {
                                         vec![v.clone()],
                                     ));
                                 }
-                                let v = index_json2(&v, &rest, no_recoverable_error)?;
+                                let v =
+                                    index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)?
+                                        .into_owned();
                                 Ok((v, outgoing))
                             })
                     })
@@ -425,7 +505,8 @@ impl Path {
                 Either3::B(b)
             }
             PathStart::Value(v) => {
-                let v = index_json2(&v, &rest, no_recoverable_error).map(|v| (v, Vec::new()));
+                let v = index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)
+                    .map(|v| (v.into_owned(), Vec::new()));
                 Either3::C(stream::iter_result(iter::repeat(v)))
             }
         }
@@ -486,27 +567,34 @@ impl ValueOrExpression {
 
     pub(super) fn evaluate<'a, 'b: 'a>(
         &'b self,
-        d: &'a json::Value,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
+        for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, TestError> {
         match self {
-            ValueOrExpression::Value(v) => v.evaluate(d, no_recoverable_error),
-            ValueOrExpression::Expression(e) => e.evaluate(d, no_recoverable_error),
+            ValueOrExpression::Value(v) => v.evaluate(d, no_recoverable_error, for_each),
+            ValueOrExpression::Expression(e) => e.evaluate(d, no_recoverable_error, for_each),
         }
     }
 
-    pub(super) fn evaluate_as_iter<'a>(
-        &self,
-        d: &'a json::Value,
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
+    {
         match self {
-            ValueOrExpression::Value(v) => {
-                Ok(Either::A(v.evaluate_as_iter(d, no_recoverable_error)?))
-            }
-            ValueOrExpression::Expression(e) => {
-                Ok(Either::B(e.evaluate_as_iter(d, no_recoverable_error)?))
-            }
+            ValueOrExpression::Value(v) => Ok(Either::A(v.evaluate_as_iter(
+                d,
+                no_recoverable_error,
+                for_each,
+            )?)),
+            ValueOrExpression::Expression(e) => Ok(Either::B(e.evaluate_as_iter(
+                d,
+                no_recoverable_error,
+                for_each,
+            )?)),
         }
     }
 
@@ -536,49 +624,51 @@ pub enum Value {
 impl Value {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
-        d: &'a json::Value,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
+        for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, TestError> {
         let v = match self {
-            Value::Path(path) => {
-                let mut v: Vec<_> = path
-                    .evaluate_as_iter(d, no_recoverable_error)?
-                    .collect::<Result<_, _>>()?;
-                if v.is_empty() {
-                    return Err(TestError::Internal(
-                        "evaluating path should never return no elements".into(),
-                    ));
-                } else if v.len() == 1 {
-                    Cow::Owned(v.pop().expect("should have 1 element"))
-                } else {
-                    Cow::Owned(json::Value::Array(v))
-                }
-            }
+            Value::Path(path) => path.evaluate(d, no_recoverable_error, for_each)?,
             Value::Json(value) => Cow::Borrowed(value),
-            Value::Template(t) => Cow::Owned(t.evaluate(d)?.into()),
+            Value::Template(t) => Cow::Owned(t.evaluate(d, for_each)?.into()),
         };
         Ok(v)
     }
 
-    fn evaluate_as_iter<'a>(
-        &self,
-        d: &'a json::Value,
+    fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
+    {
         let r = match self {
-            Value::Path(path) => Either3::B(
-                path.evaluate_as_iter(d, no_recoverable_error)?
+            Value::Path(path) => Either3::A(
+                path.evaluate_as_iter(d, no_recoverable_error, for_each)?
                     .map(|v| match v {
-                        Ok(json::Value::Array(v)) => Either::A(v.into_iter().map(Ok)),
-                        _ => Either::B(iter::once(v)),
+                        Ok(Cow::Borrowed(json::Value::Array(v))) => {
+                            Either3::A(v.iter().map(|v| Ok(Cow::Borrowed(v))))
+                        }
+                        Ok(Cow::Owned(json::Value::Array(v))) => {
+                            Either3::B(v.into_iter().map(|v| Ok(Cow::Owned(v))))
+                        }
+                        _ => Either3::C(iter::once(v)),
                     })
                     .flatten(),
             ),
             _ => {
-                let value = self.evaluate(d, no_recoverable_error)?.into_owned();
+                let value = self.evaluate(d, no_recoverable_error, for_each)?;
                 match value {
-                    json::Value::Array(v) => Either3::C(v.into_iter().map(Ok)),
-                    _ => Either3::A(iter::once(Ok(value))),
+                    Cow::Borrowed(json::Value::Array(v)) => {
+                        let ba = v.iter().map(|v| Ok(Cow::Borrowed(v)));
+                        Either3::B(Either::A(ba))
+                    }
+                    Cow::Owned(json::Value::Array(v)) => {
+                        let bb = v.into_iter().map(|v| Ok(Cow::Owned(v)));
+                        Either3::B(Either::B(bb))
+                    }
+                    _ => Either3::C(iter::once(Ok(value))),
                 }
             }
         };
@@ -631,11 +721,15 @@ impl PathSegment {
         Ok(r)
     }
 
-    fn evaluate(&self, d: &json::Value) -> Result<Either<String, usize>, TestError> {
+    fn evaluate<'a>(
+        &self,
+        d: Cow<'a, json::Value>,
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Either<String, usize>, TestError> {
         let r = match self {
             PathSegment::Number(n) => Either::B(*n),
             PathSegment::String(s) => Either::A(s.clone()),
-            PathSegment::Template(t) => Either::A(t.evaluate(d)?),
+            PathSegment::Template(t) => Either::A(t.evaluate(d, for_each)?),
         };
         Ok(r)
     }
@@ -763,17 +857,27 @@ pub struct Expression {
 impl Expression {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
-        d: &'a json::Value,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
+        for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, TestError> {
-        let mut v = match &self.lhs {
-            ExpressionLhs::Expression(e) => e.evaluate(d, no_recoverable_error)?,
-            ExpressionLhs::Value(v) => v.evaluate(d, no_recoverable_error)?,
+        let mut v = if let Some((op, rhs)) = &self.op {
+            let v = match &self.lhs {
+                ExpressionLhs::Expression(e) => {
+                    e.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                }
+                ExpressionLhs::Value(v) => {
+                    v.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                }
+            };
+            let rhs = rhs.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each);
+            Cow::Owned(op.evaluate(&*v, rhs)?)
+        } else {
+            match &self.lhs {
+                ExpressionLhs::Expression(e) => e.evaluate(d, no_recoverable_error, for_each)?,
+                ExpressionLhs::Value(v) => v.evaluate(d, no_recoverable_error, for_each)?,
+            }
         };
-        if let Some((op, rhs)) = &self.op {
-            let rhs = rhs.evaluate(d, no_recoverable_error);
-            v = Cow::Owned(op.evaluate(&*v, rhs)?);
-        }
         match self.not {
             Some(true) => {
                 let b = !bool_value(&v)?;
@@ -788,17 +892,24 @@ impl Expression {
         Ok(v)
     }
 
-    fn evaluate_as_iter<'a>(
-        &self,
-        d: &'a json::Value,
+    fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
+    {
         let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.op, &self.not, &self.lhs) {
-            Either3::A(v.evaluate_as_iter(d, no_recoverable_error)?)
+            Either3::A(v.evaluate_as_iter(d, no_recoverable_error, for_each)?)
         } else {
-            let value = self.evaluate(d, no_recoverable_error)?.into_owned();
+            let value = self.evaluate(d, no_recoverable_error, for_each)?;
             match value {
-                json::Value::Array(v) => Either3::B(v.into_iter().map(Ok)),
+                Cow::Borrowed(json::Value::Array(v)) => {
+                    Either3::B(Either::A(v.iter().map(|j| Ok(Cow::Borrowed(j)))))
+                }
+                Cow::Owned(json::Value::Array(v)) => {
+                    Either3::B(Either::B(v.into_iter().map(|j| Ok(Cow::Owned(j)))))
+                }
                 _ => Either3::C(iter::once(Ok(value))),
             }
         };
@@ -895,31 +1006,38 @@ enum ParsedSelect {
 }
 
 impl ParsedSelect {
-    fn evaluate(
-        &self,
-        d: &json::Value,
+    fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<json::Value, TestError> {
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, TestError> {
         let r = match self {
-            ParsedSelect::Null => json::Value::Null,
-            ParsedSelect::Bool(b) => json::Value::Bool(*b),
-            ParsedSelect::Number(n) => json::Value::Number(n.clone()),
-            ParsedSelect::Expression(v) => v.evaluate(d, no_recoverable_error)?.into_owned(),
+            ParsedSelect::Null => Cow::Owned(json::Value::Null),
+            ParsedSelect::Bool(b) => Cow::Owned(json::Value::Bool(*b)),
+            ParsedSelect::Number(n) => Cow::Owned(json::Value::Number(n.clone())),
+            ParsedSelect::Expression(v) => v.evaluate(d, no_recoverable_error, for_each)?,
             ParsedSelect::Array(v) => {
                 let v = v
                     .iter()
-                    .map(|p| p.evaluate(d, no_recoverable_error))
+                    .map(|p| {
+                        p.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())
+                            .map(Cow::into_owned)
+                    })
                     .collect::<Result<_, _>>()?;
-                json::Value::Array(v)
+                Cow::Owned(json::Value::Array(v))
             }
             ParsedSelect::Object(v) => {
                 let m = v
                     .iter()
                     .map(|(k, v)| {
-                        Ok::<_, TestError>((k.clone(), v.evaluate(d, no_recoverable_error)?))
+                        let v = v
+                            .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                            .into_owned();
+                        Ok::<_, TestError>((k.clone(), v))
                     })
                     .collect::<Result<_, _>>()?;
-                json::Value::Object(m)
+                Cow::Owned(json::Value::Object(m))
             }
         };
         Ok(r)
@@ -1031,12 +1149,20 @@ impl Template {
         &self.providers
     }
 
-    pub fn evaluate(&self, d: &json::Value) -> Result<String, TestError> {
+    pub fn evaluate<'a>(
+        &self,
+        d: Cow<'a, json::Value>,
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<String, TestError> {
         self.pieces
             .iter()
             .map(|piece| match piece {
                 TemplatePiece::Expression(voe) => {
-                    let v = voe.evaluate(d, self.no_recoverable_error)?;
+                    let v = voe.evaluate(
+                        Cow::Borrowed(&*d),
+                        self.no_recoverable_error,
+                        for_each.clone(),
+                    )?;
                     Ok(json_value_to_string(&*v).into_owned())
                 }
                 TemplatePiece::NotExpression(s) => Ok(s.clone()),
@@ -1200,67 +1326,103 @@ impl Select {
     pub fn execute_where(&self, d: &json::Value) -> Result<bool, TestError> {
         self.where_clause
             .as_ref()
-            .map(|wc| bool_value(&*wc.evaluate(&d, self.no_recoverable_error)?))
+            .map(|wc| {
+                bool_value(&*wc.evaluate(Cow::Borrowed(d), self.no_recoverable_error, None)?)
+            })
             .transpose()
             .map(|b| b.unwrap_or(true))
     }
 
-    pub fn as_iter(
-        &self,
-        mut d: json::Value,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>> + Clone, TestError> {
+    fn as_iter<'a>(
+        &'a self,
+        d: &'a json::Value,
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>>, TestError> {
         let r = if self.join.is_empty() {
-            if let Some(wc) = &self.where_clause {
-                if bool_value(&*wc.evaluate(&d, self.no_recoverable_error)?)? {
-                    Either3::A(iter::once(
-                        self.select.evaluate(&d, self.no_recoverable_error),
-                    ))
-                } else {
-                    Either3::B(iter::empty())
+            'r: {
+                if let Some(wc) = &self.where_clause {
+                    if !bool_value(&*wc.evaluate(
+                        Cow::Borrowed(d),
+                        self.no_recoverable_error,
+                        None,
+                    )?)? {
+                        break 'r Either3::B(iter::empty());
+                    }
                 }
-            } else {
-                Either3::A(iter::once(
-                    self.select.evaluate(&d, self.no_recoverable_error),
-                ))
+                Either3::A(iter::once(self.select.evaluate(
+                    Cow::Borrowed(&*d),
+                    self.no_recoverable_error,
+                    None,
+                )))
             }
         } else {
             let references_for_each = self.special_providers & FOR_EACH != 0;
-            let where_clause = self.where_clause.clone();
             let no_recoverable_error = self.no_recoverable_error;
-            let select = self.select.clone();
-            Either3::C(
-                self.join
-                    .iter()
-                    .map(
-                        |v| match v.evaluate_as_iter(&d, self.no_recoverable_error) {
-                            Ok(i) => Either::A(i),
-                            Err(e) => Either::B(iter::once(Err(e))),
-                        },
-                    )
-                    .multi_cartesian_product()
-                    .map(move |v| {
-                        if references_for_each {
-                            let v: Result<_, _> = v.into_iter().collect();
-                            d.as_object_mut()
-                                .ok_or_else(|| {
-                                    TestError::Internal("expected incoming json to be a map".into())
-                                })?
-                                .insert("for_each".to_string(), json::Value::Array(v?));
+            let c = self
+                .join
+                .iter()
+                .map(|v| {
+                    match v.evaluate_as_iter(Cow::Borrowed(&*d), self.no_recoverable_error, None) {
+                        Ok(i) => Either::A(i),
+                        Err(e) => Either::B(iter::once(Err(e))),
+                    }
+                })
+                .multi_cartesian_product()
+                .map(move |v| {
+                    let for_each = if references_for_each {
+                        let v: Vec<_> = v.into_iter().collect::<Result<_, _>>()?;
+                        Some(v)
+                    } else {
+                        None
+                    };
+                    if let Some(wc) = &self.where_clause {
+                        if !bool_value(&*wc.evaluate(
+                            Cow::Borrowed(&*d),
+                            no_recoverable_error,
+                            for_each.as_ref().map(Vec::as_slice),
+                        )?)? {
+                            return Ok(None);
                         }
-                        if let Some(wc) = &where_clause {
-                            if bool_value(&*wc.evaluate(&d, no_recoverable_error)?)? {
-                                Ok(Some(select.evaluate(&d, no_recoverable_error)?))
-                            } else {
-                                Ok(None)
-                            }
-                        } else {
-                            Ok(Some(select.evaluate(&d, no_recoverable_error)?))
-                        }
-                    })
-                    .filter_map(Result::transpose),
-            )
+                    }
+                    self.select
+                        .evaluate(
+                            Cow::Borrowed(&*d),
+                            no_recoverable_error,
+                            for_each.as_ref().map(Vec::as_slice),
+                        )
+                        .map(Some)
+                })
+                .filter_map(Result::transpose);
+            Either3::C(c)
         };
         Ok(r.fuse())
+    }
+
+    pub fn iter(
+        self: Arc<Self>,
+        d: Arc<json::Value>,
+    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>>, TestError> {
+        let mut iter = None;
+        Ok(iter::from_fn(move || {
+            let iter2 = match &mut iter {
+                Some(i) => i,
+                None => {
+                    // TODO: get rid of unsafe by creating a custom iterator which will do the
+                    // `map` -> `multi_cartesian_product` -> `map` of the above `as_iter` in one closure/method
+                    // this should be safe because the Arc will outlive the references (and iterator) created below
+                    let (select, data) = unsafe {
+                        let select: &'_ Self = &*(&*self as *const _);
+                        let data: &'_ json::Value = &*(&*d as *const _);
+                        (select, data)
+                    };
+                    iter = match select.as_iter(data) {
+                        Ok(i) => Some(i),
+                        Err(e) => return Some(Err(e)),
+                    };
+                    iter.as_mut().expect("just set iter")
+                }
+            };
+            iter2.next().map(|r| r.map(Cow::into_owned))
+        }))
     }
 }
 
@@ -1451,7 +1613,10 @@ fn parse_path(
     let p = Path { start, rest };
     let r = match p.start {
         PathStart::Value(_) if providers2.is_empty() => {
-            Either::A(p.evaluate(&json::Value::Null, no_recoverable_error)?)
+            let a = p
+                .evaluate(Cow::Owned(json::Value::Null), no_recoverable_error, None)?
+                .into_owned();
+            Either::A(a)
         }
         _ => {
             providers.extend(providers2);
@@ -1719,8 +1884,9 @@ mod tests {
     fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
         let select = create_select(select);
         let result: Vec<_> = select
-            .as_iter(data)
+            .as_iter(&data)
             .unwrap()
+            .map(|r| r.map(Cow::into_owned))
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(result.as_slice(), expect, "index {}", i)

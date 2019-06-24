@@ -25,7 +25,7 @@ impl BodyHandler {
         let endpoint_id = self.endpoint_id;
         let outgoing = self.outgoing.clone();
         let has_logger = outgoing.iter().any(|o| o.logger);
-        let send_response_stat = move |kind, rtt, template_values: Option<Arc<TemplateValues>>| {
+        let send_response_stat = move |kind, rtt, template_values: Option<Arc<json::Value>>| {
             let mut futures = Vec::new();
             if let (stats::StatKind::RecoverableError(e), Some(template_values)) =
                 (&kind, &template_values)
@@ -36,10 +36,14 @@ impl BodyHandler {
                         "code": e.code(),
                     });
                     let mut tv = (&**template_values).clone();
-                    tv.insert("error".into(), error);
+                    tv.as_object_mut()
+                        .expect("should be a json object")
+                        .insert("error".into(), error);
+                    let tv: Arc<_> = tv.into();
                     for o in outgoing.iter() {
-                        if let (true, Ok(iter)) = (o.logger, o.select.as_iter(tv.as_json().clone()))
-                        {
+                        let select = o.select.clone();
+                        let tv = tv.clone();
+                        if let (true, Ok(iter)) = (o.logger, select.iter(tv)) {
                             let tx = o.tx.clone();
                             let cb = o.cb.clone();
                             futures.push(Either::A(BlockSender::new(iter, tx, cb)));
@@ -90,7 +94,7 @@ impl BodyHandler {
                         .expect("`response` in template_values should be an object")
                         .insert("body".into(), body);
                 }
-                let template_values = Arc::new(template_values);
+                let template_values = Arc::new(template_values.0);
                 let mut blocked = Vec::new();
                 for (i, o) in self.outgoing.iter().enumerate() {
                     if !self.included_outgoing_indexes.contains(&i) {
@@ -99,7 +103,9 @@ impl BodyHandler {
                         }
                         continue;
                     }
-                    let iter = match o.select.as_iter(template_values.as_json().clone()) {
+                    let select = o.select.clone();
+                    let send_behavior = select.get_send_behavior();
+                    let iter = match select.iter(template_values.clone()) {
                         Ok(v) => v,
                         Err(TestError::Recoverable(r)) => {
                             let kind = stats::StatKind::RecoverableError(r);
@@ -112,7 +118,7 @@ impl BodyHandler {
                         }
                         Err(e) => return Either::B(Err(e).into_future()),
                     };
-                    match o.select.get_send_behavior() {
+                    match send_behavior {
                         EndpointProvidesSendOptions::Block => {
                             let tx = o.tx.clone();
                             let cb = o.cb.clone();
@@ -195,7 +201,7 @@ impl BodyHandler {
                 }
             }
             Err(r) => {
-                let template_values = Arc::new(template_values);
+                let template_values = Arc::new(template_values.0);
                 let kind = stats::StatKind::RecoverableError(r);
                 futures.push(Either3::B(send_response_stat(
                     kind,

@@ -38,6 +38,7 @@ use crate::stats;
 use crate::util::tweak_path;
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     error::Error as StdError,
     num::NonZeroUsize,
@@ -90,7 +91,7 @@ impl From<json::Value> for TemplateValues {
 struct Outgoing {
     cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
     logger: bool,
-    select: Select,
+    select: Arc<Select>,
     tx: channel::Sender<json::Value>,
 }
 
@@ -103,7 +104,7 @@ impl Outgoing {
     ) -> Self {
         Outgoing {
             cb,
-            select,
+            select: select.into(),
             tx,
             logger,
         }
@@ -480,15 +481,19 @@ impl MultipartBody {
             .iter()
             .rev()
             .map(|mp| {
-                let body = mp.template.evaluate(&template_values.0)?;
+                let body = mp
+                    .template
+                    .evaluate(Cow::Borrowed(template_values.as_json()), None)?;
                 let mut headers = mp
                     .headers
                     .iter()
                     .map(|(k, t)| {
                         let key = HeaderName::from_bytes(k.as_bytes())
                             .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                        let value = HeaderValue::from_str(&t.evaluate(&template_values.0)?)
-                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                        let value = HeaderValue::from_str(
+                            &t.evaluate(Cow::Borrowed(template_values.as_json()), None)?,
+                        )
+                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
                         Ok::<_, TestError>((key, value))
                     })
                     .collect::<Result<HeaderMap<_>, _>>()?;
@@ -606,7 +611,7 @@ impl BodyTemplate {
             BodyTemplate::None => return Ok(HyperBody::empty()),
             BodyTemplate::String(t) => t,
         };
-        let body = template.evaluate(&template_values.0)?;
+        let body = template.evaluate(Cow::Borrowed(template_values.as_json()), None)?;
         if let BodyTemplate::File(path, _) = self {
             Ok(create_file_hyper_body(body, path))
         } else {

@@ -49,7 +49,10 @@ impl RequestMaker {
             })))
             .into();
         let mut request = Request::builder();
-        let url = match self.url.evaluate(&template_values.0) {
+        let url = match self
+            .url
+            .evaluate(Cow::Borrowed(template_values.as_json()), None)
+        {
             Ok(u) => u,
             Err(e) => return Either::B(Err(e).into_future()),
         };
@@ -70,8 +73,10 @@ impl RequestMaker {
             .map(|(k, v)| {
                 let key = HeaderName::from_bytes(k.as_bytes())
                     .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                let value = HeaderValue::from_str(&v.evaluate(&template_values.0)?)
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                let value = HeaderValue::from_str(
+                    &v.evaluate(Cow::Borrowed(template_values.as_json()), None)?,
+                )
+                .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
                 Ok::<_, TestError>((key, value))
             })
             .collect::<Result<HeaderMap<_>, _>>();
@@ -231,11 +236,12 @@ impl RequestMaker {
                                 "code": r.code(),
                             });
                             template_values.insert("error".into(), error);
+                            let template_values: Arc<_> = template_values.0.into();
                             for o in outgoing.iter() {
-                                if let (true, Ok(iter)) = (
-                                    o.logger,
-                                    o.select.as_iter(template_values.as_json().clone()),
-                                ) {
+                                let select = o.select.clone();
+                                if let (true, Ok(iter)) =
+                                    (o.logger, select.iter(template_values.clone()))
+                                {
                                     let tx = o.tx.clone();
                                     let cb = o.cb.clone();
                                     futures.push(Either::A(BlockSender::new(iter, tx, cb)));

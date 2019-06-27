@@ -1,13 +1,22 @@
-cargo-features = ["default-run"]
-
 [package]
 name = "pewpew"
 version = "0.5.0-beta4"
 edition = "2018"
 default-run = "pewpew"
 
+[package.metadata]
+test-server-version = "0.1.0"
+
 [lib]
 doctest = false
+
+[[bin]]
+name = "pewpew"
+path = "src/bin/pewpew.rs"
+
+[[bin]]
+name = "test-server"
+path = "src/bin/test_server.rs"
 
 [dependencies]
 atty = "0.2"

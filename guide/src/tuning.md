@@ -1,4 +1,4 @@
-# Miscellaneous
+# Tuning a machine for a load test
 
 ## Tuning a Linux machine
 To get maximum throughput on Linux consider the following tweaks. *NOTE*: These tweaks have been tested in Ubuntu 18.04 and may be different in other distributions.

@@ -46,7 +46,7 @@ fn multipart(
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
     req.multipart()
-        .map_err(|_| HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
         .for_each(|item: multipart::MultipartItem<dev::Payload>| match item {
             multipart::MultipartItem::Field(field) => {
                 if let Some(sha1_expect) = field.headers().get("sha1") {
@@ -62,7 +62,7 @@ fn multipart(
                         );
                     };
                     let a = field
-                        .map_err(|_| HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR))
+                        .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
                         .fold(Sha1::new(), |mut sha_er, bytes| {
                             sha_er.input(&bytes[..]);
                             Ok::<_, HttpResponse>(sha_er)

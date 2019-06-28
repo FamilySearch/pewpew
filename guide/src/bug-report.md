@@ -3,9 +3,10 @@
 Before filing a new issue on [GitHub](https://github.com/fs-eng/pewpew/issues), it is helpful to create a reproducible test case. To do that, please do the following:
 
 1) Remove all `endpoints`, `providers`, `loggers`, `vars`, `load_pattern`s and `config` options not needed to reproduce the issue.
-2) Replace all references to environment variables with actual values in `vars`.
-3) Change the remaining `endpoints` to run against the Pewpew test server (see below).
-4) Reduce `peak_load`s and `load_pattern`s as much as possible while still reproducing the issue.
+2) When possible, replace `file` providers with a variable (`vars`) or a concise `list` provider. If the `file` provider is required to replicate the issue, make the file as small as possible.
+3) Replace all references to environment variables with actual values in `vars`.
+4) Change the remaining `endpoints` to run against the Pewpew test server (see below).
+5) Reduce `peak_load`s and `load_pattern`s as much as possible while still reproducing the issue.
 
 ## Using the Pewpew test server
 

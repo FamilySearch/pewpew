@@ -5,27 +5,36 @@ use std::{
     time::{Duration, Instant},
 };
 
-use actix::prelude::*;
+use actix_multipart::Multipart;
 use actix_web::{
-    dev,
     http::{self, header, StatusCode},
-    multipart, server, App, HttpMessage, HttpRequest, HttpResponse,
+    web, App, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
 use crypto::{digest::Digest, sha1::Sha1};
 use ether::Either;
 use futures::{Async, Future, IntoFuture, Stream};
 use parking_lot::Mutex;
+use serde::Deserialize;
 
-fn echo(req: HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
+#[derive(Deserialize)]
+struct EchoQuery {
+    echo: Option<String>,
+    wait: Option<u64>,
+}
+
+fn echo(
+    req: HttpRequest,
+    query: web::Query<EchoQuery>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
     let headers = req.headers();
-    let query = req.query();
     let content_type = headers
         .get(header::CONTENT_TYPE)
         .cloned()
         .unwrap_or_else(|| header::HeaderValue::from_static("text/plain"));
-    let response = match *req.method() {
-        http::Method::GET => {
-            if let Some(b) = query.get("echo") {
+    let query = query.into_inner();
+    let response = match (req.method(), web::Payload::extract(&req)) {
+        (&http::Method::GET, _) => {
+            if let Some(b) = query.echo {
                 HttpResponse::build(StatusCode::OK)
                     .header(header::CONTENT_TYPE, content_type)
                     .body(b)
@@ -33,66 +42,66 @@ fn echo(req: HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_web:
                 HttpResponse::new(StatusCode::NO_CONTENT)
             }
         }
-        http::Method::PUT | http::Method::POST => HttpResponse::build(StatusCode::OK)
-            .header(header::CONTENT_TYPE, content_type)
-            .streaming(req.payload()),
+        (&http::Method::POST, Ok(payload)) | (&http::Method::PUT, Ok(payload)) => {
+            HttpResponse::build(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .streaming(payload)
+        }
         _ => HttpResponse::new(StatusCode::NO_CONTENT),
     };
-    let ms = query.get("wait").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let ms = query.wait.unwrap_or(0);
     tokio::timer::Delay::new(Instant::now() + Duration::from_millis(ms)).then(move |_| Ok(response))
 }
 
 fn multipart(
-    req: HttpRequest,
+    multipart: Multipart,
 ) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
-    req.multipart()
+    multipart
         .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
-        .for_each(|item: multipart::MultipartItem<dev::Payload>| match item {
-            multipart::MultipartItem::Field(field) => {
-                if let Some(sha1_expect) = field.headers().get("sha1") {
-                    let sha1_expect = if let Ok(s) = sha1_expect.to_str() {
-                        s.to_string()
-                    } else {
-                        return Either::B(
-                            Err(HttpResponse::with_body(
-                                StatusCode::BAD_REQUEST,
-                                "invalid sha1 header",
-                            ))
-                            .into_future(),
-                        );
-                    };
-                    let a = field
-                        .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
-                        .fold(Sha1::new(), |mut sha_er, bytes| {
-                            sha_er.input(&bytes[..]);
-                            Ok::<_, HttpResponse>(sha_er)
-                        })
-                        .and_then(move |mut sha_er| {
-                            let sha1 = sha_er.result_str();
-                            if sha1.eq_ignore_ascii_case(&sha1_expect) {
-                                Ok(())
-                            } else {
-                                Err(HttpResponse::with_body(
-                                    StatusCode::BAD_REQUEST,
-                                    format!(
-                                        "sha1 doesn't match. saw: {}, expected: {}",
-                                        sha1, sha1_expect
-                                    ),
-                                ))
-                            }
-                        });
-                    Either::A(a)
+        .for_each(|field| {
+            if let Some(sha1_expect) = field.headers().get("sha1") {
+                let sha1_expect = if let Ok(s) = sha1_expect.to_str() {
+                    s.to_string()
                 } else {
-                    Either::B(
+                    return Either::B(
                         Err(HttpResponse::with_body(
                             StatusCode::BAD_REQUEST,
-                            "missing sha1 header",
+                            "invalid sha1 header".into(),
                         ))
                         .into_future(),
-                    )
-                }
+                    );
+                };
+                let a = field
+                    .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
+                    .fold(Sha1::new(), |mut sha_er, bytes| {
+                        sha_er.input(&bytes[..]);
+                        Ok::<_, HttpResponse>(sha_er)
+                    })
+                    .and_then(move |mut sha_er| {
+                        let sha1 = sha_er.result_str();
+                        if sha1.eq_ignore_ascii_case(&sha1_expect) {
+                            Ok(())
+                        } else {
+                            Err(HttpResponse::with_body(
+                                StatusCode::BAD_REQUEST,
+                                format!(
+                                    "sha1 doesn't match. saw: {}, expected: {}",
+                                    sha1, sha1_expect
+                                )
+                                .into(),
+                            ))
+                        }
+                    });
+                Either::A(a)
+            } else {
+                Either::B(
+                    Err(HttpResponse::with_body(
+                        StatusCode::BAD_REQUEST,
+                        "missing sha1 header".into(),
+                    ))
+                    .into_future(),
+                )
             }
-            _ => Either::B(Err(HttpResponse::new(StatusCode::BAD_REQUEST)).into_future()),
         })
         .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
         .or_else(Ok)
@@ -109,20 +118,14 @@ pub fn start_test_server(port: Option<u16>) -> (u16, thread::JoinHandle<()>) {
         .port();
 
     let handle = thread::spawn(move || {
-        let sys = System::new("test");
-
         // start http server
-        server::new(move || {
+        HttpServer::new(move || {
             App::new()
-                .resource("/", |r| r.with_async(echo))
-                .resource("/multipart", |r| {
-                    r.method(http::Method::POST).with_async(multipart);
-                })
+                .service(web::resource("/").to_async(echo))
+                .service(web::resource("/multipart").route(web::post().to_async(multipart)))
         })
         .listen(listener)
-        .start();
-
-        let _ = sys.run();
+        .expect("could not start test server");
     });
 
     (port, handle)

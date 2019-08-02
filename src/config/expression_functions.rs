@@ -115,6 +115,7 @@ impl Collect {
 
 #[derive(Copy, Clone, Debug)]
 enum Encoding {
+    Base64,
     PercentSimple,
     PercentQuery,
     Percent,
@@ -126,6 +127,9 @@ impl Encoding {
     fn encode(self, d: &json::Value) -> String {
         let s = json_value_to_string(&d);
         match self {
+            Encoding::Base64 => {
+                base64::encode(s.as_str())
+            }
             Encoding::PercentSimple => {
                 percent_encoding::utf8_percent_encode(&s, percent_encoding::SIMPLE_ENCODE_SET)
                     .to_string()
@@ -151,6 +155,7 @@ impl Encoding {
 
     fn try_from(s: &str) -> Result<Encoding, TestError> {
         match s {
+            "base64" => Ok(Encoding::Base64),
             "percent-simple" => Ok(Encoding::PercentSimple),
             "percent-query" => Ok(Encoding::PercentQuery),
             "percent" => Ok(Encoding::Percent),
@@ -1559,6 +1564,11 @@ mod tests {
                 Some(j!({"a": "asd jkl|"})),
                 j!("asd%20jkl%7C"),
             ),
+            (
+                vec!["a".into(), j!("base64").into()],
+                Some(j!({"a": "foo"})),
+                j!("Zm9v"),
+            ),
         ];
 
         for (args, eval, right) in checks.into_iter() {
@@ -1597,6 +1607,11 @@ mod tests {
                 j!({"a": "asd jkl|"}),
                 vec![j!("asd%20jkl%7C")],
             ),
+            (
+                vec!["a".into(), j!("base64").into()],
+                j!({"a": "foo"}),
+                vec![j!("Zm9v")],
+            ),
         ];
 
         for (args, eval, right) in checks.into_iter() {
@@ -1634,6 +1649,10 @@ mod tests {
                 vec!["d".into(), j!("percent-userinfo").into()],
                 j!("asd%20jkl%7C"),
             ),
+            (
+                vec!["e".into(), j!("base64").into()],
+                j!("Zm9v"),
+            ),
         ];
 
         current_thread::run(lazy(move || {
@@ -1642,6 +1661,7 @@ mod tests {
                 "b".to_string() => literals(vec!(j!("asd\njkl#")).into()),
                 "c".to_string() => literals(vec!(j!("asd\njkl{")).into()),
                 "d".to_string() => literals(vec!(j!("asd jkl|")).into()),
+                "e".to_string() => literals(vec!(j!("foo")).into()),
             );
 
             let providers = Arc::new(providers);

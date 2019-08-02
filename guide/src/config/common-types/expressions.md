@@ -62,6 +62,7 @@ Encode a string with the given encoding.
 
 *value* - any expression. The result of the expression will be coerced to a string if needed and then encoded with the specified encoding.<br/>
 *encoding* - The encoding to be used. Encoding must be one of the following string literals:
+- `"base64"` - Base64 encodes the value.
 - `"percent-simple"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E.
 - `"percent-query"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
 - `"percent"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).

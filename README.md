@@ -28,6 +28,7 @@ Changes:
 - Allow a global header to be unset with a `null` value in the `endpoints.headers` sub-section.
 - Better handle Ctrl-c killing of the test and persist any unsaved data to disk.
 - Add in `replace` expression function which replaces any occurances of a string in a JSON value with another string.
+- Add in `base64` option for the `encode` function.
 
 ### v0.4.11
 Changes:

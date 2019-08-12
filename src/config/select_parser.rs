@@ -52,7 +52,7 @@ impl AutoReturn {
     }
 }
 
-existential type ARInner: Future<Item = (), Error = ()>;
+type ARInner = impl Future<Item = (), Error = ()>;
 
 pub struct AutoReturnFuture {
     inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,

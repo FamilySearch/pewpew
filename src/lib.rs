@@ -1,10 +1,9 @@
 #![feature(
     bind_by_move_pattern_guards,
-    existential_type,
     label_break_value,
-    impl_trait_in_bindings
+    impl_trait_in_bindings,
+    type_alias_impl_trait
 )]
-#![recursion_limit = "128"]
 #![warn(rust_2018_idioms)]
 
 mod config;

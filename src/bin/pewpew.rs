@@ -1,4 +1,3 @@
-#![recursion_limit = "128"]
 use std::{
     convert::TryInto,
     fs::create_dir_all,

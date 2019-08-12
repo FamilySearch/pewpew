@@ -29,6 +29,7 @@ Changes:
 - Better handle Ctrl-c killing of the test and persist any unsaved data to disk.
 - Add in `replace` expression function which replaces any occurances of a string in a JSON value with another string.
 - Add in `base64` option for the `encode` function.
+- For response bodies which cannot first be parsed as utf8 strings the response body will be set to the string "<\<binary data>>".
 
 ### v0.4.11
 Changes:

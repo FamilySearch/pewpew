@@ -96,20 +96,13 @@ impl ResponseHandler {
                         Ok::<_, RecoverableError>(out_bytes)
                     })
                     .and_then(|body| {
-                        let s = match str::from_utf8(&body) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                return Either::A(
-                                    Err(RecoverableError::BodyErr(Arc::new(e))).into_future(),
-                                );
-                            }
-                        };
+                        let s = str::from_utf8(&body).unwrap_or("<<binary data>>");
                         let value = if let Ok(value) = json::from_str(s) {
                             value
                         } else {
                             json::Value::String(s.into())
                         };
-                        Either::B(Ok(Some(value)).into_future())
+                        Ok(Some(value)).into_future()
                     });
                 Either::A(a)
             }

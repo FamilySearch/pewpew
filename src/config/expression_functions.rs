@@ -2077,6 +2077,12 @@ mod tests {
                 j!([0, 1]),
                 btreeset!["a".to_string()],
             ),
+            (
+                j!("a.b.*.id"),
+                j!({ "a": { "b": [{ "id": 0 }] } }),
+                j!([0]),
+                btreeset!["a".to_string()],
+            ),
             // this should work but apparently the json_path library can't handle it
             // (
             //     j!("['$ZED'].*"),
@@ -2126,6 +2132,12 @@ mod tests {
                 j!("a.b.*.id"),
                 j!({ "a": { "b": [{ "id": 0 }, { "id": 1 }] } }),
                 vec![j!(0), j!(1)],
+                btreeset!["a".to_string()],
+            ),
+            (
+                j!("a.b.*.id"),
+                j!({ "a": { "b": [{ "id": 0 }] } }),
+                vec![j!(0)],
                 btreeset!["a".to_string()],
             ),
         ];

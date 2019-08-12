@@ -689,5 +689,4 @@ mod tests {
         });
         current_thread::run(f);
     }
-
 }

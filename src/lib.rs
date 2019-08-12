@@ -178,6 +178,30 @@ pub enum StatsFileFormat {
     // None,
 }
 
+#[derive(Clone, Debug)]
+pub enum TryRunFormat {
+    Human,
+    Json,
+}
+
+impl Default for TryRunFormat {
+    fn default() -> Self {
+        TryRunFormat::Human
+    }
+}
+
+impl TryFrom<&str> for TryRunFormat {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "human" => Ok(TryRunFormat::Human),
+            "json" => Ok(TryRunFormat::Json),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct RunConfig {
     pub config_file: PathBuf,
@@ -198,7 +222,9 @@ pub enum TryFilter {
 pub struct TryConfig {
     pub config_file: PathBuf,
     pub loggers_on: bool,
+    pub file: Option<String>,
     pub filters: Option<Vec<TryFilter>>,
+    pub format: TryRunFormat,
     pub results_dir: Option<PathBuf>,
 }
 
@@ -597,21 +623,40 @@ where
     };
 
     let eppp_to_select = |eppp| config::Select::new(eppp, &static_vars, false);
-    let select = "`\
-                  Request\n\
-                  ========================================\n\
-                  ${request['start-line']}\n\
-                  ${join(request.headers, '\n', ': ')}\n\
-                  ${if(request.body != '', '\n${request.body}\n', '')}\n\
-                  Response (RTT: ${stats.rtt}ms)\n\
-                  ========================================\n\
-                  ${response['start-line']}\n\
-                  ${join(response.headers, '\n', ': ')}\n\
-                  ${if(response.body != '', '\n${response.body}', '')}\n\n`";
+    let select = if let TryRunFormat::Human = try_config.format {
+        "`\
+         Request\n\
+         ========================================\n\
+         ${request['start-line']}\n\
+         ${join(request.headers, '\n', ': ')}\n\
+         ${if(request.body != '', '\n${request.body}\n', '')}\n\
+         Response (RTT: ${stats.rtt}ms)\n\
+         ========================================\n\
+         ${response['start-line']}\n\
+         ${join(response.headers, '\n', ': ')}\n\
+         ${if(response.body != '', '\n${response.body}', '')}\n\n`"
+            .into()
+    } else {
+        json::json!({
+            "request": {
+                "start-line": "request['start-line']",
+                "headers": "request.headers",
+                "body": "request.body"
+            },
+            "response": {
+                "start-line": "response['start-line']",
+                "headers": "response.headers",
+                "body": "response.body"
+            },
+            "stats": {
+                "RTT": "stats.rtt"
+            }
+        })
+    };
+    let to = try_config.file.unwrap_or_else(|| "stderr".into());
     let logger = json::json!({
         "select": select,
-        "to": "stderr",
-        "pretty": true
+        "to": to
     });
     if !try_config.loggers_on {
         config.loggers.clear();

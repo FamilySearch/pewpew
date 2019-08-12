@@ -7,7 +7,9 @@ use std::{
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use futures::{sync::mpsc as futures_channel, Future};
-use pewpew::{create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter};
+use pewpew::{
+    create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,
+};
 use regex::Regex;
 use tokio::{
     self,
@@ -87,13 +89,23 @@ fn main() {
                     .long("loggers")
                     .help("Enable loggers defined in the config file")
             )
-            // .arg(
-            //     Arg::with_name("file")
-            //         .short("o")
-            //         .long("file")
-            //         .help("Send results to the specified file instead of stdout. This argument implies --format json")
-            //         .value_name("FILE")
-            // )
+            .arg(
+                Arg::with_name("file")
+                    .short("o")
+                    .long("file")
+                    .help("Send results to the specified file instead of stderr")
+                    .value_name("FILE")
+            )
+            .arg(
+                Arg::with_name("format")
+                    .short("f")
+                    .long("format")
+                    .help("Specify the format for the try run output")
+                    .value_name("FORMAT")
+                    .possible_value("human")
+                    .possible_value("json")
+                    .default_value("human")
+            )
             .arg(
                 Arg::with_name("include")
                     .short("i")
@@ -199,9 +211,16 @@ fn main() {
             })
             .collect()
         });
+        let format: TryRunFormat = matches
+            .value_of("format")
+            .and_then(|f| f.try_into().ok())
+            .unwrap_or_default();
+        let file = matches.value_of("file").map(Into::into);
         let try_config = TryConfig {
             loggers_on,
+            file,
             filters,
+            format,
             config_file,
             results_dir,
         };

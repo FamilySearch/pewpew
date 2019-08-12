@@ -52,6 +52,9 @@ USAGE:
     pewpew try [OPTIONS] <CONFIG>
 
 OPTIONS:
+    -o, --file <FILE>                      Send results to the specified file instead of stderr
+    -f, --format <FORMAT>                  Specify the format for the try run output [default: human]  [possible values:
+                                           human, json]
     -h, --help                             Prints help information
     -i, --include <INCLUDE>...             Filter which endpoints are included in the try run. Filters work based on an
                                            endpoint's tags. Filters are specified in the format "key=value" where "*" is

@@ -1,16 +1,13 @@
 # TODOs
-- document and create release for the test server, along with an [issue template](https://help.github.com/en/articles/about-issue-and-pull-request-templates)
+- fix try run which hangs when an endpoint has a provider it provides and requires (See STD-API-MON.yaml). Need a way to get the required providers before building the endpoint.
 - add more tests - unit and integration - get code coverage -- add in negative tests
   - split config parser into sub-crate and add in unit tests
   - add in integration test which drops connections before the body is fully sent
-- Investigate hanging integration test (likely due to the ctrl-c changes).
-- Create a `replace` expression function to remove any instances of a string in json (will recursively search and replace any string vgit calues).
-- Add `base64` encoding to the `encode` expression function.
 - HARD - Allow declare expressions to reference other declare variables as long as there's no recursive references
+- Allow tag's expressions to reference providers and be dynamic. This should also agregate endpoints with different tags separately
 - Create a try run viewer. Version > 0.5.
 - Have a `stats` sub-command to read, merge, and print aggregate stats summaries. Also the ability to convert a json to html. Version > 0.5.
 - Have ability to include providers and endpoints (and any provider dependencies) from another config file. Version > 0.5.
-- In the stats file record the name of the yaml file. Version > 0.5
 - Adjust expression parsing errors to have line numbers which match with the yaml file
 - Have a way to set an SLA for an endpoint and visualize that in the results. Also have a stats.SLA property that could be used to key logging off of.
 - Log when a request is waiting for a provider (use tokio trace)
@@ -30,3 +27,4 @@
 - track system health (sysinfo crate) perhaps event loop latency and determine if system is overloaded
 - Add `with` support so we can have nested selects. `with` should be key value pairs where the value is an object with `with`*, `select`, `for_each`* and `where`* pieces
 - Create a Visual Studio Code language extension for the loadtest file schema. Perhaps we only need a json schema (https://code.visualstudio.com/docs/languages/json#_json-schemas-settings)
+- Tokio: v0.2 - use tokio-signal instead of ctrl c crate. Previous issues (https://github.com/tokio-rs/tokio/issues/1000) have been resolved

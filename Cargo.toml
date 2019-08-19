@@ -41,7 +41,7 @@ native-tls = "0.2"
 percent-encoding = "1"
 pest = "2"
 pest_derive = "2"
-parking_lot = "0.8"
+parking_lot = "0.9"
 rand = "0.7"
 regex = "1"
 select_any = { path = "./lib/select_any" }
@@ -53,7 +53,7 @@ test_common = { path = "./lib/test_common" }
 tokio = "0.1"
 tokio-threadpool = "0.1"
 unicode-segmentation = "1"
-url = "1"
+url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
 

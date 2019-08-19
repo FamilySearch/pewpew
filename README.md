@@ -31,6 +31,9 @@ Changes:
 - Add in `base64` option for the `encode` function.
 - For response bodies which cannot first be parsed as utf8 strings the response body will be set to the string "<\<binary data>>".
 - Add in `file` and `format` command-line options to `try` subcommand.
+- For multipart requests include the `content-length` header instead of sending a chunked request.
+- For multipart requests which have file pieces, include the `filename` section with the `content-disposition` sub-header.
+- Allow the selecting of bodies from multipart or file requests. Sections coming from a file are replaced with the string "<\<contents of file: \"filename\">>".
 
 ### v0.4.11
 Changes:

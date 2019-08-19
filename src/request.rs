@@ -9,10 +9,10 @@ use self::response_handler::ResponseHandler;
 use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
 use futures::{
-    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, Sink, Stream,
+    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
+    Stream,
 };
 use hyper::{
-    body::Payload,
     client::HttpConnector,
     header::{
         Entry as HeaderEntry, HeaderMap, HeaderName, HeaderValue, CONTENT_DISPOSITION,
@@ -25,7 +25,7 @@ use parking_lot::Mutex;
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
-use tokio::{io::AsyncRead, timer::Timeout};
+use tokio::{fs::File as TokioFile, io::AsyncRead, timer::Timeout};
 use zip_all::zip_all;
 
 use crate::config::{
@@ -453,139 +453,219 @@ impl MultipartBody {
         &self,
         template_values: &TemplateValues,
         content_type_entry: HeaderEntry<'a, HeaderValue>,
-    ) -> Result<HyperBody, TestError> {
+        copy_body_value: bool,
+        body_value: &mut Option<String>,
+    ) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
         let boundary: String = Alphanumeric
             .sample_iter(&mut rand::thread_rng())
             .take(20)
             .collect();
+
         let is_form = {
             let content_type = content_type_entry
                 .or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
-            let ct_str = content_type
-                .to_str()
-                .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+            let ct_str = match content_type.to_str() {
+                Ok(c) => c,
+                Err(e) => {
+                    return Either::A(
+                        Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                    )
+                }
+            };
             if ct_str.starts_with("multipart/") {
                 let is_form = ct_str.starts_with("multipart/form-data");
-                *content_type = HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary))
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                *content_type =
+                    match HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary)) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            return Either::A(
+                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                            )
+                        }
+                    };
                 is_form
             } else {
-                *content_type =
-                    HeaderValue::from_str(&format!("multipart/form-data;boundary={}", boundary))
-                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
+                *content_type = match HeaderValue::from_str(&format!(
+                    "multipart/form-data;boundary={}",
+                    boundary
+                )) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return Either::A(
+                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                        )
+                    }
+                };
                 true
             }
         };
-        let mut pieces: Vec<_> = self
+
+        let mut closing_boundary = Vec::new();
+        closing_boundary.extend_from_slice(b"\r\n--");
+        closing_boundary.extend_from_slice(boundary.as_bytes());
+        closing_boundary.extend_from_slice(b"--\r\n");
+
+        let mut body_value2 = Vec::new();
+
+        let pieces: Vec<_> = self
             .pieces
             .iter()
-            .rev()
-            .map(|mp| {
-                let body = mp
+            .enumerate()
+            .map(|(i, mp)| {
+                let body = match mp
                     .template
-                    .evaluate(Cow::Borrowed(template_values.as_json()), None)?;
-                let mut headers = mp
-                    .headers
-                    .iter()
-                    .map(|(k, t)| {
-                        let key = HeaderName::from_bytes(k.as_bytes())
-                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                        let value = HeaderValue::from_str(
-                            &t.evaluate(Cow::Borrowed(template_values.as_json()), None)?,
-                        )
-                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                        Ok::<_, TestError>((key, value))
-                    })
-                    .collect::<Result<HeaderMap<_>, _>>()?;
+                    .evaluate(Cow::Borrowed(template_values.as_json()), None)
+                {
+                    Ok(b) => b,
+                    Err(e) => return Either3::A(Err(e).into_future()),
+                };
 
-                if is_form && !headers.contains_key(CONTENT_DISPOSITION) {
-                    let value = HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
-                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                    headers.insert(CONTENT_DISPOSITION, value);
+                let mut has_content_disposition = false;
+
+                let mut piece_data = Vec::new();
+                if i == 0 {
+                    piece_data.extend_from_slice(b"--");
+                } else {
+                    piece_data.extend_from_slice(b"\r\n--");
                 }
-                Ok((headers, mp.is_file, body))
+                piece_data.extend_from_slice(boundary.as_bytes());
+
+                for (k, t) in mp.headers.iter() {
+                    let key = match HeaderName::from_bytes(k.as_bytes()) {
+                        Ok(k) => k,
+                        Err(e) => {
+                            return Either3::A(
+                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                            )
+                        }
+                    };
+                    let value = match t.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+                        Ok(v) => v,
+                        Err(e) => return Either3::A(Err(e).into_future()),
+                    };
+                    let value = match HeaderValue::from_str(&value) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return Either3::A(
+                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                            )
+                        }
+                    };
+
+                    let content_disposition = CONTENT_DISPOSITION;
+                    has_content_disposition |= key == content_disposition;
+
+                    piece_data.extend_from_slice(b"\r\n");
+                    piece_data.extend_from_slice(key.as_ref());
+                    piece_data.extend_from_slice(b": ");
+                    piece_data.extend_from_slice(value.as_bytes());
+                }
+
+                if is_form && !has_content_disposition {
+                    let value = if mp.is_file {
+                        HeaderValue::from_str(&format!(
+                            "form-data; name=\"{}\"; filename=\"{}\"",
+                            mp.name, body
+                        ))
+                    } else {
+                        HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
+                    };
+                    let value = match value {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return Either3::A(
+                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                            )
+                        }
+                    };
+
+                    piece_data.extend_from_slice(b"\r\ncontent-disposition: ");
+                    piece_data.extend_from_slice(value.as_bytes());
+                }
+
+                piece_data.extend_from_slice(b"\r\n\r\n");
+
+                if mp.is_file {
+                    if copy_body_value {
+                        body_value2.extend_from_slice(&piece_data);
+                        body_value2.extend_from_slice(b"<<contents of file: ");
+                        body_value2.extend_from_slice(body.as_bytes());
+                        body_value2.extend_from_slice(b">>");
+                    }
+                    let piece_data_bytes = piece_data.len() as u64;
+                    let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
+                    let b = create_file_hyper_body(body, &self.path).map(move |(bytes, body)| {
+                        let stream = Either::A(piece_stream.chain(body));
+                        (bytes + piece_data_bytes, stream)
+                    });
+                    Either3::B(b)
+                } else {
+                    piece_data.extend_from_slice(body.as_bytes());
+                    if copy_body_value {
+                        body_value2.extend_from_slice(&piece_data);
+                    }
+                    let piece_data_bytes = piece_data.len() as u64;
+                    let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
+                    let c = Ok((piece_data_bytes, Either::B(piece_stream)));
+                    Either3::C(c.into_future())
+                }
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect();
 
-        let mut sub_body: Option<HyperBody> = None;
-        let path = self.path.clone();
-        let mut ended = false;
-        let mut buf = bytes::BytesMut::with_capacity(8192);
+        if copy_body_value {
+            body_value2.extend_from_slice(&closing_boundary);
+            let bv = match String::from_utf8(body_value2) {
+                Ok(bv) => bv,
+                Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+            };
+            *body_value = Some(bv);
+        }
 
-        let stream = stream::poll_fn::<_, TestError, _>(move || loop {
-            if let Some(ref mut sb) = &mut sub_body {
-                match sb.poll_data() {
-                    Ok(Async::Ready(Some(d))) => {
-                        buf.extend_from_slice(&*d);
-                    }
-                    Ok(Async::Ready(None)) => {
-                        sub_body = None;
-                        buf.extend_from_slice(b"\r\n");
-                    }
-                    Ok(Async::NotReady) => {
-                        return if buf.is_empty() {
-                            Ok(Async::NotReady)
-                        } else {
-                            Ok(Async::Ready(Some(buf.take().freeze())))
-                        };
-                    }
-                    Err(e) => return Err(RecoverableError::BodyErr(Arc::new(e)).into()),
-                }
-                continue;
-            }
-            match pieces.pop() {
-                Some((headers, is_file, body)) => {
-                    buf.extend_from_slice(format!("--{}", boundary).as_bytes());
-                    for (k, v) in headers.iter() {
-                        buf.extend_from_slice(format!("\r\n{}: ", k.as_str()).as_bytes());
-                        buf.extend_from_slice(v.as_bytes());
-                    }
-                    buf.extend_from_slice(b"\r\n\r\n");
-                    if is_file {
-                        sub_body = Some(create_file_hyper_body(body, &path));
-                    } else {
-                        buf.extend_from_slice(body.as_bytes());
-                        buf.extend_from_slice(b"\r\n");
-                    }
-                }
-                None => {
-                    if buf.is_empty() {
-                        return if ended {
-                            Ok(Async::Ready(None))
-                        } else {
-                            buf.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
-                            ended = true;
-                            Ok(Async::Ready(Some(buf.take().freeze())))
-                        };
-                    } else {
-                        return Ok(Async::Ready(Some(buf.take().freeze())));
-                    }
-                }
-            }
+        let b = join_all(pieces).map(move |results| {
+            let (bytes, bodies) = results.into_iter().fold(
+                (closing_boundary.len() as u64, Vec::new()),
+                |(bytes, mut bodies), (bytes2, body)| {
+                    bodies.push(body);
+                    (bytes + bytes2, bodies)
+                },
+            );
+
+            let closing_boundary = hyper::Chunk::from(closing_boundary.clone());
+
+            let stream = stream::iter_ok::<_, hyper::Error>(bodies)
+                .flatten()
+                .chain(stream::once(Ok(closing_boundary)));
+
+            (bytes, HyperBody::wrap_stream(stream))
         });
-
-        Ok(HyperBody::wrap_stream(stream))
+        Either::B(b)
     }
 }
 
-fn create_file_hyper_body(mut file: String, path: &PathBuf) -> HyperBody {
+fn create_file_hyper_body(
+    mut file: String,
+    path: &PathBuf,
+) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
     tweak_path(&mut file, path);
-    let stream = tokio::fs::File::open(file)
-        .and_then(|mut file| {
+    TokioFile::open(file)
+        .and_then(TokioFile::metadata)
+        .map(|(mut file, metadata)| {
+            let bytes = metadata.len();
             let mut buf = bytes::BytesMut::with_capacity(8 * (1 << 10));
-            let s = stream::poll_fn(move || {
+            let stream = stream::poll_fn(move || {
                 buf.reserve(8 * (1 << 10));
                 let ret = match file.read_buf(&mut buf)? {
                     Async::Ready(n) if n == 0 => Async::Ready(None),
                     Async::Ready(_) => Async::Ready(buf.take().freeze().into()),
                     Async::NotReady => Async::NotReady,
                 };
-                Ok(ret)
+                Ok::<_, tokio::io::Error>(ret)
             });
-            Ok(s)
+
+            let body = HyperBody::wrap_stream(stream);
+            (bytes, body)
         })
-        .flatten_stream();
-    HyperBody::wrap_stream(stream)
+        .map_err(|e| TestError::Recoverable(RecoverableError::BodyErr(Arc::new(e))))
 }
 
 enum BodyTemplate {
@@ -602,23 +682,34 @@ impl BodyTemplate {
         copy_body_value: bool,
         body_value: &mut Option<String>,
         content_type_entry: HeaderEntry<'a, HeaderValue>,
-    ) -> Result<HyperBody, TestError> {
+    ) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
         let template = match self {
             BodyTemplate::File(_, t) => t,
             BodyTemplate::Multipart(m) => {
-                return m.as_hyper_body(template_values, content_type_entry)
+                return Either3::A(m.as_hyper_body(
+                    template_values,
+                    content_type_entry,
+                    copy_body_value,
+                    body_value,
+                ))
             }
-            BodyTemplate::None => return Ok(HyperBody::empty()),
+            BodyTemplate::None => return Either3::B(Ok((0, HyperBody::empty())).into_future()),
             BodyTemplate::String(t) => t,
         };
-        let body = template.evaluate(Cow::Borrowed(template_values.as_json()), None)?;
+        let body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+            Ok(b) => b,
+            Err(e) => return Either3::B(Err(e).into_future()),
+        };
         if let BodyTemplate::File(path, _) = self {
-            Ok(create_file_hyper_body(body, path))
+            if copy_body_value {
+                *body_value = Some(format!("<contents of file: {}>", path.display()));
+            }
+            Either3::C(create_file_hyper_body(body, path))
         } else {
             if copy_body_value {
                 *body_value = Some(body.clone());
             }
-            Ok(body.into())
+            Either3::B(Ok((body.as_bytes().len() as u64, body.into())).into_future())
         }
     }
 }

@@ -5,6 +5,7 @@
     type_alias_impl_trait
 )]
 #![warn(rust_2018_idioms)]
+#![type_length_limit = "1460995"]
 
 mod config;
 mod error;

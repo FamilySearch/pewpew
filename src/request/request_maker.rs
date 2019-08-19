@@ -94,200 +94,202 @@ impl RequestMaker {
             &mut body_value,
             ct_entry,
         );
-        let body = match body {
-            Ok(b) => b,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
-        let mut request = match request.body(body) {
-            Ok(b) => b,
-            Err(e) => return Either::B(Err(TestError::RequestBuilderErr(e.into())).into_future()),
-        };
-        // add the host header
-        headers.insert(
-            HOST,
-            HeaderValue::from_str(url.host_str().expect("should be a valid url"))
-                .expect("url should be a valid string"),
-        );
-        // add the content-lengh header, if needed
-        // (hyper adds it automatically but we need to add it manually here so it shows up in the logs)
-        match request.body().content_length() {
-            Some(n) if n > 0 => {
-                headers.insert(CONTENT_LENGTH, n.into());
-            }
-            _ => (),
-        }
-        let mut request_provider = json::json!({});
-        let request_obj = request_provider
-            .as_object_mut()
-            .expect("should be a json object");
-        if self.rr_providers & REQUEST_URL == REQUEST_URL {
-            // add in the url
-            let mut protocol: String = url.scheme().into();
-            if !protocol.is_empty() {
-                protocol = format!("{}:", protocol);
-            }
-            let search_params: json::Map<String, json::Value> = url
-                .query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned().into()))
-                .collect();
-            request_obj.insert(
-                "url".into(),
-                json::json!({
-                    "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
-                    "host": url.host_str().unwrap_or(""),
-                    "hostname": url.domain().unwrap_or(""),
-                    "href": url.as_str(),
-                    "origin": url.origin().unicode_serialization(),
-                    "password": url.password().unwrap_or(""),
-                    "pathname": url.path(),
-                    "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
-                    "protocol": protocol,
-                    "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
-                    "searchParams": search_params,
-                    "username": url.username(),
-                }),
-            );
-        }
-        if self.rr_providers & REQUEST_STARTLINE != 0 {
-            let url_path_and_query = request
-                .uri()
-                .path_and_query()
-                .map(http::uri::PathAndQuery::as_str)
-                .unwrap_or("/");
-            let version = request.version();
-            request_obj.insert(
-                "start-line".into(),
-                format!("{} {} {:?}", self.method, url_path_and_query, version).into(),
-            );
-        }
-        if self.rr_providers & REQUEST_HEADERS != 0 {
-            let mut headers_json = json::Map::new();
-            for (k, v) in headers.iter() {
-                headers_json.insert(
-                    k.as_str().to_string(),
-                    json::Value::String(
-                        v.to_str()
-                            .expect("could not parse HTTP request header as utf8 string")
-                            .to_string(),
-                    ),
-                );
-            }
-            request_obj.insert("headers".into(), json::Value::Object(headers_json));
-        }
-        if self.rr_providers & REQUEST_BODY != 0 {
-            let body_string = body_value.unwrap_or_else(|| "".into());
-            request_obj.insert("body".into(), body_string.into());
-        }
-        request_obj.insert("method".into(), self.method.as_str().into());
-        template_values.insert("request".into(), request_provider);
-        request.headers_mut().extend(headers);
-        let response_future = self.client.request(request);
-        let now = Instant::now();
+
+        let client = self.client.clone();
         let stats_tx = self.stats_tx.clone();
-        let stats_tx2 = stats_tx.clone();
         let outgoing = self.outgoing.clone();
-        let outgoing2 = outgoing.clone();
         let timeout_in_micros = self.timeout.as_micros() as u64;
         let precheck_rr_providers = self.precheck_rr_providers;
         let endpoint_id = self.endpoint_id;
+        let rr_providers = self.rr_providers;
+        let method = self.method.clone();
+        let timeout = self.timeout;
 
-        let auto_returns2 = auto_returns.clone();
-        let a = Timeout::new(response_future, self.timeout)
-            .map_err(move |err| {
-                if let Some(err) = err.into_inner() {
-                    let err: Arc<dyn StdError + Send + Sync> =
-                        if let Some(io_error_maybe) = err.source() {
-                            if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
-                                let io_error = err.into_cause().expect("should have a cause error");
-                                Arc::new(
-                                    *io_error
-                                        .downcast::<std::io::Error>()
-                                        .expect("should downcast as io error"),
-                                )
+        let a = body.and_then(move |(content_length, body)| {
+            let mut request = match request.body(body) {
+                Ok(b) => b,
+                Err(e) => return Either::B(Err(TestError::RequestBuilderErr(e.into())).into_future()),
+            };
+            // add the host header
+            headers.insert(
+                HOST,
+                HeaderValue::from_str(url.host_str().expect("should be a valid url"))
+                    .expect("url should be a valid string"),
+            );
+            // add the content-lengh header, if needed
+            if content_length > 0 {
+                headers.insert(CONTENT_LENGTH, content_length.into());
+            }
+            let mut request_provider = json::json!({});
+            let request_obj = request_provider
+                .as_object_mut()
+                .expect("should be a json object");
+            if rr_providers & REQUEST_URL == REQUEST_URL {
+                // add in the url
+                let mut protocol: String = url.scheme().into();
+                if !protocol.is_empty() {
+                    protocol = format!("{}:", protocol);
+                }
+                let search_params: json::Map<String, json::Value> = url
+                    .query_pairs()
+                    .map(|(k, v)| (k.into_owned(), v.into_owned().into()))
+                    .collect();
+                request_obj.insert(
+                    "url".into(),
+                    json::json!({
+                        "hash": url.fragment().map(|s| format!("#{}", s)).unwrap_or_else(|| "".into()),
+                        "host": url.host_str().unwrap_or(""),
+                        "hostname": url.domain().unwrap_or(""),
+                        "href": url.as_str(),
+                        "origin": url.origin().unicode_serialization(),
+                        "password": url.password().unwrap_or(""),
+                        "pathname": url.path(),
+                        "port": url.port().map(|n| n.to_string()).unwrap_or_else(|| "".into()),
+                        "protocol": protocol,
+                        "search": url.query().map(|s| format!("?{}", s)).unwrap_or_else(|| "".into()),
+                        "searchParams": search_params,
+                        "username": url.username(),
+                    }),
+                );
+            }
+            if rr_providers & REQUEST_STARTLINE != 0 {
+                let url_path_and_query = request
+                    .uri()
+                    .path_and_query()
+                    .map(http::uri::PathAndQuery::as_str)
+                    .unwrap_or("/");
+                let version = request.version();
+                request_obj.insert(
+                    "start-line".into(),
+                    format!("{} {} {:?}", method, url_path_and_query, version).into(),
+                );
+            }
+            if rr_providers & REQUEST_HEADERS != 0 {
+                let mut headers_json = json::Map::new();
+                for (k, v) in headers.iter() {
+                    headers_json.insert(
+                        k.as_str().to_string(),
+                        json::Value::String(
+                            v.to_str()
+                                .expect("could not parse HTTP request header as utf8 string")
+                                .to_string(),
+                        ),
+                    );
+                }
+                request_obj.insert("headers".into(), json::Value::Object(headers_json));
+            }
+            if rr_providers & REQUEST_BODY != 0 {
+                let body_string = body_value.unwrap_or_else(|| "".into());
+                request_obj.insert("body".into(), body_string.into());
+            }
+            request_obj.insert("method".into(), method.as_str().into());
+            template_values.insert("request".into(), request_provider);
+            request.headers_mut().extend(headers);
+
+            let response_future = client.request(request);
+            let now = Instant::now();
+            let stats_tx2 = stats_tx.clone();
+            let outgoing2 = outgoing.clone();
+            let auto_returns2 = auto_returns.clone();
+
+            let a = Timeout::new(response_future, timeout)
+                .map_err(move |err| {
+                    if let Some(err) = err.into_inner() {
+                        let err: Arc<dyn StdError + Send + Sync> =
+                            if let Some(io_error_maybe) = err.source() {
+                                if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
+                                    let io_error = err.into_cause().expect("should have a cause error");
+                                    Arc::new(
+                                        *io_error
+                                            .downcast::<std::io::Error>()
+                                            .expect("should downcast as io error"),
+                                    )
+                                } else {
+                                    Arc::new(err)
+                                }
                             } else {
                                 Arc::new(err)
-                            }
-                        } else {
-                            Arc::new(err)
+                            };
+                        RecoverableError::ConnectionErr(SystemTime::now(), err).into()
+                    } else {
+                        RecoverableError::Timeout(SystemTime::now()).into()
+                    }
+                })
+                .then(move |result| match result {
+                    Ok(response) => {
+                        let rh = ResponseHandler {
+                            template_values,
+                            precheck_rr_providers,
+                            outgoing,
+                            now,
+                            stats_tx,
+                            endpoint_id,
                         };
-                    RecoverableError::ConnectionErr(SystemTime::now(), err).into()
-                } else {
-                    RecoverableError::Timeout(SystemTime::now()).into()
-                }
-            })
-            .then(move |result| match result {
-                Ok(response) => {
-                    let rh = ResponseHandler {
-                        template_values,
-                        precheck_rr_providers,
-                        outgoing,
-                        now,
-                        stats_tx,
-                        endpoint_id,
-                    };
-                    Either3::A(rh.handle(response, auto_returns))
-                }
-                Err(te) => match te {
-                    TestError::Recoverable(r) => {
-                        let mut futures = Vec::new();
-                        if outgoing.iter().any(|o| o.logger) {
-                            let error = json::json!({
-                                "msg": format!("{}", r),
-                                "code": r.code(),
-                            });
-                            template_values.insert("error".into(), error);
-                            let template_values: Arc<_> = template_values.0.into();
-                            for o in outgoing.iter() {
-                                let select = o.select.clone();
-                                if let (true, Ok(iter)) =
-                                    (o.logger, select.iter(template_values.clone()))
-                                {
-                                    let tx = o.tx.clone();
-                                    let cb = o.cb.clone();
-                                    futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                        Either3::A(rh.handle(response, auto_returns))
+                    }
+                    Err(te) => match te {
+                        TestError::Recoverable(r) => {
+                            let mut futures = Vec::new();
+                            if outgoing.iter().any(|o| o.logger) {
+                                let error = json::json!({
+                                    "msg": format!("{}", r),
+                                    "code": r.code(),
+                                });
+                                template_values.insert("error".into(), error);
+                                let template_values: Arc<_> = template_values.0.into();
+                                for o in outgoing.iter() {
+                                    let select = o.select.clone();
+                                    if let (true, Ok(iter)) =
+                                        (o.logger, select.iter(template_values.clone()))
+                                    {
+                                        let tx = o.tx.clone();
+                                        let cb = o.cb.clone();
+                                        futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                                    }
                                 }
                             }
-                        }
-                        let time = match r {
-                            RecoverableError::Timeout(t)
-                            | RecoverableError::ConnectionErr(t, _) => t,
-                            _ => SystemTime::now(),
-                        };
-                        let rtt = match r {
-                            RecoverableError::Timeout(_) => Some(timeout_in_micros),
-                            _ => None,
-                        };
-                        for o in outgoing2.iter() {
-                            if let Some(cb) = &o.cb {
-                                cb(false);
-                            }
-                        }
-                        let f = stats_tx2
-                            .send(
-                                stats::ResponseStat {
-                                    endpoint_id,
-                                    kind: stats::StatKind::RecoverableError(r),
-                                    rtt,
-                                    time,
+                            let time = match r {
+                                RecoverableError::Timeout(t)
+                                | RecoverableError::ConnectionErr(t, _) => t,
+                                _ => SystemTime::now(),
+                            };
+                            let rtt = match r {
+                                RecoverableError::Timeout(_) => Some(timeout_in_micros),
+                                _ => None,
+                            };
+                            for o in outgoing2.iter() {
+                                if let Some(cb) = &o.cb {
+                                    cb(false);
                                 }
-                                .into(),
-                            )
-                            .then(|_| Ok(()));
-                        futures.push(Either::B(f));
-                        let b = join_all(futures).map(|_| ());
-                        Either3::B(b)
+                            }
+                            let f = stats_tx2
+                                .send(
+                                    stats::ResponseStat {
+                                        endpoint_id,
+                                        kind: stats::StatKind::RecoverableError(r),
+                                        rtt,
+                                        time,
+                                    }
+                                    .into(),
+                                )
+                                .then(|_| Ok(()));
+                            futures.push(Either::B(f));
+                            let b = join_all(futures).map(|_| ());
+                            Either3::B(b)
+                        }
+                        _ => Either3::C(Err(te).into_future()),
+                    },
+                })
+                .and_then(move |_| {
+                    if let Some(mut f) = auto_returns2.try_lock() {
+                        if let Some(f) = f.take() {
+                            return Either::A(f);
+                        }
                     }
-                    _ => Either3::C(Err(te).into_future()),
-                },
-            })
-            .and_then(move |_| {
-                if let Some(mut f) = auto_returns2.try_lock() {
-                    if let Some(f) = f.take() {
-                        return Either::A(f);
-                    }
-                }
-                Either::B(Ok(()).into_future())
-            });
+                    Either::B(Ok(()).into_future())
+                });
+            Either::A(a)
+        });
         Either::A(a)
     }
 }

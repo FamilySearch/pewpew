@@ -110,6 +110,7 @@ type EndpointId = usize;
 type StatsId = BTreeMap<String, String>;
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RollingAggregateStats {
     #[serde(with = "buckets_serde")]
     buckets: BTreeMap<EndpointId, (StatsId, BTreeMap<u64, AggregateStats>)>,

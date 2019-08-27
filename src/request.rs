@@ -141,7 +141,7 @@ pub struct Builder {
     on_demand: bool,
     provides: Vec<(String, Select)>,
     start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
-    tags: BTreeMap<String, String>,
+    tags: BTreeMap<String, Template>,
     url: Template,
 }
 
@@ -211,16 +211,12 @@ impl Builder {
         self
     }
 
-    pub fn tags(mut self, tags: BTreeMap<String, String>) -> Self {
+    pub fn tags(mut self, tags: BTreeMap<String, Template>) -> Self {
         self.tags = tags;
         self
     }
 
-    pub fn build(
-        self,
-        ctx: &mut BuilderContext,
-        endpoint_id: usize,
-    ) -> Result<Endpoint, TestError> {
+    pub fn build(self, ctx: &mut BuilderContext) -> Result<Endpoint, TestError> {
         let mut required_providers = self.url.get_providers().clone();
         let headers = self
             .headers
@@ -409,7 +405,6 @@ impl Builder {
         Ok(Endpoint {
             body,
             client,
-            endpoint_id,
             headers,
             limits,
             max_parallel_requests: self.max_parallel_requests,
@@ -421,7 +416,7 @@ impl Builder {
             provides,
             required_providers,
             rr_providers,
-            tags: self.tags,
+            tags: Arc::new(self.tags),
             stats_tx,
             stream_collection: streams,
             url: self.url,
@@ -728,7 +723,6 @@ pub struct Endpoint {
             HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
         >,
     >,
-    endpoint_id: usize,
     headers: Vec<(String, Template)>,
     limits: Vec<channel::Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
@@ -740,7 +734,7 @@ pub struct Endpoint {
     provides: Vec<Outgoing>,
     rr_providers: u16,
     required_providers: BTreeSet<String>,
-    tags: BTreeMap<String, String>,
+    tags: Arc<BTreeMap<String, Template>>,
     stats_tx: StatsTx,
     stream_collection: StreamCollection,
     timeout: Duration,
@@ -815,42 +809,30 @@ impl Endpoint {
         outgoing.extend(self.provides);
         let outgoing = Arc::new(outgoing);
         let precheck_rr_providers = self.precheck_rr_providers;
-        let endpoint_id = self.endpoint_id;
         let timeout = self.timeout;
         let limits = self.limits;
         let max_parallel_requests = self.max_parallel_requests;
-        Box::new(
-            stats_tx
-                .clone()
-                .send(
-                    stats::StatsInit {
-                        endpoint_id: self.endpoint_id,
-                        time: SystemTime::now(),
-                        tags: self.tags,
-                    }
-                    .into(),
-                )
-                .map_err(|_| TestError::Other("could not send init stats".into()))
-                .and_then(move |_| {
-                    let rm = RequestMaker {
-                        url,
-                        method,
-                        headers,
-                        body,
-                        rr_providers,
-                        client,
-                        stats_tx,
-                        no_auto_returns,
-                        outgoing,
-                        precheck_rr_providers,
-                        endpoint_id,
-                        timeout,
-                    };
-                    ForEachParallel::new(limits, max_parallel_requests, stream, move |values| {
-                        rm.send_request(values)
-                    })
-                }),
-        )
+        let tags = self.tags;
+        let rm = RequestMaker {
+            url,
+            method,
+            headers,
+            body,
+            rr_providers,
+            client,
+            stats_tx,
+            no_auto_returns,
+            outgoing,
+            precheck_rr_providers,
+            tags,
+            timeout,
+        };
+        Box::new(ForEachParallel::new(
+            limits,
+            max_parallel_requests,
+            stream,
+            move |values| rm.send_request(values),
+        ))
     }
 }
 

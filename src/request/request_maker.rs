@@ -17,7 +17,7 @@ pub(super) struct RequestMaker {
     pub(super) no_auto_returns: bool,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
     pub(super) precheck_rr_providers: u16,
-    pub(super) endpoint_id: usize,
+    pub(super) tags: Arc<BTreeMap<String, Template>>,
     pub(super) timeout: Duration,
 }
 
@@ -100,10 +100,10 @@ impl RequestMaker {
         let outgoing = self.outgoing.clone();
         let timeout_in_micros = self.timeout.as_micros() as u64;
         let precheck_rr_providers = self.precheck_rr_providers;
-        let endpoint_id = self.endpoint_id;
         let rr_providers = self.rr_providers;
         let method = self.method.clone();
         let timeout = self.timeout;
+        let tags = self.tags.clone();
 
         let a = body.and_then(move |(content_length, body)| {
             let mut request = match request.body(body) {
@@ -223,12 +223,19 @@ impl RequestMaker {
                             outgoing,
                             now,
                             stats_tx,
-                            endpoint_id,
+                            tags,
                         };
                         Either3::A(rh.handle(response, auto_returns))
                     }
                     Err(te) => match te {
                         TestError::Recoverable(r) => {
+                            let tags = tags.iter()
+                                .filter_map(|(k, v)| {
+                                    v.evaluate(Cow::Borrowed(template_values.as_json()), None)
+                                        .ok()
+                                        .map(move |v| (k.clone(), v))
+                                }).collect();
+                            let tags = Arc::new(tags);
                             let mut futures = Vec::new();
                             if outgoing.iter().any(|o| o.logger) {
                                 let error = json::json!({
@@ -265,10 +272,10 @@ impl RequestMaker {
                             let f = stats_tx2
                                 .send(
                                     stats::ResponseStat {
-                                        endpoint_id,
                                         kind: stats::StatKind::RecoverableError(r),
                                         rtt,
                                         time,
+                                        tags,
                                     }
                                     .into(),
                                 )
@@ -317,8 +324,8 @@ mod tests {
             let (stats_tx, _) = futures_channel::unbounded();
             let no_auto_returns = true;
             let outgoing = Vec::new().into();
-            let endpoint_id = 0;
             let timeout = Duration::from_secs(120);
+            let tags = Arc::new(BTreeMap::new());
 
             let rm = RequestMaker {
                 url,
@@ -331,7 +338,7 @@ mod tests {
                 no_auto_returns,
                 outgoing,
                 precheck_rr_providers,
-                endpoint_id,
+                tags,
                 timeout,
             };
 

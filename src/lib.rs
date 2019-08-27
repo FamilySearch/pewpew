@@ -92,7 +92,7 @@ impl Endpoints {
             .enumerate()
             .map(|(i, (tags, builder))| {
                 let included = filter_fn(&tags);
-                Ok((i, (included, builder.build(builder_ctx, i)?)))
+                Ok((i, (included, builder.build(builder_ctx)?)))
             })
             .collect::<Result<BTreeMap<_, _>, TestError>>()?;
 
@@ -536,22 +536,24 @@ fn create_load_watcher(
 
 fn create_url_and_update_tags(
     url: &str,
+    endpoint_id: usize,
     method: &http::Method,
-    tags: &mut BTreeMap<String, String>,
+    mut tags: BTreeMap<String, String>,
     static_vars: &BTreeMap<String, json::Value>,
-) -> Result<(config::Template), TestError> {
+) -> Result<(BTreeMap<String, config::Template>, config::Template), TestError> {
     let url = config::Template::new(url, static_vars, false)?;
+    tags.insert("_id".into(), endpoint_id.to_string());
     tags.entry("url".into())
         .or_insert_with(|| url.evaluate_with_star());
     tags.insert("method".into(), method.to_string());
-    for v in tags.values_mut() {
-        let t = config::Template::new(&v, static_vars, false)?;
-        if let Some(r) = t.get_providers().iter().nth(0) {
-            return Err(TestError::InvalidTagsReference(r.clone()));
-        }
-        *v = t.evaluate(Cow::Owned(json::Value::Null), None)?;
-    }
-    Ok(url)
+    let tags = tags
+        .into_iter()
+        .map(|(k, v)| {
+            let t = config::Template::new(&v, static_vars, true)?;
+            Ok((k, t))
+        })
+        .collect::<Result<_, TestError>>()?;
+    Ok((tags, url))
 }
 
 fn create_try_run_future<Se, So, Sef, Sof>(
@@ -684,7 +686,7 @@ where
 
     let mut endpoints = Endpoints::new();
 
-    for mut endpoint in config.endpoints.into_iter() {
+    for (i, mut endpoint) in config.endpoints.into_iter().enumerate() {
         let provides_set = endpoint
             .provides
             .iter_mut()
@@ -721,9 +723,21 @@ where
         } else {
             Vec::new()
         };
-        let mut tags = endpoint.tags.unwrap_or_default();
-        let url =
-            create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_vars)?;
+        let tags = endpoint.tags.unwrap_or_default();
+        let (tags, url) =
+            create_url_and_update_tags(&endpoint.url, i, &endpoint.method, tags, &static_vars)?;
+        let static_tags = tags
+            .iter()
+            .filter_map(|(k, v)| match v.get_providers().iter().nth(0) {
+                Some(_) => None,
+                None => {
+                    let r = v
+                        .evaluate(Cow::Owned(json::Value::Null), None)
+                        .map(|v| (k.clone(), v));
+                    Some(r)
+                }
+            })
+            .collect::<Result<_, _>>()?;
 
         let builder = request::Builder::new(url, None)
             .body(endpoint.body)
@@ -735,8 +749,8 @@ where
             .no_auto_returns(endpoint.no_auto_returns)
             .on_demand(true)
             .provides(provides)
-            .tags(tags.clone());
-        endpoints.append(tags, builder, provides_set);
+            .tags(tags);
+        endpoints.append(static_tags, builder, provides_set);
     }
 
     let client = create_http_client(config_config.client.keepalive)?;
@@ -849,7 +863,7 @@ where
         let ei = Either::B(config.endpoints.into_iter().map(|ep| (ep, None)));
         (ei, None)
     };
-    let builders: Vec<_> = endpoints_iter.map(|(endpoint, receiver)| {
+    let builders: Vec<_> = endpoints_iter.enumerate().map(|(i, (endpoint, receiver))| {
         let mut mod_interval: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>> = None;
         let send_behavior_default = if endpoint.peak_load.is_some() {
             config::EndpointProvidesSendOptions::IfNotFull
@@ -896,8 +910,8 @@ where
             })
             .collect();
         headers.extend(headers_to_add);
-        let mut tags = endpoint.tags.unwrap_or_default();
-        let url = create_url_and_update_tags(&endpoint.url, &endpoint.method, &mut tags, &static_vars)?;
+        let tags = endpoint.tags.unwrap_or_default();
+        let (tags, url) = create_url_and_update_tags(&endpoint.url, i, &endpoint.method, tags, &static_vars)?;
         let logs = to_select_values(endpoint.logs, None)?;
         let builder = request::Builder::new(url, mod_interval)
             .body(endpoint.body)
@@ -940,9 +954,9 @@ where
         stats_tx: stats_tx.clone(),
     };
 
-    let endpoint_calls = builders.into_iter().enumerate().map(move |(i, builder)| {
+    let endpoint_calls = builders.into_iter().map(move |builder| {
         builder
-            .build(&mut builder_ctx, i)
+            .build(&mut builder_ctx)
             .map(request::Endpoint::into_future)
             .into_future()
             .flatten()

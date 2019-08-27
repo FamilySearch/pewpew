@@ -14,7 +14,7 @@ use futures::{
 };
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json as json;
 use tokio::{
     fs::File as TokioFile,
@@ -70,50 +70,28 @@ mod histogram_serde {
     }
 }
 
-mod buckets_serde {
-    use super::AggregateStats;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::collections::BTreeMap;
+type StatsId = BTreeMap<String, String>;
+type Buckets = BTreeMap<StatsId, BTreeMap<u64, AggregateStats>>;
 
-    type BucketValuesSer = (BTreeMap<String, String>, Vec<AggregateStats>);
-    type BucketValues = (BTreeMap<String, String>, BTreeMap<u64, AggregateStats>);
-    type Buckets = BTreeMap<usize, BucketValues>;
-
-    pub fn serialize<S>(buckets: &Buckets, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let values: Vec<(&BTreeMap<String, String>, Vec<&AggregateStats>)> = buckets
-            .values()
-            .map(|(tags, stats_map)| (tags, stats_map.values().collect()))
-            .collect();
-        values.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Buckets, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let values: Vec<BucketValuesSer> = Vec::deserialize(deserializer)?;
-        Ok(values
-            .into_iter()
-            .map(|(k, v)| {
-                let v = v.into_iter().map(|v| (v.time, v)).collect();
-                (k, v)
-            })
-            .enumerate()
-            .collect())
-    }
+pub fn serialize_buckets<S>(buckets: &Buckets, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let values: Vec<_> = buckets
+        .into_iter()
+        .map(|(k, v)| {
+            let v: Vec<_> = v.values().collect();
+            (k, v)
+        })
+        .collect();
+    values.serialize(serializer)
 }
 
-type EndpointId = usize;
-type StatsId = BTreeMap<String, String>;
-
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RollingAggregateStats {
-    #[serde(with = "buckets_serde")]
-    buckets: BTreeMap<EndpointId, (StatsId, BTreeMap<u64, AggregateStats>)>,
+    #[serde(serialize_with = "serialize_buckets")]
+    buckets: Buckets,
     #[serde(skip_serializing)]
     duration: u64,
     #[serde(skip)]
@@ -140,35 +118,21 @@ impl RollingAggregateStats {
         }
     }
 
-    fn init(
-        &mut self,
-        time: SystemTime,
-        endpoint_id: usize,
-        tags: StatsId,
-    ) -> Result<(), TestError> {
-        if !tags.contains_key("url") || !tags.contains_key("method") {
-            return Err(TestError::Internal(
-                format!("tags missing `url` and/or `method`. {:?}", tags).into(),
-            ));
-        }
-        let duration = self.duration;
-        let time = to_epoch(time)? / duration * duration;
-        let mut stats_map = BTreeMap::new();
-        stats_map.insert(
-            time,
-            AggregateStats::new(time, Duration::from_secs(duration)),
-        );
-        self.buckets.insert(endpoint_id, (tags, stats_map));
-        Ok(())
-    }
-
     fn append(&mut self, stat: ResponseStat) -> Result<Option<String>, TestError> {
         let duration = self.duration;
         let time = to_epoch(stat.time)? / duration * duration;
-        let (_, stats_map) = self
-            .buckets
-            .get_mut(&stat.endpoint_id)
-            .expect("Unintialized bucket");
+        let stats_map = loop {
+            if let Some(sm) = self.buckets.get_mut(&stat.tags) {
+                break sm;
+            }
+            let duration = self.duration;
+            let mut stats_map = BTreeMap::new();
+            stats_map.insert(
+                time,
+                AggregateStats::new(time, Duration::from_secs(duration)),
+            );
+            self.buckets.insert((*stat.tags).clone(), stats_map);
+        };
         let current = stats_map
             .entry(time)
             .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
@@ -208,7 +172,7 @@ impl RollingAggregateStats {
         } else {
             String::new()
         };
-        for (tags, stats_map) in self.buckets.values() {
+        for (tags, stats_map) in &self.buckets {
             if let Some(stats) = stats_map.get(&time) {
                 let piece = stats.print_summary(tags, output_format, true);
                 print_string.push_str(&piece);
@@ -433,8 +397,6 @@ impl AggregateStats {
 
 #[derive(Debug)]
 pub enum StatsMessage {
-    // every endpoint sends init so the stats buckets are initialized
-    Init(StatsInit),
     // every time a response is received
     ResponseStat(ResponseStat),
     // sent at the beginning of the test
@@ -442,18 +404,11 @@ pub enum StatsMessage {
 }
 
 #[derive(Debug)]
-pub struct StatsInit {
-    pub endpoint_id: EndpointId,
-    pub tags: StatsId,
-    pub time: SystemTime,
-}
-
-#[derive(Debug)]
 pub struct ResponseStat {
-    pub endpoint_id: EndpointId,
     pub kind: StatKind,
     pub rtt: Option<u64>,
     pub time: SystemTime,
+    pub tags: Arc<StatsId>,
 }
 
 #[derive(Debug)]
@@ -465,12 +420,6 @@ pub enum StatKind {
 impl From<ResponseStat> for StatsMessage {
     fn from(rs: ResponseStat) -> Self {
         StatsMessage::ResponseStat(rs)
-    }
-}
-
-impl From<StatsInit> for StatsMessage {
-    fn from(si: StatsInit) -> Self {
-        StatsMessage::Init(si)
     }
 }
 
@@ -549,26 +498,19 @@ where
 {
     let aggregates = AggregateStats::new(0, Duration::from_secs(0));
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
-    let mut endpoint_map = BTreeMap::new();
     let console2 = console.clone();
     let f = rx
         .fold(aggregates, move |mut summary, s| {
             let mut msg = None;
             match s {
-                StatsMessage::Init(si) => {
-                    let tags = si.tags;
-                    let method = tags.get("method").expect("tags missing `method`");
-                    let url = tags.get("url").expect("tags missing `url`");
-                    endpoint_map.insert(si.endpoint_id, format!("{} {}", method, url));
-                }
                 StatsMessage::ResponseStat(rs) => {
-                    let endpoint_id = rs.endpoint_id;
+                    let tags = rs.tags.clone();
                     match summary.append_response_stat(rs) {
                         Err(_) => return Either::A(Err(()).into_future()),
                         Ok(Some(s)) => {
-                            let endpoint = endpoint_map
-                                .get(&endpoint_id)
-                                .expect("endpoint_map should have endpoint id");
+                            let method = tags.get("method").expect("tags missing `method`");
+                            let url = tags.get("url").expect("tags missing `url`");
+                            let endpoint = format!("{} {}", method, url);
                             msg = Some(format!(
                                 "{}",
                                 Paint::yellow(format!(
@@ -776,11 +718,6 @@ where
         move |datum| {
             let mut stats = stats.lock();
             match datum {
-                StatsMessage::Init(init) => Either::B(
-                    stats
-                        .init(init.time, init.endpoint_id, init.tags)
-                        .into_future(),
-                ),
                 StatsMessage::Start(d) => {
                     let (start_time, msg) = if let Some(start_time) = stats.start_time {
                         let msg = if Some(start_time + d) == stats.end_time {
@@ -838,7 +775,7 @@ where
         let (start, mut end) = stats
             .buckets
             .values()
-            .map(|(_, time_buckets)| {
+            .map(|time_buckets| {
                 let mut bucket_values = time_buckets.values();
                 let first = bucket_values
                     .next()
@@ -852,7 +789,7 @@ where
             });
         end += duration;
         let mut print_string = String::new();
-        for (_, time_buckets) in stats.buckets.values() {
+        for time_buckets in stats.buckets.values() {
             let end_time_secs = {
                 let mut bucket_values = time_buckets.values();
                 let first = bucket_values
@@ -872,7 +809,7 @@ where
                 Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
             ))
         };
-        for (tags, time_buckets) in stats.buckets.values() {
+        for (tags, time_buckets) in &stats.buckets {
             let mut summary = {
                 let (start_time_secs, mut end_time_secs) = {
                     let mut bucket_values = time_buckets.values();
@@ -892,7 +829,7 @@ where
             for agg_stats in time_buckets.values() {
                 summary += &*agg_stats;
             }
-            let piece = summary.print_summary(tags, output_format, false);
+            let piece = summary.print_summary(&tags, output_format, false);
             print_string.push_str(&piece);
         }
         write_all(stderr2(), print_string).then(|_| Ok(()))

@@ -47,7 +47,6 @@ pub enum TestError {
     InvalidEncoding(String),
     InvalidFunction(String),
     InvalidJsonPathQuery(String),
-    InvalidTagsReference(String),
     InvalidUrl(String),
     Other(Cow<'static, str>),
     PestParseErr(PestError<config::ParserRule>),
@@ -80,11 +79,6 @@ impl fmt::Display for TestError {
             InvalidEncoding(e) => write!(f, "invalid encoding specified `{}`", e),
             InvalidFunction(func) => write!(f, "invalid function specified `{}`", func),
             InvalidJsonPathQuery(q) => write!(f, "invalid json path query: `{}`", q),
-            InvalidTagsReference(r) => write!(
-                f,
-                "tags can only reference static providers and environment variables. Found `{}`",
-                r
-            ),
             InvalidUrl(u) => write!(f, "invalid url `{}`", u),
             Other(s) => write!(f, "{}", s),
             PestParseErr(err) => write!(f, "could not parse expression:\n{}", err),

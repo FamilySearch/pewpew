@@ -7,9 +7,9 @@ pub(super) struct BodyHandler {
     pub(super) template_values: TemplateValues,
     pub(super) included_outgoing_indexes: BTreeSet<usize>,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
-    pub(super) endpoint_id: usize,
     pub(super) stats_tx: StatsTx,
     pub(super) status: u16,
+    pub(super) tags: Arc<BTreeMap<String, Template>>,
 }
 
 impl BodyHandler {
@@ -22,20 +22,45 @@ impl BodyHandler {
         F: Future<Item = (), Error = TestError>,
     {
         let stats_tx = self.stats_tx.clone();
-        let endpoint_id = self.endpoint_id;
         let outgoing = self.outgoing.clone();
         let has_logger = outgoing.iter().any(|o| o.logger);
-        let send_response_stat = move |kind, rtt, template_values: Option<Arc<json::Value>>| {
+        let rtt = self.now.elapsed().as_micros() as u64;
+        let mut template_values = self.template_values;
+        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
+        let error_result = match result {
+            Ok(Some(body)) => {
+                template_values
+                    .get_mut("response")
+                    .expect("template_values should have `response`")
+                    .as_object_mut()
+                    .expect("`response` in template_values should be an object")
+                    .insert("body".into(), body);
+                None
+            }
+            Err(e) => Some(e),
+            _ => None,
+        };
+        let template_values = Arc::new(template_values.0);
+        let template_values2 = template_values.clone();
+        let tags: BTreeMap<String, String> = self
+            .tags
+            .iter()
+            .filter_map(|(k, t)| {
+                t.evaluate(Cow::Borrowed(&*template_values), None)
+                    .ok()
+                    .map(|v| (k.clone(), v))
+            })
+            .collect();
+        let tags = Arc::new(tags);
+        let send_response_stat = move |kind, rtt| {
             let mut futures = Vec::new();
-            if let (stats::StatKind::RecoverableError(e), Some(template_values)) =
-                (&kind, &template_values)
-            {
+            if let stats::StatKind::RecoverableError(e) = &kind {
                 if has_logger {
                     let error = json::json!({
                         "msg": format!("{}", e),
                         "code": e.code(),
                     });
-                    let mut tv = (&**template_values).clone();
+                    let mut tv = (&*template_values2).clone();
                     tv.as_object_mut()
                         .expect("should be a json object")
                         .insert("error".into(), error);
@@ -55,10 +80,10 @@ impl BodyHandler {
                 .clone()
                 .send(
                     stats::ResponseStat {
-                        endpoint_id,
                         kind,
                         rtt,
                         time: SystemTime::now(),
+                        tags: tags.clone(),
                     }
                     .into(),
                 )
@@ -71,145 +96,112 @@ impl BodyHandler {
             futures.push(Either::B(b));
             join_all(futures).map(|_| ())
         };
-        let rtt = self.now.elapsed().as_micros() as u64;
-        let mut template_values = self.template_values;
-        template_values.insert("stats".into(), json::json!({ "rtt": rtt as f64 / 1000.0 }));
-        let mut futures = vec![Either3::B(send_response_stat(
-            stats::StatKind::Response(self.status),
-            Some(rtt),
-            None,
-        ))];
+        let mut futures = Vec::new();
         if let Some(mut f) = auto_returns.try_lock() {
             if let Some(f) = f.take() {
                 futures.push(Either3::C(f))
             }
         }
-        match result {
-            Ok(body) => {
-                if let Some(body) = body {
-                    template_values
-                        .get_mut("response")
-                        .expect("template_values should have `response`")
-                        .as_object_mut()
-                        .expect("`response` in template_values should be an object")
-                        .insert("body".into(), body);
+        if let Some(e) = error_result {
+            let kind = stats::StatKind::RecoverableError(e);
+            futures.push(Either3::B(send_response_stat(kind, None)));
+        } else {
+            let mut blocked = Vec::new();
+            for (i, o) in self.outgoing.iter().enumerate() {
+                if !self.included_outgoing_indexes.contains(&i) {
+                    if let Some(cb) = &o.cb {
+                        cb(false);
+                    }
+                    continue;
                 }
-                let template_values = Arc::new(template_values.0);
-                let mut blocked = Vec::new();
-                for (i, o) in self.outgoing.iter().enumerate() {
-                    if !self.included_outgoing_indexes.contains(&i) {
-                        if let Some(cb) = &o.cb {
-                            cb(false);
-                        }
+                let select = o.select.clone();
+                let send_behavior = select.get_send_behavior();
+                let iter = match select.iter(template_values.clone()) {
+                    Ok(v) => v,
+                    Err(TestError::Recoverable(r)) => {
+                        let kind = stats::StatKind::RecoverableError(r);
+                        futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;
                     }
-                    let select = o.select.clone();
-                    let send_behavior = select.get_send_behavior();
-                    let iter = match select.iter(template_values.clone()) {
-                        Ok(v) => v,
-                        Err(TestError::Recoverable(r)) => {
-                            let kind = stats::StatKind::RecoverableError(r);
-                            futures.push(Either3::B(send_response_stat(
-                                kind,
-                                None,
-                                Some(template_values.clone()),
-                            )));
-                            continue;
-                        }
-                        Err(e) => return Either::B(Err(e).into_future()),
-                    };
-                    match send_behavior {
-                        EndpointProvidesSendOptions::Block => {
-                            let tx = o.tx.clone();
-                            let cb = o.cb.clone();
-                            let send_response_stat = send_response_stat.clone();
-                            let template_values = template_values.clone();
-                            let f = BlockSender::new(iter, tx, cb).or_else(move |e| {
-                                if let TestError::Recoverable(r) = e {
-                                    let kind = stats::StatKind::RecoverableError(r);
-                                    Either::A(send_response_stat(kind, None, Some(template_values)))
-                                } else {
-                                    Either::B(Err(e).into_future())
-                                }
-                            });
-                            if o.logger {
-                                futures.push(Either3::A(Either::A(f)));
+                    Err(e) => return Either::B(Err(e).into_future()),
+                };
+                match send_behavior {
+                    EndpointProvidesSendOptions::Block => {
+                        let tx = o.tx.clone();
+                        let cb = o.cb.clone();
+                        let send_response_stat = send_response_stat.clone();
+                        let f = BlockSender::new(iter, tx, cb).or_else(move |e| {
+                            if let TestError::Recoverable(r) = e {
+                                let kind = stats::StatKind::RecoverableError(r);
+                                Either::A(send_response_stat(kind, None))
                             } else {
-                                blocked.push(f);
+                                Either::B(Err(e).into_future())
                             }
+                        });
+                        if o.logger {
+                            futures.push(Either3::A(Either::A(f)));
+                        } else {
+                            blocked.push(f);
                         }
-                        EndpointProvidesSendOptions::Force => {
-                            let mut value_added = false;
-                            for v in iter {
-                                let v = match v {
-                                    Ok(v) => v,
-                                    Err(TestError::Recoverable(r)) => {
-                                        let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(
-                                            kind,
-                                            None,
-                                            Some(template_values.clone()),
-                                        )));
-                                        break;
-                                    }
-                                    Err(e) => return Either::B(Err(e).into_future()),
-                                };
-                                o.tx.force_send(v);
-                                value_added = true;
-                            }
-                            if let Some(cb) = &o.cb {
-                                cb(value_added);
-                            }
-                        }
-                        EndpointProvidesSendOptions::IfNotFull => {
-                            let mut value_added = false;
-                            for v in iter {
-                                let v = match v {
-                                    Ok(v) => v,
-                                    Err(TestError::Recoverable(r)) => {
-                                        let kind = stats::StatKind::RecoverableError(r);
-                                        futures.push(Either3::B(send_response_stat(
-                                            kind,
-                                            None,
-                                            Some(template_values.clone()),
-                                        )));
-                                        break;
-                                    }
-                                    Err(e) => return Either::B(Err(e).into_future()),
-                                };
-                                if !o.tx.try_send(v).is_success() {
+                    }
+                    EndpointProvidesSendOptions::Force => {
+                        let mut value_added = false;
+                        for v in iter {
+                            let v = match v {
+                                Ok(v) => v,
+                                Err(TestError::Recoverable(r)) => {
+                                    let kind = stats::StatKind::RecoverableError(r);
+                                    futures.push(Either3::B(send_response_stat(kind, None)));
                                     break;
                                 }
-                                value_added = true;
+                                Err(e) => return Either::B(Err(e).into_future()),
+                            };
+                            o.tx.force_send(v);
+                            value_added = true;
+                        }
+                        if let Some(cb) = &o.cb {
+                            cb(value_added);
+                        }
+                    }
+                    EndpointProvidesSendOptions::IfNotFull => {
+                        let mut value_added = false;
+                        for v in iter {
+                            let v = match v {
+                                Ok(v) => v,
+                                Err(TestError::Recoverable(r)) => {
+                                    let kind = stats::StatKind::RecoverableError(r);
+                                    futures.push(Either3::B(send_response_stat(kind, None)));
+                                    break;
+                                }
+                                Err(e) => return Either::B(Err(e).into_future()),
+                            };
+                            if !o.tx.try_send(v).is_success() {
+                                break;
                             }
-                            if let Some(cb) = &o.cb {
-                                cb(value_added);
-                            }
+                            value_added = true;
+                        }
+                        if let Some(cb) = &o.cb {
+                            cb(value_added);
                         }
                     }
                 }
-                if !blocked.is_empty() {
-                    let f = select_all(blocked)
-                        .map_err(|(e, ..)| e)
-                        .and_then(|(_, _, rest)| {
-                            for mut f in rest {
-                                f.poll()?;
-                            }
-                            Ok(())
-                        });
-                    futures.push(Either3::A(Either::B(f)));
-                }
             }
-            Err(r) => {
-                let template_values = Arc::new(template_values.0);
-                let kind = stats::StatKind::RecoverableError(r);
-                futures.push(Either3::B(send_response_stat(
-                    kind,
-                    None,
-                    Some(template_values),
-                )));
+            if !blocked.is_empty() {
+                let f = select_all(blocked)
+                    .map_err(|(e, ..)| e)
+                    .and_then(|(_, _, rest)| {
+                        for mut f in rest {
+                            f.poll()?;
+                        }
+                        Ok(())
+                    });
+                futures.push(Either3::A(Either::B(f)));
             }
         }
+        futures.push(Either3::B(send_response_stat(
+            stats::StatKind::Response(self.status),
+            Some(rtt),
+        )));
         Either::A(join_all(futures).map(|_| ()))
     }
 }
@@ -219,7 +211,7 @@ mod tests {
     use super::*;
     use channel::{Limit, Receiver};
     use futures::lazy;
-    use maplit::btreeset;
+    use maplit::{btreemap, btreeset};
     use tokio::runtime::current_thread;
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -278,18 +270,20 @@ mod tests {
             let (outgoing4, mut rx4, cb_called4) = create_outgoing(outgoing4);
 
             let outgoing = vec![outgoing1, outgoing2, outgoing3, outgoing4].into();
-            let endpoint_id = 0;
             let (stats_tx, mut stats_rx) = futures_channel::unbounded();
             let status = 200;
+            let tags = Arc::new(
+                btreemap! {"_id".into() => Template::new("0", &BTreeMap::new(), false).unwrap() },
+            );
 
             let bh = BodyHandler {
                 now,
                 template_values,
                 included_outgoing_indexes,
                 outgoing,
-                endpoint_id,
                 stats_tx,
                 status,
+                tags,
             };
 
             let auto_return_called = Arc::new(AtomicBool::new(false));
@@ -363,10 +357,11 @@ mod tests {
                     // check that the stats_rx received the correct stats data
                     let r = stats_rx.poll();
                     let b = match &r {
-                        Ok(Async::Ready(Some(stats::StatsMessage::ResponseStat(rs))))
-                            if rs.endpoint_id == 0 =>
-                        {
-                            true
+                        Ok(Async::Ready(Some(stats::StatsMessage::ResponseStat(rs)))) => {
+                            match rs.tags.get("_id") {
+                                Some(s) => s == "0",
+                                _ => false,
+                            }
                         }
                         _ => false,
                     };
@@ -413,18 +408,18 @@ mod tests {
             let (outgoing3, mut rx3, cb_called3) = create_outgoing(outgoing3);
 
             let outgoing = vec![outgoing1, outgoing2, outgoing3].into();
-            let endpoint_id = 0;
             let (stats_tx, stats_rx) = futures_channel::unbounded();
             let status = 200;
+            let tags = Arc::new(BTreeMap::new());
 
             let bh = BodyHandler {
                 now,
                 template_values,
                 included_outgoing_indexes,
                 outgoing,
-                endpoint_id,
                 stats_tx,
                 status,
+                tags,
             };
 
             type AutoReturns = Arc<Mutex<Option<Box<dyn Future<Item = (), Error = TestError>>>>>;

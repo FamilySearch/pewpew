@@ -8,7 +8,7 @@ pub(super) struct ResponseHandler {
     pub(super) outgoing: Arc<Vec<Outgoing>>,
     pub(super) now: Instant,
     pub(super) stats_tx: StatsTx,
-    pub(super) endpoint_id: usize,
+    pub(super) tags: Arc<BTreeMap<String, Template>>,
 }
 
 impl ResponseHandler {
@@ -120,15 +120,14 @@ impl ResponseHandler {
         let now = self.now;
         let outgoing = self.outgoing;
         let stats_tx = self.stats_tx;
-        let endpoint_id = self.endpoint_id;
         let bh = BodyHandler {
             now,
             template_values,
             included_outgoing_indexes,
             outgoing,
-            endpoint_id,
             stats_tx,
             status,
+            tags: self.tags,
         };
         let a = body_stream.then(move |result| bh.handle(result, auto_returns));
         Either::A(a)
@@ -187,14 +186,14 @@ mod tests {
             let outgoing = Vec::new().into();
             let now = Instant::now();
             let (stats_tx, stats_rx) = futures_channel::unbounded();
-            let endpoint_id = 0;
+            let tags = Arc::new(BTreeMap::new());
             let rh = ResponseHandler {
                 template_values,
                 precheck_rr_providers,
                 outgoing,
                 now,
                 stats_tx,
-                endpoint_id,
+                tags,
             };
 
             let auto_returns: Arc<Mutex<Option<futures::future::Empty<_, _>>>> =

@@ -36,9 +36,27 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   `300 hps` - 300 hits per second
 
-- **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs. Only variables defined in the [vars section](./vars-section.md) can be interpolated, which is to say providers cannot be referenced here.
+- **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs.
 
-  Tags are a series of key/value pairs used to identify each endpoint. This makes it easier to distinguish endpoints in a test with several endpoints. Every endpoint has the implicitly defined tags of `method` (which is the HTTP method for the endpoint) and `url` (which is the endpoint url with the dynamic pieces being replaced with an asterisk). The implicitly defined `url` tag can be overwritten which is helpful in cases such as when an entire url is dynamically generated and it would otherwise show up as `*`.
+  Tags are a series of key/value pairs used to distinguish each endpoint. Tags can be used to include certain endpoints in a [`try` run](../cli.md#Command-line-options), and also make it possible for a single endpoint to have its results statistics aggregated in multiple groups. Because tag values are [templates](./common-types.md#templates) only tags which can be resolved statically at the beginning of a test can be used with the `include` flag of a `try` run. A reference to a provider can cause a single endpoint to have multiple groups of tags. Each one of these groups will have its own statistics in the results. For example if an endpoint had the following tags:
+
+  ```
+    tags:
+      name: Subscribe
+      status: ${response.status}
+  ```
+
+  A new group of aggregated stats will be created for every status code returned by the endpoint.
+  
+  All endpoints have the following implicitly defined tags:
+
+  | Name | Description |
+  | - | - |
+  | `method` | The HTTP method for the endpoint. |
+  | `url` | The endpoint's url with any dynamic pieces being replaced with an asterisk. |
+  | `_id` | The index of this endpoint in the list of endpoints, starting with 0. |
+
+  Of the implicitly defined tags only `url` can be overwritten which is helpful in cases such as when an entire url is dynamically generated and it would otherwise show up as `*`.
 - **`url`** - A [template](./common-types.md#templates) specifying the fully qualified url to the endpoint which will be requested.
 - **`provides`** <sub><sup>*Optional*</sup></sub> - See the [provides subsection](#provides-subsection)
 - **`on_demand`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that this endpoint should only be called when another endpoint first needs data that this endpoint provides. If the endpoint has no `provides` it has no affect.

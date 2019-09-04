@@ -15,7 +15,7 @@ Operator | Description
 `>=` | Greater than or equal to. Check that the left value is greater than or equal to the right and produces a boolean.
 `<=` | Less than or equal to. Check that the left value is less than or equal to the right and produces a boolean.
 `&&` | And. Checks that two values are true and produces a boolean.
-`&&` | Or. Checks that one of two values is true and produces a boolean.
+<code>&#124;&#124;</code> | Or. Checks that one of two values is true and produces a boolean.
 `+` | Add. Adds two numbers together producing a number.
 `-` | Subtract. Subtracts two numbers producing a number.
 `*` | Multiply. Multiplies two numbers producing a number.

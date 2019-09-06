@@ -1,4 +1,6 @@
-use super::select_parser::{bool_value, f64_value, AutoReturn, Value, ValueOrExpression};
+use super::select_parser::{
+    bool_value, f64_value, AutoReturn, RequiredProviders, Value, ValueOrExpression,
+};
 use crate::error::TestError;
 use crate::providers;
 use crate::util::json_value_to_string;
@@ -14,7 +16,7 @@ use zip_all::zip_all;
 use std::{
     borrow::Cow,
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     env, fmt, iter,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -627,7 +629,7 @@ impl fmt::Debug for JsonPath {
 impl JsonPath {
     pub(super) fn new(
         args: Vec<ValueOrExpression>,
-        providers: &mut BTreeSet<String>,
+        providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Either<Self, json::Value>, TestError> {
         match args.as_slice() {
@@ -2088,7 +2090,7 @@ mod tests {
         ];
         for do_static in [false, true].iter() {
             for (arg, eval, right, providers_expect) in checks.iter() {
-                let mut providers = BTreeSet::new();
+                let mut providers = RequiredProviders::new();
                 let static_vars = if *do_static {
                     eval.as_object().unwrap().clone().into_iter().collect()
                 } else {
@@ -2099,12 +2101,12 @@ mod tests {
                     JsonPath::new(vec![arg.clone().into()], &mut providers, &static_vars).unwrap(),
                 ) {
                     (false, Either::A(j)) => {
-                        assert_eq!(&providers, providers_expect);
+                        assert_eq!(&providers.into_inner(), providers_expect);
                         let left = j.evaluate(Cow::Borrowed(eval));
                         assert_eq!(&*left, right)
                     }
                     (true, Either::B(left)) => {
-                        assert_eq!(providers.len(), 0);
+                        assert_eq!(providers.into_inner().len(), 0);
                         assert_eq!(&left, right)
                     }
                     _ => unreachable!(),
@@ -2137,11 +2139,11 @@ mod tests {
             ),
         ];
         for (arg, eval, right, providers_expect) in checks.into_iter() {
-            let mut providers = BTreeSet::new();
+            let mut providers = RequiredProviders::new();
             let static_vars = BTreeMap::new();
             match JsonPath::new(vec![arg.into()], &mut providers, &static_vars).unwrap() {
                 Either::A(j) => {
-                    assert_eq!(providers, providers_expect);
+                    assert_eq!(providers.into_inner(), providers_expect);
                     let left: Vec<_> = j
                         .evaluate_as_iter(Cow::Owned(eval))
                         .map(Cow::into_owned)
@@ -2171,11 +2173,11 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(arg, right, providers_expect)| {
-                    let mut providers2 = BTreeSet::new();
+                    let mut providers2 = RequiredProviders::new();
                     let static_vars = BTreeMap::new();
                     match JsonPath::new(vec![arg.into()], &mut providers2, &static_vars).unwrap() {
                         Either::A(j) => {
-                            assert_eq!(providers2, providers_expect);
+                            assert_eq!(providers2.into_inner(), providers_expect);
                             j.into_stream(&providers).into_future().map(move |(v, _)| {
                                 assert_eq!(v.unwrap().0, right);
                             })

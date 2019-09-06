@@ -29,8 +29,9 @@ use tokio::{fs::File as TokioFile, io::AsyncRead, timer::Timeout};
 use zip_all::zip_all;
 
 use crate::config::{
-    self, AutoReturn, EndpointProvidesSendOptions, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
-    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+    self, AutoReturn, BodyTemplate, EndpointProvidesSendOptions, MultipartBody, Select, Template,
+    REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    RESPONSE_STARTLINE, STATS,
 };
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
@@ -112,7 +113,7 @@ impl Outgoing {
 }
 
 pub struct BuilderContext {
-    pub config: config::Config,
+    pub config: config::Config<config::ClientConfig>,
     pub config_path: PathBuf,
     // the http client
     pub client: Arc<
@@ -125,147 +126,77 @@ pub struct BuilderContext {
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Provider>,
     // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, (channel::Sender<json::Value>, Option<config::Select>)>,
+    pub loggers: BTreeMap<String, channel::Sender<json::Value>>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: StatsTx,
 }
 
 pub struct Builder {
-    body: Option<config::Body>,
-    declare: BTreeMap<String, String>,
-    headers: Vec<(String, String)>,
-    logs: Vec<(String, Select)>,
-    max_parallel_requests: Option<NonZeroUsize>,
-    method: Method,
-    no_auto_returns: bool,
-    on_demand: bool,
-    provides: Vec<(String, Select)>,
+    endpoint: config::Endpoint,
     start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
-    tags: BTreeMap<String, Template>,
-    url: Template,
 }
 
 impl Builder {
     pub fn new(
-        url: Template,
+        endpoint: config::Endpoint,
         start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
     ) -> Self {
         Builder {
-            body: None,
-            declare: BTreeMap::new(),
-            headers: Vec::new(),
-            logs: Vec::new(),
-            max_parallel_requests: None,
-            method: Method::GET,
-            no_auto_returns: false,
-            on_demand: false,
+            endpoint,
             start_stream,
-            provides: Vec::new(),
-            tags: BTreeMap::new(),
-            url,
         }
     }
 
-    pub fn declare(mut self, providers: BTreeMap<String, String>) -> Self {
-        self.declare.extend(providers);
-        self
-    }
-
-    pub fn provides(mut self, provides: Vec<(String, Select)>) -> Self {
-        self.provides = provides;
-        self
-    }
-
-    pub fn logs(mut self, logs: Vec<(String, Select)>) -> Self {
-        self.logs.extend(logs);
-        self
-    }
-
-    pub fn max_parallel_requests(mut self, max_parallel_requests: Option<NonZeroUsize>) -> Self {
-        self.max_parallel_requests = max_parallel_requests;
-        self
-    }
-
-    pub fn method(mut self, method: Method) -> Self {
-        self.method = method;
-        self
-    }
-
-    pub fn no_auto_returns(mut self, no_auto_returns: bool) -> Self {
-        self.no_auto_returns = no_auto_returns;
-        self
-    }
-
-    pub fn on_demand(mut self, on_demand: bool) -> Self {
-        self.on_demand = on_demand;
-        self
-    }
-
-    pub fn headers(mut self, mut headers: Vec<(String, String)>) -> Self {
-        self.headers.append(&mut headers);
-        self
-    }
-
-    pub fn body(mut self, body: Option<config::Body>) -> Self {
-        self.body = body;
-        self
-    }
-
-    pub fn tags(mut self, tags: BTreeMap<String, Template>) -> Self {
-        self.tags = tags;
-        self
-    }
-
-    pub fn build(
-        self,
-        ctx: &mut BuilderContext,
-        request_timeout: Duration,
-    ) -> Result<Endpoint, TestError> {
-        let mut required_providers = self.url.get_providers().clone();
-        let headers = self
-            .headers
-            .into_iter()
-            .map(|(key, v)| {
-                let value = Template::new(&v, &ctx.static_vars, false)?;
-                required_providers.extend(value.get_providers().clone());
-                Ok::<_, TestError>((key.to_lowercase(), value))
-            })
-            .collect::<Result<_, _>>()?;
+    pub fn build(self, ctx: &mut BuilderContext) -> Endpoint {
         let mut limits = Vec::new();
-        let mut precheck_rr_providers = 0;
-        let mut rr_providers = 0;
         let mut outgoing = Vec::new();
         let mut on_demand_streams: OnDemandStreams = Vec::new();
-        let mut provides_set = if self.start_stream.is_none() && !self.provides.is_empty() {
+        let timeout = ctx.config.client.request_timeout;
+
+        let config::Endpoint {
+            method,
+            headers,
+            body,
+            no_auto_returns,
+            providers_to_stream,
+            url,
+            max_parallel_requests,
+            provides,
+            logs,
+            on_demand,
+            tags,
+            ..
+        } = self.endpoint;
+
+        let mut provides_set = if self.start_stream.is_none() && !provides.is_empty() {
             Some(BTreeSet::new())
         } else {
             None
         };
-        let mut provides = Vec::new();
-        for (k, v) in self.provides {
-            let provider = ctx
-                .providers
-                .get(&k)
-                .ok_or_else(|| TestError::UnknownProvider(k))?;
-            let tx = provider.tx.clone();
-            if let Some(set) = &mut provides_set {
-                set.insert(tx.clone());
-            }
-            if v.get_send_behavior().is_block() {
-                limits.push(tx.limit());
-            }
-            rr_providers |= v.get_special_providers();
-            precheck_rr_providers |= v.get_where_clause_special_providers();
-            required_providers.extend(v.get_providers().clone());
-            let cb = if self.on_demand {
-                let (stream, cb) = provider.on_demand.clone().into_stream();
-                on_demand_streams.push(Box::new(stream));
-                Some(cb)
-            } else {
-                None
-            };
-            provides.push(Outgoing::new(v, tx, cb, false));
-        }
+        let provides = provides
+            .into_iter()
+            .map(|(k, v)| {
+                let provider = ctx
+                    .providers
+                    .get(&k)
+                    .expect("provides should reference a provider");
+                let tx = provider.tx.clone();
+                if let Some(set) = &mut provides_set {
+                    set.insert(tx.clone());
+                }
+                if v.get_send_behavior().is_block() {
+                    limits.push(tx.limit());
+                }
+                let cb = if on_demand {
+                    let (stream, cb) = provider.on_demand.clone().into_stream();
+                    on_demand_streams.push(Box::new(stream));
+                    Some(cb)
+                } else {
+                    None
+                };
+                Outgoing::new(v, tx, cb, false)
+            })
+            .collect();
         let mut streams: StreamCollection = Vec::new();
         if let Some(start_stream) = self.start_stream {
             streams.push((true, Box::new(start_stream.map(|_| StreamItem::None))));
@@ -280,112 +211,25 @@ impl Builder {
             });
             streams.push((true, Box::new(stream)));
         }
-        for (k, v) in self.logs {
-            let (tx, _) = ctx
+        for (k, v) in logs {
+            let tx = ctx
                 .loggers
                 .get(&k)
-                .ok_or_else(|| TestError::UnknownLogger(k))?;
-            rr_providers |= v.get_special_providers();
-            precheck_rr_providers |= v.get_where_clause_special_providers();
-            required_providers.extend(v.get_providers().clone());
+                .expect("logs should reference a valid logger");
             outgoing.push(Outgoing::new(v, tx.clone(), None, true));
         }
-        outgoing.extend(ctx.loggers.values().filter_map(|(tx, select)| {
-            if let Some(select) = select {
-                required_providers.extend(select.get_providers().clone());
-                rr_providers |= select.get_special_providers();
-                precheck_rr_providers |= select.get_where_clause_special_providers();
-                Some(Outgoing::new(select.clone(), tx.clone(), None, true))
-            } else {
-                None
-            }
-        }));
-        let body = self
-            .body
-            .map(|body| {
-                let value = match body {
-                    config::Body::File(body) => {
-                        let template = Template::new(&body, &ctx.static_vars, false)?;
-                        required_providers.extend(template.get_providers().clone());
-                        BodyTemplate::File(ctx.config_path.clone(), template)
-                    }
-                    config::Body::String(body) => {
-                        let template = Template::new(&body, &ctx.static_vars, false)?;
-                        required_providers.extend(template.get_providers().clone());
-                        BodyTemplate::String(template)
-                    }
-                    config::Body::Multipart(multipart) => {
-                        let pieces = multipart
-                            .into_iter()
-                            .map(|(name, v)| {
-                                let (is_file, template) = match v.body {
-                                    config::BodyMultipartPieceBody::File(f) => {
-                                        let template = Template::new(&f, &ctx.static_vars, false)?;
-                                        required_providers.extend(template.get_providers().clone());
-                                        (true, template)
-                                    }
-                                    config::BodyMultipartPieceBody::String(s) => {
-                                        let template = Template::new(&s, &ctx.static_vars, false)?;
-                                        required_providers.extend(template.get_providers().clone());
-                                        (false, template)
-                                    }
-                                };
-                                let headers = v
-                                    .headers
-                                    .into_iter()
-                                    .map(|(k, v)| {
-                                        let template = Template::new(&v, &ctx.static_vars, false)?;
-                                        required_providers.extend(template.get_providers().clone());
-                                        Ok::<_, TestError>((k, template))
-                                    })
-                                    .collect::<Result<_, _>>()?;
-
-                                let piece = MultipartPiece {
-                                    name,
-                                    headers,
-                                    is_file,
-                                    template,
-                                };
-                                Ok::<_, TestError>(piece)
-                            })
-                            .collect::<Result<_, _>>()?;
-                        let multipart = MultipartBody {
-                            path: ctx.config_path.clone(),
-                            pieces,
-                        };
-                        BodyTemplate::Multipart(multipart)
-                    }
-                };
-                Ok::<_, TestError>(value)
-            })
-            .transpose()?
-            .unwrap_or(BodyTemplate::None);
-        let mut required_providers2 = BTreeSet::new();
-        for (name, d) in self.declare {
-            required_providers.remove(&name);
-            let vce = config::ValueOrExpression::new(
-                &d,
-                &mut required_providers2,
-                &ctx.static_vars,
-                false,
-            )?;
-            let stream = vce
-                .into_stream(&ctx.providers, false)
-                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
-            streams.push((false, Box::new(stream)));
-        }
-        let no_auto_returns = self.no_auto_returns;
+        let rr_providers = providers_to_stream.get_special();
+        let precheck_rr_providers = providers_to_stream.get_where_special();
         // go through the list of required providers and make sure we have them all
-        for name in &required_providers {
-            let provider = ctx
-                .providers
-                .get(name)
-                .ok_or_else(|| TestError::UnknownProvider(name.clone()))?;
+        for name in providers_to_stream.into_inner() {
+            let provider = match ctx.providers.get(&name) {
+                Some(p) => p,
+                None => continue,
+            };
             let receiver = provider.rx.clone();
             let ar = provider
                 .auto_return
                 .map(|send_option| (send_option, provider.tx.clone()));
-            let name = name.clone();
             let provider_stream = Box::new(
                 Stream::map(receiver, move |v| {
                     let ar = if no_auto_returns {
@@ -401,30 +245,33 @@ impl Builder {
             );
             streams.push((false, provider_stream));
         }
-        required_providers.extend(required_providers2);
+        for (name, vce) in self.endpoint.declare {
+            let stream = vce
+                .into_stream(&ctx.providers, false)
+                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
+            streams.push((false, Box::new(stream)));
+        }
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
-        let method = self.method;
-        Ok(Endpoint {
+        Endpoint {
             body,
             client,
             headers,
             limits,
-            max_parallel_requests: self.max_parallel_requests,
+            max_parallel_requests,
             method,
             no_auto_returns,
             on_demand_streams,
             outgoing,
             precheck_rr_providers,
             provides,
-            required_providers,
             rr_providers,
-            tags: Arc::new(self.tags),
+            tags: Arc::new(tags),
             stats_tx,
             stream_collection: streams,
-            url: self.url,
-            timeout: request_timeout,
-        })
+            url,
+            timeout,
+        }
     }
 }
 
@@ -432,18 +279,6 @@ enum StreamItem {
     Declare(String, json::Value, Vec<config::AutoReturn>),
     None,
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
-}
-
-struct MultipartPiece {
-    name: String,
-    headers: Vec<(String, Template)>,
-    is_file: bool,
-    template: Template,
-}
-
-struct MultipartBody {
-    path: PathBuf,
-    pieces: Vec<MultipartPiece>,
 }
 
 impl MultipartBody {
@@ -663,13 +498,6 @@ fn create_file_hyper_body(file: String) -> impl Future<Item = (u64, HyperBody), 
         .map_err(|e| TestError::Recoverable(RecoverableError::BodyErr(Arc::new(e))))
 }
 
-enum BodyTemplate {
-    File(PathBuf, Template),
-    Multipart(MultipartBody),
-    None,
-    String(Template),
-}
-
 impl BodyTemplate {
     fn as_hyper_body<'a>(
         &self,
@@ -734,7 +562,6 @@ pub struct Endpoint {
     precheck_rr_providers: u16,
     provides: Vec<Outgoing>,
     rr_providers: u16,
-    required_providers: BTreeSet<String>,
     tags: Arc<BTreeMap<String, Template>>,
     stats_tx: StatsTx,
     stream_collection: StreamCollection,
@@ -743,10 +570,6 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn required_providers(&self) -> &BTreeSet<String> {
-        &self.required_providers
-    }
-
     pub fn clear_provides(&mut self) {
         self.provides.clear();
     }

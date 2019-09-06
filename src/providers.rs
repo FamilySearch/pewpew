@@ -43,10 +43,10 @@ impl Provider {
 }
 
 pub fn file(
-    template: config::FileProvider,
+    mut template: config::FileProvider,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
-    file: String,
 ) -> Result<Provider, TestError> {
+    let file = std::mem::replace(&mut template.path, Default::default());
     let test_killer2 = test_killer.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
@@ -427,6 +427,12 @@ mod tests {
                 "kill": true
             }"#;
             let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
             let (test_killer, mut test_killed_rx) = futures_channel(1);
             let writer = TestWriter::new();
             let writer_future = future::ok(writer.clone());
@@ -470,6 +476,12 @@ mod tests {
                 "to": ""
             }"#;
             let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
             let (test_killer, mut test_killed_rx) = futures_channel(1);
             let writer = TestWriter::new();
             let writer_future = future::ok(writer.clone());
@@ -514,6 +526,12 @@ mod tests {
                 "to": ""
             }"#;
             let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
             let (test_killer, mut test_killed_rx) = futures_channel(1);
             let writer = TestWriter::new();
             writer.do_would_block_on_next_write();
@@ -557,6 +575,12 @@ mod tests {
                 "limit": 1
             }"#;
             let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
             let (test_killer, mut test_killed_rx) = futures_channel(1);
             let writer = TestWriter::new();
             let writer_future = future::ok(writer.clone());
@@ -599,6 +623,12 @@ mod tests {
                 "pretty": true
             }"#;
             let logger_params = serde_json::from_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
             let (test_killer, mut test_killed_rx) = futures_channel(1);
             let writer = TestWriter::new();
             let writer_future = future::ok(writer.clone());

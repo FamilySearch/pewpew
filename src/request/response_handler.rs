@@ -5,6 +5,7 @@ use futures::future::IntoFuture;
 pub(super) struct ResponseHandler {
     pub(super) template_values: TemplateValues,
     pub(super) precheck_rr_providers: u16,
+    pub(super) rr_providers: u16,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
     pub(super) now: Instant,
     pub(super) stats_tx: StatsTx,
@@ -36,6 +37,8 @@ impl ResponseHandler {
                 .expect("`response` in template_values should be an object"),
             &response,
         );
+        let rr_providers = self.rr_providers;
+        let where_clause_special_providers = self.precheck_rr_providers;
         // executing the where clause determine which of the provides and logs need
         // to be executed
         let included_outgoing_indexes: Result<BTreeSet<_>, _> = self
@@ -43,13 +46,12 @@ impl ResponseHandler {
             .iter()
             .enumerate()
             .map(|(i, o)| {
-                let where_clause_special_providers = o.select.get_where_clause_special_providers();
                 if where_clause_special_providers & RESPONSE_BODY == RESPONSE_BODY
                     || where_clause_special_providers & STATS == STATS
                     || o.select.execute_where(template_values.as_json())?
                 {
                     handle_response_requirements(
-                        o.select.get_special_providers(),
+                        rr_providers,
                         &mut response_fields_added,
                         template_values
                             .get_mut("response")
@@ -183,6 +185,7 @@ mod tests {
         current_thread::run(lazy(|| {
             let template_values = TemplateValues::new();
             let precheck_rr_providers = 0;
+            let rr_providers = 0;
             let outgoing = Vec::new().into();
             let now = Instant::now();
             let (stats_tx, stats_rx) = futures_channel::unbounded();
@@ -190,6 +193,7 @@ mod tests {
             let rh = ResponseHandler {
                 template_values,
                 precheck_rr_providers,
+                rr_providers,
                 outgoing,
                 now,
                 stats_tx,

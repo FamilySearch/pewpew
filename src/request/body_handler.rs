@@ -221,7 +221,7 @@ mod tests {
     fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
         let static_vars = BTreeMap::new();
         let eppp = json::from_value(s).unwrap();
-        let select = Select::new(eppp, &static_vars, false).unwrap();
+        let select = Select::new(eppp, &static_vars, &mut Default::default(), false).unwrap();
         let (tx, rx) = channel::channel(Limit::Integer(1));
         let cb_called = Arc::new(AtomicUsize::new(0));
         let cb_called2 = cb_called.clone();
@@ -273,7 +273,7 @@ mod tests {
             let (stats_tx, mut stats_rx) = futures_channel::unbounded();
             let status = 200;
             let tags = Arc::new(
-                btreemap! {"_id".into() => Template::new("0", &BTreeMap::new(), false).unwrap() },
+                btreemap! {"_id".into() => Template::new("0", &BTreeMap::new(), &mut Default::default(), false).unwrap() },
             );
 
             let bh = BodyHandler {

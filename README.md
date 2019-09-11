@@ -12,11 +12,11 @@ Bugfix:
 - Fix issue where `request.body` would display the wrong file name when the request body was a file.
 - Fix message displayed as `request.body` when the request body is a file to be consistent with other similar messages and have double braces as delimiters.
 - Fix issue where the `config.client.request_timeout` and `config.client.keepalive` were not being parsed properly from the config file.
+- Fix issue where an endpoint which provides for a provider it also depends on could cause a try run to hang.
 
 ### v0.5.1
 Changes:
 - Tags can now reference providers. Add an additional implicit tag of `_id` which is the index of the endpoint in the list of endpoints.
-
 
 ### v0.5.0
 Breaking changes:

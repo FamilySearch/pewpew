@@ -89,6 +89,10 @@ impl RequiredProviders {
         self.inner
     }
 
+    pub fn contains(&self, p: &str) -> bool {
+        self.inner.contains(p)
+    }
+
     pub fn get_special(&self) -> u16 {
         self.special
     }

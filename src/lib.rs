@@ -649,12 +649,18 @@ where
             endpoint.logs.clear();
         }
 
+        let required_providers = mem::replace(&mut endpoint.required_providers, Default::default());
+
         let provides_set = endpoint
             .provides
             .iter_mut()
-            .map(|(k, s)| {
+            .filter_map(|(k, s)| {
                 s.set_send_behavior(config::EndpointProvidesSendOptions::Block);
-                k.clone()
+                if required_providers.contains(k) {
+                    None
+                } else {
+                    Some(k.clone())
+                }
             })
             .collect::<BTreeSet<_>>();
         endpoint.on_demand = true;
@@ -674,7 +680,6 @@ where
             })
             .collect::<Result<_, _>>()?;
 
-        let required_providers = mem::replace(&mut endpoint.required_providers, Default::default());
         let builder = request::Builder::new(endpoint, None);
         endpoints.append(static_tags, builder, provides_set, required_providers);
     }

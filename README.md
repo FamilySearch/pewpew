@@ -2,9 +2,13 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.5.2
+Bugfix:
+- Fix issue where `request.body` would display the wrong file name when the request body was a file.
+
 ### v0.5.1
 Changes:
-  - Tags can now reference providers. Add an additional implicit tag of `_id` which is the index of the endpoint in the list of endpoints.
+- Tags can now reference providers. Add an additional implicit tag of `_id` which is the index of the endpoint in the list of endpoints.
 
 
 ### v0.5.0

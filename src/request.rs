@@ -507,7 +507,7 @@ impl MultipartBody {
             .iter()
             .enumerate()
             .map(|(i, mp)| {
-                let body = match mp
+                let mut body = match mp
                     .template
                     .evaluate(Cow::Borrowed(template_values.as_json()), None)
                 {
@@ -589,7 +589,8 @@ impl MultipartBody {
                     }
                     let piece_data_bytes = piece_data.len() as u64;
                     let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
-                    let b = create_file_hyper_body(body, &self.path).map(move |(bytes, body)| {
+                    tweak_path(&mut body, &self.path);
+                    let b = create_file_hyper_body(body).map(move |(bytes, body)| {
                         let stream = Either::A(piece_stream.chain(body));
                         (bytes + piece_data_bytes, stream)
                     });
@@ -637,11 +638,7 @@ impl MultipartBody {
     }
 }
 
-fn create_file_hyper_body(
-    mut file: String,
-    path: &PathBuf,
-) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
-    tweak_path(&mut file, path);
+fn create_file_hyper_body(file: String) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
     TokioFile::open(file)
         .and_then(TokioFile::metadata)
         .map(|(mut file, metadata)| {
@@ -691,15 +688,16 @@ impl BodyTemplate {
             BodyTemplate::None => return Either3::B(Ok((0, HyperBody::empty())).into_future()),
             BodyTemplate::String(t) => t,
         };
-        let body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+        let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
             Ok(b) => b,
             Err(e) => return Either3::B(Err(e).into_future()),
         };
         if let BodyTemplate::File(path, _) = self {
+            tweak_path(&mut body, path);
             if copy_body_value {
-                *body_value = Some(format!("<contents of file: {}>", path.display()));
+                *body_value = Some(format!("<contents of file: {}>", body));
             }
-            Either3::C(create_file_hyper_body(body, path))
+            Either3::C(create_file_hyper_body(body))
         } else {
             if copy_body_value {
                 *body_value = Some(body.clone());

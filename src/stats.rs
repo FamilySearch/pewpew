@@ -78,7 +78,7 @@ where
     S: Serializer,
 {
     let values: Vec<_> = buckets
-        .into_iter()
+        .iter()
         .map(|(k, v)| {
             let v: Vec<_> = v.values().collect();
             (k, v)
@@ -502,27 +502,24 @@ where
     let f = rx
         .fold(aggregates, move |mut summary, s| {
             let mut msg = None;
-            match s {
-                StatsMessage::ResponseStat(rs) => {
-                    let tags = rs.tags.clone();
-                    match summary.append_response_stat(rs) {
-                        Err(_) => return Either::A(Err(()).into_future()),
-                        Ok(Some(s)) => {
-                            let method = tags.get("method").expect("tags missing `method`");
-                            let url = tags.get("url").expect("tags missing `url`");
-                            let endpoint = format!("{} {}", method, url);
-                            msg = Some(format!(
-                                "{}",
-                                Paint::yellow(format!(
-                                    "WARNING - recoverable error happened on endpoint `{}`: {}\n",
-                                    endpoint, s
-                                ))
-                            ));
-                        }
-                        _ => (),
+            if let StatsMessage::ResponseStat(rs) = s {
+                let tags = rs.tags.clone();
+                match summary.append_response_stat(rs) {
+                    Err(_) => return Either::A(Err(()).into_future()),
+                    Ok(Some(s)) => {
+                        let method = tags.get("method").expect("tags missing `method`");
+                        let url = tags.get("url").expect("tags missing `url`");
+                        let endpoint = format!("{} {}", method, url);
+                        msg = Some(format!(
+                            "{}",
+                            Paint::yellow(format!(
+                                "WARNING - recoverable error happened on endpoint `{}`: {}\n",
+                                endpoint, s
+                            ))
+                        ));
                     }
+                    _ => (),
                 }
-                _ => (),
             }
             if let Some(msg) = msg {
                 let b = write_all(console(), msg).then(move |_| Ok(summary));

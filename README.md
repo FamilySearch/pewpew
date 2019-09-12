@@ -5,6 +5,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.5.2
 Bugfix:
 - Fix issue where `request.body` would display the wrong file name when the request body was a file.
+- Fix message displayed as `request.body` when the request body is a file to be consistent with other similar messages and have double braces as delimiters.
 
 ### v0.5.1
 Changes:

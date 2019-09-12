@@ -695,7 +695,7 @@ impl BodyTemplate {
         if let BodyTemplate::File(path, _) = self {
             tweak_path(&mut body, path);
             if copy_body_value {
-                *body_value = Some(format!("<contents of file: {}>", body));
+                *body_value = Some(format!("<<contents of file: {}>>", body));
             }
             Either3::C(create_file_hyper_body(body))
         } else {

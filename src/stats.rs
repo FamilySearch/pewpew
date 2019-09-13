@@ -312,7 +312,7 @@ impl AggregateStats {
     ) -> String {
         let calls_made = self.rtt_histogram.len();
         let mut print_string = String::new();
-        if calls_made == 0 {
+        if calls_made == 0 && self.test_errors.is_empty() && self.request_timeouts == 0 {
             return print_string;
         }
         const MICROS_TO_MS: f64 = 1_000.0;

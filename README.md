@@ -6,6 +6,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 Changes:
 - Allow an unquoted number to be used when indexing into an object within an expression.
 - Change stats to go through stdout instead of stderr.
+- Print stats for an endpoint even if it only experienced errors.
 
 Bugfix:
 - Fix issue where `request.body` would display the wrong file name when the request body was a file.

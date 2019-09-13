@@ -835,8 +835,8 @@ where
         run_config.results_dir.as_ref(),
         &test_ended_tx,
         &static_vars,
-        stdout,
-        stderr.clone(),
+        stdout.clone(),
+        stderr,
     )?;
 
     let global_load_pattern = config
@@ -940,7 +940,7 @@ where
         test_ended_tx.clone(),
         &config_config.general,
         &providers,
-        stderr,
+        stdout,
         &run_config,
         &static_vars,
     )?;

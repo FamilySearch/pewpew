@@ -303,6 +303,10 @@ fn index_json<'a>(
     };
     let o = match (json, str_or_number) {
         (Cow::Borrowed(json::Value::Object(m)), Either::A(s)) => m.get(s).map(Cow::Borrowed),
+        (Cow::Borrowed(json::Value::Object(m)), Either::B(n)) => {
+            let s = n.to_string();
+            m.get(&s).map(Cow::Borrowed)
+        }
         (Cow::Owned(json::Value::Object(mut m)), Either::A(s)) => m.remove(s).map(Cow::Owned),
         (Cow::Borrowed(json::Value::Array(a)), Either::B(n)) => a.get(n).map(Cow::Borrowed),
         (Cow::Owned(json::Value::Array(mut a)), Either::B(n)) => {
@@ -337,6 +341,10 @@ fn index_json2<'a>(
         let o = match (json, r) {
             (Cow::Borrowed(json::Value::Object(m)), Either::A(ref s)) => {
                 m.get(s).map(Cow::Borrowed)
+            }
+            (Cow::Borrowed(json::Value::Object(m)), Either::B(n)) => {
+                let s = n.to_string();
+                m.get(&s).map(Cow::Borrowed)
             }
             (Cow::Owned(json::Value::Object(ref mut m)), Either::A(ref s)) => {
                 m.remove(s).map(Cow::Owned)

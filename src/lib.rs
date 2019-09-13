@@ -77,6 +77,7 @@ impl Endpoints {
         filter_fn: F,
         builder_ctx: &mut request::BuilderContext,
         response_providers: &BTreeSet<String>,
+        request_timeout: Duration,
     ) -> Result<Vec<Box<dyn Future<Item = (), Error = TestError> + Send>>, TestError>
     where
         F: Fn(&BTreeMap<String, String>) -> bool,
@@ -87,7 +88,7 @@ impl Endpoints {
             .enumerate()
             .map(|(i, (tags, builder))| {
                 let included = filter_fn(&tags);
-                Ok((i, (included, builder.build(builder_ctx)?)))
+                Ok((i, (included, builder.build(builder_ctx, request_timeout)?)))
             })
             .collect::<Result<BTreeMap<_, _>, TestError>>()?;
 
@@ -748,7 +749,7 @@ where
         endpoints.append(static_tags, builder, provides_set);
     }
 
-    let client = create_http_client(config_config.client.keepalive)?;
+    let client = create_http_client(config_config.client.keepalive.evaluate(&static_vars)?)?;
 
     let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_rx.clone(), stderr);
     let (tx, stats_done) = oneshot::channel::<()>();
@@ -756,6 +757,11 @@ where
         drop(tx);
         Ok(())
     }));
+
+    let request_timeout = config_config
+        .client
+        .request_timeout
+        .evaluate(&static_vars)?;
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
@@ -767,7 +773,12 @@ where
         stats_tx: stats_tx.clone(),
     };
 
-    let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
+    let endpoint_calls = endpoints.build(
+        filter_fn,
+        &mut builder_ctx,
+        &response_providers,
+        request_timeout,
+    )?;
 
     let endpoint_calls = join_all(endpoint_calls)
         .map(|_| TestEndReason::Completed)
@@ -922,7 +933,7 @@ where
         Ok(builder)
     }).collect::<Result<_, _>>()?;
 
-    let client = create_http_client(config_config.client.keepalive)?;
+    let client = create_http_client(config_config.client.keepalive.evaluate(&static_vars)?)?;
 
     let (stats_tx, stats_rx) = create_stats_channel(
         test_ended_rx.clone(),
@@ -939,6 +950,11 @@ where
         Ok(())
     }));
 
+    let request_timeout = config_config
+        .client
+        .request_timeout
+        .evaluate(&static_vars)?;
+
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
         config_path: run_config.config_file,
@@ -951,7 +967,7 @@ where
 
     let endpoint_calls = builders.into_iter().map(move |builder| {
         builder
-            .build(&mut builder_ctx)
+            .build(&mut builder_ctx, request_timeout)
             .map(request::Endpoint::into_future)
             .into_future()
             .flatten()

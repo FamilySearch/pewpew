@@ -405,12 +405,12 @@ pub struct EndpointProvidesPreProcessed {
     pub where_clause: Option<String>,
 }
 
-fn default_keepalive() -> Duration {
-    Duration::from_secs(90)
+fn default_keepalive() -> PreDuration {
+    PreDuration(PreTemplate("90s".into()))
 }
 
-fn default_request_timeout() -> Duration {
-    Duration::from_secs(60)
+fn default_request_timeout() -> PreDuration {
+    PreDuration(PreTemplate("60s".into()))
 }
 
 pub fn default_auto_buffer_start_size() -> usize {
@@ -421,11 +421,11 @@ pub fn default_auto_buffer_start_size() -> usize {
 #[derive(Deserialize)]
 pub struct ClientConfig {
     #[serde(default = "default_request_timeout")]
-    pub request_timeout: Duration,
+    pub request_timeout: PreDuration,
     #[serde(default, with = "tuple_vec_map")]
     pub headers: Vec<(String, String)>,
     #[serde(default = "default_keepalive")]
-    pub keepalive: Duration,
+    pub keepalive: PreDuration,
 }
 
 impl Default for ClientConfig {

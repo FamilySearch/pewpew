@@ -216,7 +216,11 @@ impl Builder {
         self
     }
 
-    pub fn build(self, ctx: &mut BuilderContext) -> Result<Endpoint, TestError> {
+    pub fn build(
+        self,
+        ctx: &mut BuilderContext,
+        request_timeout: Duration,
+    ) -> Result<Endpoint, TestError> {
         let mut required_providers = self.url.get_providers().clone();
         let headers = self
             .headers
@@ -401,7 +405,6 @@ impl Builder {
         let stats_tx = ctx.stats_tx.clone();
         let client = ctx.client.clone();
         let method = self.method;
-        let timeout = ctx.config.client.request_timeout;
         Ok(Endpoint {
             body,
             client,
@@ -420,7 +423,7 @@ impl Builder {
             stats_tx,
             stream_collection: streams,
             url: self.url,
-            timeout,
+            timeout: request_timeout,
         })
     }
 }

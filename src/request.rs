@@ -113,7 +113,7 @@ impl Outgoing {
 }
 
 pub struct BuilderContext {
-    pub config: config::Config<config::ClientConfig>,
+    pub config: config::Config<config::ClientConfig, config::GeneralConfig>,
     pub config_path: PathBuf,
     // the http client
     pub client: Arc<
@@ -121,8 +121,6 @@ pub struct BuilderContext {
             HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
         >,
     >,
-    // a mapping of names to their prospective static (single value) providers
-    pub static_vars: BTreeMap<String, json::Value>,
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Provider>,
     // a mapping of names to their prospective loggers

@@ -407,6 +407,10 @@ fn default_request_timeout() -> PreDuration {
     PreDuration(PreTemplate("60s".into()))
 }
 
+fn default_bucket_size() -> PreDuration {
+    PreDuration(PreTemplate("60s".into()))
+}
+
 pub fn default_auto_buffer_start_size() -> usize {
     5
 }
@@ -437,24 +441,31 @@ impl Default for ClientConfigPreProcessed {
     }
 }
 
-#[serde(deny_unknown_fields)]
-#[derive(Deserialize)]
 pub struct GeneralConfig {
-    #[serde(default = "default_auto_buffer_start_size")]
     pub auto_buffer_start_size: usize,
-    #[serde(default)]
-    pub bucket_size: Option<PreDuration>,
-    #[serde(default)]
-    pub log_provider_stats: Option<PreDuration>,
-    #[serde(default)]
-    pub watch_transition_time: Option<PreDuration>,
+    pub bucket_size: Duration,
+    pub log_provider_stats: Option<Duration>,
+    pub watch_transition_time: Option<Duration>,
 }
 
-impl Default for GeneralConfig {
+#[serde(deny_unknown_fields)]
+#[derive(Deserialize)]
+struct GeneralConfigPreProcessed {
+    #[serde(default = "default_auto_buffer_start_size")]
+    auto_buffer_start_size: usize,
+    #[serde(default = "default_bucket_size")]
+    bucket_size: PreDuration,
+    #[serde(default)]
+    log_provider_stats: Option<PreDuration>,
+    #[serde(default)]
+    watch_transition_time: Option<PreDuration>,
+}
+
+impl Default for GeneralConfigPreProcessed {
     fn default() -> Self {
-        GeneralConfig {
+        GeneralConfigPreProcessed {
             auto_buffer_start_size: default_auto_buffer_start_size(),
-            bucket_size: None,
+            bucket_size: default_bucket_size(),
             log_provider_stats: None,
             watch_transition_time: None,
         }
@@ -463,18 +474,18 @@ impl Default for GeneralConfig {
 
 #[serde(deny_unknown_fields)]
 #[derive(Default, Deserialize)]
-pub struct Config<C> {
+pub struct Config<C, G> {
     #[serde(default)]
     pub client: C,
     #[serde(default)]
-    pub general: GeneralConfig,
+    pub general: G,
 }
 
 #[serde(deny_unknown_fields)]
 #[derive(Deserialize)]
 struct LoadTestPreProcessed {
     #[serde(default)]
-    config: Config<ClientConfigPreProcessed>,
+    config: Config<ClientConfigPreProcessed, GeneralConfigPreProcessed>,
     endpoints: Vec<EndpointPreProcessed>,
     #[serde(default)]
     load_pattern: Option<PreLoadPattern>,
@@ -798,12 +809,12 @@ where
 }
 
 pub struct LoadTest {
-    pub config: Config<ClientConfig>,
+    pub config: Config<ClientConfig, GeneralConfig>,
     pub endpoints: Vec<Endpoint>,
     pub providers: BTreeMap<String, Provider<FileProvider>>,
     pub loggers: BTreeMap<String, Logger>,
-    pub vars: BTreeMap<String, json::Value>,
-    pub load_test_errors: Vec<TestError>,
+    vars: BTreeMap<String, json::Value>,
+    load_test_errors: Vec<TestError>,
 }
 
 #[derive(Default)]
@@ -1142,7 +1153,22 @@ impl LoadTest {
                 keepalive: c.config.client.keepalive.evaluate(&vars)?,
                 request_timeout: c.config.client.request_timeout.evaluate(&vars)?,
             },
-            general: c.config.general,
+            general: GeneralConfig {
+                auto_buffer_start_size: c.config.general.auto_buffer_start_size,
+                bucket_size: c.config.general.bucket_size.evaluate(&vars)?,
+                log_provider_stats: c
+                    .config
+                    .general
+                    .log_provider_stats
+                    .map(|b| b.evaluate(&vars))
+                    .transpose()?,
+                watch_transition_time: c
+                    .config
+                    .general
+                    .watch_transition_time
+                    .map(|b| b.evaluate(&vars))
+                    .transpose()?,
+            },
         };
         let mut load_test_errors = Vec::new();
         let endpoints = c.endpoints.into_iter()
@@ -1247,6 +1273,15 @@ impl LoadTest {
         for endpoint in &mut self.endpoints {
             endpoint.logs.clear();
         }
+    }
+
+    pub fn ok_for_loadtest(&self) -> Result<(), TestError> {
+        self.load_test_errors
+            .get(0)
+            .cloned()
+            .map(Err::<(), _>)
+            .transpose()
+            .map(|_| ())
     }
 
     fn verify_loggers<'a, I: Iterator<Item = &'a String>>(

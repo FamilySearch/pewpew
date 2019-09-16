@@ -485,17 +485,7 @@ fn create_load_watcher(
                             Ok(c) => c,
                             Err(_) => continue,
                         };
-                    let static_vars = config.vars;
-                    let transition_time = config
-                        .config
-                        .general
-                        .watch_transition_time
-                        .map(|d| d.evaluate(&static_vars))
-                        .transpose();
-                    let transition_time = match transition_time {
-                        Ok(t) => t,
-                        Err(_) => continue,
-                    };
+                    let transition_time = config.config.general.watch_transition_time;
                     let mut duration = Duration::new(0, 0);
                     for (endpoint, sender) in config.endpoints.into_iter().zip(senders.iter()) {
                         if let Some(peak_load) = endpoint.peak_load {
@@ -591,7 +581,6 @@ where
 
     let config_config = config.config;
 
-    let static_vars = config.vars;
     // build and register the providers
     let (providers, response_providers) = get_providers_from_config(
         config.providers,
@@ -695,7 +684,6 @@ where
         client: Arc::new(client),
         loggers,
         providers,
-        static_vars,
         stats_tx: stats_tx.clone(),
     };
 
@@ -726,6 +714,8 @@ where
     Sef: Fn() -> Se + Clone + Send + Sync + 'static,
     Sof: Fn() -> So + Clone + Send + Sync + 'static,
 {
+    config.ok_for_loadtest()?;
+
     let (test_ended_tx, test_ended_rx) = test_ended;
     let test_ended_rx = test_ended_rx
         .into_future()
@@ -739,7 +729,6 @@ where
 
     let config_config = config.config;
 
-    let static_vars = config.vars;
     // build and register the providers
     let (providers, _) = get_providers_from_config(
         config.providers,
@@ -798,7 +787,6 @@ where
         &providers,
         stdout,
         &run_config,
-        &static_vars,
     )?;
     let (tx, stats_done) = oneshot::channel::<()>();
     tokio::spawn(stats_rx.then(move |_| {
@@ -812,7 +800,6 @@ where
         client: Arc::new(client),
         loggers,
         providers,
-        static_vars,
         stats_tx: stats_tx.clone(),
     };
 

@@ -2,6 +2,10 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.5.3
+Changes:
+- Add a `days` unit to durations.
+
 ### v0.5.2
 Changes:
 - Allow an unquoted number to be used when indexing into an object within an expression.

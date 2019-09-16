@@ -519,7 +519,7 @@ impl PreDuration {
         static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<Duration, TestError> {
         let dur = self.0.evaluate(static_vars)?;
-        let base_re = r"(?i)(\d+)\s*(h|m|s|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
+        let base_re = r"(?i)(\d+)\s*(d|h|m|s|days?|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
         let sanity_re =
             Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
         if !sanity_re.is_match(&dur) {
@@ -537,7 +537,9 @@ impl PreDuration {
                 .parse()
                 .expect("should parse into u64 for duration");
             let unit = &captures.get(2).expect("should have capture group").as_str()[0..1];
-            let secs = if unit.eq_ignore_ascii_case("h") {
+            let secs = if unit.eq_ignore_ascii_case("d") {
+                n * 60 * 60 * 24 // days
+            } else if unit.eq_ignore_ascii_case("h") {
                 n * 60 * 60 // hours
             } else if unit.eq_ignore_ascii_case("m") {
                 n * 60 // minutes

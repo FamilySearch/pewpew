@@ -1,6 +1,6 @@
 # Common types
 ## Duration
-A duration is an integer followed by an optional space and a string value indicating the time unit. Hours can be specified with "h", "hr", "hrs", "hour", or "hours", minutes with "m", "min", "mins", "minute", or "minutes", and seconds with "s", "sec", "secs", "second", or "seconds". Durations are [templates](#templates), but can only be interpolated with variables defined in the [vars section](./vars-section.md).
+A duration is an integer followed by an optional space and a string value indicating the time unit. Days can be specified with "d", "day" or "days", hours with "h", "hr", "hrs", "hour" or "hours", minutes with "m", "min", "mins", "minute" or "minutes", and seconds with "s", "sec", "secs", "second" or "seconds". Durations are [templates](#templates), but can only be interpolated with variables defined in the [vars section](./vars-section.md).
 
 Examples:
 

@@ -136,7 +136,7 @@ impl AutoReturn {
     }
 }
 
-type ARInner = impl Future<Item = (), Error = ()>;
+type ARInner = Box<dyn Future<Item = (), Error = ()> + Send + Sync>;
 
 pub struct AutoReturnFuture {
     inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,
@@ -148,7 +148,8 @@ impl AutoReturnFuture {
         let jsons = ar.jsons;
         let inner = match ar.send_option {
             EndpointProvidesSendOptions::Block => {
-                let a: ARInner = channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(()));
+                let a: ARInner =
+                    Box::new(channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(())));
                 Either::A(a)
             }
             EndpointProvidesSendOptions::Force => Either::B((true, channel, jsons)),
@@ -1388,22 +1389,23 @@ impl Select {
         d: &'a json::Value,
     ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>>, TestError> {
         let r = if self.join.is_empty() {
-            'r: {
+            let r = || -> Result<_, TestError> {
                 if let Some(wc) = &self.where_clause {
                     if !bool_value(&*wc.evaluate(
                         Cow::Borrowed(d),
                         self.no_recoverable_error,
                         None,
                     )?)? {
-                        break 'r Either3::B(iter::empty());
+                        return Ok(Either3::B(iter::empty()));
                     }
                 }
-                Either3::A(iter::once(self.select.evaluate(
+                Ok(Either3::A(iter::once(self.select.evaluate(
                     Cow::Borrowed(&*d),
                     self.no_recoverable_error,
                     None,
-                )))
-            }
+                ))))
+            };
+            r()?
         } else {
             let references_for_each = self.references_for_each;
             let no_recoverable_error = self.no_recoverable_error;

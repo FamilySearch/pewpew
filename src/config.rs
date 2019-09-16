@@ -1112,6 +1112,7 @@ impl Endpoint {
     ) {
         self.logs.push((key, value));
         if let Some(required_providers) = required_providers {
+            self.providers_to_stream.extend(required_providers.clone());
             self.required_providers.extend(required_providers);
         }
     }
@@ -1239,6 +1240,13 @@ impl LoadTest {
             }
         }
         Ok(())
+    }
+
+    pub fn clear_loggers(&mut self) {
+        self.loggers.clear();
+        for endpoint in &mut self.endpoints {
+            endpoint.logs.clear();
+        }
     }
 
     fn verify_loggers<'a, I: Iterator<Item = &'a String>>(

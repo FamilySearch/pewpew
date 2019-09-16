@@ -584,10 +584,10 @@ where
         "to": to
     });
     let logger = json::from_value(logger).expect("should be valid logger");
-    config.add_logger("try_run".into(), logger)?;
     if !try_config.loggers_on {
-        config.loggers.clear();
+        config.clear_loggers();
     }
+    config.add_logger("try_run".into(), logger)?;
 
     let config_config = config.config;
 
@@ -645,10 +645,6 @@ where
     let mut endpoints = Endpoints::new();
 
     for mut endpoint in config.endpoints.into_iter() {
-        if !try_config.loggers_on {
-            endpoint.logs.clear();
-        }
-
         let required_providers = mem::replace(&mut endpoint.required_providers, Default::default());
 
         let provides_set = endpoint

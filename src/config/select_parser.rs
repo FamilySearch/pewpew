@@ -82,6 +82,7 @@ impl RequiredProviders {
 
     pub(super) fn extend(&mut self, other: RequiredProviders) {
         self.special |= other.special;
+        self.where_special |= other.special;
         self.inner.extend(other.inner);
     }
 

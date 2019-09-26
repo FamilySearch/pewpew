@@ -57,6 +57,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             InvalidExpression(e) => Some(e),
+            InvalidYaml(e) => Some(&**e),
             _ => None,
         }
     }

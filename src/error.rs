@@ -81,9 +81,15 @@ impl fmt::Display for TestError {
 impl StdError for TestError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
+            CannotCreateLoggerFile(_, e) => Some(&**e),
+            CannotOpenFile(_, e) => Some(&**e),
+            Config(e) => e.source(),
+            FileReading(_, e) => Some(&**e),
             Recoverable(BodyErr(e)) => Some(&**e),
             Recoverable(ConnectionErr(_, e)) => Some(&**e),
             RequestBuilderErr(e) => Some(&**e),
+            SslError(e) => Some(&**e),
+            WritingToLogger(_, e) => Some(&**e),
             _ => None,
         }
     }

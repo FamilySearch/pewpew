@@ -163,6 +163,16 @@ pub enum Provider<F> {
     List(StaticList),
 }
 
+impl<F> Provider<F> {
+    fn is_response_provider(&self) -> bool {
+        if let Provider::Response(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 type RangeProviderIteratorA = iter::StepBy<std::ops::RangeInclusive<i64>>;
 
 pub struct RangeProvider(pub Either<RangeProviderIteratorA, iter::Cycle<RangeProviderIteratorA>>);
@@ -1174,15 +1184,22 @@ impl LoadTest {
 
                 // check for errors which would prevent a load test (but are ok for a try run)
                 if e.peak_load.is_none() {
+                    let requires_response_provider = e.required_providers.iter().any(|p| {
+                        providers
+                            .get(p)
+                            .map(Provider::is_response_provider)
+                            .unwrap_or_default()
+                    });
                     let has_provides_send_block = e
                         .provides
                         .iter()
                         .any(|(_, v)| v.get_send_behavior().is_block());
-                    if !has_provides_send_block {
+                    if !has_provides_send_block && !requires_response_provider {
+                        // endpoint should have a peak_load, have a provides which is send_block, or depend upon a response provider
                         load_test_errors.push(Error::MissingPeakLoad);
                     }
-                }
-                if e.load_pattern.is_none() {
+                } else if e.load_pattern.is_none() {
+                    // endpoint is missing a load_pattern
                     load_test_errors.push(Error::MissingLoadPattern);
                 }
 

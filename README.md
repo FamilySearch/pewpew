@@ -5,6 +5,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.5.3
 Changes:
 - Add a `days` unit to durations.
+- Expand cases when an endpoint can have no `peak_load` to include the case when the endpoint depends upon a `response` provider.
 
 ### v0.5.2
 Changes:

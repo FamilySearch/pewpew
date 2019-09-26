@@ -39,7 +39,7 @@ impl fmt::Display for Error {
             InvalidYaml(e) => write!(f, "yaml syntax error:\n\t{}", e),
             MissingPeakLoad => write!(
                 f,
-                "endpoint must either have a `peak_load` or a provides which is `send: block`"
+                "endpoint must either have a `peak_load`, a provides which is `send: block`, or depend on a `response` provider"
             ),
             MissingLoadPattern => write!(f, "endpoint is missing a load_pattern"),
             RecursiveForEachReference => write!(

@@ -1,4 +1,3 @@
-use crate::config;
 use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;

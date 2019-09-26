@@ -1,13 +1,10 @@
-use super::expression_functions::{
+use crate::expression_functions::{
     Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
     Replace,
 };
-use super::{EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
+use crate::{json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
 
-use crate::config;
-use crate::error::{RecoverableError, TestError};
-use crate::providers;
-use crate::util::{json_value_into_string, json_value_to_string};
+use crate::error::Error;
 
 use ether::{Either, Either3};
 use futures::{stream, Async, Future, IntoFuture, Sink, Stream};
@@ -26,6 +23,12 @@ use std::{
     iter,
     sync::Arc,
 };
+
+pub trait ProviderStream {
+    fn into_stream(
+        &self,
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Send + Sync + 'static>;
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct RequiredProviders {
@@ -113,14 +116,14 @@ impl RequiredProviders {
 
 #[derive(Clone)]
 pub struct AutoReturn {
-    send_option: config::EndpointProvidesSendOptions,
+    send_option: EndpointProvidesSendOptions,
     channel: channel::Sender<json::Value>,
     jsons: Vec<json::Value>,
 }
 
 impl AutoReturn {
     pub fn new(
-        send_option: config::EndpointProvidesSendOptions,
+        send_option: EndpointProvidesSendOptions,
         channel: channel::Sender<json::Value>,
         jsons: Vec<json::Value>,
     ) -> Self {
@@ -208,7 +211,7 @@ impl FunctionCall {
         args: Vec<ValueOrExpression>,
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<Either<Self, json::Value>, TestError> {
+    ) -> Result<Either<Self, json::Value>, Error> {
         let r = match ident {
             "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?)),
             "encode" => Encode::new(args)?.map_a(FunctionCall::Encode),
@@ -228,7 +231,7 @@ impl FunctionCall {
             "range" => Either::A(FunctionCall::Range(Range::new(args)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?)),
             "replace" => Replace::new(args)?.map_a(|r| FunctionCall::Replace(r.into())),
-            _ => return Err(TestError::InvalidFunction(ident.into())),
+            _ => return Err(Error::UnknownExpressionFunction(ident.into())),
         };
         Ok(r)
     }
@@ -238,7 +241,7 @@ impl FunctionCall {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         match self {
             FunctionCall::Collect(c) => c.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::Encode(e) => e.evaluate(d, no_recoverable_error, for_each),
@@ -262,7 +265,7 @@ impl FunctionCall {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, TestError> {
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, Error> {
         let r =
             match self {
                 FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(
@@ -321,12 +324,11 @@ impl FunctionCall {
         Ok(r)
     }
 
-    fn into_stream(
+    fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
+        providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
-    {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Sync + Send> {
         let f = match self {
             FunctionCall::Collect(c) => {
                 Either3::A(Either3::A(c.into_stream(providers, no_recoverable_error)))
@@ -373,7 +375,7 @@ fn index_json<'a>(
     index: Either<&PathSegment, &str>,
     no_err: bool,
     for_each: Option<&[Cow<'a, json::Value>]>,
-) -> Result<Cow<'a, json::Value>, TestError> {
+) -> Result<Cow<'a, json::Value>, Error> {
     #[allow(unused_assignments)]
     let mut holder = None;
     let str_or_number = match index {
@@ -402,12 +404,13 @@ fn index_json<'a>(
             Some(Cow::Owned(ret))
         }
         (json, Either::A(s)) if !no_err => {
-            return Err(RecoverableError::IndexingJson(s.into(), json.into_owned()).into());
+            return Err(Error::IndexingIntoJson(s.into(), json.into_owned()));
         }
         (json, Either::B(n)) if !no_err => {
-            return Err(
-                RecoverableError::IndexingJson(format!("[{}]", n), json.into_owned()).into(),
-            );
+            return Err(Error::IndexingIntoJson(
+                format!("[{}]", n),
+                json.into_owned(),
+            ));
         }
         _ => None,
     };
@@ -420,7 +423,7 @@ fn index_json2<'a>(
     indexes: &[PathSegment],
     no_err: bool,
     for_each: Option<&[Cow<'a, json::Value>]>,
-) -> Result<Cow<'a, json::Value>, TestError> {
+) -> Result<Cow<'a, json::Value>, Error> {
     for index in indexes.iter() {
         let r = index.evaluate(Cow::Borrowed(&*json), for_each.clone())?;
         let o = match (json, r) {
@@ -443,12 +446,13 @@ fn index_json2<'a>(
                 Some(Cow::Owned(ret))
             }
             (json, Either::A(s)) if !no_err => {
-                return Err(RecoverableError::IndexingJson(s, json.into_owned()).into())
+                return Err(Error::IndexingIntoJson(s, json.into_owned()))
             }
             (json, Either::B(n)) if !no_err => {
-                return Err(
-                    RecoverableError::IndexingJson(format!("[{}]", n), json.into_owned()).into(),
-                );
+                return Err(Error::IndexingIntoJson(
+                    format!("[{}]", n),
+                    json.into_owned(),
+                ));
             }
             _ => None,
         };
@@ -469,7 +473,7 @@ impl Path {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         let (v, rest) = match (&self.start, for_each) {
             (PathStart::FunctionCall(f), _) => (
                 f.evaluate(d, no_recoverable_error, for_each.clone())?,
@@ -503,8 +507,7 @@ impl Path {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
-    {
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, Error>> + Clone, Error> {
         let r = match &self.start {
             PathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
@@ -546,11 +549,11 @@ impl Path {
         Ok(r)
     }
 
-    fn into_stream(
+    fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
+        providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
         match self.start {
@@ -570,29 +573,13 @@ impl Path {
                 let b = providers
                     .get(&*s2)
                     .map(move |provider| {
-                        let auto_return = provider.auto_return.map(|ar| (ar, provider.tx.clone()));
-                        provider
-                            .rx
-                            .clone()
-                            .map_err(move |_| {
-                                TestError::Internal("unexpected error from provider".into())
-                            })
-                            .and_then(move |v| {
-                                let mut outgoing = Vec::new();
-                                if let Some((ar, tx)) = &auto_return {
-                                    outgoing.push(AutoReturn::new(
-                                        *ar,
-                                        tx.clone(),
-                                        vec![v.clone()],
-                                    ));
-                                }
-                                let v =
-                                    index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)?
-                                        .into_owned();
-                                Ok((v, outgoing))
-                            })
+                        provider.into_stream().and_then(move |(v, outgoing)| {
+                            let v = index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)?
+                                .into_owned();
+                            Ok((v, outgoing))
+                        })
                     })
-                    .ok_or_else(move || TestError::UnknownProvider((&*s).clone()))
+                    .ok_or_else(move || Error::UnknownProvider((&*s).clone()))
                     .into_future()
                     .flatten_stream();
                 Either3::B(b)
@@ -606,18 +593,14 @@ impl Path {
     }
 }
 
-pub(super) fn bool_value(json: &json::Value) -> Result<bool, TestError> {
+pub(super) fn bool_value(json: &json::Value) -> Result<bool, Error> {
     let r = match json {
         json::Value::Null => false,
         json::Value::Bool(b) => *b,
         json::Value::Number(n) if n.is_i64() => n.as_i64().expect("should be i64") != 0,
         json::Value::Number(n) if n.is_u64() => n.as_u64().expect("should be u64") != 0,
         json::Value::Number(n) if n.is_f64() => n.as_f64().expect("should be f64") != 0f64,
-        json::Value::Number(_) => {
-            return Err(TestError::Internal(
-                "Number should always be i64, u64 or f64".into(),
-            ));
-        }
+        json::Value::Number(_) => unreachable!("Number should always be i64, u64 or f64"),
         json::Value::String(s) => !s.is_empty(),
         json::Value::Object(_) | json::Value::Array(_) => true,
     };
@@ -644,13 +627,13 @@ impl ValueOrExpression {
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<Self, TestError> {
+    ) -> Result<Self, Error> {
         let pairs = Parser::parse(Rule::entry_point, expr)?;
         let e = parse_expression(pairs, providers, static_vars, no_recoverable_error)?;
         ValueOrExpression::from_expression(e)
     }
 
-    fn from_expression(e: Expression) -> Result<Self, TestError> {
+    fn from_expression(e: Expression) -> Result<Self, Error> {
         let voe = match e.simplify_to_json()? {
             Either::A(v) => ValueOrExpression::Value(Value::Json(v)),
             Either::B(e) => ValueOrExpression::Expression(e),
@@ -663,7 +646,7 @@ impl ValueOrExpression {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         match self {
             ValueOrExpression::Value(v) => v.evaluate(d, no_recoverable_error, for_each),
             ValueOrExpression::Expression(e) => e.evaluate(d, no_recoverable_error, for_each),
@@ -675,8 +658,7 @@ impl ValueOrExpression {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
-    {
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, Error>> + Clone, Error> {
         match self {
             ValueOrExpression::Value(v) => Ok(Either::A(v.evaluate_as_iter(
                 d,
@@ -691,11 +673,11 @@ impl ValueOrExpression {
         }
     }
 
-    pub fn into_stream(
+    pub fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
+        providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> {
+    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
         match self {
             ValueOrExpression::Value(v) => {
                 Either::A(v.into_stream(providers, no_recoverable_error))
@@ -720,7 +702,7 @@ impl Value {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         let v = match self {
             Value::Path(path) => path.evaluate(d, no_recoverable_error, for_each)?,
             Value::Json(value) => Cow::Borrowed(value),
@@ -734,8 +716,7 @@ impl Value {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
-    {
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, Error>> + Clone, Error> {
         let r = match self {
             Value::Path(path) => Either3::A(
                 path.evaluate_as_iter(d, no_recoverable_error, for_each)?
@@ -768,12 +749,11 @@ impl Value {
         Ok(r)
     }
 
-    fn into_stream(
+    fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
+        providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Sync + Send>
-    {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Sync + Send> {
         let s = match self {
             Value::Path(path) => Either3::A(path.into_stream(providers, no_recoverable_error)),
             Value::Json(value) => Either3::B(stream::repeat((value, Vec::new()))),
@@ -802,7 +782,7 @@ impl PathSegment {
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
         no_recoverable_error: bool,
-    ) -> Result<Self, TestError> {
+    ) -> Result<Self, Error> {
         let template = Template::new(s, static_vars, providers, no_recoverable_error)?;
         let r = match template.simplify_to_string() {
             Either::A(s) => PathSegment::String(s),
@@ -815,7 +795,7 @@ impl PathSegment {
         &self,
         d: Cow<'a, json::Value>,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Either<String, usize>, TestError> {
+    ) -> Result<Either<String, usize>, Error> {
         let r = match self {
             PathSegment::Number(n) => Either::B(*n),
             PathSegment::String(s) => Either::A(s.clone()),
@@ -877,8 +857,8 @@ impl InfixOperator {
     fn evaluate<'a>(
         self,
         left: &json::Value,
-        right: Result<Cow<'a, json::Value>, TestError>,
-    ) -> Result<json::Value, TestError> {
+        right: Result<Cow<'a, json::Value>, Error>,
+    ) -> Result<json::Value, Error> {
         let value = match self {
             InfixOperator::Add => {
                 let n = f64_value(left) + f64_value(&*right?);
@@ -950,7 +930,7 @@ impl Expression {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         let mut v = if let Some((op, rhs)) = &self.op {
             let v = match &self.lhs {
                 ExpressionLhs::Expression(e) => {
@@ -987,8 +967,7 @@ impl Expression {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>> + Clone, TestError>
-    {
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, Error>> + Clone, Error> {
         let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.op, &self.not, &self.lhs) {
             Either3::A(v.evaluate_as_iter(d, no_recoverable_error, for_each)?)
         } else {
@@ -1006,12 +985,11 @@ impl Expression {
         Ok(Box::new(i))
     }
 
-    fn into_stream(
+    fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
+        providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = TestError> + Send + Sync>
-    {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Send + Sync> {
         let v = match self.lhs {
             ExpressionLhs::Expression(e) => {
                 Either::A(e.into_stream(providers, no_recoverable_error))
@@ -1052,7 +1030,7 @@ impl Expression {
         Box::new(v)
     }
 
-    fn simplify_to_json(self) -> Result<Either<json::Value, Self>, TestError> {
+    fn simplify_to_json(self) -> Result<Either<json::Value, Self>, Error> {
         let aorb = match self {
             Expression {
                 lhs: ExpressionLhs::Value(Value::Json(v)),
@@ -1080,8 +1058,10 @@ impl Expression {
         Ok(aorb)
     }
 
-    fn simplify_to_string(self) -> Result<Either<String, Self>, TestError> {
-        Ok(self.simplify_to_json()?.map_a(json_value_into_string))
+    fn simplify_to_string(self) -> Result<Either<String, Self>, Error> {
+        Ok(self
+            .simplify_to_json()?
+            .map_a(|v| json_value_to_string(Cow::Owned(v)).into_owned()))
     }
 }
 
@@ -1101,7 +1081,7 @@ impl ParsedSelect {
         d: Cow<'a, json::Value>,
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<Cow<'a, json::Value>, TestError> {
+    ) -> Result<Cow<'a, json::Value>, Error> {
         let r = match self {
             ParsedSelect::Null => Cow::Owned(json::Value::Null),
             ParsedSelect::Bool(b) => Cow::Owned(json::Value::Bool(*b)),
@@ -1124,7 +1104,7 @@ impl ParsedSelect {
                         let v = v
                             .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
                             .into_owned();
-                        Ok::<_, TestError>((k.clone(), v))
+                        Ok::<_, Error>((k.clone(), v))
                     })
                     .collect::<Result<_, _>>()?;
                 Cow::Owned(json::Value::Object(m))
@@ -1150,7 +1130,7 @@ pub const STATS: u16 = 0b0_010_000_000;
 pub const REQUEST_URL: u16 = 0b0_100_000_000;
 pub const ERROR: u16 = 0b1_000_000_000;
 
-#[grammar = "config/select.pest"]
+#[grammar = "select.pest"]
 #[derive(Parser)]
 struct Parser;
 
@@ -1173,10 +1153,10 @@ impl Template {
         static_vars: &BTreeMap<String, json::Value>,
         providers: &mut RequiredProviders,
         no_recoverable_error: bool,
-    ) -> Result<Self, TestError> {
+    ) -> Result<Self, Error> {
         let pairs = Parser::parse(Rule::template_entry_point, t)?
             .nth(0)
-            .ok_or_else(|| TestError::Internal("Expected 1 pair from parser".into()))?
+            .expect("Expected 1 pair from parser")
             .into_inner();
         let mut pieces = Vec::new();
         // let mut providers = RequiredProviders::new();
@@ -1210,9 +1190,7 @@ impl Template {
                     TemplatePiece::NotExpression(pair.as_str().into())
                 }
                 rule => {
-                    return Err(TestError::Internal(
-                        format!("unexpected rule while parsing template, {:?}", rule).into(),
-                    ));
+                    unreachable!("unexpected rule while parsing template, {:?}", rule);
                 }
             };
             pieces.push(piece);
@@ -1248,7 +1226,7 @@ impl Template {
         &self,
         d: Cow<'a, json::Value>,
         for_each: Option<&[Cow<'a, json::Value>]>,
-    ) -> Result<String, TestError> {
+    ) -> Result<String, Error> {
         self.pieces
             .iter()
             .map(|piece| match piece {
@@ -1258,7 +1236,7 @@ impl Template {
                         self.no_recoverable_error,
                         for_each.clone(),
                     )?;
-                    Ok(json_value_to_string(&*v).into_owned())
+                    Ok(json_value_to_string(v).into_owned())
                 }
                 TemplatePiece::NotExpression(s) => Ok(s.clone()),
             })
@@ -1275,16 +1253,16 @@ impl Template {
             .join("")
     }
 
-    fn into_stream(
+    fn into_stream<P: ProviderStream + 'static>(
         self,
-        providers: &BTreeMap<String, providers::Provider>,
-    ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = TestError> {
+        providers: &BTreeMap<String, P>,
+    ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = Error> {
         let no_recoverable_error = self.no_recoverable_error;
         let streams = self.pieces.into_iter().map(|piece| match piece {
             TemplatePiece::Expression(voe) => {
                 let a = voe
                     .into_stream(providers, no_recoverable_error)
-                    .map(|v| (json_value_into_string(v.0), v.1));
+                    .map(|v| (json_value_to_string(Cow::Owned(v.0)).into_owned(), v.1));
                 Either::A(a)
             }
             TemplatePiece::NotExpression(s) => {
@@ -1322,7 +1300,7 @@ impl Select {
         static_vars: &BTreeMap<String, json::Value>,
         providers: &mut RequiredProviders,
         no_recoverable_error: bool,
-    ) -> Result<Self, TestError> {
+    ) -> Result<Self, Error> {
         // let mut providers = RequiredProviders::new();
         let join = provides
             .for_each
@@ -1331,7 +1309,7 @@ impl Select {
                 let pairs = Parser::parse(Rule::entry_point, s)?;
                 let e = parse_expression(pairs, providers, static_vars, no_recoverable_error)?;
                 if providers.get_special() & FOR_EACH != 0 {
-                    Err(TestError::RecursiveForEachReference)
+                    Err(Error::RecursiveForEachReference)
                 } else {
                     ValueOrExpression::from_expression(e)
                 }
@@ -1343,11 +1321,11 @@ impl Select {
             .map(|s| {
                 let mut providers2 = RequiredProviders::new();
                 providers2.is_where();
-                let pairs = Parser::parse(Rule::entry_point, s).map_err(TestError::PestParseErr)?;
+                let pairs = Parser::parse(Rule::entry_point, s)?;
                 let e =
                     parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
                 providers.extend(providers2);
-                Ok::<_, TestError>(e)
+                Ok::<_, Error>(e)
             })
             .transpose()?;
         let select = parse_select(
@@ -1374,7 +1352,7 @@ impl Select {
         self.send_behavior = send_behavior;
     }
 
-    pub fn execute_where(&self, d: &json::Value) -> Result<bool, TestError> {
+    pub fn execute_where(&self, d: &json::Value) -> Result<bool, Error> {
         self.where_clause
             .as_ref()
             .map(|wc| {
@@ -1387,9 +1365,9 @@ impl Select {
     fn as_iter<'a>(
         &'a self,
         d: &'a json::Value,
-    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, TestError>>, TestError> {
+    ) -> Result<impl Iterator<Item = Result<Cow<'a, json::Value>, Error>>, Error> {
         let r = if self.join.is_empty() {
-            let r = || -> Result<_, TestError> {
+            let r = || -> Result<_, Error> {
                 if let Some(wc) = &self.where_clause {
                     if !bool_value(&*wc.evaluate(
                         Cow::Borrowed(d),
@@ -1452,7 +1430,7 @@ impl Select {
     pub fn iter(
         self: Arc<Self>,
         d: Arc<json::Value>,
-    ) -> Result<impl Iterator<Item = Result<json::Value, TestError>>, TestError> {
+    ) -> Result<impl Iterator<Item = Result<json::Value, Error>>, Error> {
         let mut iter = None;
         Ok(iter::from_fn(move || {
             let iter2 = match &mut iter {
@@ -1483,7 +1461,7 @@ fn parse_select(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<ParsedSelect, TestError> {
+) -> Result<ParsedSelect, Error> {
     let r = match select {
         json::Value::Null => ParsedSelect::Null,
         json::Value::Bool(b) => ParsedSelect::Bool(b),
@@ -1504,7 +1482,7 @@ fn parse_select(
             let new = m
                 .into_iter()
                 .map(|(k, v)| {
-                    Ok::<_, TestError>((
+                    Ok::<_, Error>((
                         k,
                         parse_select(v, providers, static_vars, no_recoverable_error)?,
                     ))
@@ -1521,7 +1499,7 @@ fn parse_function_call(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<Either<FunctionCall, json::Value>, TestError> {
+) -> Result<Either<FunctionCall, json::Value>, Error> {
     let mut ident = None;
     let mut args = Vec::new();
     for pair in pair.into_inner() {
@@ -1541,15 +1519,12 @@ fn parse_function_call(
                 );
             }
             r => {
-                return Err(TestError::Internal(
-                    format!("Unexpected rule for function call, `{:?}`", r).into(),
-                ));
+                unreachable!("Unexpected rule for function call, `{:?}`", r);
             }
         }
     }
     FunctionCall::new(
-        ident
-            .ok_or_else(|| TestError::Internal("expected to have a function identifier".into()))?,
+        ident.expect("expected to have a function identifier"),
         args,
         providers,
         static_vars,
@@ -1561,24 +1536,19 @@ fn parse_indexed_property(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<PathSegment, TestError> {
-    let pair = pair.into_inner().next().ok_or_else(|| {
-        TestError::Internal("Expected 1 rule while parsing indexed property".into())
-    })?;
+) -> Result<PathSegment, Error> {
+    let pair = pair
+        .into_inner()
+        .next()
+        .expect("Expected 1 rule while parsing indexed property");
     match pair.as_rule() {
         Rule::string => {
             PathSegment::from_str(pair.as_str(), providers, static_vars, no_recoverable_error)
         }
-        Rule::integer => Ok(PathSegment::Number(pair.as_str().parse().map_err(
-            |_| {
-                TestError::Internal(
-                    "Expected rule to parse as a number while parsing indexed property".into(),
-                )
-            },
-        )?)),
-        r => Err(TestError::Internal(
-            format!("Unexpected rule for path segment, `{:?}`", r).into(),
-        )),
+        Rule::integer => Ok(PathSegment::Number(pair.as_str().parse().expect(
+            "Expected rule to parse as a number while parsing indexed property",
+        ))),
+        r => unreachable!("Unexpected rule for path segment, `{:?}`", r),
     }
 }
 
@@ -1587,7 +1557,7 @@ fn parse_path(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<Either<json::Value, Path>, TestError> {
+) -> Result<Either<json::Value, Path>, Error> {
     let mut start = None;
     let mut rest = Vec::new();
     let mut providers2 = RequiredProviders::new();
@@ -1606,9 +1576,7 @@ fn parse_path(
                     };
                     start = Some(jps);
                 } else {
-                    return Err(TestError::Internal(
-                        "Encountered unexpected function call while parsing path".into(),
-                    ));
+                    unreachable!("Encountered unexpected function call while parsing path");
                 }
             }
             Rule::json_ident => {
@@ -1630,9 +1598,7 @@ fn parse_path(
             }
             Rule::indexed_property => {
                 if start.is_none() {
-                    return Err(TestError::Internal(
-                        "Encountered unexpected indexed property while parsing path".into(),
-                    ));
+                    unreachable!("Encountered unexpected indexed property while parsing path");
                 } else {
                     rest.push(parse_indexed_property(
                         pair,
@@ -1643,15 +1609,11 @@ fn parse_path(
                 }
             }
             r => {
-                return Err(TestError::Internal(
-                    format!("Unexpected rule while parsing path, `{:?}`", r).into(),
-                ));
+                unreachable!("Unexpected rule while parsing path, `{:?}`", r);
             }
         }
     }
-    let start = start.ok_or_else(|| {
-        TestError::Internal("expected there to be a start piece while parsing path".into())
-    })?;
+    let start = start.expect("expected there to be a start piece while parsing path");
     if let PathStart::Ident(s) = &start {
         match rest.first() {
             Some(PathSegment::String(next)) if &*s == "request" || &*s == "response" => {
@@ -1683,19 +1645,17 @@ fn parse_value(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<Value, TestError> {
-    let pair = pairs.next().ok_or_else(|| {
-        TestError::Internal("Expected 1 rule while parsing indexed property".into())
-    })?;
+) -> Result<Value, Error> {
+    let pair = pairs
+        .next()
+        .expect("Expected 1 rule while parsing indexed property");
     let v = match pair.as_rule() {
         Rule::boolean => {
             let b = match pair.as_str() {
                 "true" => true,
                 "false" => false,
                 s => {
-                    return Err(TestError::Internal(
-                        format!("Expected value to parse as a boolean. Saw `{}`", s).into(),
-                    ));
+                    unreachable!("Expected value to parse as a boolean. Saw `{}`", s);
                 }
             };
             Value::Json(b.into())
@@ -1714,16 +1674,13 @@ fn parse_value(
             }
         }
         Rule::integer | Rule::decimal => {
-            let j =
-                json::Value::Number(std::str::FromStr::from_str(pair.as_str()).map_err(|_| {
-                    TestError::Internal("Expected value to parse as a number or decimal".into())
-                })?);
+            let n = std::str::FromStr::from_str(pair.as_str())
+                .expect("Expected value to parse as a number or decimal");
+            let j = json::Value::Number(n);
             Value::Json(j)
         }
         r => {
-            return Err(TestError::Internal(
-                format!("Unexpected rule while parsing value: {:?}", r).into(),
-            ));
+            unreachable!("Unexpected rule while parsing value: {:?}", r);
         }
     };
     Ok(v)
@@ -1735,10 +1692,7 @@ enum ExpressionOrOperator {
     Operator(InfixOperator),
 }
 
-fn expression_helper(
-    mut items: Vec<ExpressionOrOperator>,
-    level: u8,
-) -> Result<Expression, TestError> {
+fn expression_helper(mut items: Vec<ExpressionOrOperator>, level: u8) -> Result<Expression, Error> {
     let i = items.iter().rposition(|eoo| {
         if let ExpressionOrOperator::Operator(o) = eoo {
             INFIX_OPERATOR_PRECEDENCE[*o as usize] == level
@@ -1759,9 +1713,7 @@ fn expression_helper(
                 if let Some(ExpressionOrOperator::Expression(e)) = left.pop() {
                     e
                 } else {
-                    return Err(TestError::Internal(
-                        "expected an expression but found an operator".into(),
-                    ));
+                    unreachable!("expected an expression but found an operator");
                 }
             } else {
                 expression_helper(left, level)?
@@ -1785,15 +1737,14 @@ fn expression_helper(
                 if let Some(ExpressionOrOperator::Expression(e)) = items.pop() {
                     Ok(e)
                 } else {
-                    Err(TestError::Internal(
-                        "reached level 5 of operator precedence and found another operator".into(),
-                    ))
+                    unreachable!(
+                        "reached level 5 of operator precedence and found another operator"
+                    )
                 }
             } else {
-                Err(TestError::Internal(
+                unreachable!(
                     "reached level 5 of operator precedence and still had more than 1 element"
-                        .into(),
-                ))
+                )
             }
         }
         None => expression_helper(items, level + 1),
@@ -1806,7 +1757,7 @@ fn parse_expression_pieces(
     static_vars: &BTreeMap<String, json::Value>,
     pieces: &mut Vec<ExpressionOrOperator>,
     no_recoverable_error: bool,
-) -> Result<(), TestError> {
+) -> Result<(), Error> {
     let mut not_count = 0;
     let start_len = pieces.len();
     for pair in pairs {
@@ -1882,13 +1833,10 @@ fn parse_expression_pieces(
                     "/" => InfixOperator::Divide,
                     "%" => InfixOperator::Mod,
                     o => {
-                        return Err(TestError::Internal(
-                            format!(
-                                "Unexpected operator while parsing simple expression: {:?}",
-                                o
-                            )
-                            .into(),
-                        ));
+                        unreachable!(
+                            "Unexpected operator while parsing simple expression: {:?}",
+                            o
+                        );
                     }
                 };
                 let eoo = ExpressionOrOperator::Operator(o);
@@ -1896,9 +1844,7 @@ fn parse_expression_pieces(
             }
             Rule::EOI => (),
             r => {
-                return Err(TestError::Internal(
-                    format!("Unexpected rule while parsing expression: {:?}", r).into(),
-                ));
+                unreachable!("Unexpected rule while parsing expression: {:?}", r);
             }
         }
     }
@@ -1910,7 +1856,7 @@ fn parse_expression(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
-) -> Result<Expression, TestError> {
+) -> Result<Expression, Error> {
     let mut pieces = Vec::new();
     parse_expression_pieces(
         pairs,
@@ -1925,11 +1871,32 @@ fn parse_expression(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers;
     use futures::future::{join_all, lazy};
     use maplit::btreemap;
     use serde_json as json;
+    // use test_common::literals;
     use tokio::runtime::current_thread;
+
+    pub struct Literals(Vec<json::Value>);
+
+    impl ProviderStream for Literals {
+        fn into_stream(
+            &self,
+        ) -> Box<
+            dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error>
+                + Send
+                + Sync
+                + 'static,
+        > {
+            let values = self.0.clone();
+            let s = stream::iter_ok(values.into_iter().cycle()).map(|v| (v, Vec::new()));
+            Box::new(s)
+        }
+    }
+
+    pub fn literals(values: Vec<json::Value>) -> Literals {
+        Literals(values)
+    }
 
     fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
         let select = create_select(select, &mut Default::default());
@@ -2105,8 +2072,8 @@ mod tests {
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
-                        json::Value::Array(v) => providers::literals(v.into()),
-                        _ => providers::literals(vec![v].into()),
+                        json::Value::Array(v) => literals(v.into()),
+                        _ => literals(vec![v].into()),
                     };
                     (k.to_string(), p)
                 })
@@ -2161,7 +2128,7 @@ mod tests {
                     .map(|(v, _)| v)
                     .into_future()
                     .map(move |(v, _)| {
-                        assert_eq!(v.unwrap(), expect, "index {}", i);
+                        assert_eq!(v, Some(expect), "index {}", i);
                     });
                 futures.push(fut);
             }

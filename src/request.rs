@@ -4,50 +4,40 @@ mod response_handler;
 
 use self::body_handler::BodyHandler;
 use self::request_maker::RequestMaker;
-use self::response_handler::ResponseHandler;
 
 use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
 use futures::{
-    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
-    Stream,
+    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Stream,
 };
 use hyper::{
     client::HttpConnector,
-    header::{
-        Entry as HeaderEntry, HeaderMap, HeaderName, HeaderValue, CONTENT_DISPOSITION,
-        CONTENT_LENGTH, CONTENT_TYPE, HOST,
-    },
-    Body as HyperBody, Client, Method, Request, Response,
+    header::{Entry as HeaderEntry, HeaderName, HeaderValue, CONTENT_DISPOSITION},
+    Body as HyperBody, Client, Method, Response,
 };
 use hyper_tls::HttpsConnector;
 use parking_lot::Mutex;
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
-use tokio::{fs::File as TokioFile, io::AsyncRead, timer::Timeout};
+use tokio::{fs::File as TokioFile, io::AsyncRead};
 use zip_all::zip_all;
 
-use crate::config::{
-    self, AutoReturn, BodyTemplate, EndpointProvidesSendOptions, MultipartBody, Select, Template,
-    REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
-    RESPONSE_STARTLINE, STATS,
-};
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::stats;
 use crate::util::tweak_path;
+use config::{AutoReturn, BodyTemplate, MultipartBody, ProviderStream, Select, Template};
 
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    error::Error as StdError,
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
     path::PathBuf,
     str,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Debug)]
@@ -109,6 +99,31 @@ impl Outgoing {
             tx,
             logger,
         }
+    }
+}
+
+impl ProviderStream for providers::Provider {
+    fn into_stream(
+        &self,
+    ) -> Box<
+        dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = config::Error>
+            + Send
+            + Sync
+            + 'static,
+    > {
+        let auto_return = self.auto_return.map(|ar| (ar, self.tx.clone()));
+        let future = self
+            .rx
+            .clone()
+            .map_err(move |_e| unreachable!("unexpected error from provider"))
+            .map(move |v| {
+                let mut outgoing = Vec::new();
+                if let Some((ar, tx)) = &auto_return {
+                    outgoing.push(AutoReturn::new(*ar, tx.clone(), vec![v.clone()]));
+                };
+                (v, outgoing)
+            });
+        Box::new(future)
     }
 }
 
@@ -239,14 +254,15 @@ impl Builder {
                     };
                     StreamItem::TemplateValue(name.clone(), v, ar)
                 })
-                .map_err(|_| TestError::Internal("Unexpected error from receiver".into())),
+                .map_err(|_| unreachable!("Unexpected error from receiver")),
             );
             streams.push((false, provider_stream));
         }
         for (name, vce) in self.endpoint.declare {
             let stream = vce
                 .into_stream(&ctx.providers, false)
-                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns));
+                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns))
+                .map_err(Into::into);
             streams.push((false, Box::new(stream)));
         }
         let stats_tx = ctx.stats_tx.clone();
@@ -279,47 +295,31 @@ enum StreamItem {
     TemplateValue(String, json::Value, Option<config::AutoReturn>),
 }
 
-impl MultipartBody {
-    fn as_hyper_body<'a>(
-        &self,
-        template_values: &TemplateValues,
-        content_type_entry: HeaderEntry<'a, HeaderValue>,
-        copy_body_value: bool,
-        body_value: &mut Option<String>,
-    ) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
-        let boundary: String = Alphanumeric
-            .sample_iter(&mut rand::thread_rng())
-            .take(20)
-            .collect();
+fn multipart_body_as_hyper_body<'a>(
+    multipart_body: &MultipartBody,
+    template_values: &TemplateValues,
+    content_type_entry: HeaderEntry<'a, HeaderValue>,
+    copy_body_value: bool,
+    body_value: &mut Option<String>,
+) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
+    let boundary: String = Alphanumeric
+        .sample_iter(&mut rand::thread_rng())
+        .take(20)
+        .collect();
 
-        let is_form = {
-            let content_type = content_type_entry
-                .or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
-            let ct_str = match content_type.to_str() {
-                Ok(c) => c,
-                Err(e) => {
-                    return Either::A(
-                        Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                    )
-                }
-            };
-            if ct_str.starts_with("multipart/") {
-                let is_form = ct_str.starts_with("multipart/form-data");
-                *content_type =
-                    match HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary)) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            return Either::A(
-                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                            )
-                        }
-                    };
-                is_form
-            } else {
-                *content_type = match HeaderValue::from_str(&format!(
-                    "multipart/form-data;boundary={}",
-                    boundary
-                )) {
+    let is_form = {
+        let content_type =
+            content_type_entry.or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
+        let ct_str = match content_type.to_str() {
+            Ok(c) => c,
+            Err(e) => {
+                return Either::A(Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future())
+            }
+        };
+        if ct_str.starts_with("multipart/") {
+            let is_form = ct_str.starts_with("multipart/form-data");
+            *content_type =
+                match HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary)) {
                     Ok(c) => c,
                     Err(e) => {
                         return Either::A(
@@ -327,151 +327,163 @@ impl MultipartBody {
                         )
                     }
                 };
-                true
+            is_form
+        } else {
+            *content_type = match HeaderValue::from_str(&format!(
+                "multipart/form-data;boundary={}",
+                boundary
+            )) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Either::A(
+                        Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                    )
+                }
+            };
+            true
+        }
+    };
+
+    let mut closing_boundary = Vec::new();
+    closing_boundary.extend_from_slice(b"\r\n--");
+    closing_boundary.extend_from_slice(boundary.as_bytes());
+    closing_boundary.extend_from_slice(b"--\r\n");
+
+    let mut body_value2 = Vec::new();
+
+    let pieces: Vec<_> = multipart_body
+        .pieces
+        .iter()
+        .enumerate()
+        .map(|(i, mp)| {
+            let mut body = match mp
+                .template
+                .evaluate(Cow::Borrowed(template_values.as_json()), None)
+            {
+                Ok(b) => b,
+                Err(e) => return Either3::A(Err(TestError::from(e)).into_future()),
+            };
+
+            let mut has_content_disposition = false;
+
+            let mut piece_data = Vec::new();
+            if i == 0 {
+                piece_data.extend_from_slice(b"--");
+            } else {
+                piece_data.extend_from_slice(b"\r\n--");
             }
-        };
+            piece_data.extend_from_slice(boundary.as_bytes());
 
-        let mut closing_boundary = Vec::new();
-        closing_boundary.extend_from_slice(b"\r\n--");
-        closing_boundary.extend_from_slice(boundary.as_bytes());
-        closing_boundary.extend_from_slice(b"--\r\n");
-
-        let mut body_value2 = Vec::new();
-
-        let pieces: Vec<_> = self
-            .pieces
-            .iter()
-            .enumerate()
-            .map(|(i, mp)| {
-                let mut body = match mp
-                    .template
-                    .evaluate(Cow::Borrowed(template_values.as_json()), None)
-                {
-                    Ok(b) => b,
-                    Err(e) => return Either3::A(Err(e).into_future()),
+            for (k, t) in mp.headers.iter() {
+                let key = match HeaderName::from_bytes(k.as_bytes()) {
+                    Ok(k) => k,
+                    Err(e) => {
+                        return Either3::A(
+                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                        )
+                    }
+                };
+                let value = match t.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+                    Ok(v) => v,
+                    Err(e) => return Either3::A(Err(e.into()).into_future()),
+                };
+                let value = match HeaderValue::from_str(&value) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Either3::A(
+                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                        )
+                    }
                 };
 
-                let mut has_content_disposition = false;
+                let content_disposition = CONTENT_DISPOSITION;
+                has_content_disposition |= key == content_disposition;
 
-                let mut piece_data = Vec::new();
-                if i == 0 {
-                    piece_data.extend_from_slice(b"--");
+                piece_data.extend_from_slice(b"\r\n");
+                piece_data.extend_from_slice(key.as_ref());
+                piece_data.extend_from_slice(b": ");
+                piece_data.extend_from_slice(value.as_bytes());
+            }
+
+            if is_form && !has_content_disposition {
+                let value = if mp.is_file {
+                    HeaderValue::from_str(&format!(
+                        "form-data; name=\"{}\"; filename=\"{}\"",
+                        mp.name, body
+                    ))
                 } else {
-                    piece_data.extend_from_slice(b"\r\n--");
-                }
-                piece_data.extend_from_slice(boundary.as_bytes());
-
-                for (k, t) in mp.headers.iter() {
-                    let key = match HeaderName::from_bytes(k.as_bytes()) {
-                        Ok(k) => k,
-                        Err(e) => {
-                            return Either3::A(
-                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                            )
-                        }
-                    };
-                    let value = match t.evaluate(Cow::Borrowed(template_values.as_json()), None) {
-                        Ok(v) => v,
-                        Err(e) => return Either3::A(Err(e).into_future()),
-                    };
-                    let value = match HeaderValue::from_str(&value) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            return Either3::A(
-                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                            )
-                        }
-                    };
-
-                    let content_disposition = CONTENT_DISPOSITION;
-                    has_content_disposition |= key == content_disposition;
-
-                    piece_data.extend_from_slice(b"\r\n");
-                    piece_data.extend_from_slice(key.as_ref());
-                    piece_data.extend_from_slice(b": ");
-                    piece_data.extend_from_slice(value.as_bytes());
-                }
-
-                if is_form && !has_content_disposition {
-                    let value = if mp.is_file {
-                        HeaderValue::from_str(&format!(
-                            "form-data; name=\"{}\"; filename=\"{}\"",
-                            mp.name, body
-                        ))
-                    } else {
-                        HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
-                    };
-                    let value = match value {
-                        Ok(v) => v,
-                        Err(e) => {
-                            return Either3::A(
-                                Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                            )
-                        }
-                    };
-
-                    piece_data.extend_from_slice(b"\r\ncontent-disposition: ");
-                    piece_data.extend_from_slice(value.as_bytes());
-                }
-
-                piece_data.extend_from_slice(b"\r\n\r\n");
-
-                if mp.is_file {
-                    if copy_body_value {
-                        body_value2.extend_from_slice(&piece_data);
-                        body_value2.extend_from_slice(b"<<contents of file: ");
-                        body_value2.extend_from_slice(body.as_bytes());
-                        body_value2.extend_from_slice(b">>");
+                    HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
+                };
+                let value = match value {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Either3::A(
+                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
+                        )
                     }
-                    let piece_data_bytes = piece_data.len() as u64;
-                    let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
-                    tweak_path(&mut body, &self.path);
-                    let b = create_file_hyper_body(body).map(move |(bytes, body)| {
-                        let stream = Either::A(piece_stream.chain(body));
-                        (bytes + piece_data_bytes, stream)
-                    });
-                    Either3::B(b)
-                } else {
-                    piece_data.extend_from_slice(body.as_bytes());
-                    if copy_body_value {
-                        body_value2.extend_from_slice(&piece_data);
-                    }
-                    let piece_data_bytes = piece_data.len() as u64;
-                    let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
-                    let c = Ok((piece_data_bytes, Either::B(piece_stream)));
-                    Either3::C(c.into_future())
+                };
+
+                piece_data.extend_from_slice(b"\r\ncontent-disposition: ");
+                piece_data.extend_from_slice(value.as_bytes());
+            }
+
+            piece_data.extend_from_slice(b"\r\n\r\n");
+
+            if mp.is_file {
+                if copy_body_value {
+                    body_value2.extend_from_slice(&piece_data);
+                    body_value2.extend_from_slice(b"<<contents of file: ");
+                    body_value2.extend_from_slice(body.as_bytes());
+                    body_value2.extend_from_slice(b">>");
                 }
-            })
-            .collect();
+                let piece_data_bytes = piece_data.len() as u64;
+                let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
+                tweak_path(&mut body, &multipart_body.path);
+                let b = create_file_hyper_body(body).map(move |(bytes, body)| {
+                    let stream = Either::A(piece_stream.chain(body));
+                    (bytes + piece_data_bytes, stream)
+                });
+                Either3::B(b)
+            } else {
+                piece_data.extend_from_slice(body.as_bytes());
+                if copy_body_value {
+                    body_value2.extend_from_slice(&piece_data);
+                }
+                let piece_data_bytes = piece_data.len() as u64;
+                let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
+                let c = Ok((piece_data_bytes, Either::B(piece_stream)));
+                Either3::C(c.into_future())
+            }
+        })
+        .collect();
 
-        if copy_body_value {
-            body_value2.extend_from_slice(&closing_boundary);
-            let bv = match String::from_utf8(body_value2) {
-                Ok(bv) => bv,
-                Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
-            };
-            *body_value = Some(bv);
-        }
-
-        let b = join_all(pieces).map(move |results| {
-            let (bytes, bodies) = results.into_iter().fold(
-                (closing_boundary.len() as u64, Vec::new()),
-                |(bytes, mut bodies), (bytes2, body)| {
-                    bodies.push(body);
-                    (bytes + bytes2, bodies)
-                },
-            );
-
-            let closing_boundary = hyper::Chunk::from(closing_boundary.clone());
-
-            let stream = stream::iter_ok::<_, hyper::Error>(bodies)
-                .flatten()
-                .chain(stream::once(Ok(closing_boundary)));
-
-            (bytes, HyperBody::wrap_stream(stream))
-        });
-        Either::B(b)
+    if copy_body_value {
+        body_value2.extend_from_slice(&closing_boundary);
+        let bv = match String::from_utf8(body_value2) {
+            Ok(bv) => bv,
+            Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+        };
+        *body_value = Some(bv);
     }
+
+    let b = join_all(pieces).map(move |results| {
+        let (bytes, bodies) = results.into_iter().fold(
+            (closing_boundary.len() as u64, Vec::new()),
+            |(bytes, mut bodies), (bytes2, body)| {
+                bodies.push(body);
+                (bytes + bytes2, bodies)
+            },
+        );
+
+        let closing_boundary = hyper::Chunk::from(closing_boundary.clone());
+
+        let stream = stream::iter_ok::<_, hyper::Error>(bodies)
+            .flatten()
+            .chain(stream::once(Ok(closing_boundary)));
+
+        (bytes, HyperBody::wrap_stream(stream))
+    });
+    Either::B(b)
 }
 
 fn create_file_hyper_body(file: String) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
@@ -496,43 +508,42 @@ fn create_file_hyper_body(file: String) -> impl Future<Item = (u64, HyperBody), 
         .map_err(|e| TestError::Recoverable(RecoverableError::BodyErr(Arc::new(e))))
 }
 
-impl BodyTemplate {
-    fn as_hyper_body<'a>(
-        &self,
-        template_values: &TemplateValues,
-        copy_body_value: bool,
-        body_value: &mut Option<String>,
-        content_type_entry: HeaderEntry<'a, HeaderValue>,
-    ) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
-        let template = match self {
-            BodyTemplate::File(_, t) => t,
-            BodyTemplate::Multipart(m) => {
-                return Either3::A(m.as_hyper_body(
-                    template_values,
-                    content_type_entry,
-                    copy_body_value,
-                    body_value,
-                ))
-            }
-            BodyTemplate::None => return Either3::B(Ok((0, HyperBody::empty())).into_future()),
-            BodyTemplate::String(t) => t,
-        };
-        let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
-            Ok(b) => b,
-            Err(e) => return Either3::B(Err(e).into_future()),
-        };
-        if let BodyTemplate::File(path, _) = self {
-            tweak_path(&mut body, path);
-            if copy_body_value {
-                *body_value = Some(format!("<<contents of file: {}>>", body));
-            }
-            Either3::C(create_file_hyper_body(body))
-        } else {
-            if copy_body_value {
-                *body_value = Some(body.clone());
-            }
-            Either3::B(Ok((body.as_bytes().len() as u64, body.into())).into_future())
+fn body_template_as_hyper_body<'a>(
+    body_template: &BodyTemplate,
+    template_values: &TemplateValues,
+    copy_body_value: bool,
+    body_value: &mut Option<String>,
+    content_type_entry: HeaderEntry<'a, HeaderValue>,
+) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
+    let template = match body_template {
+        BodyTemplate::File(_, t) => t,
+        BodyTemplate::Multipart(m) => {
+            return Either3::A(multipart_body_as_hyper_body(
+                m,
+                template_values,
+                content_type_entry,
+                copy_body_value,
+                body_value,
+            ))
         }
+        BodyTemplate::None => return Either3::B(Ok((0, HyperBody::empty())).into_future()),
+        BodyTemplate::String(t) => t,
+    };
+    let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+        Ok(b) => b,
+        Err(e) => return Either3::B(Err(TestError::from(e)).into_future()),
+    };
+    if let BodyTemplate::File(path, _) = body_template {
+        tweak_path(&mut body, path);
+        if copy_body_value {
+            *body_value = Some(format!("<<contents of file: {}>>", body));
+        }
+        Either3::C(create_file_hyper_body(body))
+    } else {
+        if copy_body_value {
+            *body_value = Some(body.clone());
+        }
+        Either3::B(Ok((body.as_bytes().len() as u64, body.into())).into_future())
     }
 }
 
@@ -607,11 +618,7 @@ impl Endpoint {
                         Ok(Async::Ready(Some(_))) => od_continue = true,
                         Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
                         Ok(Async::NotReady) => return Ok(Async::NotReady),
-                        Err(_) => {
-                            return Err(TestError::Internal(
-                                "on demand streams should never error".into(),
-                            ));
-                        }
+                        Err(_) => unreachable!("on demand streams should never error"),
                     }
                 }
                 let p = zipped_streams.poll();

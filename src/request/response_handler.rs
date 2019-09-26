@@ -1,5 +1,6 @@
 use super::*;
 
+use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS};
 use futures::future::IntoFuture;
 
 pub(super) struct ResponseHandler {
@@ -72,15 +73,11 @@ impl ResponseHandler {
             Err(e) => return Either::B(Err(e).into_future()),
         };
         let ce_header = response.headers().get("content-encoding").map(|h| {
-            Ok::<_, TestError>(h.to_str().map_err(|_| {
-                TestError::Internal(
-                    "content-encoding header should be able to be cast to str".into(),
-                )
-            })?)
+            h.to_str()
+                .expect("content-encoding header should cast to str")
         });
         let ce_header = match ce_header {
-            Some(Err(e)) => return Either::B(Err(e).into_future()),
-            Some(Ok(s)) => s,
+            Some(s) => s,
             None => "",
         };
         let body_stream = match (

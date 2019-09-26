@@ -1,15 +1,9 @@
+mod error;
 mod expression_functions;
 mod select_parser;
 
-pub use self::select_parser::{
-    AutoReturn, AutoReturnFuture, RequiredProviders, Rule as ParserRule, Select, Template,
-    ValueOrExpression, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL,
-    RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
-};
-
-use crate::error::TestError;
-
 use channel::Limit;
+pub use error::Error;
 use ether::{Either, Either3};
 use hyper::Method;
 use mod_interval::{HitsPer, LinearBuilder, ModInterval};
@@ -18,6 +12,11 @@ use rand::{
     Rng,
 };
 use regex::Regex;
+use select_parser::ValueOrExpression;
+pub use select_parser::{
+    AutoReturn, ProviderStream, RequiredProviders, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
+    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+};
 use serde::{
     de::{Error as DeError, Unexpected},
     Deserialize, Deserializer,
@@ -54,11 +53,11 @@ pub enum LoadPattern {
 }
 
 impl LoadPattern {
-    pub fn build(
+    pub fn build<E>(
         self,
         peak_load: &HitsPer,
         scale_fn_updater: Option<mod_interval::LoadUpdateChannel>,
-    ) -> ModInterval<TestError> {
+    ) -> ModInterval<E> {
         match self {
             LoadPattern::Linear(lb) => lb.build(peak_load, scale_fn_updater),
         }
@@ -501,10 +500,7 @@ struct LoadTestPreProcessed {
 pub struct PreTemplate(String);
 
 impl PreTemplate {
-    pub fn evaluate(
-        &self,
-        static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<String, TestError> {
+    fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<String, Error> {
         Template::new(&self.0, static_vars, &mut Default::default(), false)
             .and_then(|t| t.evaluate(Cow::Owned(json::Value::Null), None))
     }
@@ -514,18 +510,13 @@ impl PreTemplate {
 pub struct PreDuration(PreTemplate);
 
 impl PreDuration {
-    pub fn evaluate(
-        &self,
-        static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<Duration, TestError> {
+    fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<Duration, Error> {
         let dur = self.0.evaluate(static_vars)?;
         let base_re = r"(?i)(\d+)\s*(d|h|m|s|days?|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
         let sanity_re =
             Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
         if !sanity_re.is_match(&dur) {
-            return Err(TestError::Other(
-                format!("invalid duration: `{}`", dur).into(),
-            ));
+            return Err(Error::InvalidDuration(dur));
         }
         let mut total_secs = 0;
         let re = Regex::new(base_re).expect("should be a valid regex");
@@ -556,13 +547,13 @@ impl PreDuration {
 pub struct PrePercent(PreTemplate);
 
 impl PrePercent {
-    pub fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<f64, TestError> {
+    fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<f64, Error> {
         let string = self.0.evaluate(static_vars)?;
         let re = Regex::new(r"^(\d+(?:\.\d+)?)%$").expect("should be a valid regex");
 
         let captures = re
             .captures(&string)
-            .ok_or_else(|| TestError::Other(format!("invalid percent: `{}`", string).into()))?;
+            .ok_or_else(|| Error::InvalidPercent(string.clone()))?;
 
         Ok(captures
             .get(1)
@@ -577,10 +568,7 @@ impl PrePercent {
 pub struct PreLoadPattern(Vec<LoadPatternPreProcessed>);
 
 impl PreLoadPattern {
-    pub fn evaluate(
-        &self,
-        static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<LoadPattern, TestError> {
+    fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<LoadPattern, Error> {
         let mut builder: Option<LinearBuilder> = None;
         let mut last_end = 0f64;
         for lppp in &self.0 {
@@ -589,7 +577,7 @@ impl PreLoadPattern {
                     let start = lbpp
                         .from
                         .as_ref()
-                        .map(|p| Ok::<_, TestError>(p.evaluate(static_vars)? / 100f64))
+                        .map(|p| Ok::<_, Error>(p.evaluate(static_vars)? / 100f64))
                         .unwrap_or_else(|| Ok(last_end))?;
                     let to = lbpp.to.evaluate(static_vars)?;
                     let end = to / 100f64;
@@ -604,7 +592,7 @@ impl PreLoadPattern {
             }
         }
         builder
-            .ok_or_else(|| TestError::Other("invalid load pattern".into()))
+            .ok_or_else(|| Error::InvalidLoadPattern)
             .map(LoadPattern::Linear)
     }
 }
@@ -613,15 +601,12 @@ impl PreLoadPattern {
 pub struct PreHitsPer(PreTemplate);
 
 impl PreHitsPer {
-    pub fn evaluate(
-        &self,
-        static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<HitsPer, TestError> {
+    fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<HitsPer, Error> {
         let string = self.0.evaluate(static_vars)?;
         let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
         let captures = re
             .captures(&string)
-            .ok_or_else(|| TestError::Other(format!("invalid peak_load: `{}`", string).into()))?;
+            .ok_or_else(|| Error::InvalidPeakLoad(string.clone()))?;
         let n = captures
             .get(1)
             .expect("should have capture group")
@@ -761,7 +746,7 @@ where
     fn json_transform(
         v: &mut json::Value,
         env_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<(), TestError> {
+    ) -> Result<(), Error> {
         match v {
             json::Value::String(s) => {
                 let t = Template::new(s, env_vars, &mut Default::default(), false)?;
@@ -816,7 +801,7 @@ pub struct LoadTest {
     pub providers: BTreeMap<String, Provider<FileProvider>>,
     pub loggers: BTreeMap<String, Logger>,
     vars: BTreeMap<String, json::Value>,
-    load_test_errors: Vec<TestError>,
+    load_test_errors: Vec<Error>,
 }
 
 #[derive(Default)]
@@ -843,7 +828,7 @@ impl Logger {
         logger: LoggerPreProcessed,
         vars: &BTreeMap<String, json::Value>,
         required_providers: &mut RequiredProviders,
-    ) -> Result<(Self, Option<Select>), TestError> {
+    ) -> Result<(Self, Option<Select>), Error> {
         let LoggerPreProcessed {
             pretty,
             to,
@@ -918,7 +903,7 @@ impl Endpoint {
         global_load_pattern: &Option<LoadPattern>,
         global_headers: &[(String, (Template, RequiredProviders))],
         config_path: &PathBuf,
-    ) -> Result<Self, TestError> {
+    ) -> Result<Self, Error> {
         let EndpointPreProcessed {
             declare,
             headers,
@@ -972,7 +957,7 @@ impl Endpoint {
                 let value = Select::new(value, static_vars, &mut required_providers, false)?;
                 Ok((key, value))
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
 
         let load_pattern = load_pattern
             .map(|l| l.evaluate(static_vars))
@@ -993,7 +978,7 @@ impl Endpoint {
                 let value = Template::new(&value, static_vars, &mut required_providers, true)?;
                 Ok((key, value))
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
 
         let body = body
             .map(|body| {
@@ -1042,7 +1027,7 @@ impl Endpoint {
                                             &mut required_providers,
                                             false,
                                         )?;
-                                        Ok::<_, TestError>((k, template))
+                                        Ok::<_, Error>((k, template))
                                     })
                                     .collect::<Result<_, _>>()?;
 
@@ -1052,7 +1037,7 @@ impl Endpoint {
                                     is_file,
                                     template,
                                 };
-                                Ok::<_, TestError>(piece)
+                                Ok::<_, Error>(piece)
                             })
                             .collect::<Result<_, _>>()?;
                         let multipart = MultipartBody {
@@ -1062,7 +1047,7 @@ impl Endpoint {
                         BodyTemplate::Multipart(multipart)
                     }
                 };
-                Ok::<_, TestError>(value)
+                Ok::<_, Error>(value)
             })
             .transpose()?
             .unwrap_or(BodyTemplate::None);
@@ -1077,7 +1062,7 @@ impl Endpoint {
                     ValueOrExpression::new(&value, &mut required_providers2, static_vars, false)?;
                 Ok((key, value))
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
         required_providers2.extend(providers_to_stream.clone());
         let required_providers = required_providers2;
 
@@ -1111,7 +1096,7 @@ impl Endpoint {
         key: String,
         value: EndpointProvidesPreProcessed,
         static_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<(), TestError> {
+    ) -> Result<(), Error> {
         let value = Select::new(value, static_vars, &mut self.required_providers, false)?;
         self.append_processed_logger(key, value, None);
         Ok(())
@@ -1132,9 +1117,9 @@ impl Endpoint {
 }
 
 impl LoadTest {
-    pub fn from_config(bytes: &[u8], config_path: &PathBuf) -> Result<Self, TestError> {
+    pub fn from_config(bytes: &[u8], config_path: &PathBuf) -> Result<Self, Error> {
         let c: LoadTestPreProcessed =
-            serde_yaml::from_slice(bytes).map_err(|e| TestError::YamlDeserializerErr(e.into()))?;
+            serde_yaml::from_slice(bytes).map_err(|e| Error::InvalidYaml(e.into()))?;
         let vars = c.vars;
         let loggers = c.loggers;
         let providers = c.providers;
@@ -1149,7 +1134,7 @@ impl LoadTest {
                 let value = Template::new(&value, &vars, &mut required_providers, false)?;
                 Ok((key.clone(), (value, required_providers)))
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
         let config = Config {
             client: ClientConfig {
                 keepalive: c.config.client.keepalive.evaluate(&vars)?,
@@ -1173,27 +1158,37 @@ impl LoadTest {
             },
         };
         let mut load_test_errors = Vec::new();
-        let endpoints = c.endpoints.into_iter()
+        let endpoints = c
+            .endpoints
+            .into_iter()
             .enumerate()
             .map(|(i, e)| {
-                let e = Endpoint::from_preprocessed(e, i, &vars, &global_load_pattern, &global_headers, config_path)?;
+                let e = Endpoint::from_preprocessed(
+                    e,
+                    i,
+                    &vars,
+                    &global_load_pattern,
+                    &global_headers,
+                    config_path,
+                )?;
 
                 // check for errors which would prevent a load test (but are ok for a try run)
                 if e.peak_load.is_none() {
-                    let has_provides_send_block = e.provides.iter().any(|(_, v)| {
-                        v.get_send_behavior().is_block()
-                    });
+                    let has_provides_send_block = e
+                        .provides
+                        .iter()
+                        .any(|(_, v)| v.get_send_behavior().is_block());
                     if !has_provides_send_block {
-                        load_test_errors.push(TestError::Other("endpoint without `peak_load` must have at least one `provides` with `send: block`".into()));
+                        load_test_errors.push(Error::MissingPeakLoad);
                     }
                 }
                 if e.load_pattern.is_none() {
-                    load_test_errors.push(TestError::Other("missing load_pattern".into()));
+                    load_test_errors.push(Error::MissingLoadPattern);
                 }
 
                 Ok(e)
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
         let providers = providers
             .into_iter()
             .map(|(key, value)| {
@@ -1226,7 +1221,7 @@ impl LoadTest {
                 };
                 Ok((key, value))
             })
-            .collect::<Result<_, TestError>>()?;
+            .collect::<Result<_, Error>>()?;
 
         let mut loadtest = LoadTest {
             config,
@@ -1252,7 +1247,7 @@ impl LoadTest {
         Ok(loadtest)
     }
 
-    pub fn add_logger(&mut self, key: String, value: LoggerPreProcessed) -> Result<(), TestError> {
+    pub fn add_logger(&mut self, key: String, value: LoggerPreProcessed) -> Result<(), Error> {
         let mut required_providers = RequiredProviders::new();
         let (value, select) =
             Logger::from_pre_processed(value, &self.vars, &mut required_providers)?;
@@ -1277,7 +1272,7 @@ impl LoadTest {
         }
     }
 
-    pub fn ok_for_loadtest(&self) -> Result<(), TestError> {
+    pub fn ok_for_loadtest(&self) -> Result<(), Error> {
         self.load_test_errors
             .get(0)
             .cloned()
@@ -1289,9 +1284,9 @@ impl LoadTest {
     fn verify_loggers<'a, I: Iterator<Item = &'a String>>(
         &self,
         mut loggers: I,
-    ) -> Result<(), TestError> {
+    ) -> Result<(), Error> {
         if let Some(l) = loggers.find(|l| !self.loggers.contains_key(*l)) {
-            Err(TestError::UnknownLogger(l.clone()))
+            Err(Error::UnknownLogger(l.clone()))
         } else {
             Ok(())
         }
@@ -1300,11 +1295,19 @@ impl LoadTest {
     fn verify_providers<'a, I: Iterator<Item = &'a String>>(
         &self,
         mut providers: I,
-    ) -> Result<(), TestError> {
+    ) -> Result<(), Error> {
         if let Some(p) = providers.find(|p| !self.providers.contains_key(*p)) {
-            Err(TestError::UnknownProvider(p.clone()))
+            Err(Error::UnknownProvider(p.clone()))
         } else {
             Ok(())
         }
+    }
+}
+
+pub(crate) fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
+    match v {
+        Cow::Owned(json::Value::String(s)) => Cow::Owned(s),
+        Cow::Borrowed(json::Value::String(s)) => Cow::Borrowed(s),
+        _ => Cow::Owned(v.to_string()),
     }
 }

@@ -1,6 +1,20 @@
-use super::*;
+use crate::error::{RecoverableError, TestError};
+use crate::stats;
 
-use futures::future::{join_all, select_all, IntoFuture};
+use config::{EndpointProvidesSendOptions, Error as ConfigError, Template};
+use ether::{Either, Either3};
+use futures::future::{join_all, select_all, Future, IntoFuture};
+use parking_lot::Mutex;
+use serde_json as json;
+
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::{Instant, SystemTime},
+};
+
+use super::{BlockSender, Outgoing, StatsTx, TemplateValues};
 
 pub(super) struct BodyHandler {
     pub(super) now: Instant,
@@ -69,31 +83,23 @@ impl BodyHandler {
                         let select = o.select.clone();
                         let tv = tv.clone();
                         if let (true, Ok(iter)) = (o.logger, select.iter(tv)) {
+                            let iter = iter.map(|v| v.map_err(Into::into));
                             let tx = o.tx.clone();
                             let cb = o.cb.clone();
-                            futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                            futures.push(BlockSender::new(iter, tx, cb));
                         }
                     }
                 }
             }
-            let b = stats_tx
-                .clone()
-                .send(
-                    stats::ResponseStat {
-                        kind,
-                        rtt,
-                        time: SystemTime::now(),
-                        tags: tags.clone(),
-                    }
-                    .into(),
-                )
-                .map(|_v| ())
-                .map_err(|e| {
-                    TestError::Internal(
-                        format!("unexpected error trying to send stats, {}", e).into(),
-                    )
-                });
-            futures.push(Either::B(b));
+            let _ = stats_tx.clone().unbounded_send(
+                stats::ResponseStat {
+                    kind,
+                    rtt,
+                    time: SystemTime::now(),
+                    tags: tags.clone(),
+                }
+                .into(),
+            );
             join_all(futures).map(|_| ())
         };
         let mut futures = Vec::new();
@@ -117,13 +123,14 @@ impl BodyHandler {
                 let select = o.select.clone();
                 let send_behavior = select.get_send_behavior();
                 let iter = match select.iter(template_values.clone()) {
-                    Ok(v) => v,
-                    Err(TestError::Recoverable(r)) => {
+                    Ok(v) => v.map(|v| v.map_err(Into::into)),
+                    Err(ConfigError::IndexingIntoJson(j, e)) => {
+                        let r = RecoverableError::IndexingJson(j, e);
                         let kind = stats::StatKind::RecoverableError(r);
                         futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;
                     }
-                    Err(e) => return Either::B(Err(e).into_future()),
+                    Err(e) => return Either::B(Err(e.into()).into_future()),
                 };
                 match send_behavior {
                     EndpointProvidesSendOptions::Block => {
@@ -210,13 +217,13 @@ impl BodyHandler {
 mod tests {
     use super::*;
     use channel::{Limit, Receiver};
-    use futures::lazy;
+    use futures::{lazy, stream::Stream, sync::mpsc as futures_channel, Async};
     use maplit::{btreemap, btreeset};
     use tokio::runtime::current_thread;
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use crate::config::Select;
+    use config::Select;
 
     fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
         let static_vars = BTreeMap::new();

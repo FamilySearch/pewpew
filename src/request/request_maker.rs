@@ -1,6 +1,34 @@
-use super::*;
+use crate::error::{RecoverableError, TestError};
+use crate::stats;
 
-use futures::future::IntoFuture;
+use config::{
+    AutoReturn, BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE,
+    REQUEST_URL,
+};
+use ether::{Either, Either3};
+use futures::future::{join_all, Future, IntoFuture};
+use hyper::{
+    client::HttpConnector,
+    header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST},
+    Client, Method, Request,
+};
+use hyper_tls::HttpsConnector;
+use parking_lot::Mutex;
+use serde_json as json;
+use tokio::timer::Timeout;
+
+use super::{
+    body_template_as_hyper_body, response_handler::ResponseHandler, BlockSender, Outgoing, StatsTx,
+    StreamItem, TemplateValues,
+};
+
+use std::{
+    borrow::Cow,
+    collections::BTreeMap,
+    error::Error as StdError,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
 
 pub(super) struct RequestMaker {
     pub(super) url: Template,
@@ -45,7 +73,7 @@ impl RequestMaker {
         }
         let auto_returns: Arc<_> =
             Mutex::new(Some(join_all(auto_returns).map(|_| ()).map_err(|_| {
-                TestError::Internal("auto returns should never error".into())
+                unreachable!("auto returns should never error");
             })))
             .into();
         let mut request = Request::builder();
@@ -54,7 +82,7 @@ impl RequestMaker {
             .evaluate(Cow::Borrowed(template_values.as_json()), None)
         {
             Ok(u) => u,
-            Err(e) => return Either::B(Err(e).into_future()),
+            Err(e) => return Either::B(Err(TestError::from(e)).into_future()),
         };
         let url = match url::Url::parse(&url) {
             Ok(u) => {
@@ -88,7 +116,8 @@ impl RequestMaker {
             .entry(CONTENT_TYPE)
             .expect("Content-Type is a valid header name");
         let mut body_value = None;
-        let body = self.body.as_hyper_body(
+        let body = body_template_as_hyper_body(
+            &self.body,
             &template_values,
             self.rr_providers & REQUEST_BODY != 0,
             &mut body_value,
@@ -250,9 +279,10 @@ impl RequestMaker {
                                     if let (true, Ok(iter)) =
                                         (o.logger, select.iter(template_values.clone()))
                                     {
+                                        let iter = iter.map(|v| v.map_err(Into::into));
                                         let tx = o.tx.clone();
                                         let cb = o.cb.clone();
-                                        futures.push(Either::A(BlockSender::new(iter, tx, cb)));
+                                        futures.push(BlockSender::new(iter, tx, cb));
                                     }
                                 }
                             }
@@ -270,8 +300,8 @@ impl RequestMaker {
                                     cb(false);
                                 }
                             }
-                            let f = stats_tx2
-                                .send(
+                            let _ = stats_tx2
+                                .unbounded_send(
                                     stats::ResponseStat {
                                         kind: stats::StatKind::RecoverableError(r),
                                         rtt,
@@ -279,9 +309,7 @@ impl RequestMaker {
                                         tags,
                                     }
                                     .into(),
-                                )
-                                .then(|_| Ok(()));
-                            futures.push(Either::B(f));
+                                );
                             let b = join_all(futures).map(|_| ());
                             Either3::B(b)
                         }
@@ -306,7 +334,7 @@ impl RequestMaker {
 mod tests {
     use super::*;
     use crate::create_http_client;
-    use futures::lazy;
+    use futures::{lazy, sync::mpsc as futures_channel};
     use tokio::runtime::current_thread;
 
     #[test]

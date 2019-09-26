@@ -1,7 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![type_length_limit = "1460995"]
 
-mod config;
 mod error;
 mod providers;
 mod request;
@@ -282,15 +281,24 @@ where
     let output_format = exec_config.get_output_format();
     let config_file = exec_config.get_config_file().clone();
     tokio::fs::File::open(config_file.clone())
-        .map_err(move |_| TestError::InvalidConfigFilePath(config_file))
-        .and_then(|file| {
-            read_to_end(file, Vec::new())
-                .map_err(|e| TestError::Other(format!("could not read config file: {}", e).into()))
+        .then(move |file| {
+            match file {
+                Ok(file) => {
+                    let a = read_to_end(file, Vec::new())
+                        .map_err(|e| TestError::CannotOpenFile(config_file, e.into()));
+                    Either::A(a)
+                }
+                Err(_) => {
+                    let b = Err(TestError::InvalidConfigFilePath(config_file))
+                        .into_future();
+                    Either::B(b)
+                }
+            }
         })
         .and_then(move |(file, config_bytes)| {
             let config = match config::LoadTest::from_config(&config_bytes, exec_config.get_config_file()) {
                 Ok(c) => c,
-                Err(e) => return Either3::B(Err(e).into_future()),
+                Err(e) => return Either3::B(Err(e.into()).into_future()),
             };
             let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
             let work = match exec_config {
@@ -531,9 +539,7 @@ where
         .into_future()
         .then(|v| match v {
             Ok((Some(r), _)) => r,
-            _ => Err(TestError::Internal(
-                "test_ended should not error at this point".into(),
-            )),
+            _ => unreachable!("test_ended should not error at this point"),
         })
         .shared();
 
@@ -720,9 +726,7 @@ where
         .into_future()
         .then(|v| match v {
             Ok((Some(r), _)) => r,
-            _ => Err(TestError::Internal(
-                "test_ended should not error at this point".into(),
-            )),
+            _ => unreachable!("test_ended should not error at this point"),
         })
         .shared();
 
@@ -767,8 +771,9 @@ where
                 Box<dyn Stream<Item = Instant, Error = TestError> + Send>,
             > = None;
 
-            if let Some(peak_load) = endpoint.peak_load.as_ref() {
-                let load_pattern = endpoint.load_pattern.take().expect("missing load_pattern");
+            if let (Some(peak_load), Some(load_pattern)) =
+                (endpoint.peak_load.as_ref(), endpoint.load_pattern.take())
+            {
                 duration = cmp::max(duration, load_pattern.duration());
                 mod_interval = Some(Box::new(load_pattern.build(peak_load, receiver)));
             }
@@ -810,7 +815,7 @@ where
     let test_ended_tx2 = test_ended_tx.clone();
     let endpoint_calls = stats_tx
         .send(StatsMessage::Start(duration))
-        .map_err(|_| TestError::Internal("Error sending test start signal".into()))
+        .map_err(|_| unreachable!("Error sending test start signal"))
         .then(move |r| match r {
             Ok(stats_tx) => {
                 let test_start = Instant::now();
@@ -885,12 +890,7 @@ pub(crate) fn create_http_client(
     http.set_keepalive(Some(keepalive));
     http.set_reuse_address(true);
     http.enforce_http(false);
-    let https = HttpsConnector::from((
-        http,
-        TlsConnector::new().map_err(|e| {
-            TestError::Other(format!("could not create ssl connector: {}", e).into())
-        })?,
-    ));
+    let https = HttpsConnector::from((http, TlsConnector::new()?));
     Ok(Client::builder().set_host(false).build::<_, Body>(https))
 }
 
@@ -965,11 +965,7 @@ where
                     let name2 = name.clone();
                     let f = tokio::fs::File::create(file_path)
                         .map(Either3::C)
-                        .map_err(move |e| {
-                            TestError::Other(
-                                format!("creating logger file for `{:?}`: {}", name2, e).into(),
-                            )
-                        });
+                        .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()));
                     Either::B(f)
                 }
             };

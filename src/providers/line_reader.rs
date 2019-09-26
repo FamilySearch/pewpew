@@ -1,4 +1,4 @@
-use crate::{config, util::str_to_json};
+use crate::util::str_to_json;
 use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;

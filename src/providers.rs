@@ -4,9 +4,8 @@ mod line_reader;
 
 use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineReader};
 
-use crate::config;
 use crate::error::TestError;
-use crate::util::json_value_into_string;
+use crate::util::json_value_to_string;
 use crate::TestEndReason;
 
 use bytes::{Buf, Bytes, IntoBuf};
@@ -18,7 +17,7 @@ use futures::{
 use serde_json as json;
 use tokio_threadpool::blocking;
 
-use std::io;
+use std::{borrow::Cow, io};
 
 pub struct Provider {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
@@ -47,33 +46,22 @@ pub fn file(
     test_killer: FCSender<Result<TestEndReason, TestError>>,
 ) -> Result<Provider, TestError> {
     let file = std::mem::replace(&mut template.path, Default::default());
+    let file2 = file.clone();
     let test_killer2 = test_killer.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
             CsvReader::new(&template, &file)
-                .map_err(|e| {
-                    TestError::Other(
-                        format!("creating file reader from file `{}`: {}", file, e).into(),
-                    )
-                })?
+                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?
                 .into_stream(),
         ),
         config::FileFormat::Json => Either3::B(
             JsonReader::new(&template, &file)
-                .map_err(|e| {
-                    TestError::Other(
-                        format!("creating file reader from file `{}`: {}", file, e).into(),
-                    )
-                })?
+                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?
                 .into_stream(),
         ),
         config::FileFormat::Line => Either3::C(
             LineReader::new(&template, &file)
-                .map_err(|e| {
-                    TestError::Other(
-                        format!("creating file reader from file `{}`: {}", file, e).into(),
-                    )
-                })?
+                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?
                 .into_stream(),
         ),
     };
@@ -81,7 +69,7 @@ pub fn file(
     let tx2 = tx.clone();
     let prime_tx = stream
         .map_err(move |e| {
-            let e = TestError::Other(format!("reading file `{}`: {}", file, e).into());
+            let e = TestError::FileReading(file2.clone(), e.into());
             channel::ChannelClosed::wrapped(e)
         })
         .forward(tx2)
@@ -154,7 +142,7 @@ where
             let pretty = format!("{:#}\n", item);
             Bytes::from(pretty).into_buf()
         } else {
-            let mut s = json_value_into_string(item);
+            let mut s = json_value_to_string(Cow::Owned(item)).into_owned();
             s.push('\n');
             Bytes::from(s).into_buf()
         };
@@ -171,14 +159,12 @@ where
                         return self
                             .writer
                             .poll_flush()
-                            .map_err(|_| TestError::Other("could not flush logger buffer".into()));
+                            .map_err(|e| TestError::WritingToLogger(self.name.clone(), e.into()));
                     }
                     Ok(Async::Ready(_)) => continue,
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Err(e) => {
-                        let e = TestError::Other(
-                            format!("writing to logger `{}`: {}", self.name, e).into(),
-                        );
+                        let e = TestError::WritingToLogger(self.name.clone(), e.into());
                         return Err(e);
                     }
                 }
@@ -186,7 +172,7 @@ where
                 return self
                     .writer
                     .poll_flush()
-                    .map_err(|_| TestError::Other("could not flush logger buffer".into()));
+                    .map_err(|e| TestError::WritingToLogger(self.name.clone(), e.into()));
             }
         }
     }
@@ -223,7 +209,7 @@ where
             } else {
                 Either::B(rx)
             };
-            rx.map_err(|_| TestError::Internal("logger receiver unexpectedly errored".into()))
+            rx.map_err(|_| unreachable!("logger receiver unexpectedly errored"))
                 .forward(sink)
         })
         .then(move |r| match r {

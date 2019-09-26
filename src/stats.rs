@@ -1,4 +1,3 @@
-use crate::config;
 use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::TestEndReason;
@@ -6,7 +5,6 @@ use crate::{RunConfig, RunOutputFormat};
 
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use ether::Either;
-use fnv::FnvHashMap;
 use futures::{
     future::Shared,
     sync::mpsc::{self as futures_channel, Sender as FCSender},
@@ -26,7 +24,7 @@ use yansi::Paint;
 use std::{
     cell::Cell,
     cmp,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     ops::AddAssign,
     path::PathBuf,
     sync::Arc,
@@ -118,9 +116,9 @@ impl RollingAggregateStats {
         }
     }
 
-    fn append(&mut self, stat: ResponseStat) -> Result<Option<String>, TestError> {
+    fn append(&mut self, stat: ResponseStat) -> Option<String> {
         let duration = self.duration;
-        let time = to_epoch(stat.time)? / duration * duration;
+        let time = to_epoch(stat.time) / duration * duration;
         let stats_map = loop {
             if let Some(sm) = self.buckets.get_mut(&stat.tags) {
                 break sm;
@@ -207,7 +205,7 @@ pub struct AggregateStats {
     rtt_histogram: Histogram<u64>,
     start_time: u64, // epoch in seconds, when the first request was logged
     status_counts: BTreeMap<u16, u64>,
-    test_errors: FnvHashMap<String, u64>,
+    test_errors: HashMap<String, u64>,
     time: u64, // epoch in seconds, when the bucket time begins
 }
 
@@ -233,17 +231,17 @@ impl AddAssign<&AggregateStats> for AggregateStats {
     }
 }
 
-fn get_epoch() -> Result<u64, TestError> {
+fn get_epoch() -> u64 {
     UNIX_EPOCH
         .elapsed()
         .map(|d| d.as_secs())
-        .map_err(|_| TestError::TimeSkew)
+        .unwrap_or_default()
 }
 
-fn to_epoch(time: SystemTime) -> Result<u64, TestError> {
+fn to_epoch(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .map_err(|_| TestError::TimeSkew)
+        .unwrap_or_default()
 }
 
 fn create_date_diff(start: u64, end: u64) -> String {
@@ -269,13 +267,13 @@ impl AggregateStats {
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             start_time: 0,
             status_counts: BTreeMap::new(),
-            test_errors: FnvHashMap::default(),
+            test_errors: HashMap::default(),
             time,
         }
     }
 
-    fn append_response_stat(&mut self, rhs: ResponseStat) -> Result<Option<String>, TestError> {
-        let time = to_epoch(rhs.time)?;
+    fn append_response_stat(&mut self, rhs: ResponseStat) -> Option<String> {
+        let time = to_epoch(rhs.time);
         if self.start_time == 0 {
             self.start_time = time;
         }
@@ -301,7 +299,7 @@ impl AggregateStats {
         if let Some(rtt) = rhs.rtt {
             self.rtt_histogram += rtt;
         }
-        Ok(warning)
+        warning
     }
 
     fn print_summary(
@@ -504,21 +502,17 @@ where
             let mut msg = None;
             if let StatsMessage::ResponseStat(rs) = s {
                 let tags = rs.tags.clone();
-                match summary.append_response_stat(rs) {
-                    Err(_) => return Either::A(Err(()).into_future()),
-                    Ok(Some(s)) => {
-                        let method = tags.get("method").expect("tags missing `method`");
-                        let url = tags.get("url").expect("tags missing `url`");
-                        let endpoint = format!("{} {}", method, url);
-                        msg = Some(format!(
-                            "{}",
-                            Paint::yellow(format!(
-                                "WARNING - recoverable error happened on endpoint `{}`: {}\n",
-                                endpoint, s
-                            ))
-                        ));
-                    }
-                    _ => (),
+                if let Some(s) = summary.append_response_stat(rs) {
+                    let method = tags.get("method").expect("tags missing `method`");
+                    let url = tags.get("url").expect("tags missing `url`");
+                    let endpoint = format!("{} {}", method, url);
+                    msg = Some(format!(
+                        "{}",
+                        Paint::yellow(format!(
+                            "WARNING - recoverable error happened on endpoint `{}`: {}\n",
+                            endpoint, s
+                        ))
+                    ));
                 }
             }
             if let Some(msg) = msg {
@@ -571,7 +565,7 @@ where
         .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
         .collect();
     Interval::new(now + start_print, interval)
-        .map_err(|_| TestError::Internal("something happened while printing stats".into()))
+        .map_err(|_| unreachable!("something happened while printing stats"))
         .for_each(move |_| {
             let time = Local::now();
             let is_human_format = output_format.is_human();
@@ -604,18 +598,14 @@ where
                         stats.sender_count,
                     )
                 } else {
-                    let mut s = match json::to_string(&stats).map_err(|_| {
-                        TestError::Internal("could not serialize provider stats".into())
-                    }) {
-                        Ok(s) => s,
-                        Err(e) => return Either::B(Err(e).into_future()),
-                    };
+                    let mut s =
+                        json::to_string(&stats).expect("could not serialize provider stats");
                     s.push('\n');
                     s
                 };
                 string_to_print.push_str(&piece);
             }
-            Either::A(write_all(console(), string_to_print).then(|_| Ok(())))
+            write_all(console(), string_to_print).then(|_| Ok(()))
         })
 }
 
@@ -640,7 +630,7 @@ where
 {
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
-    let start_sec = get_epoch()?;
+    let start_sec = get_epoch();
     let bucket_size = config.bucket_size;
     let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
     let next_bucket =
@@ -674,20 +664,20 @@ where
     let console3 = console.clone();
     let console4 = console.clone();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
-        .map_err(|_| TestError::Internal("something happened while printing stats".into()))
+        .map_err(|_e| unreachable!("something happened while printing stats"))
         .for_each(move |_| {
             let stats = stats4.lock();
-            let epoch = match get_epoch() {
-                Ok(e) => e,
-                Err(e) => return Either::A(Err(e).into_future()),
-            };
+            let epoch = get_epoch();
             let prev_time = epoch / stats.duration * stats.duration - stats.duration;
             let summary = stats.generate_summary(prev_time, output_format);
             let stats4 = stats4.clone();
             let console3 = console3.clone();
-            let b = write_all(console3(), summary)
-                .then(move |_| stats4.lock().persist(console3()).then(|_| Ok(())));
-            Either::B(b)
+            write_all(console3(), summary).then(move |_| {
+                stats4
+                    .lock()
+                    .persist(console3())
+                    .then(|_| Ok::<_, TestError>(()))
+            })
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
         let print_provider_stats = create_provider_stats_printer(
@@ -704,7 +694,7 @@ where
         Either::B(print_stats)
     };
     let receiver = Stream::for_each(
-        rx.map_err(|_| TestError::Internal("Error receiving stats".into())),
+        rx.map_err(|_| unreachable!("Error receiving stats")),
         move |datum| {
             let mut stats = stats.lock();
             match datum {
@@ -747,8 +737,8 @@ where
                     Either::A(a)
                 }
                 StatsMessage::ResponseStat(rs) => {
-                    let r = stats.append(rs);
-                    Either::B(r.map(|_| ()).into_future())
+                    stats.append(rs);
+                    Either::B(Ok::<_, TestError>(()).into_future())
                 }
             }
         },

@@ -1302,7 +1302,7 @@ impl Select {
         no_recoverable_error: bool,
     ) -> Result<Self, Error> {
         // let mut providers = RequiredProviders::new();
-        let join = provides
+        let join: Vec<_> = provides
             .for_each
             .iter()
             .map(|s| {
@@ -1334,10 +1334,15 @@ impl Select {
             static_vars,
             no_recoverable_error,
         )?;
+        let references_for_each = providers.get_special() & FOR_EACH != 0;
+        if references_for_each && join.is_empty() {
+            return Err(Error::MissingForEach)
+        }
+
         Ok(Select {
             join,
             no_recoverable_error,
-            references_for_each: providers.get_special() & FOR_EACH != 0,
+            references_for_each,
             select,
             send_behavior: provides.send.unwrap_or_default(),
             where_clause,
@@ -1943,7 +1948,6 @@ mod tests {
                 vec![],
                 RESPONSE_HEADERS,
             ),
-            (json::json!(r#"for_each[0]"#), None, vec![], FOR_EACH),
             (json::json!(r#"stats.rtt"#), None, vec![], STATS),
             (json::json!("join(b.e, '-')"), None, vec!["b"], 0),
             (

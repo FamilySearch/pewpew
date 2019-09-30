@@ -7,6 +7,9 @@ Changes:
 - Add a `days` unit to durations.
 - Expand cases when an endpoint can have no `peak_load` to include the case when the endpoint depends upon a `response` provider.
 
+Bugfix:
+- Raise an error if `for_each` is referenced but not defined.
+
 ### v0.5.2
 Changes:
 - Allow an unquoted number to be used when indexing into an object within an expression.

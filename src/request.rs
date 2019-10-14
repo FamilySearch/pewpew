@@ -8,7 +8,8 @@ use self::request_maker::RequestMaker;
 use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
 use futures::{
-    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Stream,
+    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
+    Stream,
 };
 use hyper::{
     client::HttpConnector,
@@ -27,7 +28,10 @@ use crate::error::{RecoverableError, TestError};
 use crate::providers;
 use crate::stats;
 use crate::util::tweak_path;
-use config::{AutoReturn, BodyTemplate, MultipartBody, ProviderStream, Select, Template};
+use config::{
+    BodyTemplate, EndpointProvidesSendOptions, Limit, MultipartBody, ProviderStream, Select,
+    Template,
+};
 
 use std::{
     borrow::Cow,
@@ -39,6 +43,79 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+
+#[derive(Clone)]
+pub struct AutoReturn {
+    send_option: EndpointProvidesSendOptions,
+    channel: channel::Sender<json::Value>,
+    jsons: Vec<json::Value>,
+}
+
+impl AutoReturn {
+    pub fn new(
+        send_option: EndpointProvidesSendOptions,
+        channel: channel::Sender<json::Value>,
+        jsons: Vec<json::Value>,
+    ) -> Self {
+        AutoReturn {
+            send_option,
+            channel,
+            jsons,
+        }
+    }
+
+    pub fn into_future(self) -> AutoReturnFuture {
+        AutoReturnFuture::new(self)
+    }
+}
+
+type ARInner = Box<dyn Future<Item = (), Error = ()> + Send + Sync>;
+
+pub struct AutoReturnFuture {
+    inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,
+}
+
+impl AutoReturnFuture {
+    fn new(ar: AutoReturn) -> Self {
+        let channel = ar.channel;
+        let jsons = ar.jsons;
+        let inner = match ar.send_option {
+            EndpointProvidesSendOptions::Block => {
+                let a: ARInner =
+                    Box::new(channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(())));
+                Either::A(a)
+            }
+            EndpointProvidesSendOptions::Force => Either::B((true, channel, jsons)),
+            EndpointProvidesSendOptions::IfNotFull => Either::B((false, channel, jsons)),
+        };
+        AutoReturnFuture { inner }
+    }
+}
+
+impl Future for AutoReturnFuture {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Result<Async<()>, ()> {
+        match &mut self.inner {
+            Either::A(ref mut a) => a.poll(),
+            Either::B((true, ref channel, ref mut jsons)) => {
+                while let Some(json) = jsons.pop() {
+                    channel.force_send(json);
+                }
+                Ok(Async::Ready(()))
+            }
+            Either::B((false, ref channel, ref mut jsons)) => {
+                while let Some(json) = jsons.pop() {
+                    if !channel.try_send(json).is_success() {
+                        break;
+                    }
+                }
+                Ok(Async::Ready(()))
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct TemplateValues(json::Value);
@@ -102,7 +179,7 @@ impl Outgoing {
     }
 }
 
-impl ProviderStream for providers::Provider {
+impl ProviderStream<AutoReturn> for providers::Provider {
     fn into_stream(
         &self,
     ) -> Box<
@@ -290,9 +367,9 @@ impl Builder {
 }
 
 enum StreamItem {
-    Declare(String, json::Value, Vec<config::AutoReturn>),
+    Declare(String, json::Value, Vec<AutoReturn>),
     None,
-    TemplateValue(String, json::Value, Option<config::AutoReturn>),
+    TemplateValue(String, json::Value, Option<AutoReturn>),
 }
 
 fn multipart_body_as_hyper_body<'a>(
@@ -562,7 +639,7 @@ pub struct Endpoint {
         >,
     >,
     headers: Vec<(String, Template)>,
-    limits: Vec<channel::Limit>,
+    limits: Vec<Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     no_auto_returns: bool,

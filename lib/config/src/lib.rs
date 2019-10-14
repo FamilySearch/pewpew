@@ -2,11 +2,9 @@ mod error;
 mod expression_functions;
 mod select_parser;
 
-use channel::Limit;
 pub use error::Error;
 use ether::{Either, Either3};
-use hyper::Method;
-use mod_interval::{HitsPer, LinearBuilder, ModInterval};
+use http::Method;
 use rand::{
     distributions::{Distribution, Uniform},
     Rng,
@@ -14,7 +12,7 @@ use rand::{
 use regex::Regex;
 use select_parser::ValueOrExpression;
 pub use select_parser::{
-    AutoReturn, ProviderStream, RequiredProviders, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
+    ProviderStream, RequiredProviders, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 use serde::{
@@ -30,8 +28,105 @@ use std::{
     iter,
     num::{NonZeroU16, NonZeroUsize},
     path::PathBuf,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
+
+#[derive(Clone)]
+pub enum Limit {
+    Auto(Arc<AtomicUsize>),
+    Integer(usize),
+}
+
+impl Default for Limit {
+    fn default() -> Self {
+        Limit::auto()
+    }
+}
+
+impl Limit {
+    pub fn auto() -> Limit {
+        Limit::Auto(Arc::new(AtomicUsize::new(5)))
+    }
+
+    pub fn get(&self) -> usize {
+        match self {
+            Limit::Auto(a) => a.load(Ordering::Acquire),
+            Limit::Integer(n) => *n,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Limit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        if string == "auto" {
+            Ok(Limit::auto())
+        } else {
+            let n = string.parse::<usize>().map_err(|_| {
+                DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value")
+            })?;
+            Ok(Limit::Integer(n))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum HitsPer {
+    Second(f32),
+    Minute(f32),
+}
+
+#[derive(Clone)]
+pub struct LinearBuilder {
+    pub pieces: Vec<LinearBuilderPiece>,
+    pub duration: Duration,
+}
+
+impl LinearBuilder {
+    pub fn new(start_percent: f64, end_percent: f64, duration: Duration) -> Self {
+        let mut ret = LinearBuilder {
+            pieces: Vec::new(),
+            duration: Duration::from_secs(0),
+        };
+        ret.append(start_percent, end_percent, duration);
+        ret
+    }
+
+    pub fn append(&mut self, start_percent: f64, end_percent: f64, duration: Duration) {
+        self.duration += duration;
+        let duration = duration.as_nanos() as f64;
+        let lb = LinearBuilderPiece::new(start_percent, end_percent, duration);
+        self.pieces.push(lb);
+    }
+
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+}
+
+#[derive(Clone)]
+pub struct LinearBuilderPiece {
+    pub start_percent: f64,
+    pub end_percent: f64,
+    pub duration: f64,
+}
+
+impl LinearBuilderPiece {
+    fn new(start_percent: f64, end_percent: f64, duration: f64) -> Self {
+        LinearBuilderPiece {
+            start_percent,
+            end_percent,
+            duration,
+        }
+    }
+}
 
 #[serde(rename_all = "snake_case")]
 #[derive(Deserialize)]
@@ -53,16 +148,6 @@ pub enum LoadPattern {
 }
 
 impl LoadPattern {
-    pub fn build<E>(
-        self,
-        peak_load: &HitsPer,
-        scale_fn_updater: Option<mod_interval::LoadUpdateChannel>,
-    ) -> ModInterval<E> {
-        match self {
-            LoadPattern::Linear(lb) => lb.build(peak_load, scale_fn_updater),
-        }
-    }
-
     pub fn duration(&self) -> Duration {
         match self {
             LoadPattern::Linear(lb) => lb.duration(),
@@ -1262,6 +1347,14 @@ impl LoadTest {
         }
 
         Ok(loadtest)
+    }
+
+    pub fn get_duration(&self) -> Duration {
+        self.endpoints
+            .iter()
+            .filter_map(|e| e.load_pattern.as_ref().map(LoadPattern::duration))
+            .max()
+            .unwrap_or_default()
     }
 
     pub fn add_logger(&mut self, key: String, value: LoggerPreProcessed) -> Result<(), Error> {

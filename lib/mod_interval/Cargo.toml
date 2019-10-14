@@ -7,6 +7,7 @@ edition = "2018"
 doctest = false
 
 [dependencies]
+config = { path = "../config" }
 channel = { path = "../channel" }
 futures = "0.1"
 regex = "1"

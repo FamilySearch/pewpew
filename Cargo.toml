@@ -27,7 +27,7 @@ crossbeam = "0.7"
 csv = "1"
 ctrlc = "3"
 chrono = "0.4"
-ether = { path = "./lib/either" }
+ether = { path = "./lib/either", features = ["async-write"] }
 for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.1"
 hdrhistogram = "6"
@@ -62,6 +62,7 @@ members = [
     "lib/body_reader",
     "lib/channel",
     "lib/config",
+    "lib/config_wasm",
     "lib/either",
     "lib/for_each_parallel",
     "lib/mod_interval",

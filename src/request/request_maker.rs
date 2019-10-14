@@ -2,8 +2,7 @@ use crate::error::{RecoverableError, TestError};
 use crate::stats;
 
 use config::{
-    AutoReturn, BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE,
-    REQUEST_URL,
+    BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL,
 };
 use ether::{Either, Either3};
 use futures::future::{join_all, Future, IntoFuture};
@@ -18,8 +17,8 @@ use serde_json as json;
 use tokio::timer::Timeout;
 
 use super::{
-    body_template_as_hyper_body, response_handler::ResponseHandler, BlockSender, Outgoing, StatsTx,
-    StreamItem, TemplateValues,
+    body_template_as_hyper_body, response_handler::ResponseHandler, AutoReturn, BlockSender,
+    Outgoing, StatsTx, StreamItem, TemplateValues,
 };
 
 use std::{

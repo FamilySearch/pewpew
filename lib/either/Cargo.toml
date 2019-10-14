@@ -8,4 +8,7 @@ doctest = false
 
 [dependencies]
 futures = "0.1"
-tokio = "0.1"
+tokio = { version = "0.1", optional = true }
+
+[features]
+async-write = ["tokio"]

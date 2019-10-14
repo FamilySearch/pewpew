@@ -1,10 +1,8 @@
 #![feature(no_more_cas)]
+use config::Limit;
 use crossbeam_queue::SegQueue;
 use futures::{sink::Sink, stream, task, Async, AsyncSink, Poll, StartSend, Stream};
-use serde::{
-    de::{Error as DeError, Unexpected},
-    Deserialize, Deserializer, Serialize,
-};
+use serde::Serialize;
 
 use std::{
     error::Error as StdError,
@@ -13,48 +11,6 @@ use std::{
         Arc,
     },
 };
-
-#[derive(Clone)]
-pub enum Limit {
-    Auto(Arc<AtomicUsize>),
-    Integer(usize),
-}
-
-impl Default for Limit {
-    fn default() -> Self {
-        Limit::auto()
-    }
-}
-
-impl Limit {
-    pub fn auto() -> Limit {
-        Limit::Auto(Arc::new(AtomicUsize::new(5)))
-    }
-
-    pub fn get(&self) -> usize {
-        match self {
-            Limit::Auto(a) => a.load(Ordering::Acquire),
-            Limit::Integer(n) => *n,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Limit {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        if string == "auto" {
-            Ok(Limit::auto())
-        } else {
-            let n = string.parse::<usize>().map_err(|_| {
-                DeError::invalid_value(Unexpected::Str(&string), &"a valid limit value")
-            })?;
-            Ok(Limit::Integer(n))
-        }
-    }
-}
 
 struct ParkedTasks(SegQueue<task::Task>);
 

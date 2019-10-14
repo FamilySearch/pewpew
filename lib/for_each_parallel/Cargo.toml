@@ -8,5 +8,6 @@ doctest = false
 
 [dependencies]
 channel = { path = "../channel" }
+config = { path = "../config" }
 futures = "0.1"
 tokio = "0.1"

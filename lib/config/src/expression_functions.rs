@@ -1,6 +1,4 @@
-use super::select_parser::{
-    bool_value, f64_value, AutoReturn, RequiredProviders, Value, ValueOrExpression,
-};
+use super::select_parser::{bool_value, f64_value, RequiredProviders, Value, ValueOrExpression};
 
 use crate::error::Error;
 use crate::json_value_to_string;
@@ -8,6 +6,7 @@ use crate::select_parser::ProviderStream;
 
 use ether::{Either, Either3};
 use futures::{stream, try_ready, Async, Future, IntoFuture, Stream};
+use jsonpath_lib as json_path;
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
@@ -77,11 +76,14 @@ impl Collect {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let mut value = None;
         let mut arg_stream = self.arg.into_stream(providers, no_recoverable_error);
         let random = self.random;
@@ -222,11 +224,14 @@ impl Encode {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let encoding = self.encoding;
         self.arg
             .into_stream(providers, no_recoverable_error)
@@ -334,11 +339,14 @@ impl Entries {
         Ok(v)
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         self.arg
             .into_stream(providers, no_recoverable_error)
             .map(|(v, ar)| {
@@ -396,9 +404,9 @@ impl Epoch {
         Ok(iter::once(self.evaluate()?))
     }
 
-    pub(super) fn into_stream(
+    pub(super) fn into_stream<Ar: Clone + Send + Sync + 'static>(
         self,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let iter = iter::repeat_with(move || self.evaluate().map(|v| (v.into_owned(), Vec::new())));
         stream::iter_result(iter)
     }
@@ -471,11 +479,14 @@ impl If {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let mut first = self.first.into_stream(providers, no_recoverable_error);
         let mut second = self.second.into_stream(providers, no_recoverable_error);
         let mut third = self.third.into_stream(providers, no_recoverable_error);
@@ -602,11 +613,14 @@ impl Join {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let sep = self.sep;
         let sep2 = self.sep2;
         self.arg
@@ -618,7 +632,7 @@ impl Join {
 #[derive(Clone)]
 pub(super) struct JsonPath {
     provider: String,
-    selector: Arc<jsonpath::Selector>,
+    selector: Arc<json_path::Node>,
 }
 
 impl fmt::Debug for JsonPath {
@@ -651,8 +665,8 @@ impl JsonPath {
                 } else {
                     format!("$.{}", json_path)
                 };
-                let json_path = jsonpath::Selector::new(&json_path2)
-                    .map_err(move |_| Error::InvalidFunctionArguments("json_path"))?;
+                let json_path = json_path::Parser::compile(&json_path2)
+                    .map_err(|_| Error::InvalidFunctionArguments("json_path"))?;
                 let j = JsonPath {
                     provider: provider.into(),
                     selector: json_path.into(),
@@ -677,7 +691,12 @@ impl JsonPath {
     }
 
     fn evaluate_to_vec(&self, d: &json::Value) -> Vec<json::Value> {
-        self.selector.find(d).cloned().collect()
+        let mut selector = json_path::Selector::new();
+        selector
+            .compiled_path(&self.selector)
+            .value(d)
+            .select_as()
+            .unwrap_or_default()
     }
 
     pub(super) fn evaluate<'a, 'b: 'a>(&'b self, d: Cow<'a, json::Value>) -> Cow<'a, json::Value> {
@@ -692,10 +711,13 @@ impl JsonPath {
         self.evaluate_to_vec(&*d).into_iter().map(Cow::Owned)
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let provider_name = self.provider.clone();
         providers
             .get(&self.provider)
@@ -794,11 +816,14 @@ impl Match {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let capture_names = self.capture_names;
         let regex = self.regex;
         self.arg
@@ -897,11 +922,14 @@ impl MinMax {
             .map(iter::once)
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let streams = self
             .args
             .into_iter()
@@ -1008,11 +1036,14 @@ impl Pad {
         )?))
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let padding = self.padding;
         let min_length = self.min_length;
         let start = self.start;
@@ -1068,9 +1099,9 @@ impl Random {
         iter::once(self.evaluate())
     }
 
-    pub(super) fn into_stream(
+    pub(super) fn into_stream<Ar: Clone + Send + Sync + 'static>(
         self,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         stream::iter_ok(iter::repeat_with(move || {
             (self.evaluate().into_owned(), Vec::new())
         }))
@@ -1173,11 +1204,14 @@ impl Range {
         Ok(r.into_iter())
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         match self {
             Range::Args(first, second) => {
                 let a = first
@@ -1254,9 +1288,9 @@ impl Repeat {
         iter::repeat(Cow::Owned(json::Value::Null)).take(n as usize)
     }
 
-    pub(super) fn into_stream(
+    pub(super) fn into_stream<Ar: Clone + Send + Sync + 'static>(
         self,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         stream::repeat((self.evaluate().into_owned(), Vec::new()))
     }
 }
@@ -1373,11 +1407,14 @@ impl Replace {
             .map(iter::once)
     }
 
-    pub(super) fn into_stream<P: ProviderStream + 'static>(
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Sync + 'static,
+        P: ProviderStream<Ar> + 'static,
+    >(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let streams = vec![
             self.haystack.into_stream(providers, no_recoverable_error),
             self.needle.into_stream(providers, no_recoverable_error),
@@ -1404,15 +1441,11 @@ mod tests {
 
     pub struct Literals(Vec<json::Value>);
 
-    impl ProviderStream for Literals {
+    impl ProviderStream<()> for Literals {
         fn into_stream(
             &self,
-        ) -> Box<
-            dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error>
-                + Send
-                + Sync
-                + 'static,
-        > {
+        ) -> Box<dyn Stream<Item = (json::Value, Vec<()>), Error = Error> + Send + Sync + 'static>
+        {
             let values = self.0.clone();
             let s = stream::iter_ok(values.into_iter().cycle()).map(|v| (v, Vec::new()));
             Box::new(s)
@@ -1701,7 +1734,7 @@ mod tests {
             (
                 vec!["a".into()],
                 Some(j!({"a": {"foo": "bar", "abc": 123}})),
-                j!([["abc", 123], ["foo", "bar"]]),
+                j!([["foo", "bar"], ["abc", 123]]),
             ),
             (
                 vec!["a".into()],
@@ -1732,7 +1765,7 @@ mod tests {
             (
                 vec!["a".into()],
                 Some(j!({"a": {"foo": "bar", "abc": 123}})),
-                vec![j!(["abc", 123]), j!(["foo", "bar"])],
+                vec![j!(["foo", "bar"]), j!(["abc", 123])],
             ),
             (
                 vec!["a".into()],
@@ -1760,7 +1793,7 @@ mod tests {
             (vec![j!("foo").into()], j!([[0, "f"], [1, "o"], [2, "o"]])),
             (vec![j!(null).into()], j!(null)),
             (vec![j!(false).into()], j!(false)),
-            (vec!["a".into()], j!([["abc", 123], ["foo", "bar"]])),
+            (vec!["a".into()], j!([["foo", "bar"], ["abc", 123]])),
             (vec!["b".into()], j!([[0, 1], [1, 2], [2, 3]])),
         ];
 
@@ -1852,7 +1885,7 @@ mod tests {
                 .into_iter()
                 .map(|arg| {
                     let e = Epoch::new(vec![arg.into()]).unwrap();
-                    e.into_stream().into_future().map(move |(v, _)| {
+                    e.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (left, _) = v.unwrap();
                         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                         let (allowable_dif, right) = match e {
@@ -2635,7 +2668,7 @@ mod tests {
                 .into_iter()
                 .map(move |(first, second)| {
                     let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
-                    r.into_stream().into_future().map(move |(v, _)| {
+                    r.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (left, _) = v.unwrap();
                         if first.is_u64() && second.is_u64() {
                             let left = left.as_u64().unwrap();
@@ -2789,7 +2822,7 @@ mod tests {
                 .into_iter()
                 .map(|(args, count)| {
                     let r = Repeat::new(args).unwrap();
-                    r.into_stream().into_future().map(move |(v, _)| {
+                    r.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (v, _) = v.unwrap();
                         let v = if let json::Value::Array(v) = v {
                             v

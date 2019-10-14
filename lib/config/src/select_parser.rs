@@ -7,7 +7,7 @@ use crate::{json_value_to_string, EndpointProvidesPreProcessed, EndpointProvides
 use crate::error::Error;
 
 use ether::{Either, Either3};
-use futures::{stream, Async, Future, IntoFuture, Sink, Stream};
+use futures::{stream, Future, IntoFuture, Stream};
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
@@ -24,10 +24,10 @@ use std::{
     sync::Arc,
 };
 
-pub trait ProviderStream {
+pub trait ProviderStream<Ar: Clone + Send + Sync + 'static> {
     fn into_stream(
         &self,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Send + Sync + 'static>;
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<Ar>), Error = Error> + Send + Sync + 'static>;
 }
 
 #[derive(Clone, Debug, Default)]
@@ -111,79 +111,6 @@ impl RequiredProviders {
 
     pub fn iter(&self) -> impl Iterator<Item = &String> {
         self.inner.iter()
-    }
-}
-
-#[derive(Clone)]
-pub struct AutoReturn {
-    send_option: EndpointProvidesSendOptions,
-    channel: channel::Sender<json::Value>,
-    jsons: Vec<json::Value>,
-}
-
-impl AutoReturn {
-    pub fn new(
-        send_option: EndpointProvidesSendOptions,
-        channel: channel::Sender<json::Value>,
-        jsons: Vec<json::Value>,
-    ) -> Self {
-        AutoReturn {
-            send_option,
-            channel,
-            jsons,
-        }
-    }
-
-    pub fn into_future(self) -> AutoReturnFuture {
-        AutoReturnFuture::new(self)
-    }
-}
-
-type ARInner = Box<dyn Future<Item = (), Error = ()> + Send + Sync>;
-
-pub struct AutoReturnFuture {
-    inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,
-}
-
-impl AutoReturnFuture {
-    fn new(ar: AutoReturn) -> Self {
-        let channel = ar.channel;
-        let jsons = ar.jsons;
-        let inner = match ar.send_option {
-            EndpointProvidesSendOptions::Block => {
-                let a: ARInner =
-                    Box::new(channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(())));
-                Either::A(a)
-            }
-            EndpointProvidesSendOptions::Force => Either::B((true, channel, jsons)),
-            EndpointProvidesSendOptions::IfNotFull => Either::B((false, channel, jsons)),
-        };
-        AutoReturnFuture { inner }
-    }
-}
-
-impl Future for AutoReturnFuture {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Result<Async<()>, ()> {
-        match &mut self.inner {
-            Either::A(ref mut a) => a.poll(),
-            Either::B((true, ref channel, ref mut jsons)) => {
-                while let Some(json) = jsons.pop() {
-                    channel.force_send(json);
-                }
-                Ok(Async::Ready(()))
-            }
-            Either::B((false, ref channel, ref mut jsons)) => {
-                while let Some(json) = jsons.pop() {
-                    if !channel.try_send(json).is_success() {
-                        break;
-                    }
-                }
-                Ok(Async::Ready(()))
-            }
-        }
     }
 }
 
@@ -324,11 +251,11 @@ impl FunctionCall {
         Ok(r)
     }
 
-    fn into_stream<P: ProviderStream + 'static>(
+    fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Sync + Send> {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<Ar>), Error = Error> + Sync + Send> {
         let f = match self {
             FunctionCall::Collect(c) => {
                 Either3::A(Either3::A(c.into_stream(providers, no_recoverable_error)))
@@ -549,11 +476,11 @@ impl Path {
         Ok(r)
     }
 
-    fn into_stream<P: ProviderStream + 'static>(
+    fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
         match self.start {
@@ -673,11 +600,11 @@ impl ValueOrExpression {
         }
     }
 
-    pub fn into_stream<P: ProviderStream + 'static>(
+    pub fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> impl Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         match self {
             ValueOrExpression::Value(v) => {
                 Either::A(v.into_stream(providers, no_recoverable_error))
@@ -749,11 +676,11 @@ impl Value {
         Ok(r)
     }
 
-    fn into_stream<P: ProviderStream + 'static>(
+    fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Sync + Send> {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<Ar>), Error = Error> + Sync + Send> {
         let s = match self {
             Value::Path(path) => Either3::A(path.into_stream(providers, no_recoverable_error)),
             Value::Json(value) => Either3::B(stream::repeat((value, Vec::new()))),
@@ -985,11 +912,11 @@ impl Expression {
         Ok(Box::new(i))
     }
 
-    fn into_stream<P: ProviderStream + 'static>(
+    fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
-    ) -> Box<dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error> + Send + Sync> {
+    ) -> Box<dyn Stream<Item = (json::Value, Vec<Ar>), Error = Error> + Send + Sync> {
         let v = match self.lhs {
             ExpressionLhs::Expression(e) => {
                 Either::A(e.into_stream(providers, no_recoverable_error))
@@ -1253,10 +1180,10 @@ impl Template {
             .join("")
     }
 
-    fn into_stream<P: ProviderStream + 'static>(
+    fn into_stream<Ar: Clone + Send + Sync + 'static, P: ProviderStream<Ar> + 'static>(
         self,
         providers: &BTreeMap<String, P>,
-    ) -> impl Stream<Item = (String, Vec<AutoReturn>), Error = Error> {
+    ) -> impl Stream<Item = (String, Vec<Ar>), Error = Error> {
         let no_recoverable_error = self.no_recoverable_error;
         let streams = self.pieces.into_iter().map(|piece| match piece {
             TemplatePiece::Expression(voe) => {
@@ -1307,10 +1234,13 @@ impl Select {
             .iter()
             .map(|s| {
                 let pairs = Parser::parse(Rule::entry_point, s)?;
-                let e = parse_expression(pairs, providers, static_vars, no_recoverable_error)?;
-                if providers.get_special() & FOR_EACH != 0 {
+                let mut providers2 = RequiredProviders::new();
+                let e =
+                    parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
+                if providers2.get_special() & FOR_EACH != 0 {
                     Err(Error::RecursiveForEachReference)
                 } else {
+                    providers.extend(providers2);
                     ValueOrExpression::from_expression(e)
                 }
             })
@@ -1324,20 +1254,26 @@ impl Select {
                 let pairs = Parser::parse(Rule::entry_point, s)?;
                 let e =
                     parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
+                let references_for_each = providers2.get_special() & FOR_EACH != 0;
+                if references_for_each && join.is_empty() {
+                    return Err(Error::MissingForEach);
+                }
                 providers.extend(providers2);
                 Ok::<_, Error>(e)
             })
             .transpose()?;
+        let mut providers2 = RequiredProviders::new();
         let select = parse_select(
             provides.select,
-            providers,
+            &mut providers2,
             static_vars,
             no_recoverable_error,
         )?;
-        let references_for_each = providers.get_special() & FOR_EACH != 0;
+        let references_for_each = providers2.get_special() & FOR_EACH != 0;
         if references_for_each && join.is_empty() {
-            return Err(Error::MissingForEach)
+            return Err(Error::MissingForEach);
         }
+        providers.extend(providers2);
 
         Ok(Select {
             join,
@@ -1884,15 +1820,11 @@ mod tests {
 
     pub struct Literals(Vec<json::Value>);
 
-    impl ProviderStream for Literals {
+    impl ProviderStream<()> for Literals {
         fn into_stream(
             &self,
-        ) -> Box<
-            dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = Error>
-                + Send
-                + Sync
-                + 'static,
-        > {
+        ) -> Box<dyn Stream<Item = (json::Value, Vec<()>), Error = Error> + Send + Sync + 'static>
+        {
             let values = self.0.clone();
             let s = stream::iter_ok(values.into_iter().cycle()).map(|v| (v, Vec::new()));
             Box::new(s)

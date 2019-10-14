@@ -1,3 +1,4 @@
+use config::{HitsPer, LinearBuilder, LoadPattern};
 use futures::{try_ready, Async, Future, Poll, Stream};
 use tokio::timer::Delay;
 
@@ -15,70 +16,11 @@ fn nanos_to_duration(n: f64) -> Duration {
     Duration::from_nanos(n as u64)
 }
 
-#[derive(Debug)]
-pub enum HitsPer {
-    Second(f32),
-    Minute(f32),
-}
-
 // x represents the time elapsed in the test
 // y represents the amount of time between hits
 pub trait ScaleFn {
     fn max_x(&self) -> f64;
     fn y(&mut self, x: f64) -> f64;
-}
-
-#[derive(Clone)]
-pub struct LinearBuilder {
-    pieces: Vec<LinearBuilderPiece>,
-    duration: Duration,
-}
-
-impl LinearBuilder {
-    pub fn new(start_percent: f64, end_percent: f64, duration: Duration) -> Self {
-        let mut ret = LinearBuilder {
-            pieces: Vec::new(),
-            duration: Duration::from_secs(0),
-        };
-        ret.append(start_percent, end_percent, duration);
-        ret
-    }
-
-    pub fn append(&mut self, start_percent: f64, end_percent: f64, duration: Duration) {
-        self.duration += duration;
-        let duration = duration.as_nanos() as f64;
-        let lb = LinearBuilderPiece::new(start_percent, end_percent, duration);
-        self.pieces.push(lb);
-    }
-
-    pub fn duration(&self) -> Duration {
-        self.duration
-    }
-
-    pub fn build<E>(
-        self,
-        peak_load: &HitsPer,
-        scale_fn_updater: Option<channel::Receiver<(LinearScaling, Option<Duration>)>>,
-    ) -> ModInterval<E> {
-        ModInterval::new(LinearScaling::new(self, peak_load), scale_fn_updater)
-    }
-}
-
-#[derive(Clone)]
-struct LinearBuilderPiece {
-    start_percent: f64,
-    end_percent: f64,
-    duration: f64,
-}
-
-impl LinearBuilderPiece {
-    fn new(start_percent: f64, end_percent: f64, duration: f64) -> Self {
-        LinearBuilderPiece {
-            start_percent,
-            end_percent,
-            duration,
-        }
-    }
 }
 
 pub struct LinearScaling {
@@ -239,13 +181,22 @@ pub struct ModInterval<E> {
 }
 
 impl<E> ModInterval<E> {
-    pub fn new(scale_fn: LinearScaling, scale_fn_updater: Option<LoadUpdateChannel>) -> Self {
-        ModInterval {
-            _e: std::marker::PhantomData,
-            delay: Delay::new(Instant::now()),
-            scale_fn,
-            scale_fn_updater,
-            start_end_time: None,
+    pub fn new(
+        load_pattern: LoadPattern,
+        peak_load: &HitsPer,
+        scale_fn_updater: Option<LoadUpdateChannel>,
+    ) -> Self {
+        match load_pattern {
+            LoadPattern::Linear(lb) => {
+                let scale_fn = LinearScaling::new(lb, peak_load);
+                ModInterval {
+                    _e: std::marker::PhantomData,
+                    delay: Delay::new(Instant::now()),
+                    scale_fn,
+                    scale_fn_updater,
+                    start_end_time: None,
+                }
+            }
         }
     }
 }
@@ -398,7 +349,7 @@ mod tests {
             checks.into_iter().enumerate()
         {
             let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+            let mut scale_fn = LinearScaling::new(lb, &hitsper);
             for (i2, (secs, hps)) in expects.iter().enumerate() {
                 let nanos = secs * nis;
                 let right = 1.0 / (scale_fn.y(nanos) / nis);
@@ -420,7 +371,7 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        let mut scale_fn = LinearScaling::new(lb, &hitsper);
         let nis = NANOS_IN_SECOND;
         let mut y_values: std::collections::VecDeque<_> = (0..60)
             .step_by(10)
@@ -452,12 +403,12 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        let mut scale_fn = LinearScaling::new(lb, &hitsper);
         lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         lb.append(1.0, 1.0, Duration::from_secs(60));
-        let mut scale_fn2 = lb.build::<()>(&hitsper, None).scale_fn;
+        let mut scale_fn2 = LinearScaling::new(lb, &hitsper);
         scale_fn2.transition_from(
             &mut scale_fn,
             Duration::from_secs(10),
@@ -542,9 +493,9 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = lb.build::<()>(&hitsper, None).scale_fn;
+        let mut scale_fn = LinearScaling::new(lb, &hitsper);
         lb = LinearBuilder::new(1.2, 1.8, Duration::from_secs(60));
-        let mut scale_fn2 = lb.build::<()>(&hitsper, None).scale_fn;
+        let mut scale_fn2 = LinearScaling::new(lb, &hitsper);
         scale_fn2.transition_from(
             &mut scale_fn,
             Duration::from_secs(20),

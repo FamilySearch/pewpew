@@ -25,6 +25,7 @@ use futures::{
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use itertools::Itertools;
+use mod_interval::ModInterval;
 use native_tls::TlsConnector;
 use serde_json as json;
 use tokio::io::{read_to_end, write_all, AsyncRead, AsyncWrite};
@@ -420,9 +421,9 @@ fn create_load_watcher(
     channel::Receiver<Duration>,
 ) {
     let (senders, receivers): (Vec<_>, Vec<_>) = (0..config.endpoints.len())
-        .map(|_| channel::channel(channel::Limit::auto()))
+        .map(|_| channel::channel(config::Limit::auto()))
         .unzip();
-    let (duration_sender, duration_receiver) = channel::channel(channel::Limit::auto());
+    let (duration_sender, duration_receiver) = channel::channel(config::Limit::auto());
     let mut interval = tokio::timer::Interval::new_interval(Duration::from_millis(1000));
     let mut file_seeked = false;
     let mut interval_triggered = false;
@@ -730,6 +731,7 @@ where
         })
         .shared();
 
+    let duration = config.get_duration();
     let config_config = config.config;
 
     // build and register the providers
@@ -748,8 +750,6 @@ where
         stdout.clone(),
         stderr,
     );
-
-    let mut duration = Duration::new(0, 0);
 
     // create the endpoints
     let (endpoints_iter, mut duration_updater) = if let Some((receivers, du)) = load_pattern_updates
@@ -774,8 +774,11 @@ where
             if let (Some(peak_load), Some(load_pattern)) =
                 (endpoint.peak_load.as_ref(), endpoint.load_pattern.take())
             {
-                duration = cmp::max(duration, load_pattern.duration());
-                mod_interval = Some(Box::new(load_pattern.build(peak_load, receiver)));
+                mod_interval = Some(Box::new(ModInterval::new(
+                    load_pattern,
+                    peak_load,
+                    receiver,
+                )));
             }
 
             request::Builder::new(endpoint, mod_interval)
@@ -910,7 +913,7 @@ fn get_providers_from_config(
             config::Provider::File(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let channel::Limit::Auto(limit) = &template.buffer {
+                    if let config::Limit::Auto(limit) = &template.buffer {
                         limit.store(auto_size, Ordering::Relaxed);
                     }
                 }
@@ -921,7 +924,7 @@ fn get_providers_from_config(
             config::Provider::Response(template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let channel::Limit::Auto(limit) = &template.buffer {
+                    if let config::Limit::Auto(limit) = &template.buffer {
                         limit.store(auto_size, Ordering::Relaxed);
                     }
                 }

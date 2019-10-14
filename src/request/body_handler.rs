@@ -216,14 +216,14 @@ impl BodyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use channel::{Limit, Receiver};
+    use channel::Receiver;
     use futures::{lazy, stream::Stream, sync::mpsc as futures_channel, Async};
     use maplit::{btreemap, btreeset};
     use tokio::runtime::current_thread;
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use config::Select;
+    use config::{Limit, Select};
 
     fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
         let static_vars = BTreeMap::new();

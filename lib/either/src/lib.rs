@@ -1,6 +1,7 @@
 use std::{cmp::PartialEq, fmt, io};
 
 use futures::{Async, Future, Poll, Stream};
+#[cfg(feature = "async-write")]
 use tokio::io::AsyncWrite;
 
 pub enum Either<A, B> {
@@ -264,6 +265,7 @@ where
     }
 }
 
+#[cfg(feature = "async-write")]
 impl<A, B, C> AsyncWrite for Either3<A, B, C>
 where
     A: AsyncWrite,

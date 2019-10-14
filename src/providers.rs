@@ -9,7 +9,6 @@ use crate::util::json_value_to_string;
 use crate::TestEndReason;
 
 use bytes::{Buf, Bytes, IntoBuf};
-use channel::Limit;
 use ether::{Either, Either3};
 use futures::{
     stream, sync::mpsc::Sender as FCSender, Async, AsyncSink, Future, IntoFuture, Sink, Stream,
@@ -90,7 +89,7 @@ pub fn response(template: config::ResponseProvider) -> Provider {
 
 pub fn literals(list: config::StaticList) -> Provider {
     let rs = stream::iter_ok::<_, channel::ChannelClosed>(list.into_iter());
-    let (tx, rx) = channel::channel(Limit::auto());
+    let (tx, rx) = channel::channel(config::Limit::auto());
     let tx2 = tx.clone();
     let prime_tx = rs
         .forward(tx2)
@@ -101,7 +100,7 @@ pub fn literals(list: config::StaticList) -> Provider {
 }
 
 pub fn range(range: config::RangeProvider) -> Provider {
-    let (tx, rx) = channel::channel(Limit::auto());
+    let (tx, rx) = channel::channel(config::Limit::auto());
     let prime_tx = stream::iter_ok::<_, channel::ChannelClosed>(range.0.map(json::Value::from))
         .forward(tx.clone())
         // Error propagate here when sender channel closes at test conclusion
@@ -188,7 +187,7 @@ where
     F: Future<Item = W, Error = TestError> + Send + Sync + 'static,
     W: tokio::io::AsyncWrite + Send + Sync + 'static,
 {
-    let (tx, rx) = channel::channel::<json::Value>(Limit::Integer(5));
+    let (tx, rx) = channel::channel::<json::Value>(config::Limit::Integer(5));
     let pretty = template.pretty;
     let kill = template.kill;
     let limit = if kill && template.limit.is_none() {
@@ -390,7 +389,7 @@ mod tests {
             let jsons = vec![json!(1), json!(2), json!(3)];
             let rp = config::ResponseProvider {
                 auto_return: None,
-                buffer: Limit::auto(),
+                buffer: config::Limit::auto(),
             };
             let p = response(rp);
             let responses = stream::iter_ok(jsons.clone().into_iter().cycle());

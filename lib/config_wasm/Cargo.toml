@@ -1,0 +1,15 @@
+[package]
+name = "config-wasm"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+config = { path = "../config" }
+wasm-bindgen = "0.2"
+
+[profile.release]
+lto = true
+opt-level = 's'

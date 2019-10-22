@@ -46,7 +46,6 @@ pub fn file(
 ) -> Result<Provider, TestError> {
     let file = std::mem::replace(&mut template.path, Default::default());
     let file2 = file.clone();
-    let test_killer2 = test_killer.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(
             CsvReader::new(&template, &file)
@@ -74,7 +73,7 @@ pub fn file(
         .forward(tx2)
         .map(|_| ())
         .or_else(move |e| match e.inner_cast() {
-            Some(e) => Either::A(test_killer2.send(Err(*e)).then(|_| Ok(()))),
+            Some(e) => Either::A(test_killer.send(Err(*e)).then(|_| Ok(()))),
             None => Either::B(Ok(()).into_future()),
         });
 
@@ -374,7 +373,7 @@ mod tests {
             tokio::spawn(f);
 
             let p = literals(jsons.clone().into());
-            let expects = stream::iter_ok(jsons.clone().into_iter().cycle());
+            let expects = stream::iter_ok(jsons.into_iter().cycle());
 
             p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);

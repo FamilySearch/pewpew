@@ -690,7 +690,7 @@ where
         client: Arc::new(client),
         loggers,
         providers,
-        stats_tx: stats_tx.clone(),
+        stats_tx,
     };
 
     let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;

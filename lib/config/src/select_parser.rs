@@ -2008,8 +2008,8 @@ mod tests {
                 .into_iter()
                 .map(move |(k, v)| {
                     let p = match v {
-                        json::Value::Array(v) => literals(v.into()),
-                        _ => literals(vec![v].into()),
+                        json::Value::Array(v) => literals(v),
+                        _ => literals(vec![v]),
                     };
                     (k.to_string(), p)
                 })

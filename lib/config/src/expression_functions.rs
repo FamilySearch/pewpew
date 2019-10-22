@@ -728,7 +728,7 @@ impl JsonPath {
                     (result, outgoing)
                 })
             })
-            .ok_or_else(move || Error::UnknownProvider(provider_name.clone()))
+            .ok_or_else(move || Error::UnknownProvider(provider_name))
             .into_future()
             .flatten_stream()
     }

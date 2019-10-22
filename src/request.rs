@@ -552,7 +552,7 @@ fn multipart_body_as_hyper_body<'a>(
             },
         );
 
-        let closing_boundary = hyper::Chunk::from(closing_boundary.clone());
+        let closing_boundary = hyper::Chunk::from(closing_boundary);
 
         let stream = stream::iter_ok::<_, hyper::Error>(bodies)
             .flatten()

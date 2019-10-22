@@ -6,6 +6,9 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 Changes:
 - Add `stats-file` command-line flag to specify the name of the stats file.
 
+Bugfix:
+- Fix bug where a `logs` expression would get `null` for `response` and `request` fields unless they were also references within a `provides`.
+
 ### v0.5.3
 Changes:
 - Add a `days` unit to durations.

@@ -1192,7 +1192,7 @@ impl Endpoint {
         value: EndpointProvidesPreProcessed,
         static_vars: &BTreeMap<String, json::Value>,
     ) -> Result<(), Error> {
-        let value = Select::new(value, static_vars, &mut self.required_providers, false)?;
+        let value = Select::new(value, static_vars, &mut self.providers_to_stream, true)?;
         self.append_processed_logger(key, value, None);
         Ok(())
     }

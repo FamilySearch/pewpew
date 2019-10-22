@@ -3,6 +3,7 @@ use std::{
     fs::create_dir_all,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
+    time::UNIX_EPOCH,
 };
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
@@ -48,6 +49,13 @@ fn main() {
                     .possible_value("human")
                     .possible_value("json")
                     .default_value("human")
+            )
+            .arg(
+                Arg::with_name("stats-file")
+                    .short("o")
+                    .long("stats-file")
+                    .help("Specify the filename for the stats file")
+                    .value_name("STATS_FILE")
             )
             .arg(
                 Arg::with_name("results-directory")
@@ -143,22 +151,44 @@ fn main() {
             .value_of("CONFIG")
             .expect("should have CONFIG param")
             .into();
-        let results_dir = matches.value_of("results-directory");
+        let results_dir = matches.value_of_os("results-directory").map(|d| {
+            create_dir_all(d).unwrap();
+            PathBuf::from(d)
+        });
         let output_format = TryInto::try_into(
             matches
                 .value_of("output-format")
                 .expect("should have output_format cli arg"),
         )
         .expect("output_format cli arg unrecognized");
-        let results_dir = results_dir.map(|d| {
-            create_dir_all(d).unwrap();
-            d.into()
-        });
         let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();
 
         let _ = ctrlc::set_handler(move || {
             let _ = ctrl_c_tx.unbounded_send(());
         });
+        let stats_file = matches
+            .value_of_os("stats-file")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                let start_sec = UNIX_EPOCH
+                    .elapsed()
+                    .map(|d| d.as_secs())
+                    .unwrap_or_default();
+                let test_name = config_file.file_stem().and_then(std::ffi::OsStr::to_str);
+                let file = if let Some(test_name) = test_name {
+                    format!("stats-{}-{}.json", test_name, start_sec)
+                } else {
+                    format!("stats-{}.json", start_sec)
+                };
+                PathBuf::from(file)
+            });
+        let stats_file = if let Some(results_dir) = &results_dir {
+            let mut file = results_dir.clone();
+            file.push(stats_file);
+            file
+        } else {
+            stats_file
+        };
         let stats_file_format = StatsFileFormat::Json;
         let watch_config_file = matches.is_present("watch");
         let run_config = RunConfig {
@@ -166,6 +196,7 @@ fn main() {
             ctrlc_channel,
             output_format,
             results_dir,
+            stats_file,
             stats_file_format,
             watch_config_file,
         };

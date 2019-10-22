@@ -20,6 +20,7 @@ fn int1() {
         ctrlc_channel,
         output_format: pewpew::RunOutputFormat::Human,
         results_dir: Some("./".into()),
+        stats_file: "integration.json".into(),
         stats_file_format: pewpew::StatsFileFormat::Json,
         watch_config_file: false,
     };

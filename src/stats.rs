@@ -639,17 +639,7 @@ where
         .config_file
         .file_stem()
         .and_then(std::ffi::OsStr::to_str);
-    let file_name = if let Some(test_name) = test_name {
-        format!("stats-{}-{}.json", test_name, start_sec)
-    } else {
-        format!("stats-{}.json", start_sec)
-    };
-    let mut file_path = if let Some(results_dir) = &run_config.results_dir {
-        results_dir.clone()
-    } else {
-        PathBuf::new()
-    };
-    file_path.push(file_name);
+    let file_path = run_config.stats_file.clone();
     let stats = Arc::new(Mutex::new(RollingAggregateStats::new(
         bucket_size,
         file_path,

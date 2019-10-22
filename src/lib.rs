@@ -208,6 +208,7 @@ pub struct RunConfig {
     pub ctrlc_channel: futures_channel::UnboundedReceiver<()>,
     pub output_format: RunOutputFormat,
     pub results_dir: Option<PathBuf>,
+    pub stats_file: PathBuf,
     pub stats_file_format: StatsFileFormat,
     pub watch_config_file: bool,
 }

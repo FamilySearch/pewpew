@@ -2,6 +2,10 @@
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://fs-eng.github.io/pewpew) for details on its use.
 
 ## Changelog
+### v0.5.4
+Changes:
+- Add `stats-file` command-line flag to specify the name of the stats file.
+
 ### v0.5.3
 Changes:
 - Add a `days` unit to durations.

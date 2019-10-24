@@ -1,0 +1,31 @@
+{
+  "name": "pewpew-results-viewer",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "@babel/core": "^7.6.4",
+    "@babel/preset-env": "7.6.3",
+    "@types/chart.js": "^2.8.9",
+    "@types/node": "^12.11.7",
+    "chart.js": "^2.8.0",
+    "hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
+    "parcel-bundler": "^1.12.4",
+    "parcel-plugin-svelte": "^4.0.4",
+    "svelte": "^3.12.1",
+    "tslint": "^5.20.0",
+    "typescript": "~3.6.4"
+  },
+  "scripts": {
+    "build": "parcel build --detailed-report --public-url .  -d ../src/results-viewer/ src/index.html",
+    "dev": "parcel serve -d dev src/index.html",
+    "lint": "tslint --project ./"
+  },
+  "babel": {
+    "presets": [
+      "@babel/preset-env"
+    ]
+  },
+  "author": "",
+  "browserslist": "last 1 Chrome versions, last 1 Firefox versions"
+}

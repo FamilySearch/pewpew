@@ -1,9 +1,9 @@
 
 /target
 **/*.rs.bk
-*.csv
-*.yaml
-*.txt
-*.dump
-*.log
-*.json
+/*.csv
+/*.yaml
+/*.txt
+/*.dump
+/*.log
+/*.json

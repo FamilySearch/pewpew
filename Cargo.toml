@@ -64,6 +64,7 @@ members = [
     "lib/config",
     "lib/config_wasm",
     "lib/either",
+    "lib/hdr-histogram-wasm",
     "lib/for_each_parallel",
     "lib/mod_interval",
     "lib/select_any",

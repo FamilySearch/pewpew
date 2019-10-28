@@ -8,7 +8,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 config = { path = "../config" }
-wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde = "1"
+serde-wasm-bindgen = "0.1"
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"]  }
 
 [profile.release]
 lto = true

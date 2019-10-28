@@ -587,8 +587,8 @@ struct LoadTestPreProcessed {
     providers: BTreeMap<String, Provider<FileProviderPreProcessed>>,
     #[serde(default)]
     loggers: BTreeMap<String, LoggerPreProcessed>,
-    #[serde(default, deserialize_with = "deserialize_vars")]
-    vars: BTreeMap<String, json::Value>,
+    #[serde(default)]
+    vars: BTreeMap<String, PreVar>,
 }
 
 #[derive(Default, Deserialize)]
@@ -598,6 +598,47 @@ impl PreTemplate {
     fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<String, Error> {
         Template::new(&self.0, static_vars, &mut Default::default(), false)
             .and_then(|t| t.evaluate(Cow::Owned(json::Value::Null), None))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PreVar(json::Value);
+
+impl PreVar {
+    fn evaluate(mut self, env_vars: &BTreeMap<String, json::Value>) -> Result<json::Value, Error> {
+        fn json_transform(
+            v: &mut json::Value,
+            env_vars: &BTreeMap<String, json::Value>,
+        ) -> Result<(), Error> {
+            match v {
+                json::Value::String(s) => {
+                    let t = Template::new(s, env_vars, &mut Default::default(), false)?;
+                    let s = match t.evaluate(Cow::Owned(json::Value::Null), None) {
+                        Ok(s) => s,
+                        Err(Error::UnknownProvider(s)) => {
+                            return Err(Error::MissingEnvironmentVariable(s))
+                        }
+                        Err(e) => return Err(e),
+                    };
+                    *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
+                }
+                json::Value::Array(a) => {
+                    for v in a.iter_mut() {
+                        json_transform(v, env_vars)?;
+                    }
+                }
+                json::Value::Object(o) => {
+                    for v in o.values_mut() {
+                        json_transform(v, env_vars)?;
+                    }
+                }
+                _ => (),
+            }
+            Ok(())
+        }
+
+        json_transform(&mut self.0, env_vars)?;
+        Ok(self.0)
     }
 }
 
@@ -831,53 +872,6 @@ where
             ));
         }
     }
-    Ok(map)
-}
-
-fn deserialize_vars<'de, D>(deserializer: D) -> Result<BTreeMap<String, json::Value>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    fn json_transform(
-        v: &mut json::Value,
-        env_vars: &BTreeMap<String, json::Value>,
-    ) -> Result<(), Error> {
-        match v {
-            json::Value::String(s) => {
-                let t = Template::new(s, env_vars, &mut Default::default(), false)?;
-                let s = t.evaluate(Cow::Owned(json::Value::Null), None)?;
-                *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
-            }
-            json::Value::Array(a) => {
-                for v in a.iter_mut() {
-                    json_transform(v, env_vars)?;
-                }
-            }
-            json::Value::Object(o) => {
-                for v in o.values_mut() {
-                    json_transform(v, env_vars)?;
-                }
-            }
-            _ => (),
-        }
-        Ok(())
-    }
-
-    let mut map = BTreeMap::deserialize(deserializer)?;
-
-    let env_vars: BTreeMap<String, json::Value> = std::env::vars_os()
-        .map(|(k, v)| {
-            (
-                k.to_string_lossy().to_owned().to_string(),
-                v.to_string_lossy().into(),
-            )
-        })
-        .collect();
-
-    for (_, v) in map.iter_mut() {
-        json_transform(v, &env_vars).map_err(DeError::custom)?;
-    }
-
     Ok(map)
 }
 
@@ -1212,10 +1206,22 @@ impl Endpoint {
 }
 
 impl LoadTest {
-    pub fn from_config(bytes: &[u8], config_path: &PathBuf) -> Result<Self, Error> {
+    pub fn from_config(
+        bytes: &[u8],
+        config_path: &PathBuf,
+        env_vars: &BTreeMap<String, String>,
+    ) -> Result<Self, Error> {
+        let env_vars = env_vars
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_str().into()))
+            .collect();
         let c: LoadTestPreProcessed =
             serde_yaml::from_slice(bytes).map_err(|e| Error::InvalidYaml(e.into()))?;
-        let vars = c.vars;
+        let vars: BTreeMap<String, json::Value> = c
+            .vars
+            .into_iter()
+            .map(|(k, v)| Ok::<_, Error>((k, v.evaluate(&env_vars)?)))
+            .collect::<Result<_, _>>()?;
         let loggers = c.loggers;
         let providers = c.providers;
         let global_load_pattern = c.load_pattern.map(|l| l.evaluate(&vars)).transpose()?;

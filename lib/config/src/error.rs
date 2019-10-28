@@ -14,6 +14,7 @@ pub enum Error {
     InvalidPeakLoad(String),
     InvalidPercent(String),
     InvalidYaml(Arc<serde_yaml::Error>),
+    MissingEnvironmentVariable(String),
     MissingForEach,
     MissingPeakLoad,
     MissingLoadPattern,
@@ -38,6 +39,7 @@ impl fmt::Display for Error {
             InvalidPeakLoad(p) => write!(f, "invalid peak_load `{}`", p),
             InvalidPercent(p) => write!(f, "invalid percent `{}`", p),
             InvalidYaml(e) => write!(f, "yaml syntax error:\n\t{}", e),
+            MissingEnvironmentVariable(e) => write!(f, "missing environment variable `{}`", e),
             MissingForEach => write!(f, "missing `for_each` expression"),
             MissingLoadPattern => write!(f, "endpoint is missing a load_pattern"),
             MissingPeakLoad => write!(

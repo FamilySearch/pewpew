@@ -1,8 +1,5 @@
-use hdrhistogram::{
-    serialization::Deserializer,
-    Histogram
-};
-use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
+use hdrhistogram::{serialization::Deserializer, Histogram};
+use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
 #[wasm_bindgen]
 pub struct HDRHistogram(Histogram<u64>);
@@ -14,7 +11,8 @@ impl HDRHistogram {
         let bytes = base64::decode(&base64)
             .map_err(|_| JsValue::from_str("could not parse as a bas64 string"))?;
         let mut deserializer = Deserializer::new();
-        let mut histogram = deserializer.deserialize(&mut &*bytes)
+        let mut histogram = deserializer
+            .deserialize(&mut &*bytes)
             .map_err(|_| JsValue::from_str("could not parse bas64 string into an HDRHistogram"))?;
         histogram.auto(true);
         Ok(HDRHistogram(histogram))
@@ -42,7 +40,8 @@ impl HDRHistogram {
 
     #[wasm_bindgen]
     pub fn add(&mut self, other: &HDRHistogram) -> Result<(), JsValue> {
-        self.0.add(&other.0)
+        self.0
+            .add(&other.0)
             .map_err(|_| JsValue::from_str("could not combine HDRHistograms"))
     }
 

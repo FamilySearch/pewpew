@@ -1,4 +1,5 @@
 use config::{LoadTest, Provider};
+use js_sys::Map;
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
 #[wasm_bindgen]
@@ -7,8 +8,9 @@ pub struct Config(LoadTest);
 #[wasm_bindgen]
 impl Config {
     #[wasm_bindgen(constructor)]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Config, JsValue> {
-        let load_test = LoadTest::from_config(bytes, &Default::default())
+    pub fn from_bytes(bytes: &[u8], env_vars: Map) -> Result<Config, JsValue> {
+        let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
+        let load_test = LoadTest::from_config(bytes, &Default::default(), &env_vars)
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         Ok(Config(load_test))
     }

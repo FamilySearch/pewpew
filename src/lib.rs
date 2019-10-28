@@ -298,7 +298,15 @@ where
             }
         })
         .and_then(move |(file, config_bytes)| {
-            let config = match config::LoadTest::from_config(&config_bytes, exec_config.get_config_file()) {
+            let env_vars = std::env::vars_os()
+                .map(|(k, v)| {
+                    (
+                        k.to_string_lossy().into(),
+                        v.to_string_lossy().into(),
+                    )
+                })
+                .collect();
+            let config = match config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars) {
                 Ok(c) => c,
                 Err(e) => return Either3::B(Err(e.into()).into_future()),
             };
@@ -314,7 +322,7 @@ where
                 .map(Either::A),
                 ExecConfig::Run(r) => {
                     let load_pattern_updates = if r.watch_config_file {
-                        let lpu = create_load_watcher(&config, file);
+                        let lpu = create_load_watcher(&config, file, env_vars);
                         Some(lpu)
                     } else {
                         None
@@ -417,6 +425,7 @@ where
 fn create_load_watcher(
     config: &config::LoadTest,
     mut file: tokio::fs::File,
+    env_vars: BTreeMap<String, String>,
 ) -> (
     Vec<mod_interval::LoadUpdateChannel>,
     channel::Receiver<Duration>,
@@ -489,11 +498,14 @@ fn create_load_watcher(
                         }
                     }
                     last_modified = Some(modified_time);
-                    let config =
-                        match config::LoadTest::from_config(&file_bytes[..], &Default::default()) {
-                            Ok(c) => c,
-                            Err(_) => continue,
-                        };
+                    let config = match config::LoadTest::from_config(
+                        &file_bytes[..],
+                        &Default::default(),
+                        &env_vars,
+                    ) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
                     let transition_time = config.config.general.watch_transition_time;
                     let mut duration = Duration::new(0, 0);
                     for (endpoint, sender) in config.endpoints.into_iter().zip(senders.iter()) {

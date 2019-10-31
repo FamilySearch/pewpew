@@ -8,6 +8,7 @@ Changes:
 
 Bugfix:
 - Fix bug where a `logs` expression would get `null` for `response` and `request` fields unless they were also references within a `provides`.
+- Fix bug where tests would crash if a response header was a not UTF8 encoded.
 
 ### v0.5.3
 Changes:

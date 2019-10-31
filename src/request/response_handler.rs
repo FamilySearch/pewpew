@@ -155,11 +155,7 @@ fn handle_response_requirements(
         for (k, v) in response.headers() {
             headers_json.insert(
                 k.as_str().to_string(),
-                json::Value::String(
-                    v.to_str()
-                        .expect("could not parse HTTP response header as utf8 string")
-                        .to_string(),
-                ),
+                json::Value::String(String::from_utf8_lossy(v.as_bytes()).into_owned()),
             );
         }
         rp.insert("headers".into(), json::Value::Object(headers_json));

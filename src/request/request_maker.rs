@@ -55,14 +55,28 @@ impl RequestMaker {
     ) -> impl Future<Item = (), Error = TestError> {
         let mut template_values = TemplateValues::new();
         let mut auto_returns = Vec::new();
+        let mut target_instant = None;
         for tv in values {
             match tv {
-                StreamItem::Declare(name, value, returns) => {
+                StreamItem::Instant(i) => target_instant = Some(i),
+                StreamItem::Declare(name, value, returns, instant) => {
+                    match target_instant {
+                        Some(target_instant) if instant > target_instant => {
+                            
+                        }
+                        _ => ()
+                    }
                     template_values.insert(name, value);
                     auto_returns.extend(returns.into_iter().map(AutoReturn::into_future));
                 }
                 StreamItem::None => (),
-                StreamItem::TemplateValue(name, value, auto_return) => {
+                StreamItem::TemplateValue(name, value, auto_return, instant) => {
+                    match target_instant {
+                        Some(target_instant) if instant > target_instant => {
+                            
+                        }
+                        _ => ()
+                    }
                     template_values.insert(name, value);
                     if let (Some(ar), false) = (auto_return, self.no_auto_returns) {
                         auto_returns.push(ar.into_future());

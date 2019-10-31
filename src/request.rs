@@ -329,7 +329,7 @@ impl Builder {
                             AutoReturn::new(send_option, tx, vec![v.clone()])
                         })
                     };
-                    StreamItem::TemplateValue(name.clone(), v, ar)
+                    StreamItem::TemplateValue(name.clone(), v, ar, Instant::now())
                 })
                 .map_err(|_| unreachable!("Unexpected error from receiver")),
             );
@@ -338,7 +338,7 @@ impl Builder {
         for (name, vce) in self.endpoint.declare {
             let stream = vce
                 .into_stream(&ctx.providers, false)
-                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns))
+                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns, Instant::now()))
                 .map_err(Into::into);
             streams.push((false, Box::new(stream)));
         }
@@ -366,10 +366,11 @@ impl Builder {
     }
 }
 
-enum StreamItem {
-    Declare(String, json::Value, Vec<AutoReturn>),
+pub enum StreamItem {
+    Instant(Instant),
+    Declare(String, json::Value, Vec<AutoReturn>, Instant),
     None,
-    TemplateValue(String, json::Value, Option<AutoReturn>),
+    TemplateValue(String, json::Value, Option<AutoReturn>, Instant),
 }
 
 fn multipart_body_as_hyper_body<'a>(
@@ -662,9 +663,9 @@ impl Endpoint {
 
     pub fn add_start_stream<S>(&mut self, stream: S)
     where
-        S: Stream<Item = (), Error = TestError> + Send + 'static,
+        S: Stream<Item = StreamItem, Error = TestError> + Send + 'static,
     {
-        let stream = Box::new(stream.map(|_| StreamItem::None));
+        let stream = Box::new(stream);
         match self.stream_collection.get_mut(0) {
             Some((true, s)) => {
                 *s = stream;

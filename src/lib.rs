@@ -133,7 +133,7 @@ impl Endpoints {
                             Ok(Async::Ready(None))
                         } else {
                             ran = true;
-                            Ok(Async::Ready(Some(())))
+                            Ok(Async::Ready(Some(request::StreamItem::None)))
                         }
                     }));
                 }

@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::{
     error::Error as StdError,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -232,6 +232,7 @@ pub struct ChannelStats<'a> {
 pub struct Receiver<T> {
     inner: Arc<SegQueue<T>>,
     limit: Limit,
+    has_maxed: Arc<AtomicBool>,
     parked_receivers: Arc<ParkedTasks>,
     parked_senders: Arc<ParkedTasks>,
     receiver_count: Arc<AtomicUsize>,
@@ -244,6 +245,7 @@ impl<T> Clone for Receiver<T> {
         Receiver {
             inner: self.inner.clone(),
             limit: self.limit.clone(),
+            has_maxed: self.has_maxed.clone(),
             parked_receivers: self.parked_receivers.clone(),
             parked_senders: self.parked_senders.clone(),
             receiver_count: self.receiver_count.clone(),
@@ -268,12 +270,18 @@ impl<T> Stream for Receiver<T> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let msg = self.inner.pop().ok();
         if msg.is_some() {
-            if self.inner.len() == 1 {
-                // if there's an "auto" limit and we've emptied the buffer,
-                // increment the limit
+            let inner_len = self.inner.len();
+            if inner_len == 0 {
+                // if there's an "auto" limit and we've emptied the buffer
+                // after it was previously full increment the limit
                 if let Limit::Auto(a) = &self.limit {
-                    a.fetch_add(1, Ordering::Release);
+                    if self.has_maxed.compare_and_swap(true, false, Ordering::Release) {
+                        a.fetch_add(1, Ordering::Release);
+                    }
                 }
+            } else if self.limit.get() == inner_len + 1 {
+                // if the buffer was full, raise the has_maxed flag
+                self.has_maxed.store(true, Ordering::Release);
             }
             self.parked_senders.wake_all();
             Ok(Async::Ready(msg))
@@ -300,6 +308,7 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
     let receiver = Receiver {
         inner: inner.clone(),
         limit: limit.clone(),
+        has_maxed: Arc::new(AtomicBool::new(false)),
         parked_receivers: parked_receivers.clone(),
         parked_senders: parked_senders.clone(),
         receiver_count: receiver_count.clone(),
@@ -460,6 +469,9 @@ mod tests {
 
             let new_limit = start_limit + 1;
             assert_eq!(limit.get(), new_limit, "limit has increased");
+
+            tx.force_send(true);
+            let _ = rx.poll();
 
             let left = rx.poll();
             let right = Ok(Async::NotReady);

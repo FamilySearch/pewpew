@@ -14,10 +14,11 @@ use std::{
     time::{Instant, SystemTime},
 };
 
-use super::{BlockSender, Outgoing, StatsTx, TemplateValues};
+use super::{BlockSender, Outgoing, ProviderDelays, StatsTx, TemplateValues};
 
 pub(super) struct BodyHandler {
     pub(super) now: Instant,
+    pub(super) provider_delays: ProviderDelays,
     pub(super) template_values: TemplateValues,
     pub(super) included_outgoing_indexes: BTreeSet<usize>,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
@@ -35,7 +36,7 @@ impl BodyHandler {
     where
         F: Future<Item = (), Error = TestError>,
     {
-        let stats_tx = self.stats_tx.clone();
+        let stats_tx = self.stats_tx;
         let outgoing = self.outgoing.clone();
         let has_logger = outgoing.iter().any(|o| o.logger);
         let rtt = self.now.elapsed().as_micros() as u64;
@@ -66,6 +67,7 @@ impl BodyHandler {
             })
             .collect();
         let tags = Arc::new(tags);
+        self.provider_delays.log(&tags, &stats_tx);
         let send_response_stat = move |kind, rtt| {
             let mut futures = Vec::new();
             if let stats::StatKind::RecoverableError(e) = &kind {
@@ -91,7 +93,7 @@ impl BodyHandler {
                     }
                 }
             }
-            let _ = stats_tx.clone().unbounded_send(
+            let _ = stats_tx.unbounded_send(
                 stats::ResponseStat {
                     kind,
                     rtt,
@@ -285,6 +287,7 @@ mod tests {
 
             let bh = BodyHandler {
                 now,
+                provider_delays: ProviderDelays::new(),
                 template_values,
                 included_outgoing_indexes,
                 outgoing,
@@ -421,6 +424,7 @@ mod tests {
 
             let bh = BodyHandler {
                 now,
+                provider_delays: ProviderDelays::new(),
                 template_values,
                 included_outgoing_indexes,
                 outgoing,

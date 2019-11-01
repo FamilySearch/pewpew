@@ -5,6 +5,7 @@ use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemT
 
 #[derive(Clone, Debug)]
 pub enum RecoverableError {
+    ProviderDelay(String),
     BodyErr(Arc<dyn StdError + Send + Sync>),
     ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
     IndexingJson(String, json::Value),
@@ -20,6 +21,7 @@ impl RecoverableError {
             ConnectionErr(..) => 2,
             IndexingJson(..) => 3,
             Timeout(_) => 4,
+            ProviderDelay(_) => 5,
         }
     }
 }
@@ -30,6 +32,7 @@ impl fmt::Display for RecoverableError {
             BodyErr(e) => write!(f, "body error: {}", e),
             ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
             IndexingJson(p, _) => write!(f, "indexing into json. Path was `{}`", p),
+            ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{}`", p),
             Timeout(..) => write!(f, "request timed out"),
         }
     }

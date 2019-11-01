@@ -5,6 +5,8 @@ mod response_handler;
 use self::body_handler::BodyHandler;
 use self::request_maker::RequestMaker;
 
+use request_maker::ProviderDelays;
+
 use ether::{Either, Either3};
 use for_each_parallel::ForEachParallel;
 use futures::{
@@ -289,7 +291,7 @@ impl Builder {
             .collect();
         let mut streams: StreamCollection = Vec::new();
         if let Some(start_stream) = self.start_stream {
-            streams.push((true, Box::new(start_stream.map(|_| StreamItem::None))));
+            streams.push((true, Box::new(start_stream.map(StreamItem::Instant))));
         } else if let Some(set) = provides_set {
             let stream = stream::poll_fn(move || {
                 let done = set.iter().all(channel::Sender::no_receivers);
@@ -338,7 +340,9 @@ impl Builder {
         for (name, vce) in self.endpoint.declare {
             let stream = vce
                 .into_stream(&ctx.providers, false)
-                .map(move |(v, returns)| StreamItem::Declare(name.clone(), v, returns, Instant::now()))
+                .map(move |(v, returns)| {
+                    StreamItem::Declare(name.clone(), v, returns, Instant::now())
+                })
                 .map_err(Into::into);
             streams.push((false, Box::new(stream)));
         }

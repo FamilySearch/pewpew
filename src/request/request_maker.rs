@@ -48,6 +48,35 @@ pub(super) struct RequestMaker {
     pub(super) timeout: Duration,
 }
 
+pub(super) struct ProviderDelays {
+    inner: Vec<String>,
+}
+
+impl ProviderDelays {
+    pub(super) fn new() -> Self {
+        ProviderDelays { inner: Vec::new() }
+    }
+
+    fn push(&mut self, name: String) {
+        self.inner.push(name)
+    }
+
+    pub(super) fn log(self, tags: &Arc<BTreeMap<String, String>>, stats_tx: &StatsTx) {
+        for provider in self.inner {
+            let kind = stats::StatKind::RecoverableError(RecoverableError::ProviderDelay(provider));
+            let _ = stats_tx.unbounded_send(
+                stats::ResponseStat {
+                    kind,
+                    rtt: None,
+                    time: SystemTime::now(),
+                    tags: tags.clone(),
+                }
+                .into(),
+            );
+        }
+    }
+}
+
 impl RequestMaker {
     pub(super) fn send_request(
         &self,
@@ -56,15 +85,16 @@ impl RequestMaker {
         let mut template_values = TemplateValues::new();
         let mut auto_returns = Vec::new();
         let mut target_instant = None;
+        let mut provider_delays = ProviderDelays::new();
         for tv in values {
             match tv {
                 StreamItem::Instant(i) => target_instant = Some(i),
                 StreamItem::Declare(name, value, returns, instant) => {
                     match target_instant {
                         Some(target_instant) if instant > target_instant => {
-                            
+                            provider_delays.push(name.clone());
                         }
-                        _ => ()
+                        _ => (),
                     }
                     template_values.insert(name, value);
                     auto_returns.extend(returns.into_iter().map(AutoReturn::into_future));
@@ -73,9 +103,9 @@ impl RequestMaker {
                 StreamItem::TemplateValue(name, value, auto_return, instant) => {
                     match target_instant {
                         Some(target_instant) if instant > target_instant => {
-                            
+                            provider_delays.push(name.clone());
                         }
-                        _ => ()
+                        _ => (),
                     }
                     template_values.insert(name, value);
                     if let (Some(ar), false) = (auto_return, self.no_auto_returns) {
@@ -230,7 +260,6 @@ impl RequestMaker {
 
             let response_future = client.request(request);
             let now = Instant::now();
-            let stats_tx2 = stats_tx.clone();
             let outgoing2 = outgoing.clone();
             let auto_returns2 = auto_returns.clone();
 
@@ -260,6 +289,7 @@ impl RequestMaker {
                 .then(move |result| match result {
                     Ok(response) => {
                         let rh = ResponseHandler {
+                            provider_delays,
                             template_values,
                             precheck_rr_providers,
                             rr_providers,
@@ -313,7 +343,7 @@ impl RequestMaker {
                                     cb(false);
                                 }
                             }
-                            let _ = stats_tx2
+                            let _ = stats_tx
                                 .unbounded_send(
                                     stats::ResponseStat {
                                         kind: stats::StatKind::RecoverableError(r),

@@ -4,6 +4,7 @@ use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS};
 use futures::future::IntoFuture;
 
 pub(super) struct ResponseHandler {
+    pub(super) provider_delays: ProviderDelays,
     pub(super) template_values: TemplateValues,
     pub(super) precheck_rr_providers: u16,
     pub(super) rr_providers: u16,
@@ -116,10 +117,12 @@ impl ResponseHandler {
                 )
             }
         };
+        let provider_delays = self.provider_delays;
         let now = self.now;
         let outgoing = self.outgoing;
         let stats_tx = self.stats_tx;
         let bh = BodyHandler {
+            provider_delays,
             now,
             template_values,
             included_outgoing_indexes,
@@ -184,6 +187,7 @@ mod tests {
             let (stats_tx, stats_rx) = futures_channel::unbounded();
             let tags = Arc::new(BTreeMap::new());
             let rh = ResponseHandler {
+                provider_delays: ProviderDelays::new(),
                 template_values,
                 precheck_rr_providers,
                 rr_providers,

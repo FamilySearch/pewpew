@@ -395,7 +395,7 @@ impl AggregateStats {
 
 #[derive(Debug)]
 pub enum StatsMessage {
-    // every time a response is received
+    // every time a response is received or an endpoint error occurs
     ResponseStat(ResponseStat),
     // sent at the beginning of the test
     Start(Duration),

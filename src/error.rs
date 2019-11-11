@@ -72,7 +72,7 @@ impl fmt::Display for TestError {
                 write!(f, "could not find config file at path `{}`", p.display())
             }
             InvalidUrl(u) => write!(f, "invalid url `{}`", u),
-            Recoverable(r) => write!(f, "{}", r),
+            Recoverable(r) => write!(f, "recoverable error: {}", r),
             RequestBuilderErr(e) => write!(f, "error creating request: {}", e),
             SslError(e) => write!(f, "error creating ssl connector: {}", e),
             TimerError(e) => write!(f, "error with timer: {}", e),
@@ -106,7 +106,11 @@ impl From<tokio::timer::Error> for TestError {
 
 impl From<config::Error> for TestError {
     fn from(ce: config::Error) -> Self {
-        Config(ce)
+        if let config::Error::IndexingIntoJson(s, j) = ce {
+            Recoverable(IndexingJson(s, j))
+        } else {
+            Config(ce)
+        }
     }
 }
 

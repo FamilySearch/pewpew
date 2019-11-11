@@ -1,7 +1,7 @@
 use crate::error::{RecoverableError, TestError};
 use crate::stats;
 
-use config::{EndpointProvidesSendOptions, Error as ConfigError, Template};
+use config::{EndpointProvidesSendOptions, Template};
 use ether::{Either, Either3};
 use futures::future::{join_all, select_all, Future, IntoFuture};
 use parking_lot::Mutex;
@@ -124,15 +124,14 @@ impl BodyHandler {
                 }
                 let select = o.select.clone();
                 let send_behavior = select.get_send_behavior();
-                let iter = match select.iter(template_values.clone()) {
+                let iter = match select.iter(template_values.clone()).map_err(Into::into) {
                     Ok(v) => v.map(|v| v.map_err(Into::into)),
-                    Err(ConfigError::IndexingIntoJson(j, e)) => {
-                        let r = RecoverableError::IndexingJson(j, e);
+                    Err(TestError::Recoverable(r)) => {
                         let kind = stats::StatKind::RecoverableError(r);
                         futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;
                     }
-                    Err(e) => return Either::B(Err(e.into()).into_future()),
+                    Err(e) => return Either::B(Err(e).into_future()),
                 };
                 match send_behavior {
                     EndpointProvidesSendOptions::Block => {

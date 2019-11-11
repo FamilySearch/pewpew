@@ -1215,6 +1215,7 @@ impl Template {
 pub struct Select {
     join: Vec<ValueOrExpression>,
     references_for_each: bool,
+    where_references_for_each: bool,
     send_behavior: EndpointProvidesSendOptions,
     select: ParsedSelect,
     where_clause: Option<Expression>,
@@ -1245,6 +1246,7 @@ impl Select {
                 }
             })
             .collect::<Result<_, _>>()?;
+        let mut where_references_for_each = false;
         let where_clause = provides
             .where_clause
             .as_ref()
@@ -1254,8 +1256,8 @@ impl Select {
                 let pairs = Parser::parse(Rule::entry_point, s)?;
                 let e =
                     parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
-                let references_for_each = providers2.get_special() & FOR_EACH != 0;
-                if references_for_each && join.is_empty() {
+                where_references_for_each = providers2.get_special() & FOR_EACH != 0;
+                if where_references_for_each && join.is_empty() {
                     return Err(Error::MissingForEach);
                 }
                 providers.extend(providers2);
@@ -1282,6 +1284,7 @@ impl Select {
             select,
             send_behavior: provides.send.unwrap_or_default(),
             where_clause,
+            where_references_for_each,
         })
     }
 
@@ -1328,42 +1331,93 @@ impl Select {
         } else {
             let references_for_each = self.references_for_each;
             let no_recoverable_error = self.no_recoverable_error;
-            let c = self
-                .join
-                .iter()
-                .map(|v| {
-                    match v.evaluate_as_iter(Cow::Borrowed(&*d), self.no_recoverable_error, None) {
-                        Ok(i) => Either::A(i),
-                        Err(e) => Either::B(iter::once(Err(e))),
-                    }
-                })
-                .multi_cartesian_product()
-                .map(move |v| {
-                    let for_each = if references_for_each {
-                        let v: Vec<_> = v.into_iter().collect::<Result<_, _>>()?;
-                        Some(v)
-                    } else {
-                        None
-                    };
-                    if let Some(wc) = &self.where_clause {
+            if self.where_references_for_each {
+                let a = self
+                    .join
+                    .iter()
+                    .map(|v| {
+                        match v.evaluate_as_iter(
+                            Cow::Borrowed(&*d),
+                            self.no_recoverable_error,
+                            None,
+                        ) {
+                            Ok(i) => Either::A(i),
+                            Err(e) => Either::B(iter::once(Err(e))),
+                        }
+                    })
+                    .multi_cartesian_product()
+                    .map(move |v| {
+                        let for_each = if references_for_each {
+                            let v: Vec<_> = v.into_iter().collect::<Result<_, _>>()?;
+                            Some(v)
+                        } else {
+                            None
+                        };
+                        if let Some(wc) = &self.where_clause {
+                            if !bool_value(&*wc.evaluate(
+                                Cow::Borrowed(&*d),
+                                no_recoverable_error,
+                                for_each.as_ref().map(Vec::as_slice),
+                            )?)? {
+                                return Ok(None);
+                            }
+                        }
+                        self.select
+                            .evaluate(
+                                Cow::Borrowed(&*d),
+                                no_recoverable_error,
+                                for_each.as_ref().map(Vec::as_slice),
+                            )
+                            .map(Some)
+                    })
+                    .filter_map(Result::transpose);
+                Either3::C(Either3::A(a))
+            } else {
+                match &self.where_clause {
+                    Some(wc)
                         if !bool_value(&*wc.evaluate(
                             Cow::Borrowed(&*d),
                             no_recoverable_error,
-                            for_each.as_ref().map(Vec::as_slice),
-                        )?)? {
-                            return Ok(None);
-                        }
+                            None,
+                        )?)? =>
+                    {
+                        Either3::C(Either3::B(iter::empty()))
                     }
-                    self.select
-                        .evaluate(
-                            Cow::Borrowed(&*d),
-                            no_recoverable_error,
-                            for_each.as_ref().map(Vec::as_slice),
-                        )
-                        .map(Some)
-                })
-                .filter_map(Result::transpose);
-            Either3::C(c)
+                    _ => {
+                        let c = self
+                            .join
+                            .iter()
+                            .map(|v| {
+                                match v.evaluate_as_iter(
+                                    Cow::Borrowed(&*d),
+                                    self.no_recoverable_error,
+                                    None,
+                                ) {
+                                    Ok(i) => Either::A(i),
+                                    Err(e) => Either::B(iter::once(Err(e))),
+                                }
+                            })
+                            .multi_cartesian_product()
+                            .map(move |v| {
+                                let for_each = if references_for_each {
+                                    let v: Vec<_> = v.into_iter().collect::<Result<_, _>>()?;
+                                    Some(v)
+                                } else {
+                                    None
+                                };
+                                self.select
+                                    .evaluate(
+                                        Cow::Borrowed(&*d),
+                                        no_recoverable_error,
+                                        for_each.as_ref().map(Vec::as_slice),
+                                    )
+                                    .map(Some)
+                            })
+                            .filter_map(Result::transpose);
+                        Either3::C(Either3::C(c))
+                    }
+                }
+            }
         };
         Ok(r.fuse())
     }

@@ -275,7 +275,10 @@ impl<T> Stream for Receiver<T> {
                 // if there's an "auto" limit and we've emptied the buffer
                 // after it was previously full increment the limit
                 if let Limit::Auto(a) = &self.limit {
-                    if self.has_maxed.compare_and_swap(true, false, Ordering::Release) {
+                    if self
+                        .has_maxed
+                        .compare_and_swap(true, false, Ordering::Release)
+                    {
                         a.fetch_add(1, Ordering::Release);
                     }
                 }

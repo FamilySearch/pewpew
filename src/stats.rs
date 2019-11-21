@@ -3,16 +3,17 @@ use crate::providers;
 use crate::TestEndReason;
 use crate::{RunConfig, RunOutputFormat};
 
+use bytes::Buf;
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
-use ether::Either;
+use ether::{Either, Either3};
 use futures::{
-    future::Shared,
+    future::{join_all, poll_fn, Shared},
     sync::mpsc::{self as futures_channel, Sender as FCSender},
-    Future, IntoFuture, Sink, Stream,
+    Async, Future, IntoFuture, Sink, Stream,
 };
 use hdrhistogram::Histogram;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tokio::{
     fs::File as TokioFile,
@@ -22,11 +23,9 @@ use tokio::{
 use yansi::Paint;
 
 use std::{
-    cell::Cell,
-    cmp,
-    collections::{BTreeMap, HashMap},
-    ops::AddAssign,
-    path::PathBuf,
+    collections::BTreeMap,
+    fs, io, mem,
+    path::Path,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -67,124 +66,96 @@ mod histogram_serde {
     }
 }
 
-type StatsId = BTreeMap<String, String>;
-type Buckets = BTreeMap<StatsId, BTreeMap<u64, AggregateStats>>;
-
-pub fn serialize_buckets<S>(buckets: &Buckets, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let values: Vec<_> = buckets
-        .iter()
-        .map(|(k, v)| {
-            let v: Vec<_> = v.values().collect();
-            (k, v)
-        })
-        .collect();
-    values.serialize(serializer)
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum FileMessage {
+    Header(FileHeader),
+    Tags(FileTags),
+    Buckets(TimeBucket),
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RollingAggregateStats {
-    #[serde(serialize_with = "serialize_buckets")]
-    buckets: Buckets,
-    #[serde(skip_serializing)]
-    duration: u64,
-    #[serde(skip)]
-    end_time: Option<Instant>,
-    #[serde(skip)]
-    file_name: PathBuf,
-    #[serde(skip_serializing)]
-    last_print_time: Cell<u64>,
-    #[serde(skip)]
-    start_time: Option<Instant>,
-    test_name: Option<String>,
+struct FileHeader {
+    test: String,
+    bin: String,
+    bucket_size: u64,
 }
 
-impl RollingAggregateStats {
-    fn new(duration: Duration, file_name: PathBuf, test_name: Option<String>) -> Self {
-        RollingAggregateStats {
-            buckets: BTreeMap::new(),
-            duration: duration.as_secs(),
-            end_time: None,
-            file_name,
-            last_print_time: Cell::new(0),
-            start_time: None,
-            test_name,
+#[derive(Deserialize, Serialize)]
+struct FileTags {
+    index: usize,
+    tags: Tags,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct TimeBucket {
+    time: u64,
+    entries: BTreeMap<usize, Bucket>,
+}
+
+impl TimeBucket {
+    fn new(time: u64) -> Self {
+        TimeBucket {
+            time,
+            entries: BTreeMap::new(),
         }
     }
 
-    fn append(&mut self, stat: ResponseStat) -> Option<String> {
-        let duration = self.duration;
-        let time = to_epoch(stat.time) / duration * duration;
-        let stats_map = loop {
-            if let Some(sm) = self.buckets.get_mut(&stat.tags) {
-                break sm;
-            }
-            let duration = self.duration;
-            let mut stats_map = BTreeMap::new();
-            stats_map.insert(
-                time,
-                AggregateStats::new(time, Duration::from_secs(duration)),
-            );
-            self.buckets.insert((*stat.tags).clone(), stats_map);
-        };
-        let current = stats_map
-            .entry(time)
-            .or_insert_with(|| AggregateStats::new(time, Duration::from_secs(duration)));
-        current.append_response_stat(stat)
+    fn append(&mut self, stat: ResponseStat, index: usize) {
+        let entry = self.entries.entry(index).or_default();
+        entry.append(stat);
     }
 
-    fn persist<C: AsyncWrite + Send + Sync + 'static>(
+    fn combine(&mut self, rhs: &TimeBucket) {
+        for (index, entry) in &rhs.entries {
+            self.entries
+                .entry(*index)
+                .and_modify(|b| b.combine(entry))
+                .or_insert_with(|| entry.clone());
+        }
+    }
+
+    fn create_print_summary(
         &self,
-        console: C,
-    ) -> impl Future<Item = (), Error = TestError> {
-        let stats = self.clone();
-        TokioFile::create(self.file_name.clone())
-            .map_err(Either::A)
-            .and_then(move |mut file| {
-                stats
-                    .serialize(&mut json::Serializer::new(&mut file))
-                    .map_err(Either::B)
-            })
-            .or_else(|e| {
-                write_all(console, format!("error persisting stats {:?}\n", e)).then(|_| Ok(()))
-            })
-    }
-
-    fn generate_summary(&self, time: u64, output_format: RunOutputFormat) -> String {
-        let mut printed = false;
-        self.last_print_time.set(time);
-        let is_pretty_format = output_format.is_human();
+        tags: &BTreeMap<Tags, usize>,
+        format: RunOutputFormat,
+        bucket_size: u64,
+        test_complete: bool,
+    ) -> String {
+        let end_time = self.time + bucket_size;
+        let summary_type = if test_complete { "Test" } else { "Bucket" };
+        let is_pretty_format = format.is_human();
         let mut print_string = if is_pretty_format {
             format!(
                 "{}",
                 Paint::new(format!(
-                    "\nBucket Summary {}\n",
-                    create_date_diff(time, time + self.duration)
+                    "\n{} Summary {}\n",
+                    summary_type,
+                    create_date_diff(self.time, end_time)
                 ))
                 .bold()
             )
         } else {
             String::new()
         };
-        for (tags, stats_map) in &self.buckets {
-            if let Some(stats) = stats_map.get(&time) {
-                let piece = stats.print_summary(tags, output_format, true);
+        let end_time = if test_complete { Some(end_time) } else { None };
+        // TODO: should these be ordered?
+        for (tags, index) in tags {
+            if let Some(bucket) = self.entries.get(index) {
+                let piece = bucket.create_print_summary(tags, format, self.time, end_time);
                 print_string.push_str(&piece);
-                if !printed && !piece.is_empty() {
-                    printed = true;
-                }
             }
         }
         if is_pretty_format {
-            if !printed {
+            if self.entries.is_empty() {
                 print_string.push_str("no data\n");
             }
-            if let Some(et) = self.end_time {
-                if et > Instant::now() {
-                    let test_end_msg = duration_till_end_to_pretty_string(et - Instant::now());
+            if let Some(et) = end_time {
+                let now = get_epoch();
+                if et > now {
+                    let test_end_msg =
+                        duration_till_end_to_pretty_string(Duration::from_secs(et - now));
                     let piece = format!("\n{}\n", test_end_msg);
                     print_string.push_str(&piece);
                 }
@@ -194,95 +165,36 @@ impl RollingAggregateStats {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AggregateStats {
-    duration: u64, // in seconds
-    end_time: u64, // epoch in seconds, when the last request was logged
+struct Bucket {
+    #[serde(skip_serializing_if = "is_zero")]
     request_timeouts: u64,
-    #[serde(with = "histogram_serde")]
+    #[serde(with = "histogram_serde", skip_serializing_if = "Histogram::is_empty")]
     rtt_histogram: Histogram<u64>,
-    start_time: u64, // epoch in seconds, when the first request was logged
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     status_counts: BTreeMap<u16, u64>,
-    test_errors: HashMap<String, u64>,
-    time: u64, // epoch in seconds, when the bucket time begins
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    test_errors: BTreeMap<String, u64>,
 }
 
-impl AddAssign<&AggregateStats> for AggregateStats {
-    fn add_assign(&mut self, rhs: &AggregateStats) {
-        self.time = cmp::min(self.time, rhs.time);
-        self.start_time = cmp::min(self.start_time, rhs.start_time);
-        self.end_time = cmp::max(self.end_time, rhs.end_time);
-        self.rtt_histogram += &rhs.rtt_histogram;
-        for (status, count) in &rhs.status_counts {
-            self.status_counts
-                .entry(*status)
-                .and_modify(|n| *n += count)
-                .or_insert(*count);
-        }
-        for (description, count) in &rhs.test_errors {
-            self.test_errors
-                .entry(description.clone())
-                .and_modify(|n| *n += count)
-                .or_insert(*count);
-        }
-        self.request_timeouts += rhs.request_timeouts;
-    }
-}
-
-fn get_epoch() -> u64 {
-    UNIX_EPOCH
-        .elapsed()
-        .map(|d| d.as_secs())
-        .unwrap_or_default()
-}
-
-fn to_epoch(time: SystemTime) -> u64 {
-    time.duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_default()
-}
-
-fn create_date_diff(start: u64, end: u64) -> String {
-    let start = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(start as i64, 0), Utc)
-        .with_timezone(&Local);
-    let end = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp((end) as i64, 0), Utc)
-        .with_timezone(&Local);
-    let fmt2 = "%T %-e-%b-%Y";
-    let fmt = if start.date() == end.date() {
-        "%T"
-    } else {
-        fmt2
-    };
-    format!("{} to {}", start.format(fmt), end.format(fmt2))
-}
-
-impl AggregateStats {
-    fn new(time: u64, duration: Duration) -> Self {
-        AggregateStats {
-            duration: duration.as_secs(),
-            end_time: 0,
+impl Default for Bucket {
+    fn default() -> Self {
+        Bucket {
             request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
-            start_time: 0,
-            status_counts: BTreeMap::new(),
-            test_errors: HashMap::default(),
-            time,
+            status_counts: Default::default(),
+            test_errors: Default::default(),
         }
     }
+}
 
-    fn append_response_stat(&mut self, rhs: ResponseStat) -> Option<String> {
-        let time = to_epoch(rhs.time);
-        if self.start_time == 0 {
-            self.start_time = time;
-        }
-        self.end_time = cmp::max(self.end_time, time);
-        let mut warning = None;
-        match rhs.kind {
+impl Bucket {
+    fn append(&mut self, stat: ResponseStat) {
+        match stat.kind {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
                 let msg = format!("{}", r);
-                warning = Some(msg.clone());
                 self.test_errors
                     .entry(msg)
                     .and_modify(|n| *n += 1)
@@ -295,17 +207,34 @@ impl AggregateStats {
                     .or_insert(1);
             }
         }
-        if let Some(rtt) = rhs.rtt {
+        if let Some(rtt) = stat.rtt {
             self.rtt_histogram += rtt;
         }
-        warning
     }
 
-    fn print_summary(
+    fn combine(&mut self, rhs: &Bucket) {
+        self.request_timeouts += rhs.request_timeouts;
+        let _ = self.rtt_histogram.add(&rhs.rtt_histogram);
+        for (status, count) in &rhs.status_counts {
+            self.status_counts
+                .entry(*status)
+                .and_modify(|n| *n += count)
+                .or_insert(*count);
+        }
+        for (description, count) in &rhs.test_errors {
+            self.test_errors
+                .entry(description.clone())
+                .and_modify(|n| *n += count)
+                .or_insert(*count);
+        }
+    }
+
+    fn create_print_summary(
         &self,
-        tags: &StatsId,
+        tags: &Tags,
         format: RunOutputFormat,
-        bucket_summary: bool,
+        time: u64,
+        end_time: Option<u64>,
     ) -> String {
         let calls_made = self.rtt_histogram.len();
         let mut print_string = String::new();
@@ -349,11 +278,11 @@ impl AggregateStats {
                 print_string.push_str(&piece);
             }
             RunOutputFormat::Json => {
-                let summary_type = if bucket_summary { "bucket" } else { "test" };
+                let summary_type = if end_time.is_some() { "bucket" } else { "test" };
                 let output = json::json!({
                     "type": "summary",
-                    "startTime": self.time,
-                    "timestamp": self.time + self.duration,
+                    "startTime": time,
+                    "timestamp": end_time,
                     "summaryType": summary_type,
                     "method": method,
                     "url": url,
@@ -379,10 +308,7 @@ impl AggregateStats {
                     "max": max,
                     "mean": mean,
                     "stddev": stddev,
-                    "statsId":
-                        tags.iter()
-                            .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
-                            .collect::<BTreeMap<_, _>>(),
+                    "tags": tags
                 });
                 let piece = format!("{}\n", output);
                 print_string.push_str(&piece);
@@ -390,6 +316,198 @@ impl AggregateStats {
         }
         print_string
     }
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
+struct Stats<C, Cf>
+where
+    C: AsyncWrite + Send + Sync + 'static,
+    Cf: Fn() -> C + Clone + Send + Sync + 'static,
+{
+    bucket_size: u64,
+    current: TimeBucket,
+    console: Cf,
+    duration: u64,
+    file: fs::File,
+    format: RunOutputFormat,
+    previous: Option<TimeBucket>,
+    tags: BTreeMap<Tags, usize>,
+    totals: TimeBucket,
+}
+
+fn rounded_epoch(bucket_size: u64) -> u64 {
+    round_time(get_epoch(), bucket_size)
+}
+
+fn round_time(time: u64, bucket_size: u64) -> u64 {
+    time / bucket_size * bucket_size
+}
+
+impl<C, Cf> Stats<C, Cf>
+where
+    C: AsyncWrite + Send + Sync + 'static,
+    Cf: Fn() -> C + Clone + Send + Sync + 'static,
+{
+    fn new(
+        file_name: &Path,
+        bucket_size: u64,
+        format: RunOutputFormat,
+        console: Cf,
+    ) -> Result<Self, io::Error> {
+        let file = std::fs::File::create(file_name)?;
+        Ok(Stats {
+            bucket_size,
+            current: TimeBucket::new(rounded_epoch(bucket_size)),
+            console,
+            duration: 0,
+            file,
+            format,
+            previous: None,
+            tags: BTreeMap::new(),
+            totals: TimeBucket::new(get_epoch()),
+        })
+    }
+
+    fn check_current_bucket(&mut self) {
+        let current_bucket_time = rounded_epoch(self.bucket_size);
+        if self.current.time < current_bucket_time {
+            let new_bucket = TimeBucket::new(current_bucket_time);
+            let previous = mem::replace(&mut self.current, new_bucket);
+            let previous_bucket_time = current_bucket_time - self.bucket_size;
+            assert_eq!(
+                previous.time, previous_bucket_time,
+                "previous bucket had an unexpected time"
+            );
+            assert!(self.previous.is_none(), "found a left over previous bucket");
+            self.totals.combine(&previous);
+            self.previous = Some(previous);
+        }
+    }
+
+    fn get_previous_bucket(&mut self, test_complete: bool) -> Option<TimeBucket> {
+        if test_complete {
+            let new_bucket = TimeBucket::new(0);
+            let bucket = mem::replace(&mut self.current, new_bucket);
+            self.totals.combine(&bucket);
+            return Some(bucket);
+        }
+        self.previous.take().or_else(|| {
+            self.check_current_bucket();
+            self.previous.take()
+        })
+    }
+
+    fn append(&mut self, stat: ResponseStat) -> impl Future<Item = (), Error = ()> {
+        let mut new_tag = None;
+        let index = match self.tags.get(&stat.tags) {
+            Some(i) => *i,
+            _ => {
+                let i = self.tags.len();
+                self.tags.insert((*stat.tags).clone(), i);
+                new_tag = Some(FileTags {
+                    index: i,
+                    tags: (*stat.tags).clone(),
+                });
+                i
+            }
+        };
+        self.check_current_bucket();
+        self.current.append(stat, index);
+        if let Some(new_tag) = new_tag {
+            let a = self.write_file_message(&FileMessage::Tags(new_tag));
+            Either::A(a)
+        } else {
+            let b = Ok(()).into_future();
+            Either::B(b)
+        }
+    }
+
+    fn write_file_message(&self, msg: &FileMessage) -> impl Future<Item = (), Error = ()> {
+        let file = match self.file.try_clone() {
+            Ok(f) => f,
+            Err(_) => return Either::A(Err(()).into_future()),
+        };
+
+        let bytes = match serde_json::to_vec(msg) {
+            Ok(b) => b,
+            Err(_) => return Either::A(Err(()).into_future()),
+        };
+
+        let mut buf = io::Cursor::new(bytes);
+        let mut file = TokioFile::from_std(file);
+
+        let b = poll_fn(move || match file.write_buf(&mut buf) {
+            Ok(Async::Ready(_)) => {
+                if !buf.has_remaining() {
+                    Ok(Async::Ready(()))
+                } else {
+                    Ok(Async::NotReady)
+                }
+            }
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(_) => Err(()),
+        });
+        Either::B(b)
+    }
+
+    fn close_out_bucket(
+        &mut self,
+        test_complete: bool,
+    ) -> impl Future<Item = (), Error = TestError> {
+        let mut is_new_bucket = false;
+        let bucket = match self.get_previous_bucket(test_complete) {
+            Some(b) => b,
+            None => {
+                is_new_bucket = true;
+                let time = rounded_epoch(self.bucket_size) - self.bucket_size;
+                TimeBucket::new(time)
+            }
+        };
+        let print_string =
+            bucket.create_print_summary(&self.tags, self.format, self.bucket_size, false);
+        let console_output = write_all((self.console)(), print_string).then(|_| Ok(()));
+        let mut futures = vec![Either3::A(console_output)];
+        if !is_new_bucket {
+            let file_message = FileMessage::Buckets(bucket);
+            futures.push(Either3::B(self.write_file_message(&file_message)))
+        }
+        if test_complete {
+            let blank = TimeBucket::new(0);
+            let bucket = std::mem::replace(&mut self.totals, blank);
+            let print_string =
+                bucket.create_print_summary(&self.tags, self.format, self.duration, true);
+            let console_output = write_all((self.console)(), print_string).then(|_| Ok(()));
+            futures.push(Either3::C(console_output));
+        }
+        join_all(futures).then(|_| Ok(()))
+    }
+}
+
+type Tags = BTreeMap<String, String>;
+
+fn get_epoch() -> u64 {
+    UNIX_EPOCH
+        .elapsed()
+        .map(|d| d.as_secs())
+        .unwrap_or_default()
+}
+
+fn create_date_diff(start: u64, end: u64) -> String {
+    let start = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(start as i64, 0), Utc)
+        .with_timezone(&Local);
+    let end = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp((end) as i64, 0), Utc)
+        .with_timezone(&Local);
+    let fmt2 = "%T %-e-%b-%Y";
+    let fmt = if start.date() == end.date() {
+        "%T"
+    } else {
+        fmt2
+    };
+    format!("{} to {}", start.format(fmt), end.format(fmt2))
 }
 
 #[derive(Debug)]
@@ -405,7 +523,7 @@ pub struct ResponseStat {
     pub kind: StatKind,
     pub rtt: Option<u64>,
     pub time: SystemTime,
-    pub tags: Arc<StatsId>,
+    pub tags: Arc<Tags>,
 }
 
 #[derive(Debug)]
@@ -493,33 +611,14 @@ where
     C: AsyncWrite + Send + Sync + 'static,
     Cf: Fn() -> C + Clone + Send + Sync + 'static,
 {
-    let aggregates = AggregateStats::new(0, Duration::from_secs(0));
+    let aggregates = Bucket::default();
     let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
-    let console2 = console.clone();
     let f = rx
         .fold(aggregates, move |mut summary, s| {
-            let mut msg = None;
             if let StatsMessage::ResponseStat(rs) = s {
-                let tags = rs.tags.clone();
-                if let Some(s) = summary.append_response_stat(rs) {
-                    let method = tags.get("method").expect("tags missing `method`");
-                    let url = tags.get("url").expect("tags missing `url`");
-                    let endpoint = format!("{} {}", method, url);
-                    msg = Some(format!(
-                        "{}",
-                        Paint::yellow(format!(
-                            "WARNING - recoverable error happened on endpoint `{}`: {}\n",
-                            endpoint, s
-                        ))
-                    ));
-                }
+                summary.append(rs);
             }
-            if let Some(msg) = msg {
-                let b = write_all(console(), msg).then(move |_| Ok(summary));
-                Either::B(b)
-            } else {
-                Either::A(Ok(summary).into_future())
-            }
+            Ok(summary)
         })
         .and_then(move |stats| {
             let mut output = format!(
@@ -537,7 +636,7 @@ where
                 output.push_str(&piece);
             }
             output.push('\n');
-            write_all(console2(), output).then(|_| Ok(()))
+            write_all(console(), output).then(|_| Ok(()))
         })
         .join(test_complete.then(|_| Ok::<_, ()>(())))
         .then(|_| Ok(()));
@@ -631,42 +730,29 @@ where
     let now = Instant::now();
     let start_sec = get_epoch();
     let bucket_size = config.bucket_size;
-    let start_bucket = start_sec / bucket_size.as_secs() * bucket_size.as_secs();
+    let bucket_size_secs = bucket_size.as_secs();
+    let start_bucket = start_sec / bucket_size_secs * bucket_size_secs;
     let next_bucket =
-        Duration::from_millis((bucket_size.as_secs() - (start_sec - start_bucket)) * 1000 + 1);
+        Duration::from_millis((bucket_size_secs - (start_sec - start_bucket)) * 1000 + 1);
     let test_name = run_config
         .config_file
         .file_stem()
-        .and_then(std::ffi::OsStr::to_str);
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let file_path = run_config.stats_file.clone();
-    let stats = Arc::new(Mutex::new(RollingAggregateStats::new(
-        bucket_size,
-        file_path,
-        test_name.map(str::to_string),
-    )));
-    let stats2 = stats.clone();
+    let output_format = run_config.output_format;
+    let stats =
+        Stats::new(&file_path, bucket_size_secs, output_format, console.clone()).map_err(|e| {
+            TestError::CannotCreateStatsFile(file_path.to_string_lossy().into_owned(), e.into())
+        })?;
+    let stats = Arc::new(Mutex::new(stats));
     let stats3 = stats.clone();
     let stats4 = stats.clone();
-    let output_format = run_config.output_format;
-    let is_human_format = output_format.is_human();
-    let console2 = console.clone();
-    let console3 = console.clone();
-    let console4 = console.clone();
     let print_stats = Interval::new(now + next_bucket, bucket_size)
         .map_err(|_e| unreachable!("something happened while printing stats"))
         .for_each(move |_| {
-            let stats = stats4.lock();
-            let epoch = get_epoch();
-            let prev_time = epoch / stats.duration * stats.duration - stats.duration;
-            let summary = stats.generate_summary(prev_time, output_format);
-            let stats4 = stats4.clone();
-            let console3 = console3.clone();
-            write_all(console3(), summary).then(move |_| {
-                stats4
-                    .lock()
-                    .persist(console3())
-                    .then(|_| Ok::<_, TestError>(()))
-            })
+            let mut stats = stats4.lock();
+            stats.close_out_bucket(false)
         });
     let print_stats = if let Some(interval) = config.log_provider_stats {
         let print_provider_stats = create_provider_stats_printer(
@@ -682,14 +768,17 @@ where
     } else {
         Either::B(print_stats)
     };
+    let mut test_start_time = None;
     let receiver = Stream::for_each(
         rx.map_err(|_| unreachable!("Error receiving stats")),
         move |datum| {
+            let mut futures = Vec::new();
             let mut stats = stats.lock();
             match datum {
                 StatsMessage::Start(d) => {
-                    let (start_time, msg) = if let Some(start_time) = stats.start_time {
-                        let msg = if Some(start_time + d) == stats.end_time {
+                    let duration = d.as_secs();
+                    let (start_time, msg) = if let Some(start_time) = test_start_time {
+                        let msg = if duration == stats.duration {
                             String::new()
                         } else {
                             let test_end_message =
@@ -706,102 +795,51 @@ where
                         };
                         (start_time, msg)
                     } else {
+                        stats.duration = duration;
                         let now = Instant::now();
                         let test_end_message = duration_till_end_to_pretty_string(d);
+                        let bin_version = clap::crate_version!().into();
                         let msg = match output_format {
                             RunOutputFormat::Human => {
                                 format!("Starting load test. {}\n", test_end_message)
                             }
                             RunOutputFormat::Json => format!(
                                 "{{\"type\":\"start\",\"msg\":\"{}\",\"binVersion\":\"{}\"}}\n",
-                                test_end_message,
-                                clap::crate_version!()
+                                test_end_message, bin_version,
                             ),
                         };
+                        let header = FileHeader {
+                            test: test_name.clone(),
+                            bin: bin_version,
+                            bucket_size: bucket_size_secs,
+                        };
+                        let c = stats
+                            .write_file_message(&FileMessage::Header(header))
+                            .then(|_| Ok::<_, TestError>(()));
+                        futures.push(Either3::C(c));
                         (now, msg)
                     };
-                    stats.start_time = Some(start_time);
-                    stats.end_time = Some(start_time + d);
-                    let a = write_all(console(), msg).then(|_| Ok(()));
-                    Either::A(a)
+                    test_start_time = Some(start_time);
+                    let a = write_all(console(), msg).then(|_| Ok::<_, TestError>(()));
+                    futures.push(Either3::A(a))
                 }
                 StatsMessage::ResponseStat(rs) => {
-                    stats.append(rs);
-                    Either::B(Ok::<_, TestError>(()).into_future())
+                    let b = stats.append(rs).then(|_| Ok::<_, TestError>(()));
+                    futures.push(Either3::B(b));
                 }
             }
+            join_all(futures).then(|_| Ok::<_, TestError>(()))
         },
     )
     .join(print_stats)
     .map(|_| TestEndReason::Completed)
     .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
     .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
-    .map_err(|e| e.0)
-    .and_then(move |(b, _)| stats2.lock().persist(console4()).map(move |_| b))
+    // .map_err(|e| e.0)
+    // .and_then(move |(b, _)| stats2.lock().persist(console4()).map(move |_| b))
     .then(move |_| {
-        let stats = stats3.lock();
-        let duration = stats.duration;
-        let (start, mut end) = stats
-            .buckets
-            .values()
-            .map(|time_buckets| {
-                let mut bucket_values = time_buckets.values();
-                let first = bucket_values
-                    .next()
-                    .expect("bucket unexpectedly empty")
-                    .time;
-                let last = bucket_values.next_back().map(|v| v.time).unwrap_or(first);
-                (first, last)
-            })
-            .fold((u64::max_value(), 0), |(a1, b1), (a2, b2)| {
-                (cmp::min(a1, a2), cmp::max(b1, b2))
-            });
-        end += duration;
-        let mut print_string = String::new();
-        for time_buckets in stats.buckets.values() {
-            let end_time_secs = {
-                let mut bucket_values = time_buckets.values();
-                let first = bucket_values
-                    .next()
-                    .expect("bucket unexpectedly empty")
-                    .time;
-                bucket_values.next_back().map(|v| v.time).unwrap_or(first)
-            };
-            if end_time_secs > stats.last_print_time.get() {
-                let summary = stats.generate_summary(end_time_secs, output_format);
-                print_string.push_str(&summary);
-            }
-        }
-        if is_human_format {
-            print_string.push_str(&format!(
-                "{}",
-                Paint::new(format!("\nTest Summary {}\n", create_date_diff(start, end))).bold()
-            ))
-        };
-        for (tags, time_buckets) in &stats.buckets {
-            let mut summary = {
-                let (start_time_secs, mut end_time_secs) = {
-                    let mut bucket_values = time_buckets.values();
-                    let first = bucket_values
-                        .next()
-                        .expect("bucket unexpectedly empty")
-                        .time;
-                    let last = bucket_values.next_back().map(|v| v.time).unwrap_or(first);
-                    (first, last)
-                };
-                if start_time_secs == end_time_secs {
-                    end_time_secs += duration;
-                }
-                let duration = Duration::from_secs(end_time_secs - start_time_secs);
-                AggregateStats::new(start_time_secs, duration)
-            };
-            for agg_stats in time_buckets.values() {
-                summary += &*agg_stats;
-            }
-            let piece = summary.print_summary(&tags, output_format, false);
-            print_string.push_str(&piece);
-        }
-        write_all(console2(), print_string).then(|_| Ok(()))
+        let mut stats = stats3.lock();
+        stats.close_out_bucket(true).then(|_| Ok(()))
     });
     Ok((tx, receiver))
 }

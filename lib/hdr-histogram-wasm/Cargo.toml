@@ -8,6 +8,6 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-base64 = "0.11"
+base64 = "0.12"
 hdrhistogram = "7"
 wasm-bindgen = "0.2"

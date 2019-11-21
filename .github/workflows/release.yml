@@ -77,17 +77,15 @@ jobs:
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.os == 'ubuntu-latest'
-        env:
-          RUSTFLAGS: "-C target-feature=-crt-static"
         with:
-          args: cargo build -q --release
+          args: cargo build -q --release --target x86_64-unknown-linux-musl
 
       - name: Compress for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
           asset_name="pewpew-$VERSION-linux-x86_64-musl.tar.xz"
           echo "::set-env name=ASSET_NAME::$asset_name"
-          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/x86_64-unknown-linux-musl/release/ -cJf $asset_name pewpew
 
       - name: Compress for Windows
         if: matrix.os == 'windows-latest'

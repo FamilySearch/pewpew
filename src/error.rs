@@ -40,6 +40,7 @@ impl fmt::Display for RecoverableError {
 #[derive(Clone, Debug)]
 pub enum TestError {
     CannotCreateLoggerFile(String, Arc<std::io::Error>),
+    CannotCreateStatsFile(String, Arc<std::io::Error>),
     CannotOpenFile(PathBuf, Arc<std::io::Error>),
     Config(Box<config::Error>),
     FileReading(String, Arc<std::io::Error>),
@@ -64,6 +65,7 @@ impl fmt::Display for TestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CannotCreateLoggerFile(s, e) => write!(f, "error creating logger file `{}`: {}", s, e),
+            CannotCreateStatsFile(s, e) => write!(f, "error creating stats file `{}`: {}", s, e),
             CannotOpenFile(p, e) => write!(f, "error opening file `{}`: {}", p.display(), e),
             Config(e) => e.fmt(f),
             FileReading(s, e) => write!(f, "error reading file `{}`: {}", s, e),
@@ -84,6 +86,7 @@ impl StdError for TestError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             CannotCreateLoggerFile(_, e) => Some(&**e),
+            CannotCreateStatsFile(_, e) => Some(&**e),
             CannotOpenFile(_, e) => Some(&**e),
             Config(e) => Some(e),
             FileReading(_, e) => Some(&**e),

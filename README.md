@@ -7,6 +7,7 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.5.6
 Changes:
 - Add `headers_all` property to both `request` and `response` to allow the access of multiple header values which share the same header name.
+- Change the format of the stats output file so data can be appended to it throughout a test run and less data has to be kept in memory.
 
 Bugfix:
 - Fix regression introduced in v0.5.5 where specifying a `provider` multiple times in a `provides` would only use the last specified one.

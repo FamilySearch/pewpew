@@ -7,6 +7,7 @@ Changes:
 - Add an error message into the stats when an endpoint is delayed waiting for a provider.
 - Adjust the way auto-sized buffers grow to be less aggressive. Now they have to be filled and then emptied before they will grow.
 - Short circuit a `for_each` when a `where` does not reference `for_each`.
+- Add a command-line argument, `start-at`, to start the test at a given time.
 
 Bugfix:
 - Fix regression where certain errors which should be handled during a test were causing the test to crash.

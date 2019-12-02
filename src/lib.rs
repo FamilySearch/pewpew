@@ -211,6 +211,7 @@ pub struct RunConfig {
     pub stats_file: PathBuf,
     pub stats_file_format: StatsFileFormat,
     pub watch_config_file: bool,
+    pub start_at: Option<Duration>,
 }
 
 #[derive(Clone)]
@@ -516,7 +517,7 @@ fn create_load_watcher(
                             };
                             duration = cmp::max(duration, load_pattern.duration());
                             let builder = load_pattern.builder();
-                            let ls = mod_interval::LinearScaling::new(builder, &peak_load);
+                            let ls = mod_interval::LinearScaling::new(builder, &peak_load, None);
                             if !sender.no_receivers() {
                                 sender.force_send((ls, transition_time));
                             }
@@ -744,7 +745,11 @@ where
         })
         .shared();
 
-    let duration = config.get_duration();
+    let mut duration = config.get_duration();
+    if let Some(t) = run_config.start_at {
+        duration -= t;
+    }
+
     let config_config = config.config;
 
     // build and register the providers
@@ -791,6 +796,7 @@ where
                     load_pattern,
                     peak_load,
                     receiver,
+                    run_config.start_at,
                 )));
             }
 

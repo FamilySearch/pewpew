@@ -6,6 +6,7 @@ use std::{
     time::UNIX_EPOCH,
 };
 
+use config::duration_from_string;
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use futures::{sync::mpsc as futures_channel, Future};
 use pewpew::{
@@ -56,6 +57,19 @@ fn main() {
                     .long("stats-file")
                     .help("Specify the filename for the stats file")
                     .value_name("STATS_FILE")
+            )
+            .arg(
+                Arg::with_name("start-at")
+                    .short("t")
+                    .long("start-at")
+                    .help("Specify the time the test should start at")
+                    .value_name("START_AT")
+                    .validator(|s| {
+                        match duration_from_string(s) {
+                            Ok(_) => Ok(()),
+                            Err(_) => Err("".into()),
+                        }
+                    })
             )
             .arg(
                 Arg::with_name("results-directory")
@@ -191,11 +205,15 @@ fn main() {
         };
         let stats_file_format = StatsFileFormat::Json;
         let watch_config_file = matches.is_present("watch");
+        let start_at = matches
+            .value_of("start-at")
+            .map(|s| duration_from_string(s.to_string()).expect("start_at should match pattern"));
         let run_config = RunConfig {
             config_file,
             ctrlc_channel,
             output_format,
             results_dir,
+            start_at,
             stats_file,
             stats_file_format,
             watch_config_file,

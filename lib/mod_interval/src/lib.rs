@@ -31,7 +31,7 @@ pub struct LinearScaling {
 }
 
 impl LinearScaling {
-    pub fn new(builder: LinearBuilder, peak_load: &HitsPer) -> Self {
+    pub fn new(builder: LinearBuilder, peak_load: &HitsPer, start_at: Option<Duration>) -> Self {
         let mut pieces = builder
             .pieces
             .into_iter()
@@ -50,11 +50,15 @@ impl LinearScaling {
             .collect::<Vec<_>>()
             .into_iter();
         let current = pieces.next().expect("should have at least one scale piece");
+        let duration_offset = start_at
+            .map(|t| -1.0 * t.as_nanos() as f64)
+            .unwrap_or_default();
+        let duration = builder.duration.as_nanos() as f64 + duration_offset;
         LinearScaling {
             current,
             pieces,
-            duration: builder.duration.as_nanos() as f64,
-            duration_offset: 0.0,
+            duration,
+            duration_offset,
         }
     }
 
@@ -185,10 +189,11 @@ impl<E> ModInterval<E> {
         load_pattern: LoadPattern,
         peak_load: &HitsPer,
         scale_fn_updater: Option<LoadUpdateChannel>,
+        start_at: Option<Duration>,
     ) -> Self {
         match load_pattern {
             LoadPattern::Linear(lb) => {
-                let scale_fn = LinearScaling::new(lb, peak_load);
+                let scale_fn = LinearScaling::new(lb, peak_load, start_at);
                 ModInterval {
                     _e: std::marker::PhantomData,
                     delay: Delay::new(Instant::now()),
@@ -349,7 +354,67 @@ mod tests {
             checks.into_iter().enumerate()
         {
             let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let mut scale_fn = LinearScaling::new(lb, &hitsper);
+            let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
+            for (i2, (secs, hps)) in expects.iter().enumerate() {
+                let nanos = secs * nis;
+                let right = 1.0 / (scale_fn.y(nanos) / nis);
+                let left = hps;
+                let diff = (right - left).abs();
+                let close_enough = diff < 0.000_001;
+                assert!(
+                    close_enough,
+                    "index ({}, {}) left {} != right {}",
+                    i, i2, left, right
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn start_at_works() {
+        let checks = vec![
+            (
+                // scale from 0 to 100% over 30 seconds (100% = 12 hps)
+                0.0,
+                1.0,
+                30,
+                HitsPer::Second(12.0),
+                // at time t (in seconds), we should be at x hps
+                vec![(0.0, 4.0), (5.0, 6.0), (20.0, 12.0)],
+                // start at 10 seconds
+                Duration::from_secs(10),
+            ),
+            (
+                0.0,
+                1.0,
+                30,
+                HitsPer::Minute(720.0),
+                vec![(0.0, 4.0), (5.0, 6.0), (20.0, 12.0)],
+                Duration::from_secs(10),
+            ),
+            (
+                0.5,
+                1.0,
+                30,
+                HitsPer::Second(12.0),
+                vec![(0.0, 8.0), (5.0, 9.0), (20.0, 12.0)],
+                Duration::from_secs(10),
+            ),
+            (
+                0.0,
+                1.0,
+                60,
+                HitsPer::Second(1.0),
+                vec![(0.0, 0.25), (15.0, 0.5), (45.0, 1.0)],
+                Duration::from_secs(15),
+            ),
+        ];
+        let nis = NANOS_IN_SECOND;
+        for (i, (start_percent, end_percent, duration, hitsper, expects, start_at)) in
+            checks.into_iter().enumerate()
+        {
+            let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
+            let mut scale_fn = LinearScaling::new(lb, &hitsper, Some(start_at));
             for (i2, (secs, hps)) in expects.iter().enumerate() {
                 let nanos = secs * nis;
                 let right = 1.0 / (scale_fn.y(nanos) / nis);
@@ -371,7 +436,7 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper);
+        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
         let nis = NANOS_IN_SECOND;
         let mut y_values: std::collections::VecDeque<_> = (0..60)
             .step_by(10)
@@ -403,12 +468,12 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper);
+        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
         lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         lb.append(1.0, 1.0, Duration::from_secs(60));
-        let mut scale_fn2 = LinearScaling::new(lb, &hitsper);
+        let mut scale_fn2 = LinearScaling::new(lb, &hitsper, None);
         scale_fn2.transition_from(
             &mut scale_fn,
             Duration::from_secs(10),
@@ -493,9 +558,9 @@ mod tests {
         lb.append(99.0, 500.0, Duration::from_secs(60));
         lb.append(1.0, 0.5, Duration::from_secs(60));
         let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper);
+        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
         lb = LinearBuilder::new(1.2, 1.8, Duration::from_secs(60));
-        let mut scale_fn2 = LinearScaling::new(lb, &hitsper);
+        let mut scale_fn2 = LinearScaling::new(lb, &hitsper, None);
         scale_fn2.transition_from(
             &mut scale_fn,
             Duration::from_secs(20),

@@ -30,6 +30,7 @@ OPTIONS:
     -f, --output-format <FORMAT>           Formatting for stats printed to stderr [default: human]  [possible values:
                                            human, json]
     -d, --results-directory <DIRECTORY>    Directory to store results and logs
+    -t, --start-at <START_AT>              Specify the time the test should start at
     -o, --stats-file <STATS_FILE>          Specify the filename for the stats file
     -s, --stats-file-format <FORMAT>       Format for the stats file [default: json]  [possible values: json]
     -w, --watch                            Watch the config file for changes in load_patterns and peak_loads and update

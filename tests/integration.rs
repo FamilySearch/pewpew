@@ -22,6 +22,7 @@ fn int1() {
         results_dir: Some("./".into()),
         stats_file: "integration.json".into(),
         stats_file_format: pewpew::StatsFileFormat::Json,
+        start_at: None,
         watch_config_file: false,
     };
     let exec_config = pewpew::ExecConfig::Run(run_config);

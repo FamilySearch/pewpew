@@ -362,12 +362,12 @@ impl AggregateStats {
                     "statusCounts":
                         self.status_counts.iter()
                             .map(|(status, count)| json::json!({ "status": status, "count": count }))
-                            .collect::<Vec<(_)>>(),
+                            .collect::<Vec<_>>(),
                     "requestTimeouts": self.request_timeouts,
                     "testErrors":
                         self.test_errors.iter()
                             .map(|(error, count)| json::json!({ "error": error, "count": count }))
-                            .collect::<Vec<(_)>>(),
+                            .collect::<Vec<_>>(),
                     "testErrorCount":
                         self.test_errors.iter()
                             .fold(0, |sum, (_, c)| sum + c),

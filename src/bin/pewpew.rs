@@ -6,8 +6,8 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use config::duration_from_string;
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
+use config::duration_from_string;
 use futures::{sync::mpsc as futures_channel, Future};
 use pewpew::{
     create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,

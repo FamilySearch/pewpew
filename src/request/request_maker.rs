@@ -384,15 +384,7 @@ mod tests {
     fn sends_request() {
         current_thread::run(lazy(|| {
             let (port, _) = test_common::start_test_server(None);
-            let mut static_vars = BTreeMap::new();
-            static_vars.insert("port".into(), port.into());
-            let url = Template::new(
-                "https://127.0.0.1:${port}",
-                &static_vars,
-                &mut Default::default(),
-                false,
-            )
-            .unwrap();
+            let url = Template::simple(&format!("https://127.0.0.1:{}", port));
             let method = Method::GET;
             let headers = Vec::new();
             let body = BodyTemplate::None;

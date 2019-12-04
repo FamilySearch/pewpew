@@ -1,6 +1,6 @@
 use super::select_parser::{bool_value, f64_value, RequiredProviders, Value, ValueOrExpression};
 
-use crate::error::Error;
+use crate::error::ExpressionError as Error;
 use crate::json_value_to_string;
 use crate::select_parser::ProviderStream;
 
@@ -11,13 +11,14 @@ use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
+use yaml_rust::scanner::Marker;
 use zip_all::zip_all;
 
 use std::{
     borrow::Cow,
     cmp::Ordering,
     collections::BTreeMap,
-    env, fmt, iter,
+    fmt, iter,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -30,17 +31,17 @@ pub(super) struct Collect {
 }
 
 impl Collect {
-    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         match args.len() {
             2 | 3 => {
                 let second = as_u64(&args.remove(1))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("collect"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("collect", marker))?;
                 let first = args.remove(0);
                 let third = args
                     .pop()
                     .map(|fa| {
-                        let max =
-                            as_u64(&fa).ok_or_else(|| Error::InvalidFunctionArguments("collect"));
+                        let max = as_u64(&fa)
+                            .ok_or_else(|| Error::InvalidFunctionArguments("collect", marker));
                         Ok::<_, Error>(Uniform::new(second, max?))
                     })
                     .transpose()?;
@@ -50,7 +51,7 @@ impl Collect {
                     random: third,
                 })
             }
-            _ => Err(Error::InvalidFunctionArguments("collect")),
+            _ => Err(Error::InvalidFunctionArguments("collect", marker)),
         }
     }
 
@@ -156,7 +157,7 @@ impl Encoding {
         }
     }
 
-    fn try_from(s: &str) -> Result<Encoding, Error> {
+    fn try_from(s: &str, marker: Marker) -> Result<Encoding, Error> {
         match s {
             "base64" => Ok(Encoding::Base64),
             "percent-simple" => Ok(Encoding::PercentSimple),
@@ -164,7 +165,7 @@ impl Encoding {
             "percent" => Ok(Encoding::Percent),
             "percent-path" => Ok(Encoding::PercentPath),
             "percent-userinfo" => Ok(Encoding::PercentUserinfo),
-            _ => Err(Error::InvalidFunctionArguments("encode")),
+            _ => Err(Error::InvalidFunctionArguments("encode", marker)),
         }
     }
 }
@@ -178,10 +179,11 @@ pub(super) struct Encode {
 impl Encode {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(encoding)))] => {
-                let encoding = Encoding::try_from(encoding.as_str())?;
+                let encoding = Encoding::try_from(encoding.as_str(), marker)?;
                 let e = Encode {
                     arg: args.remove(0),
                     encoding,
@@ -192,7 +194,7 @@ impl Encode {
                     Ok(Either::A(e))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("encode")),
+            _ => Err(Error::InvalidFunctionArguments("encode", marker)),
         }
     }
 
@@ -245,13 +247,13 @@ pub struct Entries {
 }
 
 impl Entries {
-    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         if args.len() == 1 {
             Ok(Entries {
                 arg: args.remove(0),
             })
         } else {
-            Err(Error::InvalidFunctionArguments("entries"))
+            Err(Error::InvalidFunctionArguments("entries", marker))
         }
     }
 
@@ -368,7 +370,7 @@ pub(super) enum Epoch {
 }
 
 impl Epoch {
-    pub(super) fn new(args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         match args.as_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::String(unit)))] => {
                 match unit.as_str() {
@@ -376,10 +378,10 @@ impl Epoch {
                     "ms" => Ok(Epoch::Milliseconds),
                     "mu" => Ok(Epoch::Microseconds),
                     "ns" => Ok(Epoch::Nanoseconds),
-                    _ => Err(Error::InvalidFunctionArguments("epoch")),
+                    _ => Err(Error::InvalidFunctionArguments("epoch", marker)),
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("epoch")),
+            _ => Err(Error::InvalidFunctionArguments("epoch", marker)),
         }
     }
 
@@ -422,6 +424,7 @@ pub(super) struct If {
 impl If {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         match args.len() {
             3 => {
@@ -446,7 +449,7 @@ impl If {
                     })),
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("if")),
+            _ => Err(Error::InvalidFunctionArguments("if", marker)),
         }
     }
 
@@ -528,11 +531,12 @@ pub(super) struct Join {
 impl Join {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(_)))] => {
                 let two = into_string(args.pop().expect("join should have two args"))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("join"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("join", marker))?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
                     let b = Join::evaluate_with_arg(&two, &None, json);
@@ -549,9 +553,9 @@ impl Join {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
                 let three = into_string(args.pop().expect("join should have two args"))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("join"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("join", marker))?;
                 let two = into_string(args.pop().expect("join should have two args"))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("join"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("join", marker))?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
                     let b = Join::evaluate_with_arg(&two, &Some(three), json);
@@ -565,7 +569,7 @@ impl Join {
                     Ok(Either::A(j))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("join")),
+            _ => Err(Error::InvalidFunctionArguments("join", marker)),
         }
     }
 
@@ -633,6 +637,7 @@ impl Join {
 pub(super) struct JsonPath {
     provider: String,
     selector: Arc<json_path::Node>,
+    marker: Marker,
 }
 
 impl fmt::Debug for JsonPath {
@@ -646,6 +651,7 @@ impl JsonPath {
         args: Vec<ValueOrExpression>,
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         match args.as_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::String(json_path)))] => {
@@ -654,39 +660,35 @@ impl JsonPath {
                     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
                     param_name_re
                         .captures(&*json_path)
-                        .ok_or_else(|| Error::InvalidFunctionArguments("json_path"))?
+                        .ok_or_else(|| Error::InvalidFunctionArguments("json_path", marker))?
                         .get(1)
                         .expect("should have capture group")
                         .as_str()
                 };
                 // jsonpath requires the query to start with `$.`, so add it in
-                let json_path2 = if json_path.starts_with('[') {
+                let json_path = if json_path.starts_with('[') {
                     format!("${}", json_path)
                 } else {
                     format!("$.{}", json_path)
                 };
-                let json_path = json_path::Parser::compile(&json_path2)
-                    .map_err(|_| Error::InvalidFunctionArguments("json_path"))?;
+                let json_path = json_path::Parser::compile(&json_path)
+                    .map_err(|_| Error::InvalidFunctionArguments("json_path", marker))?;
                 let j = JsonPath {
                     provider: provider.into(),
                     selector: json_path.into(),
+                    marker,
                 };
-                let v = match (provider.starts_with('$'), env::var(&provider[1..])) {
-                    (true, Ok(s)) => {
-                        Some(json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s)))
-                    }
-                    _ => static_vars.get(provider).cloned(),
-                };
+                let v = static_vars.get(provider).cloned();
                 if let Some(v) = v {
                     let v = json::json!({ provider: v });
                     let v = j.evaluate_to_vec(&v).into();
                     Ok(Either::B(v))
                 } else {
-                    providers.insert(provider.into());
+                    providers.insert(provider.into(), marker);
                     Ok(Either::A(j))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("json_path")),
+            _ => Err(Error::InvalidFunctionArguments("json_path", marker)),
         }
     }
 
@@ -719,6 +721,7 @@ impl JsonPath {
         providers: &BTreeMap<String, P>,
     ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         let provider_name = self.provider.clone();
+        let marker = self.marker;
         providers
             .get(&self.provider)
             .map(move |provider| {
@@ -728,7 +731,7 @@ impl JsonPath {
                     (result, outgoing)
                 })
             })
-            .ok_or_else(move || Error::UnknownProvider(provider_name))
+            .ok_or_else(move || Error::UnknownProvider(provider_name, marker))
             .into_future()
             .flatten_stream()
     }
@@ -742,11 +745,14 @@ pub(super) struct Match {
 }
 
 impl Match {
-    pub(super) fn new(args: Vec<ValueOrExpression>) -> Result<Either<Self, json::Value>, Error> {
+    pub(super) fn new(
+        args: Vec<ValueOrExpression>,
+        marker: Marker,
+    ) -> Result<Either<Self, json::Value>, Error> {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(regex_str)))] => {
-                let regex =
-                    Regex::new(regex_str).map_err(|_| Error::InvalidFunctionArguments("match"))?;
+                let regex = Regex::new(regex_str)
+                    .map_err(|_| Error::InvalidFunctionArguments("match", marker))?;
                 let capture_names: Vec<_> = regex
                     .capture_names()
                     .enumerate()
@@ -765,7 +771,7 @@ impl Match {
                     Ok(Either::A(m))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("match")),
+            _ => Err(Error::InvalidFunctionArguments("match", marker)),
         }
     }
 
@@ -956,19 +962,20 @@ impl Pad {
     pub(super) fn new(
         start: bool,
         mut args: Vec<ValueOrExpression>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         let as_usize = |fa| match fa {
             ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n
                 .as_u64()
                 .map(|n| n as usize)
-                .ok_or_else(|| Error::InvalidFunctionArguments("pad")),
-            _ => Err(Error::InvalidFunctionArguments("pad")),
+                .ok_or_else(|| Error::InvalidFunctionArguments("pad", marker)),
+            _ => Err(Error::InvalidFunctionArguments("pad", marker)),
         };
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::Number(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
                 let third = into_string(args.pop().expect("pad should have three args"))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("pad"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("pad", marker))?;
                 let second = as_usize(args.pop().expect("pad should have three args"))?;
                 let first = args.pop().expect("pad should have three args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &first {
@@ -984,7 +991,7 @@ impl Pad {
                     Ok(Either::A(a))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("pad")),
+            _ => Err(Error::InvalidFunctionArguments("pad", marker)),
         }
     }
 
@@ -1065,7 +1072,7 @@ pub enum Random {
 }
 
 impl Random {
-    pub(super) fn new(args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         match args.as_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::Number(first))), ValueOrExpression::Value(Value::Json(json::Value::Number(second)))] => {
                 if first.is_u64() && second.is_u64() {
@@ -1082,7 +1089,7 @@ impl Random {
                     Ok(Random::Float(r))
                 }
             }
-            _ => Err(Error::InvalidFunctionArguments("random")),
+            _ => Err(Error::InvalidFunctionArguments("random", marker)),
         }
     }
 
@@ -1140,12 +1147,12 @@ impl ReversibleRange {
 
 #[derive(Clone, Debug)]
 pub(super) enum Range {
-    Args(ValueOrExpression, ValueOrExpression),
+    Args(ValueOrExpression, ValueOrExpression, Marker),
     Range(ReversibleRange),
 }
 
 impl Range {
-    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         if args.len() == 2 {
             let second = args.pop().expect("range should have two args");
             let first = args.pop().expect("range should have two args");
@@ -1154,16 +1161,16 @@ impl Range {
                     ValueOrExpression::Value(Value::Json(_)),
                     ValueOrExpression::Value(Value::Json(_)),
                 ) => {
-                    let first =
-                        as_u64(&first).ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
-                    let second =
-                        as_u64(&second).ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
+                    let first = as_u64(&first)
+                        .ok_or_else(|| Error::InvalidFunctionArguments("range", marker))?;
+                    let second = as_u64(&second)
+                        .ok_or_else(|| Error::InvalidFunctionArguments("range", marker))?;
                     Ok(Range::Range(ReversibleRange::new(first, second)))
                 }
-                _ => Ok(Range::Args(first, second)),
+                _ => Ok(Range::Args(first, second, marker)),
             }
         } else {
-            Err(Error::InvalidFunctionArguments("range"))
+            Err(Error::InvalidFunctionArguments("range", marker))
         }
     }
 
@@ -1188,15 +1195,15 @@ impl Range {
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, Error> {
         let r = match self {
-            Range::Args(first, second) => {
+            Range::Args(first, second, marker) => {
                 let first = first
                     .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
                     .as_u64()
-                    .ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("range", *marker))?;
                 let second = second
                     .evaluate(d, no_recoverable_error, for_each)?
                     .as_u64()
-                    .ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("range", *marker))?;
                 ReversibleRange::new(first, second)
             }
             Range::Range(r) => r.clone(),
@@ -1213,17 +1220,17 @@ impl Range {
         no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         match self {
-            Range::Args(first, second) => {
+            Range::Args(first, second, marker) => {
                 let a = first
                     .into_stream(providers, no_recoverable_error)
                     .zip(second.into_stream(providers, no_recoverable_error))
-                    .and_then(|((first, mut returns), (second, returns2))| {
+                    .and_then(move |((first, mut returns), (second, returns2))| {
                         let first = first
                             .as_u64()
-                            .ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
+                            .ok_or_else(|| Error::InvalidFunctionArguments("range", marker))?;
                         let second = second
                             .as_u64()
-                            .ok_or_else(|| Error::InvalidFunctionArguments("range"))?;
+                            .ok_or_else(|| Error::InvalidFunctionArguments("range", marker))?;
                         let v = json::Value::Array(
                             ReversibleRange::new(first, second)
                                 .into_iter()
@@ -1252,22 +1259,22 @@ pub(super) struct Repeat {
 }
 
 impl Repeat {
-    pub(super) fn new(mut args: Vec<ValueOrExpression>) -> Result<Self, Error> {
+    pub(super) fn new(mut args: Vec<ValueOrExpression>, marker: Marker) -> Result<Self, Error> {
         match args.len() {
             1 | 2 => {
                 let min = as_u64(&args.remove(0))
-                    .ok_or_else(|| Error::InvalidFunctionArguments("repeat"))?;
+                    .ok_or_else(|| Error::InvalidFunctionArguments("repeat", marker))?;
                 let random = args
                     .pop()
                     .map(|fa| {
-                        let max =
-                            as_u64(&fa).ok_or_else(|| Error::InvalidFunctionArguments("repeat"));
+                        let max = as_u64(&fa)
+                            .ok_or_else(|| Error::InvalidFunctionArguments("repeat", marker));
                         Ok::<_, Error>(Uniform::new(min, max?))
                     })
                     .transpose()?;
                 Ok(Repeat { min, random })
             }
-            _ => Err(Error::InvalidFunctionArguments("repeat")),
+            _ => Err(Error::InvalidFunctionArguments("repeat", marker)),
         }
     }
 
@@ -1325,6 +1332,7 @@ pub(super) struct Replace {
 impl Replace {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         match args.as_mut_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::String(needle))), ValueOrExpression::Value(Value::Json(haystack)), ValueOrExpression::Value(Value::Json(json::Value::String(replacer)))] =>
@@ -1343,7 +1351,7 @@ impl Replace {
                     replacer,
                 }))
             }
-            _ => Err(Error::InvalidFunctionArguments("match")),
+            _ => Err(Error::InvalidFunctionArguments("match", marker)),
         }
     }
 
@@ -1436,8 +1444,12 @@ impl Replace {
 
 #[cfg(test)]
 mod tests {
-    use super::super::select_parser::{Path, PathStart};
+    use super::super::{
+        create_marker,
+        select_parser::{Path, PathStart},
+    };
     use super::*;
+    use std::collections::BTreeSet;
 
     pub struct Literals(Vec<json::Value>);
 
@@ -1469,10 +1481,12 @@ mod tests {
 
     impl From<&str> for ValueOrExpression {
         fn from(s: &str) -> Self {
+            let marker = create_marker();
             ValueOrExpression::Value(Value::Path(
                 Path {
                     start: PathStart::Ident(s.into()),
                     rest: vec![],
+                    marker,
                 }
                 .into(),
             ))
@@ -1489,7 +1503,7 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
-            let c = Collect::new(args).unwrap();
+            let c = Collect::new(args, create_marker()).unwrap();
             let left = c
                 .evaluate(Cow::Owned(json::Value::Null), false, None)
                 .unwrap();
@@ -1507,7 +1521,7 @@ mod tests {
 
         for (args, right) in checks.into_iter() {
             let args = args.into_iter().map(Into::into).collect();
-            let c = Collect::new(args).unwrap();
+            let c = Collect::new(args, create_marker()).unwrap();
             let left: Vec<_> = c
                 .evaluate_as_iter(Cow::Owned(json::Value::Null), false, None)
                 .unwrap()
@@ -1538,7 +1552,7 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(i, (args, right, range))| {
-                    let c = Collect::new(args).unwrap();
+                    let c = Collect::new(args, create_marker()).unwrap();
                     c.into_stream(&providers, false)
                         .into_future()
                         .map(move |(v, _)| {
@@ -1615,7 +1629,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match (eval, Encode::new(args).unwrap()) {
+            match (eval, Encode::new(args, create_marker()).unwrap()) {
                 (Some(eval), Either::A(e)) => {
                     let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
                     assert_eq!(*left, right)
@@ -1658,7 +1672,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match Encode::new(args).unwrap() {
+            match Encode::new(args, create_marker()).unwrap() {
                 Either::A(e) => {
                     let left: Vec<_> = e
                         .evaluate_as_iter(Cow::Owned(eval), false, None)
@@ -1708,13 +1722,15 @@ mod tests {
 
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match Encode::new(args).unwrap() {
-                    Either::A(e) => e
-                        .into_stream(&providers, false)
-                        .into_future()
-                        .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
-                    Either::B(_) => unreachable!(),
-                })
+                .map(
+                    |(args, right)| match Encode::new(args, create_marker()).unwrap() {
+                        Either::A(e) => e
+                            .into_stream(&providers, false)
+                            .into_future()
+                            .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
+                        Either::B(_) => unreachable!(),
+                    },
+                )
                 .collect();
             join_all(futures).then(|_| Ok(()))
         }));
@@ -1744,7 +1760,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            let e = Entries::new(args).unwrap();
+            let e = Entries::new(args, create_marker()).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
             let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
             assert_eq!(*left, right)
@@ -1775,7 +1791,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            let e = Entries::new(args).unwrap();
+            let e = Entries::new(args, create_marker()).unwrap();
             let eval = eval.unwrap_or(json::Value::Null);
             let left: Vec<_> = e
                 .evaluate_as_iter(Cow::Owned(eval), false, None)
@@ -1808,7 +1824,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, right)| {
-                    Entries::new(args)
+                    Entries::new(args, create_marker())
                         .unwrap()
                         .into_stream(&providers, false)
                         .into_future()
@@ -1825,7 +1841,7 @@ mod tests {
         let checks = vec![j!("s"), j!("ms"), j!("mu"), j!("ns")];
 
         for arg in checks.into_iter() {
-            let e = Epoch::new(vec![arg.into()]).unwrap();
+            let e = Epoch::new(vec![arg.into()], create_marker()).unwrap();
             let left = json_value_to_string(e.evaluate().unwrap())
                 .parse::<u128>()
                 .unwrap();
@@ -1852,7 +1868,7 @@ mod tests {
         let checks = vec![j!("s"), j!("ms"), j!("mu"), j!("ns")];
 
         for arg in checks.into_iter() {
-            let e = Epoch::new(vec![arg.into()]).unwrap();
+            let e = Epoch::new(vec![arg.into()], create_marker()).unwrap();
             let mut left: Vec<_> = e.evaluate_as_iter().unwrap().collect();
             assert_eq!(left.len(), 1);
             let left = json_value_to_string(left.pop().unwrap())
@@ -1884,7 +1900,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|arg| {
-                    let e = Epoch::new(vec![arg.into()]).unwrap();
+                    let e = Epoch::new(vec![arg.into()], create_marker()).unwrap();
                     e.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (left, _) = v.unwrap();
                         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -1920,7 +1936,7 @@ mod tests {
         ];
 
         for (args, expect) in checks.into_iter() {
-            match If::new(args).unwrap() {
+            match If::new(args, create_marker()).unwrap() {
                 Either::A(_) => unreachable!(),
                 Either::B(v) => assert_eq!(v, expect),
             }
@@ -1944,7 +1960,7 @@ mod tests {
         ];
 
         for (args, eval, expect) in checks.into_iter() {
-            let i = match If::new(args).unwrap() {
+            let i = match If::new(args, create_marker()).unwrap() {
                 Either::A(i) => i,
                 Either::B(_) => unreachable!(),
             };
@@ -1975,13 +1991,15 @@ mod tests {
 
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match If::new(args).unwrap() {
-                    Either::A(e) => e
-                        .into_stream(&providers, false)
-                        .into_future()
-                        .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
-                    Either::B(_) => unreachable!(),
-                })
+                .map(
+                    |(args, right)| match If::new(args, create_marker()).unwrap() {
+                        Either::A(e) => e
+                            .into_stream(&providers, false)
+                            .into_future()
+                            .map(move |(v, _)| assert_eq!(v.unwrap().0, right)),
+                        Either::B(_) => unreachable!(),
+                    },
+                )
                 .collect();
             join_all(futures).then(|_| Ok(()))
         }));
@@ -2025,7 +2043,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match (eval, Join::new(args).unwrap()) {
+            match (eval, Join::new(args, create_marker()).unwrap()) {
                 (Some(eval), Either::A(e)) => {
                     let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
                     assert_eq!(*left, right)
@@ -2054,7 +2072,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match Join::new(args).unwrap() {
+            match Join::new(args, create_marker()).unwrap() {
                 Either::A(e) => {
                     let left: Vec<_> = e
                         .evaluate_as_iter(Cow::Owned(eval), false, None)
@@ -2087,16 +2105,18 @@ mod tests {
             let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match Join::new(args).unwrap() {
-                    Either::A(j) => {
-                        j.into_stream(&providers, false)
-                            .into_future()
-                            .map(move |(v, _)| {
-                                assert_eq!(v.unwrap().0, right);
-                            })
-                    }
-                    Either::B(_) => unreachable!(),
-                })
+                .map(
+                    |(args, right)| match Join::new(args, create_marker()).unwrap() {
+                        Either::A(j) => {
+                            j.into_stream(&providers, false)
+                                .into_future()
+                                .map(move |(v, _)| {
+                                    assert_eq!(v.unwrap().0, right);
+                                })
+                        }
+                        Either::B(_) => unreachable!(),
+                    },
+                )
                 .collect();
             join_all(futures).then(|_| Ok(()))
         }));
@@ -2104,7 +2124,6 @@ mod tests {
 
     #[test]
     fn json_path_eval() {
-        std::env::set_var("ZED", "[26]");
         // constructor args, eval_arg, expect response, expect providers
         let checks = vec![
             (
@@ -2125,10 +2144,10 @@ mod tests {
                 j!([0]),
                 btreeset!["a".to_string()],
             ),
-            // this should work but apparently the json_path library can't handle it
+            // current JsonPath does not properly parse the provider
             // (
-            //     j!("['$ZED'].*"),
-            //     j!(null),
+            //     j!("['ZED'].*"),
+            //     j!({ "ZED": [26] }),
             //     j!([26]),
             //     btreeset![],
             // ),
@@ -2143,10 +2162,16 @@ mod tests {
                 };
                 match (
                     *do_static,
-                    JsonPath::new(vec![arg.clone().into()], &mut providers, &static_vars).unwrap(),
+                    JsonPath::new(
+                        vec![arg.clone().into()],
+                        &mut providers,
+                        &static_vars,
+                        create_marker(),
+                    )
+                    .unwrap(),
                 ) {
                     (false, Either::A(j)) => {
-                        assert_eq!(&providers.into_inner(), providers_expect);
+                        assert_eq!(&providers.unique_providers(), providers_expect);
                         let left = j.evaluate(Cow::Borrowed(eval));
                         assert_eq!(&*left, right)
                     }
@@ -2186,9 +2211,16 @@ mod tests {
         for (arg, eval, right, providers_expect) in checks.into_iter() {
             let mut providers = RequiredProviders::new();
             let static_vars = BTreeMap::new();
-            match JsonPath::new(vec![arg.into()], &mut providers, &static_vars).unwrap() {
+            match JsonPath::new(
+                vec![arg.into()],
+                &mut providers,
+                &static_vars,
+                create_marker(),
+            )
+            .unwrap()
+            {
                 Either::A(j) => {
-                    assert_eq!(providers.into_inner(), providers_expect);
+                    assert_eq!(providers.unique_providers(), providers_expect);
                     let left: Vec<_> = j
                         .evaluate_as_iter(Cow::Owned(eval))
                         .map(Cow::into_owned)
@@ -2220,9 +2252,17 @@ mod tests {
                 .map(|(arg, right, providers_expect)| {
                     let mut providers2 = RequiredProviders::new();
                     let static_vars = BTreeMap::new();
-                    match JsonPath::new(vec![arg.into()], &mut providers2, &static_vars).unwrap() {
+                    match JsonPath::new(
+                        vec![arg.into()],
+                        &mut providers2,
+                        &static_vars,
+                        create_marker(),
+                    )
+                    .unwrap()
+                    {
                         Either::A(j) => {
-                            assert_eq!(providers2.into_inner(), providers_expect);
+                            let providers2: BTreeSet<_> = providers2.unique_providers();
+                            assert_eq!(providers2, providers_expect);
                             j.into_stream(&providers).into_future().map(move |(v, _)| {
                                 assert_eq!(v.unwrap().0, right);
                             })
@@ -2265,7 +2305,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match (eval, Match::new(args)) {
+            match (eval, Match::new(args, create_marker())) {
                 (Some(eval), Ok(Either::A(e))) => {
                     let left = e.evaluate(Cow::Owned(eval), false, None).unwrap();
                     assert_eq!(*left, right)
@@ -2293,7 +2333,7 @@ mod tests {
         ];
 
         for (args, eval, right) in checks.into_iter() {
-            match Match::new(args) {
+            match Match::new(args, create_marker()) {
                 Ok(Either::A(e)) => {
                     let left: Vec<_> = e
                         .evaluate_as_iter(Cow::Owned(eval), false, None)
@@ -2329,7 +2369,7 @@ mod tests {
             let providers = Arc::new(providers);
             let futures: Vec<_> = checks
                 .into_iter()
-                .map(|(args, right)| match Match::new(args) {
+                .map(|(args, right)| match Match::new(args, create_marker()) {
                     Ok(Either::A(m)) => {
                         m.into_stream(&providers, false)
                             .into_future()
@@ -2520,7 +2560,7 @@ mod tests {
         ];
 
         for (start, args, eval, right) in checks.into_iter() {
-            match (eval, Pad::new(start, args).unwrap()) {
+            match (eval, Pad::new(start, args, create_marker()).unwrap()) {
                 (Some(eval), Either::A(p)) => {
                     let left = p.evaluate(Cow::Owned(eval), false, None).unwrap();
                     assert_eq!(*left, right)
@@ -2562,7 +2602,7 @@ mod tests {
         ];
 
         for (start, args, eval, right) in checks.into_iter() {
-            match Pad::new(start, args).unwrap() {
+            match Pad::new(start, args, create_marker()).unwrap() {
                 Either::A(p) => {
                     let left: Vec<_> = p
                         .evaluate_as_iter(Cow::Owned(eval), false, None)
@@ -2611,7 +2651,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(
-                    |(start, args, right)| match Pad::new(start, args).unwrap() {
+                    |(start, args, right)| match Pad::new(start, args, create_marker()).unwrap() {
                         Either::A(p) => {
                             p.into_stream(&providers, false)
                                 .into_future()
@@ -2632,7 +2672,11 @@ mod tests {
         let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
 
         for (first, second) in args.into_iter() {
-            let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+            let r = Random::new(
+                vec![first.clone().into(), second.clone().into()],
+                create_marker(),
+            )
+            .unwrap();
             let left = r.evaluate();
             if first.is_u64() && second.is_u64() {
                 let left = left.as_u64().unwrap();
@@ -2647,7 +2691,11 @@ mod tests {
         let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
 
         for (first, second) in args.into_iter() {
-            let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+            let r = Random::new(
+                vec![first.clone().into(), second.clone().into()],
+                create_marker(),
+            )
+            .unwrap();
             let mut left = r.evaluate_as_iter().collect::<Vec<_>>();
             assert_eq!(left.len(), 1);
             let left = left.pop().unwrap();
@@ -2667,7 +2715,11 @@ mod tests {
             let futures: Vec<_> = args
                 .into_iter()
                 .map(move |(first, second)| {
-                    let r = Random::new(vec![first.clone().into(), second.clone().into()]).unwrap();
+                    let r = Random::new(
+                        vec![first.clone().into(), second.clone().into()],
+                        create_marker(),
+                    )
+                    .unwrap();
                     r.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (left, _) = v.unwrap();
                         if first.is_u64() && second.is_u64() {
@@ -2697,7 +2749,7 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let r = Range::new(args).unwrap();
+            let r = Range::new(args, create_marker()).unwrap();
             let left = r.evaluate(Cow::Borrowed(&data), false, None).unwrap();
             assert_eq!(*left, right);
         }
@@ -2718,7 +2770,7 @@ mod tests {
         ];
 
         for (args, right) in checks.into_iter() {
-            let r = Range::new(args).unwrap();
+            let r = Range::new(args, create_marker()).unwrap();
             let left: Vec<_> = r
                 .evaluate_as_iter(Cow::Borrowed(&data), false, None)
                 .unwrap()
@@ -2753,7 +2805,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(move |(args, right)| {
-                    let r = Range::new(args).unwrap();
+                    let r = Range::new(args, create_marker()).unwrap();
                     r.into_stream(&providers, false)
                         .into_future()
                         .map(move |(v, _)| {
@@ -2774,7 +2826,7 @@ mod tests {
         ];
 
         for (args, count) in checks.into_iter() {
-            let r = Repeat::new(args).unwrap();
+            let r = Repeat::new(args, create_marker()).unwrap();
             let v = if let json::Value::Array(v) = r.evaluate().into_owned() {
                 v
             } else {
@@ -2798,7 +2850,7 @@ mod tests {
         ];
 
         for (args, count) in checks.into_iter() {
-            let r = Repeat::new(args).unwrap();
+            let r = Repeat::new(args, create_marker()).unwrap();
             let v: Vec<_> = r.evaluate_as_iter().collect();
             assert!(v.iter().all(|v| **v == json::Value::Null));
             let len = v.len();
@@ -2821,7 +2873,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(|(args, count)| {
-                    let r = Repeat::new(args).unwrap();
+                    let r = Repeat::new(args, create_marker()).unwrap();
                     r.into_stream::<()>().into_future().map(move |(v, _)| {
                         let (v, _) = v.unwrap();
                         let v = if let json::Value::Array(v) = v {
@@ -2861,7 +2913,7 @@ mod tests {
         ];
 
         for (args, expect) in checks.into_iter() {
-            let result = if let Ok(Either::B(r)) = Replace::new(args) {
+            let result = if let Ok(Either::B(r)) = Replace::new(args, create_marker()) {
                 r
             } else {
                 unreachable!();
@@ -2890,7 +2942,7 @@ mod tests {
         ];
 
         for (args, expect) in checks.into_iter() {
-            let r = if let Ok(Either::A(r)) = Replace::new(args) {
+            let r = if let Ok(Either::A(r)) = Replace::new(args, create_marker()) {
                 r
             } else {
                 unreachable!();
@@ -2928,7 +2980,7 @@ mod tests {
             let futures: Vec<_> = checks
                 .into_iter()
                 .map(move |(args, right)| {
-                    let r = if let Ok(Either::A(r)) = Replace::new(args) {
+                    let r = if let Ok(Either::A(r)) = Replace::new(args, create_marker()) {
                         r
                     } else {
                         unreachable!();

@@ -185,7 +185,7 @@ impl ProviderStream<AutoReturn> for providers::Provider {
     fn into_stream(
         &self,
     ) -> Box<
-        dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = config::Error>
+        dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = config::ExpressionError>
             + Send
             + Sync
             + 'static,
@@ -207,7 +207,7 @@ impl ProviderStream<AutoReturn> for providers::Provider {
 }
 
 pub struct BuilderContext {
-    pub config: config::Config<config::ClientConfig, config::GeneralConfig>,
+    pub config: config::Config,
     pub config_path: PathBuf,
     // the http client
     pub client: Arc<
@@ -313,7 +313,7 @@ impl Builder {
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
         // go through the list of required providers and make sure we have them all
-        for name in providers_to_stream.into_inner() {
+        for name in providers_to_stream.unique_providers() {
             let provider = match ctx.providers.get(&name) {
                 Some(p) => p,
                 None => continue,

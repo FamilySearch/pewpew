@@ -1,7 +1,7 @@
 use crate::error::{RecoverableError, TestError};
 use crate::stats;
 
-use config::{EndpointProvidesSendOptions, Template};
+use config::{EndpointProvidesSendOptions, ExpressionError, Template};
 use ether::{Either, Either3};
 use futures::future::{join_all, select_all, Future, IntoFuture};
 use parking_lot::Mutex;
@@ -126,12 +126,13 @@ impl BodyHandler {
                 let send_behavior = select.get_send_behavior();
                 let iter = match select.iter(template_values.clone()).map_err(Into::into) {
                     Ok(v) => v.map(|v| v.map_err(Into::into)),
-                    Err(TestError::Recoverable(r)) => {
+                    Err(ExpressionError::IndexingIntoJson(j, e, _)) => {
+                        let r = RecoverableError::IndexingJson(j, e);
                         let kind = stats::StatKind::RecoverableError(r);
                         futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;
                     }
-                    Err(e) => return Either::B(Err(e).into_future()),
+                    Err(e) => return Either::B(Err(e.into()).into_future()),
                 };
                 match send_behavior {
                     EndpointProvidesSendOptions::Block => {
@@ -224,12 +225,12 @@ mod tests {
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use config::{Limit, Select};
+    use config::{EndpointProvidesSendOptions::*, Limit, Select};
 
-    fn create_outgoing(s: json::Value) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
-        let static_vars = BTreeMap::new();
-        let eppp = json::from_value(s).unwrap();
-        let select = Select::new(eppp, &static_vars, &mut Default::default(), false).unwrap();
+    fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
+        // let static_vars = BTreeMap::new();
+        // let eppp = json::from_value(s).unwrap();
+        // let select = Select::new(eppp, &static_vars, &mut Default::default(), false).unwrap();
         let (tx, rx) = channel::channel(Limit::Integer(1));
         let cb_called = Arc::new(AtomicUsize::new(0));
         let cb_called2 = cb_called.clone();
@@ -251,38 +252,28 @@ mod tests {
             let template_values = json::json!({"response": {}}).into();
             let included_outgoing_indexes = btreeset!(0, 1, 2);
 
-            let outgoing1 = json::json!({
-                "select": "1 + 1",
-                "send": "force",
-                "for_each": ["repeat(3)"]
-            });
-            let (outgoing1, mut rx1, cb_called1) = create_outgoing(outgoing1);
+            let select1 = Select::simple("1 + 1", Force, Some(vec!["repeat(3)"]), None, None);
+            let (outgoing1, mut rx1, cb_called1) = create_outgoing(select1);
 
-            let outgoing2 = json::json!({
-                "select": "1",
-                "send": "block",
-            });
-            let (outgoing2, mut rx2, cb_called2) = create_outgoing(outgoing2);
+            let select2 = Select::simple("1", Block, None, None, None);
+            let (outgoing2, mut rx2, cb_called2) = create_outgoing(select2);
 
-            let outgoing3 = json::json!({
-                "select": "response.body.foo",
-                "send": "if_not_full",
-                "for_each": ["repeat(3)"]
-            });
-            let (outgoing3, mut rx3, cb_called3) = create_outgoing(outgoing3);
+            let select3 = Select::simple(
+                "response.body.foo",
+                IfNotFull,
+                Some(vec!["repeat(3)"]),
+                None,
+                None,
+            );
+            let (outgoing3, mut rx3, cb_called3) = create_outgoing(select3);
 
-            let outgoing4 = json::json!({
-                "select": "1",
-                "send": "block",
-            });
-            let (outgoing4, mut rx4, cb_called4) = create_outgoing(outgoing4);
+            let select4 = Select::simple("1", Block, None, None, None);
+            let (outgoing4, mut rx4, cb_called4) = create_outgoing(select4);
 
             let outgoing = vec![outgoing1, outgoing2, outgoing3, outgoing4].into();
             let (stats_tx, mut stats_rx) = futures_channel::unbounded();
             let status = 200;
-            let tags = Arc::new(
-                btreemap! {"_id".into() => Template::new("0", &BTreeMap::new(), &mut Default::default(), false).unwrap() },
-            );
+            let tags = Arc::new(btreemap! {"_id".into() => Template::simple("0") });
 
             let bh = BodyHandler {
                 now,
@@ -396,25 +387,20 @@ mod tests {
             let template_values = json::json!({"response": {}}).into();
             let included_outgoing_indexes = btreeset!(0, 1, 2);
 
-            let outgoing1 = json::json!({
-                "select": "1 + 1",
-                "send": "block",
-                "for_each": ["repeat(3)"]
-            });
-            let (outgoing1, mut rx1, cb_called1) = create_outgoing(outgoing1);
+            let select1 = Select::simple("1 + 1", Block, Some(vec!["repeat(3)"]), None, None);
+            let (outgoing1, mut rx1, cb_called1) = create_outgoing(select1);
 
-            let outgoing2 = json::json!({
-                "select": "1",
-                "send": "block"
-            });
-            let (outgoing2, mut rx2, cb_called2) = create_outgoing(outgoing2);
+            let select2 = Select::simple("1", Block, None, None, None);
+            let (outgoing2, mut rx2, cb_called2) = create_outgoing(select2);
 
-            let outgoing3 = json::json!({
-                "select": "response.body.foo",
-                "send": "block",
-                "for_each": ["repeat(2)"]
-            });
-            let (outgoing3, mut rx3, cb_called3) = create_outgoing(outgoing3);
+            let select3 = Select::simple(
+                "response.body.foo",
+                Block,
+                Some(vec!["repeat(2)"]),
+                None,
+                None,
+            );
+            let (outgoing3, mut rx3, cb_called3) = create_outgoing(select3);
 
             let outgoing = vec![outgoing1, outgoing2, outgoing3].into();
             let (stats_tx, stats_rx) = futures_channel::unbounded();

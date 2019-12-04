@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![type_length_limit = "1471920"]
+#![type_length_limit = "1483480"]
 
 mod error;
 mod providers;
@@ -67,8 +67,8 @@ impl Endpoints {
         required_providers: config::RequiredProviders,
     ) {
         let i = self.inner.len();
-        self.inner
-            .push((endpoint_tags, builder, required_providers.into_inner()));
+        let set = required_providers.unique_providers();
+        self.inner.push((endpoint_tags, builder, set));
         for p in provides {
             self.providers.entry(p).or_default().push(i);
         }
@@ -570,9 +570,8 @@ where
          ${response['start-line']}\n\
          ${join(response.headers, '\n', ': ')}\n\
          ${if(response.body != '', '\n${response.body}', '')}\n\n`"
-            .into()
     } else {
-        json::json!({
+        r#"{
             "request": {
                 "start-line": "request['start-line']",
                 "headers": "request.headers",
@@ -586,14 +585,10 @@ where
             "stats": {
                 "RTT": "stats.rtt"
             }
-        })
+        })"#
     };
     let to = try_config.file.unwrap_or_else(|| "stderr".into());
-    let logger = json::json!({
-        "select": select,
-        "to": to
-    });
-    let logger = json::from_value(logger).expect("should be valid logger");
+    let logger = config::LoggerPreProcessed::from_str(&select, &to).unwrap();
     if !try_config.loggers_on {
         config.clear_loggers();
     }
@@ -919,7 +914,7 @@ pub(crate) fn create_http_client(
 type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<String>), TestError>;
 
 fn get_providers_from_config(
-    config_providers: BTreeMap<String, config::Provider<config::FileProvider>>,
+    config_providers: BTreeMap<String, config::Provider>,
     auto_size: usize,
     test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,

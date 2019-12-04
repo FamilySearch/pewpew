@@ -248,11 +248,11 @@ mod tests {
     #[test]
     fn range_provider_works() {
         current_thread::run(future::lazy(|| {
-            let range_params = r#"{
-                "start": 0,
-                "end": 20
-            }"#;
-            let range_params = serde_json::from_str(range_params).unwrap();
+            let range_params = r#"
+                start: 0
+                end: 20
+            "#;
+            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
             let p = range(range_params);
             let expects = stream::iter_ok(0..=20);
 
@@ -262,12 +262,12 @@ mod tests {
             });
             current_thread::spawn(f);
 
-            let range_params = r#"{
-                "start": 0,
-                "end": 20,
-                "step": 2
-            }"#;
-            let range_params = serde_json::from_str(range_params).unwrap();
+            let range_params = r#"
+                start: 0
+                end: 20
+                step: 2
+            "#;
+            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
             let p = range(range_params);
             let expects = stream::iter_ok((0..=20).step_by(2));
 
@@ -277,13 +277,13 @@ mod tests {
             });
             current_thread::spawn(f);
 
-            let range_params = r#"{
-                "start": 0,
-                "end": 20,
-                "repeat": true
-            }"#;
+            let range_params = r#"
+                start: 0
+                end: 20
+                repeat: true
+            "#;
 
-            let range_params = serde_json::from_str(range_params).unwrap();
+            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
             let p = range(range_params);
             let expects = stream::iter_ok((0..=20).cycle());
 
@@ -406,11 +406,11 @@ mod tests {
     #[test]
     fn basic_logger_works() {
         current_thread::run(future::lazy(|| {
-            let logger_params = r#"{
-                "to": "",
-                "kill": true
-            }"#;
-            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let logger_params = r#"
+                to: ""
+                kill: true
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
             let (logger_params, _) = config::Logger::from_pre_processed(
                 logger_params,
                 &Default::default(),
@@ -456,10 +456,10 @@ mod tests {
     #[test]
     fn basic_logger_works_with_large_data() {
         current_thread::run(future::lazy(|| {
-            let logger_params = r#"{
-                "to": ""
-            }"#;
-            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let logger_params = r#"
+                to: ""
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
             let (logger_params, _) = config::Logger::from_pre_processed(
                 logger_params,
                 &Default::default(),
@@ -506,10 +506,10 @@ mod tests {
     #[test]
     fn basic_logger_works_with_would_block() {
         current_thread::run(future::lazy(|| {
-            let logger_params = r#"{
-                "to": ""
-            }"#;
-            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let logger_params = r#"
+                to: ""
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
             let (logger_params, _) = config::Logger::from_pre_processed(
                 logger_params,
                 &Default::default(),
@@ -554,11 +554,11 @@ mod tests {
     #[test]
     fn logger_limit_works() {
         current_thread::run(future::lazy(|| {
-            let logger_params = r#"{
-                "to": "",
-                "limit": 1
-            }"#;
-            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let logger_params = r#"
+                to: ""
+                limit: 1
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
             let (logger_params, _) = config::Logger::from_pre_processed(
                 logger_params,
                 &Default::default(),
@@ -602,11 +602,11 @@ mod tests {
     #[test]
     fn logger_pretty_works() {
         current_thread::run(future::lazy(|| {
-            let logger_params = r#"{
-                "to": "",
-                "pretty": true
-            }"#;
-            let logger_params = serde_json::from_str(logger_params).unwrap();
+            let logger_params = r#"
+                to: ""
+                pretty: true
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
             let (logger_params, _) = config::Logger::from_pre_processed(
                 logger_params,
                 &Default::default(),

@@ -86,7 +86,7 @@ impl StdError for TestError {
         match self {
             CannotCreateLoggerFile(_, e) => Some(&**e),
             CannotOpenFile(_, e) => Some(&**e),
-            Config(e) => e.source(),
+            Config(e) => Some(e),
             FileReading(_, e) => Some(&**e),
             Recoverable(BodyErr(e)) => Some(&**e),
             Recoverable(ConnectionErr(_, e)) => Some(&**e),
@@ -106,11 +106,18 @@ impl From<tokio::timer::Error> for TestError {
 
 impl From<config::Error> for TestError {
     fn from(ce: config::Error) -> Self {
-        if let config::Error::IndexingIntoJson(s, j) = ce {
+        if let config::Error::ExpressionErr(config::ExpressionError::IndexingIntoJson(s, j, _)) = ce
+        {
             Recoverable(IndexingJson(s, j))
         } else {
             Config(ce)
         }
+    }
+}
+
+impl From<config::ExpressionError> for TestError {
+    fn from(ce: config::ExpressionError) -> Self {
+        Config(ce.into())
     }
 }
 

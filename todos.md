@@ -2,8 +2,11 @@
 - refactor stats parser so all console messages are printed from one location
   - need to log errors for try run
   - update results viewer to handle new stats format
+- Directly parse the yaml instead of relying on serde-yaml so we can access line numbers
+- Make config errors more descriptive of where they happened
 - When a test ends early because a provider ended, indicate which provider it was
 - v0.6 - Breaking Change - Make tags a global within a select. Add `tags` to the list of reserved keywords
+- v0.6 - Breaking Change - Make the stats file not be an array of jsons but just a log file of appended jsons (so the file doesn't need to be rewritten in whole with each bucket). Will also need to update the results viewer
 - v0.6 - Breaking Change - Change the repeat option on file and range providers default to true
 - v0.6 - ensure templates for file paths only reference static providers and vars
 - v0.6 - Remove stats-file-format cli flag

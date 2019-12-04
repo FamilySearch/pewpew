@@ -2,9 +2,12 @@ use crate::expression_functions::{
     Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
     Replace,
 };
-use crate::{json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions};
+use crate::{
+    create_marker, json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions,
+    WithMarker,
+};
 
-use crate::error::Error;
+use crate::error::{self, ExpressionError as Error};
 
 use ether::{Either, Either3};
 use futures::{stream, Future, IntoFuture, Stream};
@@ -15,6 +18,7 @@ use pest::{
 };
 use pest_derive::Parser;
 use serde_json as json;
+use yaml_rust::scanner::Marker;
 use zip_all::zip_all;
 
 use std::{
@@ -32,7 +36,7 @@ pub trait ProviderStream<Ar: Clone + Send + Sync + 'static> {
 
 #[derive(Clone, Debug, Default)]
 pub struct RequiredProviders {
-    inner: BTreeSet<String>,
+    inner: BTreeMap<String, Marker>,
     special: u16,
     where_special: u16,
     is_where: bool,
@@ -41,7 +45,7 @@ pub struct RequiredProviders {
 impl RequiredProviders {
     pub fn new() -> Self {
         RequiredProviders {
-            inner: BTreeSet::new(),
+            inner: BTreeMap::new(),
             special: 0,
             where_special: 0,
             is_where: false,
@@ -52,7 +56,7 @@ impl RequiredProviders {
         self.is_where = true;
     }
 
-    pub(super) fn insert(&mut self, s: String) {
+    pub(super) fn insert(&mut self, s: String, marker: Marker) {
         let special = if self.is_where {
             &mut self.where_special
         } else {
@@ -74,7 +78,7 @@ impl RequiredProviders {
             "for_each" => *special |= FOR_EACH,
             "error" => *special |= ERROR,
             _ => {
-                self.inner.insert(s);
+                self.inner.insert(s, marker);
             }
         }
     }
@@ -89,12 +93,16 @@ impl RequiredProviders {
         self.inner.extend(other.inner);
     }
 
-    pub fn into_inner(self) -> BTreeSet<String> {
+    pub fn into_inner(self) -> BTreeMap<String, Marker> {
         self.inner
     }
 
+    pub fn unique_providers(self) -> BTreeSet<String> {
+        self.inner.into_iter().map(|(k, _)| k).collect()
+    }
+
     pub fn contains(&self, p: &str) -> bool {
-        self.inner.contains(p)
+        self.inner.contains_key(p)
     }
 
     pub fn get_special(&self) -> u16 {
@@ -109,7 +117,7 @@ impl RequiredProviders {
         self.special == 0 && self.inner.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Marker)> {
         self.inner.iter()
     }
 }
@@ -138,27 +146,28 @@ impl FunctionCall {
         args: Vec<ValueOrExpression>,
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
+        marker: Marker,
     ) -> Result<Either<Self, json::Value>, Error> {
         let r = match ident {
-            "collect" => Either::A(FunctionCall::Collect(Collect::new(args)?)),
-            "encode" => Encode::new(args)?.map_a(FunctionCall::Encode),
-            "end_pad" => Pad::new(false, args)?.map_a(FunctionCall::Pad),
-            "entries" => Either::A(FunctionCall::Entries(Entries::new(args)?)),
-            "epoch" => Either::A(FunctionCall::Epoch(Epoch::new(args)?)),
-            "if" => If::new(args)?.map_a(|a| FunctionCall::If(a.into())),
-            "join" => Join::new(args)?.map_a(FunctionCall::Join),
+            "collect" => Either::A(FunctionCall::Collect(Collect::new(args, marker)?)),
+            "encode" => Encode::new(args, marker)?.map_a(FunctionCall::Encode),
+            "end_pad" => Pad::new(false, args, marker)?.map_a(FunctionCall::Pad),
+            "entries" => Either::A(FunctionCall::Entries(Entries::new(args, marker)?)),
+            "epoch" => Either::A(FunctionCall::Epoch(Epoch::new(args, marker)?)),
+            "if" => If::new(args, marker)?.map_a(|a| FunctionCall::If(a.into())),
+            "join" => Join::new(args, marker)?.map_a(FunctionCall::Join),
             "json_path" => {
-                JsonPath::new(args, providers, static_vars)?.map_a(FunctionCall::JsonPath)
+                JsonPath::new(args, providers, static_vars, marker)?.map_a(FunctionCall::JsonPath)
             }
-            "match" => Match::new(args)?.map_a(FunctionCall::Match),
+            "match" => Match::new(args, marker)?.map_a(FunctionCall::Match),
             "max" => MinMax::new(false, args)?.map_a(FunctionCall::MinMax),
             "min" => MinMax::new(true, args)?.map_a(FunctionCall::MinMax),
-            "start_pad" => Pad::new(true, args)?.map_a(FunctionCall::Pad),
-            "random" => Either::A(FunctionCall::Random(Random::new(args)?)),
-            "range" => Either::A(FunctionCall::Range(Range::new(args)?.into())),
-            "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args)?)),
-            "replace" => Replace::new(args)?.map_a(|r| FunctionCall::Replace(r.into())),
-            _ => return Err(Error::UnknownExpressionFunction(ident.into())),
+            "start_pad" => Pad::new(true, args, marker)?.map_a(FunctionCall::Pad),
+            "random" => Either::A(FunctionCall::Random(Random::new(args, marker)?)),
+            "range" => Either::A(FunctionCall::Range(Range::new(args, marker)?.into())),
+            "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args, marker)?)),
+            "replace" => Replace::new(args, marker)?.map_a(|r| FunctionCall::Replace(r.into())),
+            _ => return Err(Error::UnknownFunction(ident.into(), marker)),
         };
         Ok(r)
     }
@@ -302,6 +311,7 @@ fn index_json<'a>(
     index: Either<&PathSegment, &str>,
     no_err: bool,
     for_each: Option<&[Cow<'a, json::Value>]>,
+    marker: Marker,
 ) -> Result<Cow<'a, json::Value>, Error> {
     #[allow(unused_assignments)]
     let mut holder = None;
@@ -331,12 +341,13 @@ fn index_json<'a>(
             Some(Cow::Owned(ret))
         }
         (json, Either::A(s)) if !no_err => {
-            return Err(Error::IndexingIntoJson(s.into(), json.into_owned()));
+            return Err(Error::IndexingIntoJson(s.into(), json.into_owned(), marker));
         }
         (json, Either::B(n)) if !no_err => {
             return Err(Error::IndexingIntoJson(
                 format!("[{}]", n),
                 json.into_owned(),
+                marker,
             ));
         }
         _ => None,
@@ -350,6 +361,7 @@ fn index_json2<'a>(
     indexes: &[PathSegment],
     no_err: bool,
     for_each: Option<&[Cow<'a, json::Value>]>,
+    marker: Marker,
 ) -> Result<Cow<'a, json::Value>, Error> {
     for index in indexes.iter() {
         let r = index.evaluate(Cow::Borrowed(&*json), for_each.clone())?;
@@ -373,12 +385,13 @@ fn index_json2<'a>(
                 Some(Cow::Owned(ret))
             }
             (json, Either::A(s)) if !no_err => {
-                return Err(Error::IndexingIntoJson(s, json.into_owned()))
+                return Err(Error::IndexingIntoJson(s, json.into_owned(), marker))
             }
             (json, Either::B(n)) if !no_err => {
                 return Err(Error::IndexingIntoJson(
                     format!("[{}]", n),
                     json.into_owned(),
+                    marker,
                 ));
             }
             _ => None,
@@ -392,6 +405,7 @@ fn index_json2<'a>(
 pub struct Path {
     pub(super) start: PathStart,
     pub(super) rest: Vec<PathSegment>,
+    pub(super) marker: Marker,
 }
 
 impl Path {
@@ -421,12 +435,12 @@ impl Path {
                 }
             }
             (PathStart::Ident(s), _) => (
-                index_json(d, Either::B(s), no_recoverable_error, for_each)?,
+                index_json(d, Either::B(s), no_recoverable_error, for_each, self.marker)?,
                 self.rest.as_slice(),
             ),
             (PathStart::Value(v), _) => (Cow::Borrowed(v), self.rest.as_slice()),
         };
-        index_json2(v, rest, no_recoverable_error, for_each)
+        index_json2(v, rest, no_recoverable_error, for_each, self.marker)
     }
 
     fn evaluate_as_iter<'a, 'b: 'a>(
@@ -440,7 +454,9 @@ impl Path {
                 let rest = self.rest.clone();
                 Either::A(
                     fnc.evaluate_as_iter(d, no_recoverable_error, for_each)?
-                        .map(move |j| index_json2(j, &rest, no_recoverable_error, None)),
+                        .map(move |j| {
+                            index_json2(j, &rest, no_recoverable_error, None, self.marker)
+                        }),
                 )
             }
             PathStart::Ident(s) => {
@@ -460,7 +476,7 @@ impl Path {
                     }
                 } else {
                     (
-                        index_json(d, Either::B(s), no_recoverable_error, for_each)?,
+                        index_json(d, Either::B(s), no_recoverable_error, for_each, self.marker)?,
                         self.rest.as_slice(),
                     )
                 };
@@ -469,6 +485,7 @@ impl Path {
                     rest,
                     no_recoverable_error,
                     for_each,
+                    self.marker,
                 )?)))
             }
             PathStart::Value(v) => Either::B(iter::once(Ok(Cow::Borrowed(v)))),
@@ -483,12 +500,14 @@ impl Path {
     ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
+        let marker = self.marker;
         match self.start {
             PathStart::FunctionCall(fnc) => {
                 let a = fnc.into_stream(providers, no_recoverable_error).and_then(
                     move |(j, returns)| {
-                        let v = index_json2(Cow::Owned(j), &rest, no_recoverable_error, None)?
-                            .into_owned();
+                        let v =
+                            index_json2(Cow::Owned(j), &rest, no_recoverable_error, None, marker)?
+                                .into_owned();
                         Ok((v, returns))
                     },
                 );
@@ -501,18 +520,24 @@ impl Path {
                     .get(&*s2)
                     .map(move |provider| {
                         provider.into_stream().and_then(move |(v, outgoing)| {
-                            let v = index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)?
-                                .into_owned();
+                            let v = index_json2(
+                                Cow::Owned(v),
+                                &rest,
+                                no_recoverable_error,
+                                None,
+                                marker,
+                            )?
+                            .into_owned();
                             Ok((v, outgoing))
                         })
                     })
-                    .ok_or_else(move || Error::UnknownProvider((&*s).clone()))
+                    .ok_or_else(move || Error::UnknownProvider((&*s).clone(), marker))
                     .into_future()
                     .flatten_stream();
                 Either3::B(b)
             }
             PathStart::Value(v) => {
-                let v = index_json2(Cow::Owned(v), &rest, no_recoverable_error, None)
+                let v = index_json2(Cow::Owned(v), &rest, no_recoverable_error, None, marker)
                     .map(|v| (v.into_owned(), Vec::new()));
                 Either3::C(stream::iter_result(iter::repeat(v)))
             }
@@ -554,9 +579,11 @@ impl ValueOrExpression {
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
         no_recoverable_error: bool,
+        marker: Marker,
     ) -> Result<Self, Error> {
-        let pairs = Parser::parse(Rule::entry_point, expr)?;
-        let e = parse_expression(pairs, providers, static_vars, no_recoverable_error)?;
+        let pairs = Parser::parse(Rule::entry_point, expr)
+            .map_err(|e| Error::InvalidExpression(e, marker))?;
+        let e = parse_expression(pairs, providers, static_vars, no_recoverable_error, marker)?;
         ValueOrExpression::from_expression(e)
     }
 
@@ -709,8 +736,9 @@ impl PathSegment {
         providers: &mut RequiredProviders,
         static_vars: &BTreeMap<String, json::Value>,
         no_recoverable_error: bool,
+        marker: Marker,
     ) -> Result<Self, Error> {
-        let template = Template::new(s, static_vars, providers, no_recoverable_error)?;
+        let template = Template::new(s, static_vars, providers, no_recoverable_error, marker)?;
         let r = match template.simplify_to_string() {
             Either::A(s) => PathSegment::String(s),
             Either::B(t) => PathSegment::Template(t.into()),
@@ -1075,13 +1103,15 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn new(
+    pub(crate) fn new(
         t: &str,
         static_vars: &BTreeMap<String, json::Value>,
         providers: &mut RequiredProviders,
         no_recoverable_error: bool,
+        marker: Marker,
     ) -> Result<Self, Error> {
-        let pairs = Parser::parse(Rule::template_entry_point, t)?
+        let pairs = Parser::parse(Rule::template_entry_point, t)
+            .map_err(|e| Error::InvalidExpression(e, marker))?
             .nth(0)
             .expect("Expected 1 pair from parser")
             .into_inner();
@@ -1096,6 +1126,7 @@ impl Template {
                         providers,
                         static_vars,
                         no_recoverable_error,
+                        marker,
                     )?;
                     match e.simplify_to_string()? {
                         Either::A(s2) => {
@@ -1127,6 +1158,20 @@ impl Template {
             size_hint,
             no_recoverable_error,
         })
+    }
+
+    // #[cfg(test)]
+    pub fn simple(t: &str) -> Template {
+        let s = yaml_rust::scanner::Scanner::new("".chars());
+        let marker = s.mark();
+        Template::new(
+            t,
+            &Default::default(),
+            &mut RequiredProviders::new(),
+            false,
+            marker,
+        )
+        .unwrap()
     }
 
     pub fn simplify_to_string(mut self) -> Either<String, Self> {
@@ -1223,26 +1268,61 @@ pub struct Select {
 }
 
 impl Select {
-    pub fn new(
+    // #[cfg(test)]
+    pub fn simple<S: Into<json::Value>>(
+        select: S,
+        send: EndpointProvidesSendOptions,
+        for_each: Option<Vec<&'static str>>,
+        where_clause: Option<&'static str>,
+        required_providers: Option<&mut RequiredProviders>,
+    ) -> Self {
+        let marker = create_marker();
+        let select = WithMarker::new(select.into(), marker);
+        let for_each = for_each
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| WithMarker::new(s.to_string(), marker))
+            .collect();
+        let where_clause = where_clause.map(|w| WithMarker::new(w.into(), marker));
+        let send = Some(send);
+        let eppp = EndpointProvidesPreProcessed {
+            select,
+            send,
+            for_each,
+            where_clause,
+        };
+        let mut rp_default = RequiredProviders::new();
+        let required_providers = required_providers.unwrap_or_else(|| &mut rp_default);
+        Select::new(eppp, &Default::default(), required_providers, false).unwrap()
+    }
+
+    pub(crate) fn new(
         provides: EndpointProvidesPreProcessed,
         static_vars: &BTreeMap<String, json::Value>,
         providers: &mut RequiredProviders,
         no_recoverable_error: bool,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, error::Error> {
         // let mut providers = RequiredProviders::new();
         let join: Vec<_> = provides
             .for_each
             .iter()
-            .map(|s| {
-                let pairs = Parser::parse(Rule::entry_point, s)?;
+            .map(|v| {
+                let pairs = Parser::parse(Rule::entry_point, v.inner()).map_err(|e| {
+                    error::Error::ExpressionErr(Error::InvalidExpression(e, v.marker()))
+                })?;
                 let mut providers2 = RequiredProviders::new();
-                let e =
-                    parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
+                let e = parse_expression(
+                    pairs,
+                    &mut providers2,
+                    static_vars,
+                    no_recoverable_error,
+                    v.marker(),
+                )?;
                 if providers2.get_special() & FOR_EACH != 0 {
-                    Err(Error::RecursiveForEachReference)
+                    Err(error::Error::RecursiveForEachReference(v.marker()))
                 } else {
                     providers.extend(providers2);
-                    ValueOrExpression::from_expression(e)
+                    ValueOrExpression::from_expression(e).map_err(Into::into)
                 }
             })
             .collect::<Result<_, _>>()?;
@@ -1250,30 +1330,39 @@ impl Select {
         let where_clause = provides
             .where_clause
             .as_ref()
-            .map(|s| {
+            .map(|v| {
                 let mut providers2 = RequiredProviders::new();
                 providers2.is_where();
-                let pairs = Parser::parse(Rule::entry_point, s)?;
-                let e =
-                    parse_expression(pairs, &mut providers2, static_vars, no_recoverable_error)?;
+                let pairs = Parser::parse(Rule::entry_point, v.inner()).map_err(|e| {
+                    error::Error::ExpressionErr(Error::InvalidExpression(e, v.marker()))
+                })?;
+                let e = parse_expression(
+                    pairs,
+                    &mut providers2,
+                    static_vars,
+                    no_recoverable_error,
+                    v.marker(),
+                )?;
                 where_references_for_each = providers2.get_special() & FOR_EACH != 0;
                 if where_references_for_each && join.is_empty() {
-                    return Err(Error::MissingForEach);
+                    return Err(error::Error::MissingForEach(v.marker()));
                 }
                 providers.extend(providers2);
-                Ok::<_, Error>(e)
+                Ok::<_, error::Error>(e)
             })
             .transpose()?;
         let mut providers2 = RequiredProviders::new();
+        let (select, marker) = provides.select.destruct();
         let select = parse_select(
-            provides.select,
+            select,
             &mut providers2,
             static_vars,
             no_recoverable_error,
+            marker,
         )?;
         let references_for_each = providers2.get_special() & FOR_EACH != 0;
         if references_for_each && join.is_empty() {
-            return Err(Error::MissingForEach);
+            return Err(error::Error::MissingForEach(marker));
         }
         providers.extend(providers2);
 
@@ -1456,6 +1545,7 @@ fn parse_select(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<ParsedSelect, Error> {
     let r = match select {
         json::Value::Null => ParsedSelect::Null,
@@ -1463,13 +1553,13 @@ fn parse_select(
         json::Value::Number(n) => ParsedSelect::Number(n),
         json::Value::String(s) => {
             let expression =
-                ValueOrExpression::new(&s, providers, static_vars, no_recoverable_error)?;
+                ValueOrExpression::new(&s, providers, static_vars, no_recoverable_error, marker)?;
             ParsedSelect::Expression(expression)
         }
         json::Value::Array(a) => {
             let new = a
                 .into_iter()
-                .map(|v| parse_select(v, providers, static_vars, no_recoverable_error))
+                .map(|v| parse_select(v, providers, static_vars, no_recoverable_error, marker))
                 .collect::<Result<_, _>>()?;
             ParsedSelect::Array(new)
         }
@@ -1479,7 +1569,7 @@ fn parse_select(
                 .map(|(k, v)| {
                     Ok::<_, Error>((
                         k,
-                        parse_select(v, providers, static_vars, no_recoverable_error)?,
+                        parse_select(v, providers, static_vars, no_recoverable_error, marker)?,
                     ))
                 })
                 .collect::<Result<_, _>>()?;
@@ -1494,6 +1584,7 @@ fn parse_function_call(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<Either<FunctionCall, json::Value>, Error> {
     let mut ident = None;
     let mut args = Vec::new();
@@ -1509,6 +1600,7 @@ fn parse_function_call(
                         providers,
                         static_vars,
                         no_recoverable_error,
+                        marker,
                     )
                     .and_then(ValueOrExpression::from_expression)?,
                 );
@@ -1523,6 +1615,7 @@ fn parse_function_call(
         args,
         providers,
         static_vars,
+        marker,
     )
 }
 
@@ -1531,15 +1624,20 @@ fn parse_indexed_property(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<PathSegment, Error> {
     let pair = pair
         .into_inner()
         .next()
         .expect("Expected 1 rule while parsing indexed property");
     match pair.as_rule() {
-        Rule::string => {
-            PathSegment::from_str(pair.as_str(), providers, static_vars, no_recoverable_error)
-        }
+        Rule::string => PathSegment::from_str(
+            pair.as_str(),
+            providers,
+            static_vars,
+            no_recoverable_error,
+            marker,
+        ),
         Rule::integer => Ok(PathSegment::Number(pair.as_str().parse().expect(
             "Expected rule to parse as a number while parsing indexed property",
         ))),
@@ -1552,6 +1650,7 @@ fn parse_path(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<Either<json::Value, Path>, Error> {
     let mut start = None;
     let mut rest = Vec::new();
@@ -1565,6 +1664,7 @@ fn parse_path(
                         &mut providers2,
                         static_vars,
                         no_recoverable_error,
+                        marker,
                     )? {
                         Either::A(fc) => PathStart::FunctionCall(fc),
                         Either::B(v) => PathStart::Value(v),
@@ -1587,6 +1687,7 @@ fn parse_path(
                         &mut providers2,
                         static_vars,
                         no_recoverable_error,
+                        marker,
                     )?;
                     rest.push(ps);
                 }
@@ -1600,6 +1701,7 @@ fn parse_path(
                         &mut providers2,
                         static_vars,
                         no_recoverable_error,
+                        marker,
                     )?);
                 }
             }
@@ -1612,14 +1714,18 @@ fn parse_path(
     if let PathStart::Ident(s) = &start {
         match rest.first() {
             Some(PathSegment::String(next)) if &*s == "request" || &*s == "response" => {
-                providers2.insert(format!("{}.{}", s, next));
+                providers2.insert(format!("{}.{}", s, next), marker);
             }
             _ => {
-                providers2.insert(s.clone());
+                providers2.insert(s.clone(), marker);
             }
         };
     }
-    let p = Path { start, rest };
+    let p = Path {
+        start,
+        rest,
+        marker,
+    };
     let r = match p.start {
         PathStart::Value(_) if providers2.is_empty() => {
             let a = p
@@ -1640,6 +1746,7 @@ fn parse_value(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<Value, Error> {
     let pair = pairs
         .next()
@@ -1656,13 +1763,20 @@ fn parse_value(
             Value::Json(b.into())
         }
         Rule::null => Value::Json(json::Value::Null),
-        Rule::json_path => match parse_path(pair, providers, static_vars, no_recoverable_error)? {
-            Either::A(v) => Value::Json(v),
-            Either::B(p) => Value::Path(p.into()),
-        },
+        Rule::json_path => {
+            match parse_path(pair, providers, static_vars, no_recoverable_error, marker)? {
+                Either::A(v) => Value::Json(v),
+                Either::B(p) => Value::Path(p.into()),
+            }
+        }
         Rule::string => {
-            let template =
-                Template::new(pair.as_str(), static_vars, providers, no_recoverable_error)?;
+            let template = Template::new(
+                pair.as_str(),
+                static_vars,
+                providers,
+                no_recoverable_error,
+                marker,
+            )?;
             match template.simplify_to_string() {
                 Either::A(s) => Value::Json(s.into()),
                 Either::B(t) => Value::Template(t),
@@ -1752,6 +1866,7 @@ fn parse_expression_pieces(
     static_vars: &BTreeMap<String, json::Value>,
     pieces: &mut Vec<ExpressionOrOperator>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<(), Error> {
     let mut not_count = 0;
     let start_len = pieces.len();
@@ -1765,6 +1880,7 @@ fn parse_expression_pieces(
                     providers,
                     static_vars,
                     no_recoverable_error,
+                    marker,
                 )?;
                 let not = match not_count {
                     0 => None,
@@ -1789,6 +1905,7 @@ fn parse_expression_pieces(
                         static_vars,
                         &mut pieces2,
                         no_recoverable_error,
+                        marker,
                     )?;
                     let mut e = expression_helper(pieces2, 0)?;
                     let not = match not_count {
@@ -1809,6 +1926,7 @@ fn parse_expression_pieces(
                         static_vars,
                         pieces,
                         no_recoverable_error,
+                        marker,
                     )?;
                 }
             }
@@ -1851,6 +1969,7 @@ fn parse_expression(
     providers: &mut RequiredProviders,
     static_vars: &BTreeMap<String, json::Value>,
     no_recoverable_error: bool,
+    marker: Marker,
 ) -> Result<Expression, Error> {
     let mut pieces = Vec::new();
     parse_expression_pieces(
@@ -1859,6 +1978,7 @@ fn parse_expression(
         static_vars,
         &mut pieces,
         no_recoverable_error,
+        marker,
     )?;
     expression_helper(pieces, 0)
 }
@@ -1871,6 +1991,7 @@ mod tests {
     use serde_json as json;
     // use test_common::literals;
     use tokio::runtime::current_thread;
+    use EndpointProvidesSendOptions::*;
 
     pub struct Literals(Vec<json::Value>);
 
@@ -1889,8 +2010,7 @@ mod tests {
         Literals(values)
     }
 
-    fn check_results(select: json::Value, data: json::Value, expect: &[json::Value], i: usize) {
-        let select = create_select(select, &mut Default::default());
+    fn check_results(select: Select, data: json::Value, expect: &[json::Value], i: usize) {
         let result: Vec<_> = select
             .as_iter(&data)
             .unwrap()
@@ -1898,11 +2018,6 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(result.as_slice(), expect, "index {}", i)
-    }
-
-    fn create_select(json: json::Value, required_providers: &mut RequiredProviders) -> Select {
-        let eppp = json::from_value(json).unwrap();
-        Select::new(eppp, &Default::default(), required_providers, false).unwrap()
     }
 
     #[test]
@@ -1948,17 +2063,19 @@ mod tests {
             check_table.into_iter().enumerate()
         {
             let mut required_providers = RequiredProviders::new();
-            if let Some(wc) = where_clause {
-                create_select(
-                    json::json!({ "select": select, "where": wc }),
-                    &mut required_providers,
-                );
-            } else {
-                create_select(json::json!({ "select": select }), &mut required_providers);
-            }
+            Select::simple(
+                select,
+                Block,
+                None,
+                where_clause,
+                Some(&mut required_providers),
+            );
             let rr_providers = required_providers.get_special();
-            let providers: Vec<_> =
-                std::iter::FromIterator::from_iter(required_providers.into_inner());
+            let providers: Vec<_> = required_providers
+                .into_inner()
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect();
             assert_eq!(providers, providers_expect, "index {}", i);
             assert_eq!(rr_providers, rr_expect, "index {}", i);
         }
@@ -2035,8 +2152,8 @@ mod tests {
 
         for (i, (select, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let s = json::json!({ "select": select });
-            check_results(s, data, &expect, i);
+            let select = Select::simple(select, Block, None, None, None);
+            check_results(select, data, &expect, i);
         }
     }
 
@@ -2110,9 +2227,15 @@ mod tests {
             let static_vars = BTreeMap::new();
             let mut futures = Vec::new();
             for (i, (expr, expect)) in tests.into_iter().enumerate() {
-                let voe =
-                    ValueOrExpression::new(expr, &mut required_providers, &static_vars, false)
-                        .unwrap();
+                let marker = create_marker();
+                let voe = ValueOrExpression::new(
+                    expr,
+                    &mut required_providers,
+                    &static_vars,
+                    false,
+                    marker,
+                )
+                .unwrap();
                 let fut = voe
                     .into_stream(&providers, false)
                     .map(|(v, _)| v)
@@ -2180,10 +2303,7 @@ mod tests {
 
         for (i, (where_clause, expect)) in check_table.into_iter().enumerate() {
             let data = data.clone();
-            let select = json::json!({
-                "select": "three",
-                "where": where_clause
-            });
+            let select = Select::simple("three", Block, None, Some(where_clause), None);
             check_results(select, data, expect, i);
         }
     }
@@ -2203,10 +2323,7 @@ mod tests {
         // (statement, expect)
         let check_table = vec![
             (
-                json::json!({
-                    "select": "a",
-                    "for_each": ["repeat(5)"]
-                }),
+                Select::simple("a", Block, Some(vec!["repeat(5)"]), None, None),
                 vec![
                     json::json!(3),
                     json::json!(3),
@@ -2216,24 +2333,27 @@ mod tests {
                 ],
             ),
             (
-                json::json!({
-                    "select": "for_each[1]",
-                    "for_each": ["repeat(3)", "true || false"]
-                }),
+                Select::simple(
+                    "for_each[1]",
+                    Block,
+                    Some(vec!["repeat(3)", "true || false"]),
+                    None,
+                    None,
+                ),
                 vec![true.into(), true.into(), true.into()],
             ),
             (
-                json::json!({
-                    "select": "for_each[0]",
-                    "for_each": ["json_path('c.*.d')"]
-                }),
+                Select::simple(
+                    "for_each[0]",
+                    Block,
+                    Some(vec!["json_path('c.*.d')"]),
+                    None,
+                    None,
+                ),
                 vec![json::json!(1), json::json!(2), json::json!(3)],
             ),
             (
-                json::json!({
-                    "select": "for_each[0]",
-                    "for_each": ["c"]
-                }),
+                Select::simple("for_each[0]", Block, Some(vec!["c"]), None, None),
                 vec![
                     json::json!({ "d": 1 }),
                     json::json!({ "d": 2 }),
@@ -2241,10 +2361,13 @@ mod tests {
                 ],
             ),
             (
-                json::json!({
-                    "select": "for_each[1]",
-                    "for_each": ["repeat(2)", r#"json_path("c.*.d")"#]
-                }),
+                Select::simple(
+                    "for_each[1]",
+                    Block,
+                    Some(vec!["repeat(2)", r#"json_path("c.*.d")"#]),
+                    None,
+                    None,
+                ),
                 vec![
                     json::json!(1),
                     json::json!(2),

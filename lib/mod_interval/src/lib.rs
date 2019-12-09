@@ -131,7 +131,10 @@ impl LinearScalingPiece {
     pub fn new(start_percent: f64, end_percent: f64, duration: f64, peak_load: f64) -> Self {
         let b = peak_load * start_percent;
         let m = (end_percent * peak_load - b) / duration;
-        let max_y = LinearScalingPiece::calc_max_y(b, m);
+        let max_y = match LinearScalingPiece::calc_max_y(b, m) {
+            f if f.is_nan() => duration,
+            f => f,
+        };
         LinearScalingPiece {
             b,
             duration,
@@ -280,6 +283,15 @@ mod tests {
     #[test]
     fn linear_scaling_works() {
         let checks = vec![
+            (
+                // scale from 0 to 0% over 30 seconds (100% = 12 hps)
+                0.0,
+                0.0,
+                30,
+                HitsPer::Second(12.0),
+                // at time t (in seconds), we should be at x hps
+                vec![(0.0, 0.03333333), (10.0, 0.03333333), (15.0, 0.03333333), (30.0, 0.03333333)],
+            ),
             (
                 // scale from 0 to 100% over 30 seconds (100% = 12 hps)
                 0.0,

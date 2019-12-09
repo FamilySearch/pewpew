@@ -11,6 +11,7 @@ Changes:
 
 Bugfix:
 - Fix regression where certain errors which should be handled during a test were causing the test to crash.
+- Fix bug where a load_pattern did not work when doing `from: 0%` and `to: 0%`.
 
 ### v0.5.4
 Changes:

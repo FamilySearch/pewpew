@@ -1,5 +1,17 @@
 # TODOs
-- fix try run which hangs when an endpoint has a provider it provides and requires (See STD-API-MON.yaml). Need a way to get the required providers before building the endpoint.
+- refactor stats parser so all console messages are printed from one location
+  - need to log errors for try run
+  - update results viewer to handle new stats format
+- When a test ends early because a provider ended, indicate which provider it was
+- Allow an endpoint's `load_pattern` to not have an `over` field in which case it will last the duration of the test.
+- Add the ability to set the `buffer` for a provider with an auto starting limit. Perhaps something like `a10` or `auto 10`
+- Add expression parsing functions to config_wasm
+- Build UI in the guide to try out expressions with various inputs and view output
+- v0.6 - Breaking Change - Make tags a global within a select. Add `tags` to the list of reserved keywords
+- v0.6 - Breaking Change - Change the repeat option on file and range providers default to true
+- v0.6 - ensure templates for file paths only reference static providers and vars
+- v0.6 - Remove stats-file-format cli flag
+- v0.6 - Integrate provider stats in with regular stats so they're in the stats file and deprecate the `log_provider_stats` general config option.
 - add more tests - unit and integration - get code coverage -- add in negative tests
   - split config parser into sub-crate and add in unit tests
   - add in integration test which drops connections before the body is fully sent

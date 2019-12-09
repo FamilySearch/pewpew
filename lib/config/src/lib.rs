@@ -1416,6 +1416,8 @@ struct EndpointPreProcessed {
     max_parallel_requests: Option<NonZeroUsize>,
     // #[yaml(default)]
     no_auto_returns: bool,
+    // #[yaml(default)]
+    request_timeout: Option<PreDuration>,
     marker: Marker,
 }
 
@@ -1434,6 +1436,7 @@ impl FromYaml for EndpointPreProcessed {
         let mut logs = None;
         let mut max_parallel_requests = None;
         let mut no_auto_returns = None;
+        let mut request_timeout = None;
 
         let mut first_marker = None;
         let mut saw_opening = false;
@@ -1526,6 +1529,11 @@ impl FromYaml for EndpointPreProcessed {
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
                         no_auto_returns = Some(a);
                     }
+                    "request_timeout" => {
+                        let a =
+                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        request_timeout = Some(a);
+                    }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
             }
@@ -1554,6 +1562,7 @@ impl FromYaml for EndpointPreProcessed {
             logs,
             max_parallel_requests,
             no_auto_returns,
+            request_timeout,
             marker,
         };
         Ok((ret, marker))
@@ -2595,6 +2604,7 @@ pub struct Endpoint {
     pub provides: Vec<(String, Select)>,
     pub providers_to_stream: RequiredProviders,
     pub required_providers: RequiredProviders,
+    pub request_timeout: Option<Duration>,
     pub tags: BTreeMap<String, Template>,
     pub url: Template,
 }
@@ -2640,6 +2650,7 @@ impl Endpoint {
             peak_load,
             provides,
             url,
+            request_timeout,
             mut tags,
             ..
         } = endpoint;
@@ -2782,6 +2793,8 @@ impl Endpoint {
             .collect::<Result<_, Error>>()?;
         required_providers2.extend(providers_to_stream.clone());
         let required_providers = required_providers2;
+        let request_timeout = request_timeout.map(|d| d.evaluate(static_vars))
+            .transpose()?;
 
         let mut endpoint = Endpoint {
             declare,
@@ -2796,6 +2809,7 @@ impl Endpoint {
             peak_load,
             provides,
             providers_to_stream,
+            request_timeout,
             required_providers,
             url,
             tags,

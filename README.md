@@ -9,6 +9,7 @@ Changes:
 - Short circuit a `for_each` when a `where` does not reference `for_each`.
 - Add a command-line argument, `start-at`, to start the test at a given time.
 - Add optional `request_timeout` option to `endpoints`.
+- Refactor config parser to provide more helpful messages when an error occurs.
 
 Bugfix:
 - Fix regression where certain errors which should be handled during a test were causing the test to crash.

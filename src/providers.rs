@@ -235,6 +235,7 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>>>(
 mod tests {
     use super::*;
 
+    use config::FromYaml;
     use futures::{future, sync::mpsc::channel as futures_channel, Async};
     use json::json;
     use test_common::TestWriter;
@@ -252,8 +253,9 @@ mod tests {
                 start: 0
                 end: 20
             "#;
-            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
-            let p = range(range_params);
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
             let expects = stream::iter_ok(0..=20);
 
             let f = p.rx.zip(expects).for_each(|(left, right)| {
@@ -267,8 +269,9 @@ mod tests {
                 end: 20
                 step: 2
             "#;
-            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
-            let p = range(range_params);
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
             let expects = stream::iter_ok((0..=20).step_by(2));
 
             let f = p.rx.zip(expects).for_each(|(left, right)| {
@@ -283,8 +286,9 @@ mod tests {
                 repeat: true
             "#;
 
-            let range_params = config::FromYaml::from_yaml_str(range_params).unwrap();
-            let p = range(range_params);
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
             let expects = stream::iter_ok((0..=20).cycle());
 
             p.rx.zip(expects).take(100).for_each(|(left, right)| {

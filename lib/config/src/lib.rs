@@ -3,10 +3,13 @@
 
 mod error;
 mod expression_functions;
+mod from_yaml;
 mod select_parser;
 
 pub use error::{Error, ExpressionError};
 use ether::{Either, Either3};
+pub use from_yaml::FromYaml;
+use from_yaml::{Nullable, ParseResult, TupleVec, YamlDecoder, YamlEvent};
 use http::Method;
 use rand::{
     distributions::{Distribution, Uniform},
@@ -19,20 +22,14 @@ pub use select_parser::{
     REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
 };
 use serde_json as json;
-use yaml_rust::{
-    parser::Parser as YamlParser,
-    scanner::{Marker, Scanner, TScalarStyle, TokenType},
-    Event as YamlParseEvent,
-};
+use yaml_rust::scanner::{Marker, Scanner};
 
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     iter,
     num::{NonZeroU16, NonZeroUsize},
-    ops::Range,
     path::PathBuf,
-    str::FromStr,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -51,272 +48,26 @@ fn map_yaml_deserialize_err(name: String) -> impl FnOnce(Error) -> Error {
     }
 }
 
-impl FromYaml for json::Value {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let mut root: Option<json::Value> = None;
-        let mut first_marker = None;
-        loop {
-            let (event, marker) = decoder.peek()?;
-            if first_marker.is_none() {
-                first_marker = Some(*marker);
-            }
-            match event {
-                YamlEvent::MappingStart => match &mut root {
-                    None => {
-                        decoder.next()?;
-                        root = Some(json::map::Map::new().into());
-                    }
-                    Some(json::Value::Array(a)) => {
-                        let v = FromYaml::parse_into(decoder)?;
-                        a.push(v);
-                    }
-                    _ => return Err(Error::YamlDeserialize(None, *marker)),
-                },
-                YamlEvent::SequenceStart => match &mut root {
-                    None => {
-                        decoder.next()?;
-                        root = Some(json::Value::Array(Vec::new()));
-                    }
-                    Some(json::Value::Array(a)) => {
-                        let v = FromYaml::parse_into(decoder)?;
-                        a.push(v);
-                    }
-                    _ => return Err(Error::YamlDeserialize(None, *marker)),
-                },
-                YamlEvent::SequenceEnd | YamlEvent::MappingEnd => {
-                    decoder.next()?;
-                    break;
-                }
-                YamlEvent::Scalar(_, ttype, _) => {
-                    let ttype = *ttype;
-                    let s = match decoder.next() {
-                        Ok((YamlEvent::Scalar(s, ..), _)) => s,
-                        _ => unreachable!("should have gotten a scalar for next"),
-                    };
-                    let get_value = || match (s.as_str(), ttype) {
-                        ("null", TScalarStyle::Plain) => json::Value::Null,
-                        ("true", TScalarStyle::Plain) => true.into(),
-                        ("false", TScalarStyle::Plain) => false.into(),
-                        _ => {
-                            if let Ok(f) = f64::from_str(&s) {
-                                f.into()
-                            } else {
-                                s.as_str().into()
-                            }
-                        }
-                    };
-                    match &mut root {
-                        Some(json::Value::Object(o)) => {
-                            let next = FromYaml::parse_into(decoder)?;
-                            o.insert(s, next);
-                        }
-                        Some(json::Value::Array(a)) => {
-                            a.push(get_value());
-                        }
-                        _ => {
-                            root = Some(get_value());
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        let marker = first_marker.expect("should have a marker");
-        Ok((root.unwrap_or_default(), marker))
-    }
-}
-
 impl FromYaml for Method {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let (event, marker) = decoder.next()?;
-        event
-            .as_str()
-            .ok_or(())
-            .and_then(|s| Method::from_str(s).map_err(|_| ()))
-            .map(|m| (m, marker))
-            .map_err(|_| Error::YamlDeserialize(None, marker))
+        let method = match event.as_str().map(|s| s.trim()) {
+            Some("POST") => Method::POST,
+            Some("GET") => Method::GET,
+            Some("PUT") => Method::PUT,
+            Some("HEAD") => Method::HEAD,
+            Some("DELETE") => Method::DELETE,
+            Some("OPTIONS") => Method::OPTIONS,
+            Some("CONNECT") => Method::CONNECT,
+            Some("PATCH") => Method::PATCH,
+            Some("TRACE") => Method::TRACE,
+            _ => return Err(Error::YamlDeserialize(None, marker)),
+        };
+        Ok((method, marker))
     }
 }
 
-pub trait Insert: Default {
-    type Value;
-    fn insert(&mut self, v: Self::Value);
-}
-
-impl<V> Insert for Vec<V> {
-    type Value = V;
-    fn insert(&mut self, v: Self::Value) {
-        self.push(v);
-    }
-}
-
-impl<K: std::cmp::Ord, V> Insert for BTreeMap<K, V> {
-    type Value = (K, V);
-    fn insert(&mut self, (k, v): (K, V)) {
-        BTreeMap::insert(self, k, v);
-    }
-}
-
-pub trait ParseOk<T = Self> {
-    fn from(v: (T, Marker)) -> Self;
-}
-
-impl<T> ParseOk for T {
-    fn from(v: (T, Marker)) -> Self {
-        v.0
-    }
-}
-
-impl<T> ParseOk<T> for (T, Marker) {
-    fn from(v: (T, Marker)) -> Self {
-        v
-    }
-}
-
-impl<T, T2> ParseOk<(T, T2)> for (T, (T2, Marker)) {
-    fn from(((t, t2), m): ((T, T2), Marker)) -> Self {
-        (t, (t2, m))
-    }
-}
-
-type ParseResult<T> = Result<(T, Marker), Error>;
-type ParseIntoResult<R> = Result<R, Error>;
-
-impl<T: FromYaml> FromYaml for (String, T) {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let event1 = FromYaml::parse_into(decoder)?;
-        let (event2, marker): (T, Marker) = FromYaml::parse(decoder)?;
-        Ok(((event1, event2), marker))
-    }
-}
-
-impl<C> FromYaml for C
-where
-    C: Insert + ParseOk,
-    C::Value: FromYaml,
-{
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let mut ret = C::default();
-        let mut first_marker = None;
-
-        loop {
-            let (event, marker) = decoder.peek()?;
-            let marker = *marker;
-            let first_round = if first_marker.is_none() {
-                first_marker = Some(marker);
-                true
-            } else {
-                false
-            };
-            match event {
-                YamlEvent::Scalar(..) => {
-                    let v = FromYaml::parse_into(decoder)?;
-                    ret.insert(v);
-                }
-                YamlEvent::MappingStart | YamlEvent::SequenceStart => {
-                    if first_round {
-                        decoder.next()?;
-                    }
-                    let v = FromYaml::parse_into(decoder)?;
-                    ret.insert(v);
-                }
-                YamlEvent::SequenceEnd | YamlEvent::MappingEnd => {
-                    decoder.next()?;
-                    break;
-                }
-            }
-        }
-
-        let marker = first_marker.expect("should have a marker");
-        Ok(ParseOk::from((ret, marker)))
-    }
-}
-
-impl FromYaml for NonZeroU16 {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        event
-            .as_x()
-            .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
-    }
-}
-
-impl FromYaml for NonZeroUsize {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        event
-            .as_x()
-            .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
-    }
-}
-
-impl FromYaml for i64 {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        event
-            .as_x()
-            .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
-    }
-}
-
-impl FromYaml for usize {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        event
-            .as_x()
-            .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
-    }
-}
-
-impl FromYaml for String {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        event
-            .into_string()
-            .map(|s| (s, marker))
-            .map_err(|_| Error::YamlDeserialize(None, marker))
-    }
-}
-
-enum Nullable<T> {
-    Some(T),
-    Null,
-}
-
-impl<T> Default for Nullable<T> {
-    fn default() -> Self {
-        Nullable::Null
-    }
-}
-
-impl<T> Into<Option<T>> for Nullable<T> {
-    fn into(self) -> Option<T> {
-        match self {
-            Nullable::Some(t) => Some(t),
-            Nullable::Null => None,
-        }
-    }
-}
-
-impl<T: FromYaml> FromYaml for Nullable<T> {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.peek()?;
-        let marker = *marker;
-        if let Some("null") = event.as_str() {
-            decoder.next()?;
-            Ok((Nullable::Null, marker))
-        } else {
-            let (value, marker) = FromYaml::parse(decoder)?;
-            Ok((Nullable::Some(value), marker))
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Limit {
     Auto(Arc<AtomicUsize>),
     Integer(usize),
@@ -411,21 +162,7 @@ trait DefaultWithMarker {
     fn default(marker: Marker) -> Self;
 }
 
-pub trait FromYaml: Sized {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self>;
-
-    fn parse_into<R: ParseOk<Self>, I: Iterator<Item = char>>(
-        decoder: &mut YamlDecoder<I>,
-    ) -> ParseIntoResult<R> {
-        FromYaml::parse(decoder).map(ParseOk::from)
-    }
-
-    fn from_yaml_str(s: &str) -> Result<Self, Error> {
-        let mut decoder = YamlDecoder::new(s.chars());
-        Self::parse_into(&mut decoder)
-    }
-}
-
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum LoadPatternPreProcessed {
     Linear(LinearBuilderPreProcessed),
 }
@@ -455,6 +192,7 @@ impl FromYaml for LoadPatternPreProcessed {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct LinearBuilderPreProcessed {
     from: Option<PrePercent>,
     to: PrePercent,
@@ -535,6 +273,7 @@ impl LoadPattern {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct ExplicitStaticList {
     pub random: bool,
     pub repeat: bool,
@@ -601,16 +340,7 @@ impl FromYaml for ExplicitStaticList {
     }
 }
 
-impl FromYaml for bool {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (event, marker) = decoder.next()?;
-        match event.as_bool() {
-            Some(b) => Ok((b, marker)),
-            _ => Err(Error::YamlDeserialize(None, marker)),
-        }
-    }
-}
-
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum StaticList {
     Explicit(ExplicitStaticList),
     Implicit(Vec<json::Value>),
@@ -692,9 +422,10 @@ impl Iterator for StaticListRepeatRandomIterator {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum ProviderPreProcessed {
     File(FileProviderPreProcessed),
-    Range(RangeProvider),
+    Range(RangeProviderPreProcessed),
     Response(ResponseProvider),
     List(StaticList),
 }
@@ -780,9 +511,8 @@ type RangeProviderIteratorA = iter::StepBy<std::ops::RangeInclusive<i64>>;
 
 pub struct RangeProvider(pub Either<RangeProviderIteratorA, iter::Cycle<RangeProviderIteratorA>>);
 
-impl FromYaml for RangeProvider {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (rppp, marker) = RangeProviderPreProcessed::parse(decoder)?;
+impl From<RangeProviderPreProcessed> for RangeProvider {
+    fn from(rppp: RangeProviderPreProcessed) -> Self {
         let start = rppp.start;
         let end = rppp.end;
         let step = rppp.step.get().into();
@@ -792,10 +522,11 @@ impl FromYaml for RangeProvider {
         } else {
             Either::A(iter)
         };
-        Ok((RangeProvider(iter), marker))
+        RangeProvider(iter)
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct RangeProviderPreProcessed {
     start: i64,
     end: i64,
@@ -871,6 +602,7 @@ impl FromYaml for RangeProviderPreProcessed {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum FileFormat {
     Csv,
     Json,
@@ -896,6 +628,7 @@ impl Default for FileFormat {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum CsvHeader {
     Bool(bool),
     String(String),
@@ -932,6 +665,7 @@ fn from_yaml_char_u8<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> 
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 #[derive(Default)]
 pub struct CsvSettings {
     pub comment: Option<u8>,
@@ -1027,6 +761,7 @@ impl FromYaml for CsvSettings {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct FileProviderPreProcessed {
     csv: CsvSettings,
     auto_return: Option<EndpointProvidesSendOptions>,
@@ -1131,11 +866,9 @@ impl FromYaml for FileProviderPreProcessed {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct ResponseProvider {
-    // #[yaml(default)]
     pub auto_return: Option<EndpointProvidesSendOptions>,
-    // #[yaml(default)]
     pub buffer: Limit,
 }
 
@@ -1193,20 +926,14 @@ impl FromYaml for ResponseProvider {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct LoggerPreProcessed {
-    // #[yaml(default)]
     select: Option<WithMarker<json::Value>>,
-    // #[yaml(default)]
     for_each: Vec<WithMarker<String>>,
-    // #[yaml(default, rename = "where")]
     where_clause: Option<WithMarker<String>>,
     to: PreTemplate,
-    // #[yaml(default)]
     pretty: bool,
-    // #[yaml(default)]
     limit: Option<usize>,
-    // #[yaml(default)]
     kill: bool,
 }
 
@@ -1318,13 +1045,10 @@ impl FromYaml for LoggerPreProcessed {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct LogsPreProcessed {
-    // #[yaml(default)]
     select: WithMarker<json::Value>,
-    // #[yaml(default)]
     for_each: Vec<WithMarker<String>>,
-    // #[yaml(default, rename = "where")]
     where_clause: Option<WithMarker<String>>,
 }
 
@@ -1389,36 +1113,43 @@ impl FromYaml for LogsPreProcessed {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug))]
 struct EndpointPreProcessed {
-    // #[yaml(default)]
     declare: BTreeMap<String, PreValueOrExpression>,
-    // #[yaml(default, with = "tuple_vec_map")]
-    headers: Vec<(String, Nullable<PreTemplate>)>,
-    // #[yaml(default)]
+    headers: TupleVec<String, Nullable<PreTemplate>>,
     body: Option<Body>,
-    // #[yaml(default)]
     load_pattern: Option<PreLoadPattern>,
-    // #[yaml(default, deserialize_with = "deserialize_method")]
     method: Method,
-    // #[yaml(default)]
     on_demand: bool,
-    // #[yaml(default)]
     peak_load: Option<PreHitsPer>,
-    // #[yaml(default)]
     tags: BTreeMap<String, PreTemplate>,
     url: PreTemplate,
-    // #[yaml(default, deserialize_with = "deserialize_providers")]
     provides: BTreeMap<String, EndpointProvidesPreProcessed>,
-    // #[yaml(default, deserialize_with = "deserialize_logs")]
-    logs: Vec<(String, LogsPreProcessed)>,
-    // #[yaml(default)]
+    logs: TupleVec<String, LogsPreProcessed>,
     max_parallel_requests: Option<NonZeroUsize>,
-    // #[yaml(default)]
     no_auto_returns: bool,
-    // #[yaml(default)]
     request_timeout: Option<PreDuration>,
     marker: Marker,
+}
+
+#[cfg(test)]
+impl PartialEq for EndpointPreProcessed {
+    fn eq(&self, other: &Self) -> bool {
+        self.declare == other.declare
+            && self.headers == other.headers
+            && self.body == other.body
+            && self.load_pattern == other.load_pattern
+            && self.method == other.method
+            && self.on_demand == other.on_demand
+            && self.peak_load == other.peak_load
+            && self.tags == other.tags
+            && self.url == other.url
+            && self.provides == other.provides
+            && self.logs == other.logs
+            && self.max_parallel_requests == other.max_parallel_requests
+            && self.no_auto_returns == other.no_auto_returns
+            && self.request_timeout == other.request_timeout
+    }
 }
 
 impl FromYaml for EndpointPreProcessed {
@@ -1569,10 +1300,11 @@ impl FromYaml for EndpointPreProcessed {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum Body {
     String(PreTemplate),
     File(PreTemplate),
-    Multipart(Vec<(String, BodyMultipartPiece)>),
+    Multipart(TupleVec<String, BodyMultipartPiece>),
 }
 
 impl FromYaml for Body {
@@ -1622,8 +1354,9 @@ impl FromYaml for Body {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct BodyMultipartPiece {
-    pub headers: Vec<(String, PreTemplate)>,
+    pub headers: TupleVec<String, PreTemplate>,
     pub body: BodyMultipartPieceBody,
 }
 
@@ -1679,6 +1412,7 @@ impl FromYaml for BodyMultipartPiece {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum BodyMultipartPieceBody {
     String(PreTemplate),
     File(PreTemplate),
@@ -1723,6 +1457,7 @@ impl FromYaml for BodyMultipartPieceBody {
 }
 
 #[derive(Copy, Clone)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum EndpointProvidesSendOptions {
     Block,
     Force,
@@ -1762,14 +1497,11 @@ impl FromYaml for EndpointProvidesSendOptions {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub(crate) struct EndpointProvidesPreProcessed {
-    // #[yaml(default)]
     send: Option<EndpointProvidesSendOptions>,
     select: WithMarker<json::Value>,
-    // #[yaml(default)]
     for_each: Vec<WithMarker<String>>,
-    // #[yaml(default, rename = "where")]
     where_clause: Option<WithMarker<String>>,
 }
 
@@ -1857,13 +1589,10 @@ pub fn default_auto_buffer_start_size() -> usize {
     5
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct ClientConfigPreProcessed {
-    // #[yaml(default = "default_request_timeout")]
     request_timeout: PreDuration,
-    // #[yaml(default, with = "tuple_vec_map")]
-    headers: Vec<(String, PreTemplate)>,
-    // #[yaml(default = "default_keepalive")]
+    headers: TupleVec<String, PreTemplate>,
     keepalive: PreDuration,
 }
 
@@ -1939,7 +1668,7 @@ impl DefaultWithMarker for ClientConfigPreProcessed {
     fn default(marker: Marker) -> Self {
         ClientConfigPreProcessed {
             request_timeout: default_request_timeout(marker),
-            headers: Vec::new(),
+            headers: Default::default(),
             keepalive: default_keepalive(marker),
         }
     }
@@ -1952,15 +1681,11 @@ pub struct GeneralConfig {
     pub watch_transition_time: Option<Duration>,
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct GeneralConfigPreProcessed {
-    // #[yaml(default = "default_auto_buffer_start_size")]
     auto_buffer_start_size: usize,
-    // #[yaml(default = "default_bucket_size")]
     bucket_size: PreDuration,
-    // #[yaml(default)]
     log_provider_stats: Option<PreDuration>,
-    // #[yaml(default)]
     watch_transition_time: Option<PreDuration>,
 }
 
@@ -2043,6 +1768,7 @@ impl FromYaml for GeneralConfigPreProcessed {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct ConfigPreProcessed {
     client: ClientConfigPreProcessed,
     general: GeneralConfigPreProcessed,
@@ -2109,18 +1835,13 @@ impl FromYaml for ConfigPreProcessed {
     }
 }
 
-// #[derive(FromYaml)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct LoadTestPreProcessed {
-    // #[yaml(default)]
     config: ConfigPreProcessed,
     endpoints: Vec<EndpointPreProcessed>,
-    // #[yaml(default)]
     load_pattern: Option<PreLoadPattern>,
-    // #[yaml(default, deserialize_with = "deserialize_providers")]
     providers: BTreeMap<String, ProviderPreProcessed>,
-    // #[yaml(default)]
     loggers: BTreeMap<String, LoggerPreProcessed>,
-    // #[yaml(default, deserialize_with = "deserialize_vars")]
     vars: BTreeMap<String, PreVar>,
 }
 
@@ -2209,9 +1930,17 @@ impl FromYaml for LoadTestPreProcessed {
     }
 }
 
+#[cfg_attr(test, derive(Debug))]
 struct WithMarker<T> {
     inner: T,
     marker: Marker,
+}
+
+#[cfg(test)]
+impl<T: PartialEq> PartialEq for WithMarker<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
 }
 
 impl<T> WithMarker<T> {
@@ -2239,15 +1968,7 @@ impl<T: FromYaml> FromYaml for WithMarker<T> {
     }
 }
 
-struct PreHeaderValue(WithMarker<String>);
-
-impl FromYaml for PreHeaderValue {
-    fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-        let (s, marker) = FromYaml::parse(decoder)?;
-        Ok((Self(s), marker))
-    }
-}
-
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct PreValueOrExpression(WithMarker<String>);
 
 impl PreValueOrExpression {
@@ -2274,6 +1995,7 @@ impl FromYaml for PreValueOrExpression {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct PreTemplate(WithMarker<String>, bool);
 
 impl PreTemplate {
@@ -2320,6 +2042,7 @@ impl FromYaml for PreTemplate {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct PreVar(WithMarker<json::Value>);
 
 impl PreVar {
@@ -2410,6 +2133,7 @@ fn duration_from_string2(dur: String, marker: Marker) -> Result<Duration, Error>
     Ok(Duration::from_secs(total_secs))
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct PreDuration(PreTemplate);
 
 impl PreDuration {
@@ -2428,6 +2152,7 @@ impl FromYaml for PreDuration {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct PrePercent(PreTemplate);
 
 impl PrePercent {
@@ -2457,7 +2182,15 @@ impl FromYaml for PrePercent {
     }
 }
 
+#[cfg_attr(test, derive(Debug))]
 struct PreLoadPattern(Vec<LoadPatternPreProcessed>, Marker);
+
+#[cfg(test)]
+impl PartialEq for PreLoadPattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
 impl PreLoadPattern {
     fn evaluate(&self, static_vars: &BTreeMap<String, json::Value>) -> Result<LoadPattern, Error> {
@@ -2496,6 +2229,7 @@ impl FromYaml for PreLoadPattern {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
 struct PreHitsPer(PreTemplate);
 
 impl PreHitsPer {
@@ -2658,7 +2392,7 @@ impl Endpoint {
 
         let mut headers_to_remove = BTreeSet::new();
         let mut headers_to_add = Vec::new();
-        for (k, v) in headers {
+        for (k, v) in headers.0 {
             if let Nullable::Some(v) = v {
                 let v = v.into_template(static_vars, &mut required_providers)?;
                 headers_to_add.push((k, v));
@@ -2736,6 +2470,7 @@ impl Endpoint {
                     }
                     Body::Multipart(multipart) => {
                         let pieces = multipart
+                            .0
                             .into_iter()
                             .map(|(name, v)| {
                                 let (is_file, template) = match v.body {
@@ -2752,6 +2487,7 @@ impl Endpoint {
                                 };
                                 let headers = v
                                     .headers
+                                    .0
                                     .into_iter()
                                     .map(|(k, v)| {
                                         let template =
@@ -2793,7 +2529,8 @@ impl Endpoint {
             .collect::<Result<_, Error>>()?;
         required_providers2.extend(providers_to_stream.clone());
         let required_providers = required_providers2;
-        let request_timeout = request_timeout.map(|d| d.evaluate(static_vars))
+        let request_timeout = request_timeout
+            .map(|d| d.evaluate(static_vars))
             .transpose()?;
 
         let mut endpoint = Endpoint {
@@ -2815,7 +2552,7 @@ impl Endpoint {
             tags,
         };
 
-        for (key, value) in logs {
+        for (key, value) in logs.0 {
             let value = EndpointProvidesPreProcessed {
                 send: Some(EndpointProvidesSendOptions::Block),
                 select: value.select,
@@ -2853,170 +2590,6 @@ impl Endpoint {
     }
 }
 
-#[derive(Debug, Clone)]
-enum YamlEvent {
-    MappingEnd,
-    MappingStart,
-    SequenceEnd,
-    SequenceStart,
-    Scalar(String, TScalarStyle, Option<(String, String)>),
-}
-
-impl YamlEvent {
-    fn is_scalar(&self) -> bool {
-        match self {
-            YamlEvent::Scalar(..) => true,
-            _ => false,
-        }
-    }
-
-    fn is_nested_end(&self) -> bool {
-        match self {
-            YamlEvent::MappingEnd | YamlEvent::SequenceEnd => true,
-            _ => false,
-        }
-    }
-
-    fn is_nested_start(&self) -> bool {
-        match self {
-            YamlEvent::MappingStart | YamlEvent::SequenceStart => true,
-            _ => false,
-        }
-    }
-
-    fn into_string(self) -> Result<String, Self> {
-        if let YamlEvent::Scalar(s, ..) = self {
-            Ok(s)
-        } else {
-            Err(self)
-        }
-    }
-
-    fn as_str(&self) -> Option<&str> {
-        match &self {
-            YamlEvent::Scalar(s, ..) => Some(s.as_str()),
-            _ => None,
-        }
-    }
-
-    fn as_x<F: FromStr>(&self) -> Option<F> {
-        if let YamlEvent::Scalar(s, TScalarStyle::Plain, _) = self {
-            F::from_str(&s).ok()
-        } else {
-            None
-        }
-    }
-
-    fn as_bool(&self) -> Option<bool> {
-        match self {
-            YamlEvent::Scalar(s, TScalarStyle::Plain, _) if s.as_str() == "true" => Some(true),
-            YamlEvent::Scalar(s, TScalarStyle::Plain, _) if s.as_str() == "false" => Some(false),
-            _ => None,
-        }
-    }
-}
-
-enum AliasOrEvent {
-    Alias(Range<usize>),
-    Event(YamlEvent, Marker),
-}
-
-pub struct YamlDecoder<I: Iterator<Item = char>> {
-    aliased_events: Vec<AliasOrEvent>,
-    alias_map: BTreeMap<usize, Range<usize>>,
-    parser: YamlParser<I>,
-    peek: Option<(YamlEvent, Marker)>,
-    reference_stack: Vec<Option<(usize, usize)>>,
-    replaying_alias: Vec<Range<usize>>,
-}
-
-impl<I: Iterator<Item = char>> YamlDecoder<I> {
-    fn new(iter: I) -> Self {
-        let parser = YamlParser::new(iter);
-        YamlDecoder {
-            aliased_events: Vec::new(),
-            alias_map: BTreeMap::new(),
-            parser,
-            peek: None,
-            reference_stack: Vec::new(),
-            replaying_alias: Vec::new(),
-        }
-    }
-
-    fn peek(&mut self) -> Result<&(YamlEvent, Marker), Error> {
-        use YamlParseEvent::*;
-        if self.peek.is_some() {
-            return Ok(self.peek.as_ref().unwrap());
-        }
-        let ret = loop {
-            if let Some(range) = self.replaying_alias.last_mut() {
-                if let Some(i) = range.next() {
-                    match &self.aliased_events[i] {
-                        AliasOrEvent::Alias(range) => self.replaying_alias.push(range.clone()),
-                        AliasOrEvent::Event(e, marker) => break (e.clone(), *marker),
-                    }
-                } else {
-                    self.replaying_alias.pop();
-                }
-                continue;
-            }
-            let (event, marker) = self.parser.next()?;
-            let in_reference = !self.reference_stack.is_empty();
-            let (alias_id, event) = match event {
-                Nothing | StreamStart | StreamEnd | DocumentStart | DocumentEnd => continue,
-                Alias(i) => {
-                    if let Some(range) = self.alias_map.get(&i) {
-                        self.replaying_alias.push(range.clone());
-                        if in_reference {
-                            self.aliased_events.push(AliasOrEvent::Alias(range.clone()));
-                        }
-                    }
-                    continue;
-                }
-                Scalar(s, style, alias_id, tag) => {
-                    let tag = if let Some(TokenType::Tag(a, b)) = tag {
-                        Some((a, b))
-                    } else {
-                        None
-                    };
-                    (alias_id, YamlEvent::Scalar(s, style, tag))
-                }
-                MappingStart(alias_id) => (alias_id, YamlEvent::MappingStart),
-                MappingEnd => (0, YamlEvent::MappingEnd),
-                SequenceStart(alias_id) => (alias_id, YamlEvent::SequenceStart),
-                SequenceEnd => (0, YamlEvent::SequenceEnd),
-            };
-            if in_reference || alias_id > 0 {
-                self.aliased_events
-                    .push(AliasOrEvent::Event(event.clone(), marker));
-            }
-            if alias_id > 0 {
-                let i = self.aliased_events.len() - 1;
-                if event.is_scalar() {
-                    self.alias_map.insert(alias_id, i..i);
-                } else {
-                    self.reference_stack.push(Some((alias_id, i)));
-                }
-            } else if event.is_nested_end() {
-                if let Some(Some((alias_id, i))) = self.reference_stack.pop() {
-                    self.alias_map
-                        .insert(alias_id, i..self.aliased_events.len());
-                }
-            } else if event.is_nested_start() && in_reference {
-                self.reference_stack.push(None);
-            }
-            break (event, marker);
-        };
-        self.peek = Some(ret);
-        Ok(self.peek.as_ref().unwrap())
-    }
-
-    fn next(&mut self) -> Result<(YamlEvent, Marker), Error> {
-        self.peek()?;
-        Ok(self.peek.take().unwrap())
-    }
-}
-
 impl LoadTest {
     pub fn from_config(
         bytes: &[u8],
@@ -3046,6 +2619,7 @@ impl LoadTest {
             .config
             .client
             .headers
+            .0
             .iter()
             .map(|(key, value)| {
                 let mut required_providers = RequiredProviders::new();
@@ -3143,7 +2717,7 @@ impl LoadTest {
                         };
                         Provider::File(f)
                     }
-                    ProviderPreProcessed::Range(r) => Provider::Range(r),
+                    ProviderPreProcessed::Range(r) => Provider::Range(r.into()),
                     ProviderPreProcessed::Response(r) => Provider::Response(r),
                     ProviderPreProcessed::List(l) => Provider::List(l),
                 };
@@ -3246,5 +2820,496 @@ pub(crate) fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
         Cow::Owned(json::Value::String(s)) => Cow::Owned(s),
         Cow::Borrowed(json::Value::String(s)) => Cow::Borrowed(s),
         _ => Cow::Owned(v.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use maplit::btreemap;
+
+    fn check_all<T: FromYaml + std::fmt::Debug + PartialEq>(checks: Vec<(&str, Option<T>)>) {
+        for (i, (s, n)) in checks.into_iter().enumerate() {
+            let n2 = T::from_yaml_str(s);
+            match (&n, &n2) {
+                (None, _) => assert!(n2.is_err(), "failed at index {} with {:?}", i, n2),
+                (Some(n), Ok(n2)) => assert_eq!(n2, n, "failed at index {}", i),
+                _ => panic!("failed at index {} with `{:?}` and `{:?}`", i, n, n2),
+            }
+        }
+    }
+
+    #[test]
+    fn from_yaml_method() {
+        let values = vec![
+            ("POST", Some(Method::POST)),
+            ("GET", Some(Method::GET)),
+            ("PUT", Some(Method::PUT)),
+            ("HEAD", Some(Method::HEAD)),
+            ("DELETE", Some(Method::DELETE)),
+            ("OPTIONS", Some(Method::OPTIONS)),
+            ("CONNECT", Some(Method::CONNECT)),
+            ("PATCH", Some(Method::PATCH)),
+            ("TRACE", Some(Method::TRACE)),
+            ("GIT", None),
+            ("7", None),
+            ("get", None),
+        ];
+        check_all(values);
+    }
+
+    impl PartialEq for Limit {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Limit::Auto(_), Limit::Auto(_)) => self.get() == other.get(),
+                (Limit::Integer(_), Limit::Integer(_)) => self.get() == other.get(),
+                _ => false,
+            }
+        }
+    }
+
+    #[test]
+    fn from_yaml_limit() {
+        let values = vec![
+            ("asdf", None),
+            ("auto", Some(Limit::auto())),
+            ("96", Some(Limit::Integer(96))),
+            ("-96", None),
+        ];
+        check_all(values);
+    }
+
+    fn create_with_marker<T>(t: T) -> WithMarker<T> {
+        WithMarker::new(t, create_marker())
+    }
+
+    fn create_marker() -> Marker {
+        Scanner::new("".chars()).mark()
+    }
+
+    fn create_template(s: &str) -> PreTemplate {
+        PreTemplate(create_with_marker(s.to_string()), false)
+    }
+
+    #[test]
+    fn from_yaml_static_list() {
+        let values = vec![
+            (
+                "values:
+                    - foo
+                    - bar",
+                Some(StaticList::Explicit(ExplicitStaticList {
+                    random: false,
+                    repeat: true,
+                    values: vec![json::json!("foo"), json::json!("bar")],
+                })),
+            ),
+            (
+                "
+                repeat: false
+                random: true
+                values:
+                    - foo
+                    - bar",
+                Some(StaticList::Explicit(ExplicitStaticList {
+                    random: true,
+                    repeat: false,
+                    values: vec![json::json!("foo"), json::json!("bar")],
+                })),
+            ),
+            (
+                "
+                - foo
+                - bar",
+                Some(StaticList::Implicit(vec![
+                    json::json!("foo"),
+                    json::json!("bar"),
+                ])),
+            ),
+            (
+                "
+                foo: 123
+                bar: 456",
+                None,
+            ),
+            (
+                "
+                values:
+                    foo: 123
+                    bar: 456",
+                None,
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_load_pattern_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "
+                linear:
+                    to: 10%
+                    over: 9h",
+                Some(LoadPatternPreProcessed::Linear(LinearBuilderPreProcessed {
+                    from: None,
+                    to: PrePercent(create_template("10%")),
+                    over: PreDuration(create_template("9h")),
+                })),
+            ),
+            (
+                "
+                linear:
+                    from: 50%
+                    to: 10%
+                    over: 9h",
+                Some(LoadPatternPreProcessed::Linear(LinearBuilderPreProcessed {
+                    from: Some(PrePercent(create_template("50%"))),
+                    to: PrePercent(create_template("10%")),
+                    over: PreDuration(create_template("9h")),
+                })),
+            ),
+            (
+                "
+                linear:
+                    from: 50%
+                    to: 10%
+                    over: 9h
+                    foo: 123",
+                None,
+            ),
+            ("-96", None),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_provider_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "
+                file:
+                    path: foo.bar",
+                Some(ProviderPreProcessed::File(FileProviderPreProcessed {
+                    csv: Default::default(),
+                    auto_return: None,
+                    buffer: Default::default(),
+                    format: Default::default(),
+                    path: create_template("foo.bar"),
+                    random: false,
+                    repeat: false,
+                })),
+            ),
+            (
+                "range: {}",
+                Some(ProviderPreProcessed::Range(RangeProviderPreProcessed {
+                    start: std::i64::MIN,
+                    end: std::i64::MAX,
+                    step: NonZeroU16::new(1).expect("1 is non-zero"),
+                    repeat: false,
+                })),
+            ),
+            (
+                "response: {}",
+                Some(ProviderPreProcessed::Response(ResponseProvider {
+                    auto_return: None,
+                    buffer: Default::default(),
+                })),
+            ),
+            (
+                "
+                list:
+                    - 1",
+                Some(ProviderPreProcessed::List(StaticList::Implicit(vec![
+                    json::json!(1),
+                ]))),
+            ),
+        ];
+        check_all(values);
+    }
+
+    fn create_endpoint_pre_processed(url: &str) -> EndpointPreProcessed {
+        EndpointPreProcessed {
+            declare: Default::default(),
+            headers: Default::default(),
+            body: None,
+            load_pattern: None,
+            method: Method::GET,
+            on_demand: false,
+            peak_load: None,
+            tags: Default::default(),
+            url: create_template(url),
+            provides: Default::default(),
+            logs: Default::default(),
+            no_auto_returns: false,
+            max_parallel_requests: None,
+            request_timeout: None,
+            marker: create_marker(),
+        }
+    }
+
+    #[test]
+    fn from_yaml_endpoint_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "
+                declare:
+                    foo: bar
+                headers:
+                    foo: bar
+                    baz: abc
+                method: GET
+                body: foo
+                load_pattern:
+                    - linear:
+                        to: 100%
+                        over: 10m
+                on_demand: true
+                peak_load: 50hps
+                tags:
+                    foo: bar
+                url: http://localhost:8080/
+                max_parallel_requests: 3
+                provides:
+                    foo:
+                        select: 1
+                logs:
+                    foo:
+                        select: 1
+                no_auto_returns: true
+                request_timeout: 15s",
+                Some(EndpointPreProcessed {
+                    declare: btreemap! {
+                        "foo".to_string() => PreValueOrExpression(create_with_marker("bar".to_string()))
+                    },
+                    headers: vec![
+                        ("foo".to_string(), Nullable::Some(create_template("bar"))),
+                        ("baz".to_string(), Nullable::Some(create_template("abc"))),
+                    ]
+                    .into(),
+                    body: Some(Body::String(create_template("foo"))),
+                    load_pattern: Some(PreLoadPattern(
+                        vec![LoadPatternPreProcessed::Linear(LinearBuilderPreProcessed {
+                            from: None,
+                            to: PrePercent(create_template("100%")),
+                            over: PreDuration(create_template("10m")),
+                        })],
+                        create_marker(),
+                    )),
+                    method: Method::GET,
+                    on_demand: true,
+                    peak_load: Some(PreHitsPer(create_template("50hps"))),
+                    tags: btreemap! {
+                        "foo".to_string() => create_template("bar"),
+                    },
+                    url: create_template("http://localhost:8080/"),
+                    provides: btreemap! {
+                        "foo".to_string() => EndpointProvidesPreProcessed {
+                            send: None,
+                            select: create_with_marker(json::json!(1)),
+                            for_each: Default::default(),
+                            where_clause: None,
+                        }
+                    },
+                    logs: vec![(
+                        "foo".to_string(),
+                        LogsPreProcessed {
+                            select: create_with_marker(json::json!(1)),
+                            for_each: Default::default(),
+                            where_clause: None,
+                        },
+                    )]
+                    .into(),
+                    no_auto_returns: true,
+                    max_parallel_requests: Some(NonZeroUsize::new(3).unwrap()),
+                    request_timeout: Some(PreDuration(create_template("15s"))),
+                    marker: create_marker(),
+                }),
+            ),
+            (
+                "url: http://localhost:8080/",
+                Some(create_endpoint_pre_processed("http://localhost:8080/")),
+            ),
+            ("method: GET", None),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_body() {
+        let values = vec![
+            ("asdf", Some(Body::String(create_template("asdf")))),
+            (
+                "file: foo.bar",
+                Some(Body::File(create_template("foo.bar"))),
+            ),
+            (
+                "!file foo.bar",
+                Some(Body::File(create_template("foo.bar"))),
+            ),
+            (
+                "multipart:
+                    foo: 
+                        headers:
+                            asdf: jkl
+                        body: blah",
+                Some(Body::Multipart(
+                    vec![(
+                        "foo".to_string(),
+                        BodyMultipartPiece {
+                            headers: vec![("asdf".to_string(), create_template("jkl"))].into(),
+                            body: BodyMultipartPieceBody::String(create_template("blah")),
+                        },
+                    )]
+                    .into(),
+                )),
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_endpoints_provides_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "
+                select: foo
+                send: block
+                for_each:
+                    - foo
+                where: bar",
+                Some(EndpointProvidesPreProcessed {
+                    send: Some(EndpointProvidesSendOptions::Block),
+                    for_each: vec![create_with_marker("foo".to_string())],
+                    select: create_with_marker(json::json!("foo")),
+                    where_clause: Some(create_with_marker("bar".to_string())),
+                }),
+            ),
+            (
+                "
+                send: block
+                for_each:
+                    - foo
+                where: bar",
+                None,
+            ),
+            (
+                "select:
+                    foo: bar
+                    baz: abc",
+                Some(EndpointProvidesPreProcessed {
+                    send: None,
+                    for_each: Default::default(),
+                    select: create_with_marker(json::json!({"foo": "bar", "baz": "abc"})),
+                    where_clause: None,
+                }),
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_endpoints_provides_send_options() {
+        let values = vec![
+            ("asdf", None),
+            ("block", Some(EndpointProvidesSendOptions::Block)),
+            ("if_not_full", Some(EndpointProvidesSendOptions::IfNotFull)),
+            ("force", Some(EndpointProvidesSendOptions::Force)),
+            (
+                "if:
+                    not: full",
+                None,
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_client_config_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "{}",
+                Some(ClientConfigPreProcessed::default(create_marker())),
+            ),
+            (
+                "request_timeout: 10s",
+                Some(ClientConfigPreProcessed {
+                    request_timeout: PreDuration(create_template("10s")),
+                    ..DefaultWithMarker::default(create_marker())
+                }),
+            ),
+            (
+                "headers:
+                    foo: bar
+                    baz: 123",
+                Some(ClientConfigPreProcessed {
+                    headers: vec![
+                        ("foo".to_string(), create_template("bar")),
+                        ("baz".to_string(), create_template("123")),
+                    ]
+                    .into(),
+                    ..DefaultWithMarker::default(create_marker())
+                }),
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_general_config_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "{}",
+                Some(GeneralConfigPreProcessed::default(create_marker())),
+            ),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_load_test_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            (
+                "endpoints:
+                    - url: http://localhost:8080",
+                Some(LoadTestPreProcessed {
+                    config: DefaultWithMarker::default(create_marker()),
+                    providers: Default::default(),
+                    load_pattern: None,
+                    loggers: Default::default(),
+                    vars: Default::default(),
+                    endpoints: vec![create_endpoint_pre_processed("http://localhost:8080")],
+                }),
+            ),
+            ("config: {}", None),
+        ];
+        check_all(values);
+    }
+
+    #[test]
+    fn from_yaml_config_pre_processed() {
+        let values = vec![
+            ("asdf", None),
+            ("{}", Some(ConfigPreProcessed::default(create_marker()))),
+            (
+                "general:
+                    auto_buffer_start_size: 37",
+                Some(ConfigPreProcessed {
+                    client: DefaultWithMarker::default(create_marker()),
+                    general: GeneralConfigPreProcessed {
+                        auto_buffer_start_size: 37,
+                        ..DefaultWithMarker::default(create_marker())
+                    },
+                }),
+            ),
+        ];
+        check_all(values);
     }
 }

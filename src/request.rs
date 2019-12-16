@@ -243,7 +243,7 @@ impl Builder {
         let mut limits = Vec::new();
         let mut outgoing = Vec::new();
         let mut on_demand_streams: OnDemandStreams = Vec::new();
-        
+
         let config::Endpoint {
             method,
             headers,
@@ -259,9 +259,9 @@ impl Builder {
             request_timeout,
             ..
         } = self.endpoint;
-        
+
         let timeout = request_timeout.unwrap_or(ctx.config.client.request_timeout);
-        
+
         let mut provides_set = if self.start_stream.is_none() && !provides.is_empty() {
             Some(BTreeSet::new())
         } else {

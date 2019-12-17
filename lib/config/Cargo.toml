@@ -7,7 +7,7 @@ edition = "2018"
 doctest = false
 
 [dependencies]
-base64 = "0.10"
+base64 = "0.11"
 ether = { path = "../either" }
 futures = "0.1"
 http = "0.1"

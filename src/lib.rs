@@ -559,7 +559,7 @@ where
         .shared();
 
     let select = if let TryRunFormat::Human = try_config.format {
-        "`\
+        r#""`\
          Request\n\
          ========================================\n\
          ${request['start-line']}\n\
@@ -569,7 +569,7 @@ where
          ========================================\n\
          ${response['start-line']}\n\
          ${join(response.headers, '\n', ': ')}\n\
-         ${if(response.body != '', '\n${response.body}', '')}\n\n`"
+         ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
     } else {
         r#"{
             "request": {

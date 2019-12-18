@@ -538,7 +538,7 @@ impl FromYaml for RangeProviderPreProcessed {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut saw_opening = false;
 
-        let mut start = std::i64::MIN;
+        let mut start = 0;
         let mut end = std::i64::MAX;
         let mut step = NonZeroU16::new(1).expect("1 is non-zero");
         let mut repeat = false;
@@ -2059,7 +2059,8 @@ impl PreVar {
                             .map_err(Error::ExpressionErr)?;
                     let s = match t.evaluate(Cow::Owned(json::Value::Null), None) {
                         Ok(s) => s,
-                        Err(ExpressionError::UnknownProvider(s, marker)) => {
+                        Err(ExpressionError::UnknownProvider(s, marker))
+                        | Err(ExpressionError::IndexingIntoJson(s, _, marker)) => {
                             return Err(Error::MissingEnvironmentVariable(s, marker))
                         }
                         Err(e) => return Err(e.into()),
@@ -3005,7 +3006,7 @@ mod tests {
             (
                 "range: {}",
                 Some(ProviderPreProcessed::Range(RangeProviderPreProcessed {
-                    start: std::i64::MIN,
+                    start: 0,
                     end: std::i64::MAX,
                     step: NonZeroU16::new(1).expect("1 is non-zero"),
                     repeat: false,

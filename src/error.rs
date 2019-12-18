@@ -1,5 +1,4 @@
 use hyper::http::Error as HttpError;
-use serde_json as json;
 
 use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
 
@@ -8,7 +7,7 @@ pub enum RecoverableError {
     ProviderDelay(String),
     BodyErr(Arc<dyn StdError + Send + Sync>),
     ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
-    IndexingJson(String, json::Value),
+    IndexingJson(config::ExpressionError),
     Timeout(SystemTime),
 }
 
@@ -31,7 +30,7 @@ impl fmt::Display for RecoverableError {
         match self {
             BodyErr(e) => write!(f, "body error: {}", e),
             ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
-            IndexingJson(p, _) => write!(f, "indexing into json. Path was `{}`", p),
+            IndexingJson(e) => e.fmt(f),
             ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{}`", p),
             Timeout(..) => write!(f, "request timed out"),
         }
@@ -106,9 +105,9 @@ impl From<tokio::timer::Error> for TestError {
 
 impl From<config::Error> for TestError {
     fn from(ce: config::Error) -> Self {
-        if let config::Error::ExpressionErr(config::ExpressionError::IndexingIntoJson(s, j, _)) = ce
+        if let config::Error::ExpressionErr(e @ config::ExpressionError::IndexingIntoJson(..)) = ce
         {
-            Recoverable(IndexingJson(s, j))
+            Recoverable(IndexingJson(e))
         } else {
             Config(ce)
         }

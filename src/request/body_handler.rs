@@ -126,8 +126,8 @@ impl BodyHandler {
                 let send_behavior = select.get_send_behavior();
                 let iter = match select.iter(template_values.clone()).map_err(Into::into) {
                     Ok(v) => v.map(|v| v.map_err(Into::into)),
-                    Err(ExpressionError::IndexingIntoJson(j, e, _)) => {
-                        let r = RecoverableError::IndexingJson(j, e);
+                    Err(e @ ExpressionError::IndexingIntoJson(..)) => {
+                        let r = RecoverableError::IndexingJson(e);
                         let kind = stats::StatKind::RecoverableError(r);
                         futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;

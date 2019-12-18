@@ -14,17 +14,17 @@ pub enum ExpressionError {
     UnknownProvider(String, Marker),
 }
 
-impl ExpressionError {
-    fn marker(&self) -> Marker {
-        match self {
-            IndexingIntoJson(_, _, marker) => *marker,
-            InvalidExpression(_, marker) => *marker,
-            InvalidFunctionArguments(_, marker) => *marker,
-            UnknownFunction(_, marker) => *marker,
-            UnknownProvider(_, marker) => *marker,
-        }
-    }
-}
+// impl ExpressionError {
+//     fn marker(&self) -> Marker {
+//         match self {
+//             IndexingIntoJson(_, _, marker) => *marker,
+//             InvalidExpression(_, marker) => *marker,
+//             InvalidFunctionArguments(_, marker) => *marker,
+//             UnknownFunction(_, marker) => *marker,
+//             UnknownProvider(_, marker) => *marker,
+//         }
+//     }
+// }
 
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -45,27 +45,27 @@ pub enum Error {
     YamlDeserialize(Option<String>, Marker),
 }
 
-impl Error {
-    // fn marker(&self) -> Marker {
-    //     match &self {
-    //         ExpressionErr(e) => e.marker(),
-    //         InvalidDuration(_, marker) => *marker,
-    //         InvalidLoadPattern(marker) => *marker,
-    //         InvalidPeakLoad(_, marker) => *marker,
-    //         InvalidPercent(_, marker) => *marker,
-    //         InvalidYaml(e) => *e.marker(),
-    //         MissingEnvironmentVariable(_, marker) => *marker,
-    //         MissingForEach(marker) => *marker,
-    //         MissingPeakLoad(marker) => *marker,
-    //         MissingLoadPattern(marker) => *marker,
-    //         MissingYamlField(_, marker) => *marker,
-    //         RecursiveForEachReference(marker) => *marker,
-    //         UnknownLogger(_, marker) => *marker,
-    //         UnrecognizedKey(_, _, marker) => *marker,
-    //         YamlDeserialize(_, marker) => *marker,
-    //     }
-    // }
-}
+// impl Error {
+// fn marker(&self) -> Marker {
+//     match &self {
+//         ExpressionErr(e) => e.marker(),
+//         InvalidDuration(_, marker) => *marker,
+//         InvalidLoadPattern(marker) => *marker,
+//         InvalidPeakLoad(_, marker) => *marker,
+//         InvalidPercent(_, marker) => *marker,
+//         InvalidYaml(e) => *e.marker(),
+//         MissingEnvironmentVariable(_, marker) => *marker,
+//         MissingForEach(marker) => *marker,
+//         MissingPeakLoad(marker) => *marker,
+//         MissingLoadPattern(marker) => *marker,
+//         MissingYamlField(_, marker) => *marker,
+//         RecursiveForEachReference(marker) => *marker,
+//         UnknownLogger(_, marker) => *marker,
+//         UnrecognizedKey(_, _, marker) => *marker,
+//         YamlDeserialize(_, marker) => *marker,
+//     }
+// }
+// }
 
 use Error::*;
 use ExpressionError::*;
@@ -73,13 +73,41 @@ use ExpressionError::*;
 impl fmt::Display for ExpressionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InvalidExpression(e, _) => write!(f, "invalid expression. {:?}", e),
-            IndexingIntoJson(p, ..) => write!(f, "indexing into json. Path was `{}`", p),
-            InvalidFunctionArguments(func, _) => {
-                write!(f, "invalid arguments for function `{}`", func)
-            }
-            UnknownFunction(func, _) => write!(f, "unknown function `{}`", func),
-            UnknownProvider(p, _) => write!(f, "unknown provider: `{}`", p),
+            InvalidExpression(e, m) => write!(
+                f,
+                "invalid expression. {:?} at line {} column {}",
+                e,
+                m.line(),
+                m.col()
+            ),
+            IndexingIntoJson(p, _, m) => write!(
+                f,
+                "indexing into json. Path was `{}` at line {} column {}",
+                p,
+                m.line(),
+                m.col()
+            ),
+            InvalidFunctionArguments(func, m) => write!(
+                f,
+                "invalid arguments for function `{}` at line {} column {}",
+                func,
+                m.line(),
+                m.col()
+            ),
+            UnknownFunction(func, m) => write!(
+                f,
+                "unknown function `{}` at line {} column {}",
+                func,
+                m.line(),
+                m.col()
+            ),
+            UnknownProvider(p, m) => write!(
+                f,
+                "unknown provider: `{}` at line {} column {}",
+                p,
+                m.line(),
+                m.col()
+            ),
         }
     }
 }
@@ -87,10 +115,7 @@ impl fmt::Display for ExpressionError {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExpressionErr(e) => {
-                let m = e.marker();
-                write!(f, "{:?} at line {} column {}", e, m.line(), m.col())
-            },
+            ExpressionErr(e) => e.fmt(f),
             InvalidDuration(d, m) => write!(f, "invalid duration `{}` at line {} column {}", d, m.line(), m.col()),
             InvalidLoadPattern(m) => write!(f, "invalid load_pattern at line {} column {}", m.line(), m.col()),
             InvalidPeakLoad(p, m) => write!(f, "invalid peak_load `{}` at line {} column {}", p, m.line(), m.col()),

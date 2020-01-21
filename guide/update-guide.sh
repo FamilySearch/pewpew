@@ -6,7 +6,7 @@ PROJECT_ROOT=$(realpath ../)
 GUIDE_DIR=$(realpath $PROJECT_ROOT/guide)
 RESULTS_VIEWER_DIR=$(realpath $GUIDE_DIR/results-viewer)
 WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
-WASM_OUTPUT_DIR=$(realpath $RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm)
+WASM_OUTPUT_DIR=$RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm
 
 # build the hdr-histogram-wasm for the results viewer
 cd $WASM_LIB_DIR

@@ -1124,7 +1124,7 @@ struct EndpointPreProcessed {
     peak_load: Option<PreHitsPer>,
     tags: BTreeMap<String, PreTemplate>,
     url: PreTemplate,
-    provides: BTreeMap<String, EndpointProvidesPreProcessed>,
+    provides: TupleVec<String, EndpointProvidesPreProcessed>,
     logs: TupleVec<String, LogsPreProcessed>,
     max_parallel_requests: Option<NonZeroUsize>,
     no_auto_returns: bool,
@@ -2415,6 +2415,7 @@ impl Endpoint {
         headers.extend(headers_to_add);
 
         let provides = provides
+            .0
             .into_iter()
             .map(|(key, mut value)| {
                 if value.send.is_none() {
@@ -3077,7 +3078,11 @@ mod tests {
                 provides:
                     foo:
                         select: 1
+                    foo:
+                        select: 1
                 logs:
+                    foo:
+                        select: 1
                     foo:
                         select: 1
                 no_auto_returns: true
@@ -3107,22 +3112,45 @@ mod tests {
                         "foo".to_string() => create_template("bar"),
                     },
                     url: create_template("http://localhost:8080/"),
-                    provides: btreemap! {
-                        "foo".to_string() => EndpointProvidesPreProcessed {
-                            send: None,
-                            select: create_with_marker(json::json!(1)),
-                            for_each: Default::default(),
-                            where_clause: None,
-                        }
-                    },
-                    logs: vec![(
-                        "foo".to_string(),
-                        LogsPreProcessed {
-                            select: create_with_marker(json::json!(1)),
-                            for_each: Default::default(),
-                            where_clause: None,
-                        },
-                    )]
+                    provides: vec![
+                        (
+                            "foo".to_string(),
+                            EndpointProvidesPreProcessed {
+                                send: None,
+                                select: create_with_marker(json::json!(1)),
+                                for_each: Default::default(),
+                                where_clause: None,
+                            },
+                        ),
+                        (
+                            "foo".to_string(),
+                            EndpointProvidesPreProcessed {
+                                send: None,
+                                select: create_with_marker(json::json!(1)),
+                                for_each: Default::default(),
+                                where_clause: None,
+                            },
+                        ),
+                    ]
+                    .into(),
+                    logs: vec![
+                        (
+                            "foo".to_string(),
+                            LogsPreProcessed {
+                                select: create_with_marker(json::json!(1)),
+                                for_each: Default::default(),
+                                where_clause: None,
+                            },
+                        ),
+                        (
+                            "foo".to_string(),
+                            LogsPreProcessed {
+                                select: create_with_marker(json::json!(1)),
+                                for_each: Default::default(),
+                                where_clause: None,
+                            },
+                        ),
+                    ]
                     .into(),
                     no_auto_returns: true,
                     max_parallel_requests: Some(NonZeroUsize::new(3).unwrap()),

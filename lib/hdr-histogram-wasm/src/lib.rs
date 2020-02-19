@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 use hdrhistogram::{serialization::Deserializer, Histogram};
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 

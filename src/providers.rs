@@ -44,7 +44,7 @@ pub fn file(
     mut template: config::FileProvider,
     test_killer: FCSender<Result<TestEndReason, TestError>>,
 ) -> Result<Provider, TestError> {
-    let file = std::mem::replace(&mut template.path, Default::default());
+    let file = std::mem::take(&mut template.path);
     let file2 = file.clone();
     let stream = match template.format {
         config::FileFormat::Csv => Either3::A(

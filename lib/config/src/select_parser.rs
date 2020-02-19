@@ -1112,7 +1112,7 @@ impl Template {
     ) -> Result<Self, Error> {
         let pairs = Parser::parse(Rule::template_entry_point, t)
             .map_err(|e| Error::InvalidExpression(e, marker))?
-            .nth(0)
+            .next()
             .expect("Expected 1 pair from parser")
             .into_inner();
         let mut pieces = Vec::new();
@@ -1446,7 +1446,7 @@ impl Select {
                             if !bool_value(&*wc.evaluate(
                                 Cow::Borrowed(&*d),
                                 no_recoverable_error,
-                                for_each.as_ref().map(Vec::as_slice),
+                                for_each.as_deref(),
                             )?)? {
                                 return Ok(None);
                             }
@@ -1455,7 +1455,7 @@ impl Select {
                             .evaluate(
                                 Cow::Borrowed(&*d),
                                 no_recoverable_error,
-                                for_each.as_ref().map(Vec::as_slice),
+                                for_each.as_deref(),
                             )
                             .map(Some)
                     })
@@ -1498,7 +1498,7 @@ impl Select {
                                     .evaluate(
                                         Cow::Borrowed(&*d),
                                         no_recoverable_error,
-                                        for_each.as_ref().map(Vec::as_slice),
+                                        for_each.as_deref(),
                                     )
                                     .map(Some)
                             })

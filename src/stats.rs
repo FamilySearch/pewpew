@@ -32,7 +32,6 @@ use std::{
 };
 
 mod histogram_serde {
-    use base64;
     use hdrhistogram::{
         serialization::{
             Deserializer as HDRDeserializer, Serializer as HDRSerializer, V2Serializer,

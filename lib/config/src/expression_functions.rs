@@ -758,7 +758,7 @@ impl Match {
                     .enumerate()
                     .map(|(i, n)| n.map(|s| s.into()).unwrap_or_else(|| i.to_string()))
                     .collect();
-                let arg = args.into_iter().nth(0).expect("match should have two args");
+                let arg = args.into_iter().next().expect("match should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &arg {
                     let b = Match::evaluate_with_arg(&regex, &capture_names, json);
                     Ok(Either::B(b))
@@ -1147,7 +1147,7 @@ impl ReversibleRange {
 
 #[derive(Clone, Debug)]
 pub(super) enum Range {
-    Args(ValueOrExpression, ValueOrExpression, Marker),
+    Args(Box<(ValueOrExpression, ValueOrExpression, Marker)>),
     Range(ReversibleRange),
 }
 
@@ -1167,7 +1167,7 @@ impl Range {
                         .ok_or_else(|| Error::InvalidFunctionArguments("range", marker))?;
                     Ok(Range::Range(ReversibleRange::new(first, second)))
                 }
-                _ => Ok(Range::Args(first, second, marker)),
+                _ => Ok(Range::Args((first, second, marker).into())),
             }
         } else {
             Err(Error::InvalidFunctionArguments("range", marker))
@@ -1195,7 +1195,8 @@ impl Range {
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, Error> {
         let r = match self {
-            Range::Args(first, second, marker) => {
+            Range::Args(args) => {
+                let (first, second, marker) = &**args;
                 let first = first
                     .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
                     .as_u64()
@@ -1220,7 +1221,8 @@ impl Range {
         no_recoverable_error: bool,
     ) -> impl Stream<Item = (json::Value, Vec<Ar>), Error = Error> {
         match self {
-            Range::Args(first, second, marker) => {
+            Range::Args(args) => {
+                let (first, second, marker) = *args;
                 let a = first
                     .into_stream(providers, no_recoverable_error)
                     .zip(second.into_stream(providers, no_recoverable_error))

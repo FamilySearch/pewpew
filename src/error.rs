@@ -7,7 +7,7 @@ pub enum RecoverableError {
     ProviderDelay(String),
     BodyErr(Arc<dyn StdError + Send + Sync>),
     ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
-    IndexingJson(config::ExpressionError),
+    IndexingJson(Box<config::ExpressionError>),
     Timeout(SystemTime),
 }
 
@@ -41,7 +41,7 @@ impl fmt::Display for RecoverableError {
 pub enum TestError {
     CannotCreateLoggerFile(String, Arc<std::io::Error>),
     CannotOpenFile(PathBuf, Arc<std::io::Error>),
-    Config(config::Error),
+    Config(Box<config::Error>),
     FileReading(String, Arc<std::io::Error>),
     InvalidConfigFilePath(PathBuf),
     InvalidUrl(String),
@@ -107,16 +107,16 @@ impl From<config::Error> for TestError {
     fn from(ce: config::Error) -> Self {
         if let config::Error::ExpressionErr(e @ config::ExpressionError::IndexingIntoJson(..)) = ce
         {
-            Recoverable(IndexingJson(e))
+            Recoverable(IndexingJson(e.into()))
         } else {
-            Config(ce)
+            Config(ce.into())
         }
     }
 }
 
 impl From<config::ExpressionError> for TestError {
     fn from(ce: config::ExpressionError) -> Self {
-        Config(ce.into())
+        Config(Box::new(ce.into()))
     }
 }
 

@@ -12,7 +12,7 @@ ether = { path = "../either" }
 futures = "0.1"
 http = "0.1"
 itertools = "0.8"
-jsonpath_lib = "0.2"
+jsonpath_lib = "=0.2.3"
 percent-encoding = "1"
 pest = "2"
 pest_derive = "2"

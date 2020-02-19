@@ -353,14 +353,14 @@ impl FromYaml for StaticList {
             YamlEvent::SequenceStart => {
                 let (e, marker) = FromYaml::parse(decoder)?;
                 let value = (StaticList::Implicit(e), marker);
-                return Ok(value);
+                Ok(value)
             }
             YamlEvent::MappingStart => {
                 let (i, marker) = FromYaml::parse(decoder)?;
                 let value = (StaticList::Explicit(i), marker);
-                return Ok(value);
+                Ok(value)
             }
-            _ => return Err(Error::YamlDeserialize(None, *marker)),
+            _ => Err(Error::YamlDeserialize(None, *marker)),
         }
     }
 }
@@ -472,7 +472,7 @@ impl FromYaml for ProviderPreProcessed {
                     "range" => {
                         let (c, marker) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        break (ProviderPreProcessed::Range(From::from(c)), marker);
+                        break (ProviderPreProcessed::Range(c), marker);
                     }
                     "response" => {
                         let (c, marker) =
@@ -1427,7 +1427,7 @@ impl FromYaml for BodyMultipartPieceBody {
                 let value = (BodyMultipartPieceBody::File(file), marker);
                 return Ok(value);
             }
-            YamlEvent::Scalar(_, ..) => {
+            YamlEvent::Scalar(..) => {
                 let (t, marker) = FromYaml::parse(decoder)?;
                 let value = (BodyMultipartPieceBody::String(t), marker);
                 return Ok(value);
@@ -2012,14 +2012,14 @@ impl PreTemplate {
         static_vars: &BTreeMap<String, json::Value>,
         required_providers: &mut RequiredProviders,
     ) -> Result<String, Error> {
-        self.into_template(static_vars, required_providers)
+        self.as_template(static_vars, required_providers)
             .and_then(|t| {
                 t.evaluate(Cow::Owned(json::Value::Null), None)
                     .map_err(Into::into)
             })
     }
 
-    fn into_template(
+    fn as_template(
         &self,
         static_vars: &BTreeMap<String, json::Value>,
         required_providers: &mut RequiredProviders,
@@ -2395,7 +2395,7 @@ impl Endpoint {
         let mut headers_to_add = Vec::new();
         for (k, v) in headers.0 {
             if let Nullable::Some(v) = v {
-                let v = v.into_template(static_vars, &mut required_providers)?;
+                let v = v.as_template(static_vars, &mut required_providers)?;
                 headers_to_add.push((k, v));
             } else {
                 headers_to_remove.insert(k);
@@ -2438,7 +2438,7 @@ impl Endpoint {
         let peak_load = peak_load.map(|p| p.evaluate(static_vars)).transpose()?;
 
         let url_marker = (url.0).marker;
-        let url = url.into_template(static_vars, &mut required_providers)?;
+        let url = url.as_template(static_vars, &mut required_providers)?;
         tags.entry("url".into()).or_insert_with(|| {
             PreTemplate::new(WithMarker::new(url.evaluate_with_star(), url_marker))
         });
@@ -2454,7 +2454,7 @@ impl Endpoint {
             .into_iter()
             .map(|(key, mut value)| {
                 value.no_fail();
-                let value = value.into_template(&static_vars, &mut required_providers)?;
+                let value = value.as_template(&static_vars, &mut required_providers)?;
                 Ok((key, value))
             })
             .collect::<Result<_, Error>>()?;
@@ -2463,11 +2463,11 @@ impl Endpoint {
             .map(|body| {
                 let value = match body {
                     Body::File(body) => {
-                        let template = body.into_template(static_vars, &mut required_providers)?;
+                        let template = body.as_template(static_vars, &mut required_providers)?;
                         BodyTemplate::File(config_path.clone(), template)
                     }
                     Body::String(body) => {
-                        let template = body.into_template(static_vars, &mut required_providers)?;
+                        let template = body.as_template(static_vars, &mut required_providers)?;
                         BodyTemplate::String(template)
                     }
                     Body::Multipart(multipart) => {
@@ -2478,12 +2478,12 @@ impl Endpoint {
                                 let (is_file, template) = match v.body {
                                     BodyMultipartPieceBody::File(t) => {
                                         let template =
-                                            t.into_template(static_vars, &mut required_providers)?;
+                                            t.as_template(static_vars, &mut required_providers)?;
                                         (true, template)
                                     }
                                     BodyMultipartPieceBody::String(t) => {
                                         let template =
-                                            t.into_template(static_vars, &mut required_providers)?;
+                                            t.as_template(static_vars, &mut required_providers)?;
                                         (false, template)
                                     }
                                 };
@@ -2493,7 +2493,7 @@ impl Endpoint {
                                     .into_iter()
                                     .map(|(k, v)| {
                                         let template =
-                                            v.into_template(static_vars, &mut required_providers)?;
+                                            v.as_template(static_vars, &mut required_providers)?;
                                         Ok::<_, Error>((k, template))
                                     })
                                     .collect::<Result<_, _>>()?;
@@ -2625,7 +2625,7 @@ impl LoadTest {
             .iter()
             .map(|(key, value)| {
                 let mut required_providers = RequiredProviders::new();
-                let value = value.into_template(&vars, &mut required_providers)?;
+                let value = value.as_template(&vars, &mut required_providers)?;
                 Ok((key.clone(), (value, required_providers)))
             })
             .collect::<Result<_, Error>>()?;

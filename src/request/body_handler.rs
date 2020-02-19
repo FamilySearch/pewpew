@@ -127,7 +127,7 @@ impl BodyHandler {
                 let iter = match select.iter(template_values.clone()).map_err(Into::into) {
                     Ok(v) => v.map(|v| v.map_err(Into::into)),
                     Err(e @ ExpressionError::IndexingIntoJson(..)) => {
-                        let r = RecoverableError::IndexingJson(e);
+                        let r = RecoverableError::IndexingJson(e.into());
                         let kind = stats::StatKind::RecoverableError(r);
                         futures.push(Either3::B(send_response_stat(kind, None)));
                         continue;

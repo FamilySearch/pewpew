@@ -649,7 +649,7 @@ where
     let mut endpoints = Endpoints::new();
 
     for mut endpoint in config.endpoints.into_iter() {
-        let required_providers = mem::replace(&mut endpoint.required_providers, Default::default());
+        let required_providers = mem::take(&mut endpoint.required_providers);
 
         let provides_set = endpoint
             .provides
@@ -968,7 +968,7 @@ where
     config_loggers
         .into_iter()
         .map(|(name, mut template)| {
-            let to = mem::replace(&mut template.to, Default::default());
+            let to = mem::take(&mut template.to);
             let writer_future = match to.as_str() {
                 "stderr" => Either::A(future::ok(Either3::A(stderr()))),
                 "stdout" => Either::A(future::ok(Either3::B(stdout()))),

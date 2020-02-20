@@ -228,7 +228,7 @@ mod tests {
         // check that the whole process ran in an acceptable time span (meaning the tasks went in parallel and
         // with a certain limit of concurrent tasks)
         assert!(
-            elapsed < Duration::from_millis(800) && elapsed > Duration::from_millis(750),
+            elapsed < Duration::from_millis(900) && elapsed > Duration::from_millis(750),
             "elapsed: {:?}",
             elapsed
         );

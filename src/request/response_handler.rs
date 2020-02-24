@@ -1,6 +1,6 @@
 use super::*;
 
-use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS};
+use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_HEADERS_ALL, RESPONSE_STARTLINE, STATS};
 use futures::future::IntoFuture;
 
 pub(super) struct ResponseHandler {
@@ -151,7 +151,7 @@ fn handle_response_requirements(
             format!("{:?} {}", version, response.status()).into(),
         );
     }
-    // check if we need the response headers and it hasn't already been set
+    // check if we need response.headers and it hasn't already been set
     if ((bitwise & RESPONSE_HEADERS) ^ (*response_fields_added & RESPONSE_HEADERS)) != 0 {
         *response_fields_added |= RESPONSE_HEADERS;
         let mut headers_json = json::Map::new();
@@ -162,6 +162,22 @@ fn handle_response_requirements(
             );
         }
         rp.insert("headers".into(), json::Value::Object(headers_json));
+    }
+    // check if we need response.headers_all and it hasn't already been set
+    if ((bitwise & RESPONSE_HEADERS_ALL) ^ (*response_fields_added & RESPONSE_HEADERS_ALL)) != 0 {
+        *response_fields_added |= RESPONSE_HEADERS_ALL;
+        let mut headers_json = json::Map::new();
+        for (k, v) in response.headers() {
+            headers_json
+                .entry(k.as_str())
+                .or_insert_with(|| json::Value::Array(Vec::new()))
+                .as_array_mut()
+                .expect("should be a json array")
+                .push(json::Value::String(
+                    String::from_utf8_lossy(v.as_bytes()).into_owned(),
+                ))
+        }
+        rp.insert("headers_all".into(), json::Value::Object(headers_json));
     }
     // check if we need the response body and it hasn't already been set
     if ((bitwise & RESPONSE_BODY) ^ (*response_fields_added & RESPONSE_BODY)) != 0 {

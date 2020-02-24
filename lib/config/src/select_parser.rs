@@ -65,12 +65,14 @@ impl RequiredProviders {
         match &*s {
             "request.start-line" => *special |= REQUEST_STARTLINE,
             "request.headers" => *special |= REQUEST_HEADERS,
+            "request.headers_all" => *special |= REQUEST_HEADERS_ALL,
             "request.body" => *special |= REQUEST_BODY,
             "request.method" => *special |= REQUEST_METHOD,
             "request.url" => *special |= REQUEST_URL,
             "request" => *special |= REQUEST_ALL,
             "response.start-line" => *special |= RESPONSE_STARTLINE,
             "response.headers" => *special |= RESPONSE_HEADERS,
+            "response.headers_all" => *special |= RESPONSE_HEADERS_ALL,
             "response.body" => *special |= RESPONSE_BODY,
             "response" => *special |= RESPONSE_ALL,
             "response.status" => *special |= RESPONSE_STATUS,
@@ -1071,15 +1073,22 @@ impl ParsedSelect {
 
 pub const REQUEST_STARTLINE: u16 = 0b0_000_000_100;
 pub const REQUEST_HEADERS: u16 = 0b0_000_000_010;
+pub const REQUEST_HEADERS_ALL: u16 = 0b100_000_000_000;
 pub const REQUEST_BODY: u16 = 0b0_000_000_001;
 pub const REQUEST_METHOD: u16 = 0b10_000_000_000;
-const REQUEST_ALL: u16 =
-    REQUEST_STARTLINE | REQUEST_HEADERS | REQUEST_BODY | REQUEST_URL | REQUEST_METHOD;
+const REQUEST_ALL: u16 = REQUEST_STARTLINE
+    | REQUEST_HEADERS
+    | REQUEST_HEADERS_ALL
+    | REQUEST_BODY
+    | REQUEST_URL
+    | REQUEST_METHOD;
 pub const RESPONSE_STARTLINE: u16 = 0b0_000_100_000;
 pub const RESPONSE_HEADERS: u16 = 0b0_000_010_000;
+pub const RESPONSE_HEADERS_ALL: u16 = 0b1_000_000_000_000;
 pub const RESPONSE_BODY: u16 = 0b0_000_001_000;
 pub const RESPONSE_STATUS: u16 = 0b100_000_000;
-const RESPONSE_ALL: u16 = RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_BODY | RESPONSE_STATUS;
+const RESPONSE_ALL: u16 =
+    RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_HEADERS_ALL | RESPONSE_BODY | RESPONSE_STATUS;
 const FOR_EACH: u16 = 0b0_001_000_000;
 pub const STATS: u16 = 0b0_010_000_000;
 pub const REQUEST_URL: u16 = 0b0_100_000_000;

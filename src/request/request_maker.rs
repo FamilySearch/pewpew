@@ -2,7 +2,8 @@ use crate::error::{RecoverableError, TestError};
 use crate::stats;
 
 use config::{
-    BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_STARTLINE, REQUEST_URL,
+    BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_HEADERS_ALL, REQUEST_STARTLINE,
+    REQUEST_URL,
 };
 use ether::{Either, Either3};
 use futures::future::{join_all, Future, IntoFuture};
@@ -242,13 +243,22 @@ impl RequestMaker {
                     headers_json.insert(
                         k.as_str().to_string(),
                         json::Value::String(
-                            v.to_str()
-                                .expect("could not parse HTTP request header as utf8 string")
-                                .to_string(),
+                            String::from_utf8_lossy(v.as_bytes()).into_owned()
                         ),
                     );
                 }
                 request_obj.insert("headers".into(), json::Value::Object(headers_json));
+            }
+            if rr_providers & REQUEST_HEADERS_ALL != 0 {
+                let mut headers_json = json::Map::new();
+                for (k, v) in headers.iter() {
+                    headers_json.entry(k.as_str())
+                        .or_insert_with(|| json::Value::Array(Vec::new()))
+                        .as_array_mut()
+                        .expect("should be a json array")
+                        .push(json::Value::String(String::from_utf8_lossy(v.as_bytes()).into_owned()))
+                }
+                request_obj.insert("headers_all".into(), json::Value::Object(headers_json));
             }
             if rr_providers & REQUEST_BODY != 0 {
                 let body_string = body_value.unwrap_or_else(|| "".into());

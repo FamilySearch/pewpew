@@ -19,7 +19,8 @@ use regex::Regex;
 use select_parser::ValueOrExpression;
 pub use select_parser::{
     ProviderStream, RequiredProviders, Select, Template, REQUEST_BODY, REQUEST_HEADERS,
-    REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_STARTLINE, STATS,
+    REQUEST_HEADERS_ALL, REQUEST_STARTLINE, REQUEST_URL, RESPONSE_BODY, RESPONSE_HEADERS,
+    RESPONSE_HEADERS_ALL, RESPONSE_STARTLINE, STATS,
 };
 use serde_json as json;
 use yaml_rust::scanner::{Marker, Scanner};

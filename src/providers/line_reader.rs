@@ -3,6 +3,8 @@ use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
+static KB8: usize = 8 * (1 << 10);
+
 use std::{
     fs::File,
     io::{self, Read, Seek},
@@ -10,8 +12,8 @@ use std::{
 };
 
 pub struct LineReader {
-    buffer: String,
     byte_buffer: Vec<u8>,
+    buf_data_len: usize,
     position: u64,
     positions: Vec<(io::SeekFrom, usize)>,
     random: Option<Uniform<usize>>,
@@ -22,8 +24,8 @@ pub struct LineReader {
 impl LineReader {
     pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
         let mut jr = LineReader {
-            buffer: String::with_capacity(8 * (1 << 10)),
-            byte_buffer: vec![0; 8 * (1 << 10)],
+            byte_buffer: vec![0; KB8],
+            buf_data_len: 0,
             position: 0,
             positions: Vec::new(),
             random: None,
@@ -59,7 +61,6 @@ impl LineReader {
         &mut self,
         size_hint: Option<usize>,
     ) -> Option<Result<(json::Value, u64, usize), io::Error>> {
-        let position = self.position;
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.byte_buffer.len());
             if let Some(extend_length) = extend_length {
@@ -70,33 +71,43 @@ impl LineReader {
             if let Err(e) = self.reader.read_exact(buf) {
                 return Some(Err(e));
             }
-            self.buffer = String::from_utf8_lossy(buf).to_string();
+            self.buf_data_len = hint;
         };
+        let position = self.position;
         let mut eof = false;
         loop {
-            if eof && self.buffer.is_empty() {
+            if eof && self.buf_data_len == 0 {
                 return None;
             }
-            let new_line_index = self.buffer.find('\n');
+            let new_line_index = self.byte_buffer[..self.buf_data_len]
+                .iter()
+                .enumerate()
+                .find_map(|(i, b)| if *b == b'\n' { Some(i) } else { None });
             if new_line_index.is_some() || eof {
-                let i = new_line_index.unwrap_or_else(|| self.buffer.len() - 1);
-                let range = ..=i;
-                let raw_value = &self.buffer[range];
-                let length = raw_value.as_bytes().len();
-                self.position += length as u64;
-                let value = raw_value.trim_end_matches(|c| c == '\n' || c == '\r');
-                let value = str_to_json(value);
-                self.buffer.replace_range(range, "");
-                return Some(Ok((value, position, length)));
+                let i = new_line_index.unwrap_or_else(|| self.buf_data_len);
+                self.position += (i + 1) as u64;
+                let mut raw_value = &self.byte_buffer[..i];
+                let mut i2 = i;
+                while raw_value.ends_with(&[b'\n']) || raw_value.ends_with(&[b'\r']) {
+                    i2 -= 1;
+                    raw_value = &self.byte_buffer[..i2];
+                }
+                let value = String::from_utf8_lossy(raw_value);
+                let value = str_to_json(&value);
+                self.byte_buffer.drain(..i + 1);
+                self.buf_data_len -= self.buf_data_len.min(i + 1);
+                return Some(Ok((value, position, i)));
             } else {
-                let mut buf = &mut self.byte_buffer[..8 * (1 << 10)];
+                let start_length = self.buf_data_len;
+                self.byte_buffer.resize(KB8 + start_length, 0);
+                let mut buf = &mut self.byte_buffer[start_length..KB8];
                 match self.reader.read(&mut buf) {
                     Err(e) => return Some(Err(e)),
                     Ok(n) => {
                         if n == 0 {
                             eof = true;
                         }
-                        self.buffer.push_str(&String::from_utf8_lossy(&buf[..n]))
+                        self.buf_data_len += n;
                     }
                 }
             }
@@ -110,7 +121,7 @@ impl LineReader {
 
 impl Seek for LineReader {
     fn seek(&mut self, seek: io::SeekFrom) -> Result<u64, io::Error> {
-        self.buffer.clear();
+        self.buf_data_len = 0;
         let n = self.reader.seek(seek)?;
         self.position = n;
         Ok(n)
@@ -138,20 +149,19 @@ impl Iterator for LineReader {
         } else {
             None
         };
-        let result = self.get_value(size_hint);
+        let mut result = self.get_value(size_hint);
         if result.is_none() && self.repeat {
             if let Some((pos, size)) = self.positions.first().cloned() {
                 if let Err(e) = self.seek(pos) {
-                    Some(Err(e))
+                    return Some(Err(e));
                 } else {
-                    self.get_value(Some(size)).map(|r| r.map(|(v, ..)| v))
+                    result = self.get_value(Some(size));
                 }
             } else {
-                None
+                return None;
             }
-        } else {
-            result.map(|r| r.map(|(v, ..)| v))
         }
+        result.map(|r| r.map(|(v, ..)| v))
     }
 }
 
@@ -193,6 +203,45 @@ mod tests {
                 .collect();
 
             assert_eq!(values, expect);
+        }
+    }
+
+    #[test]
+    fn line_reader_repeat_random_works() {
+        let mut fp = config::FileProvider::default();
+        fp.random = true;
+        fp.repeat = true;
+
+        let expect = vec![
+            json::json!([1, 2, 3]),
+            json::json!("some bunch of text"),
+            json::json!("{"),
+            json::json!(r#"  "foo": "bar""#),
+            json::json!("}"),
+        ];
+
+        for line_ending in &["\n", "\r\n"] {
+            let mut tmp = NamedTempFile::new().unwrap();
+            write!(tmp, "{}", LINES.join(line_ending)).unwrap();
+            let path = tmp.path().to_str().unwrap().to_string();
+
+            let values: Vec<_> = LineReader::new(&fp, &path)
+                .unwrap()
+                .map(Result::unwrap)
+                .take(1000)
+                .collect();
+
+            assert!(values.len() == 1000);
+
+            for value in &values {
+                assert!(expect.contains(value));
+            }
+
+            let mut values: Vec<_> = values.into_iter().map(|v| v.to_string()).collect();
+            values.sort_unstable();
+            values.dedup();
+
+            assert_eq!(values.len(), 5);
         }
     }
 }

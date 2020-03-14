@@ -1,0 +1,115 @@
+on:
+  push:
+    tags:
+      - v*
+
+name: Release
+jobs:
+  create-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      # https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/44937/highlight/true#M5978
+      - name: Get the version
+        id: get_version
+        run: echo ::set-env name=VERSION::${GITHUB_REF/refs\/tags\//}
+        shell: bash
+
+      - name: Create GitHub release
+        id: release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: ${{ env.VERSION }}
+
+      - name: Save artifacts
+        run: |
+          mkdir artifacts
+          echo "${{ steps.release.outputs.upload_url }}" | tee artifacts/release-upload-url
+          echo $VERSION | tee artifacts/release-version
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: artifacts
+          path: artifacts
+  
+  release:
+    name: Build and Upload
+    needs: ['create-release']
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v1
+        with:
+          name: artifacts
+          path: artifacts
+
+      - name: Get upload data
+        id: upload_data
+        shell: bash
+        run: |
+          release_upload_url="$(cat artifacts/release-upload-url)"
+          echo "::set-env name=RELEASE_UPLOAD_URL::$release_upload_url"
+          release_version="$(cat artifacts/release-version)"
+          echo "::set-env name=VERSION::$release_version"
+
+      - name: Build for non-Linux
+        uses: actions-rs/toolchain@v1
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          command: build
+          args: -q --release
+
+      - name: Build for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
+        with:
+          args: cargo build -q --release
+
+      - name: Compress for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          asset_name="pewpew-$VERSION-linux-x86_64-musl.tar.xz"
+          echo "::set-env name=ASSET_NAME::$asset_name"
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+
+      - name: Compress for Windows
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          asset_name="pewpew-$VERSION-windows-x86_64.zip"
+          echo "::set-env name=ASSET_NAME::$asset_name"
+          7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/pewpew.exe
+
+      - name: Compress for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
+          echo "::set-env name=ASSET_NAME::$asset_name"
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+          asset_path: ${{ env.ASSET_NAME }}
+          asset_name: ${{ env.ASSET_NAME }}
+          asset_content_type: application/octet-stream

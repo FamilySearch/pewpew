@@ -1,6 +1,8 @@
 use std::{cmp::PartialEq, fmt, io};
 
-use futures::{Async, Future, Poll, Stream};
+#[cfg(feature = "async-write")]
+use futures::Async;
+use futures::{Future, Poll, Stream};
 #[cfg(feature = "async-write")]
 use tokio::io::AsyncWrite;
 

@@ -2,6 +2,7 @@
 name = "mod_interval"
 version = "0.0.0"
 edition = "2018"
+publish = false
 
 [lib]
 doctest = false

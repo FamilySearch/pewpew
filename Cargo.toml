@@ -3,6 +3,7 @@ name = "pewpew"
 version = "0.5.5"
 edition = "2018"
 default-run = "pewpew"
+publish = false
 
 [lib]
 doctest = false
@@ -30,7 +31,7 @@ chrono = "0.4"
 ether = { path = "./lib/either", features = ["async-write"] }
 for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.1"
-hdrhistogram = "6"
+hdrhistogram = "7"
 http = "0.1"
 hyper = "0.12"
 hyper-tls = "0.3"
@@ -56,6 +57,12 @@ tempfile = "3"
 
 [profile.release]
 panic = "abort"
+
+[profile.release.package.config-wasm]
+opt-level = 's'
+
+[profile.release.package.hdr-histogram-wasm]
+opt-level = 's'
 
 [workspace]
 members = [

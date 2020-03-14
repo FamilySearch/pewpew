@@ -2,6 +2,7 @@
 name = "config-wasm"
 version = "0.0.0"
 edition = "2018"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,7 +13,3 @@ js-sys = "0.3"
 serde = "1"
 serde-wasm-bindgen = "0.1"
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"]  }
-
-[profile.release]
-lto = true
-opt-level = 's'

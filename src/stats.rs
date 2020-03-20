@@ -143,7 +143,8 @@ impl TimeBucket {
         // TODO: should these be ordered?
         for (tags, index) in tags {
             if let Some(bucket) = self.entries.get(index) {
-                let piece = bucket.create_print_summary(tags, format, self.time, end_time);
+                let piece =
+                    bucket.create_print_summary(tags, format, self.time, end_time, bucket_size);
                 print_string.push_str(&piece);
             }
         }
@@ -235,6 +236,7 @@ impl Bucket {
         format: RunOutputFormat,
         time: u64,
         end_time: Option<u64>,
+        bucket_size: u64,
     ) -> String {
         let calls_made = self.rtt_histogram.len();
         let mut print_string = String::new();
@@ -278,11 +280,11 @@ impl Bucket {
                 print_string.push_str(&piece);
             }
             RunOutputFormat::Json => {
-                let summary_type = if end_time.is_some() { "bucket" } else { "test" };
+                let summary_type = if end_time.is_some() { "test" } else { "bucket" };
                 let output = json::json!({
                     "type": "summary",
                     "startTime": time,
-                    "timestamp": end_time,
+                    "timestamp": time + bucket_size,
                     "summaryType": summary_type,
                     "method": method,
                     "url": url,
@@ -308,7 +310,9 @@ impl Bucket {
                     "max": max,
                     "mean": mean,
                     "stddev": stddev,
-                    "tags": tags
+                    "tags": tags.iter()
+                        .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
+                        .collect::<BTreeMap<_, _>>(),
                 });
                 let piece = format!("{}\n", output);
                 print_string.push_str(&piece);

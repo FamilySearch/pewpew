@@ -1,6 +1,6 @@
 [package]
 name = "pewpew"
-version = "0.5.6-beta1"
+version = "0.5.6-beta2"
 edition = "2018"
 default-run = "pewpew"
 publish = false

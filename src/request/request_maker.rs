@@ -2,8 +2,8 @@ use crate::error::{RecoverableError, TestError};
 use crate::stats;
 
 use config::{
-    BodyTemplate, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_HEADERS_ALL, REQUEST_STARTLINE,
-    REQUEST_URL,
+    BodyTemplate, Limit, Template, REQUEST_BODY, REQUEST_HEADERS, REQUEST_HEADERS_ALL,
+    REQUEST_STARTLINE, REQUEST_URL,
 };
 use ether::{Either, Either3};
 use futures::future::{join_all, Future, IntoFuture};
@@ -26,7 +26,7 @@ use std::{
     borrow::Cow,
     collections::BTreeMap,
     error::Error as StdError,
-    sync::Arc,
+    sync::{atomic::Ordering, Arc},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -45,6 +45,7 @@ pub(super) struct RequestMaker {
     pub(super) no_auto_returns: bool,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
     pub(super) precheck_rr_providers: u16,
+    pub(super) provider_limits: BTreeMap<String, Limit>,
     pub(super) tags: Arc<BTreeMap<String, Template>>,
     pub(super) timeout: Duration,
 }
@@ -93,6 +94,11 @@ impl RequestMaker {
                 StreamItem::Declare(name, value, returns, instant) => {
                     match target_instant {
                         Some(target_instant) if instant > target_instant => {
+                            if let Some(limit) = self.provider_limits.get(&name) {
+                                if let Limit::Auto(n) = limit {
+                                    n.fetch_add(1, Ordering::Release);
+                                }
+                            }
                             provider_delays.push(name.clone());
                         }
                         _ => (),
@@ -104,6 +110,11 @@ impl RequestMaker {
                 StreamItem::TemplateValue(name, value, auto_return, instant) => {
                     match target_instant {
                         Some(target_instant) if instant > target_instant => {
+                            if let Some(limit) = self.provider_limits.get(&name) {
+                                if let Limit::Auto(n) = limit {
+                                    n.fetch_add(1, Ordering::Release);
+                                }
+                            }
                             provider_delays.push(name.clone());
                         }
                         _ => (),
@@ -400,6 +411,7 @@ mod tests {
             let body = BodyTemplate::None;
             let rr_providers = 0;
             let precheck_rr_providers = 0;
+            let provider_limits = Default::default();
             let client = create_http_client(Duration::from_secs(60)).unwrap().into();
             let (stats_tx, _) = futures_channel::unbounded();
             let no_auto_returns = true;
@@ -418,6 +430,7 @@ mod tests {
                 no_auto_returns,
                 outgoing,
                 precheck_rr_providers,
+                provider_limits,
                 tags,
                 timeout,
             };

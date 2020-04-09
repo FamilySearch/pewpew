@@ -314,6 +314,7 @@ impl Builder {
         }
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
+        let mut provider_limits = BTreeMap::new();
         // go through the list of required providers and make sure we have them all
         for name in providers_to_stream.unique_providers() {
             let provider = match ctx.providers.get(&name) {
@@ -324,6 +325,8 @@ impl Builder {
             let ar = provider
                 .auto_return
                 .map(|send_option| (send_option, provider.tx.clone()));
+            let limit = provider.tx.limit();
+            provider_limits.insert(name.clone(), limit);
             let provider_stream = Box::new(
                 Stream::map(receiver, move |v| {
                     let ar = if no_auto_returns {
@@ -361,6 +364,7 @@ impl Builder {
             on_demand_streams,
             outgoing,
             precheck_rr_providers,
+            provider_limits,
             provides,
             rr_providers,
             tags: Arc::new(tags),
@@ -653,6 +657,7 @@ pub struct Endpoint {
     on_demand_streams: OnDemandStreams,
     outgoing: Vec<Outgoing>,
     precheck_rr_providers: u16,
+    provider_limits: BTreeMap<String, Limit>,
     provides: Vec<Outgoing>,
     rr_providers: u16,
     tags: Arc<BTreeMap<String, Template>>,
@@ -724,6 +729,7 @@ impl Endpoint {
         let precheck_rr_providers = self.precheck_rr_providers;
         let timeout = self.timeout;
         let limits = self.limits;
+        let provider_limits = self.provider_limits;
         let max_parallel_requests = self.max_parallel_requests;
         let tags = self.tags;
         let rm = RequestMaker {
@@ -737,6 +743,7 @@ impl Endpoint {
             no_auto_returns,
             outgoing,
             precheck_rr_providers,
+            provider_limits,
             tags,
             timeout,
         };

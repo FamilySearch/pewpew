@@ -1,5 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![type_length_limit = "1483480"]
+#![type_length_limit = "1550232"]
 
 mod error;
 mod providers;

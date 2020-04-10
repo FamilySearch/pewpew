@@ -6,7 +6,7 @@ ARG TOOLCHAIN=nightly
 
 # for libressl
 # ARG OPENSSL_VERSION=3.0.2
-ARG OPENSSL_VERSION=1.1.1e
+ARG OPENSSL_VERSION=1.1.1f
 
 RUN apt-get -qq update && \
     apt-get -qq install -y \
@@ -22,7 +22,8 @@ RUN ls /usr/include/linux && \
     ln -s /usr/include/x86_64-linux-gnu/asm /usr/local/musl/include/asm && \
     ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic && \
     cd /tmp && \
-    curl -L "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" | \
+    export URL_VERSION=`echo $OPENSSL_VERSION | tr . _` && \
+    curl -L "https://github.com/openssl/openssl/archive/OpenSSL_$URL_VERSION.tar.gz" | \
     tar xzf - --strip-components 1 && \
     env CC=musl-gcc ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
     env C_INCLUDE_PATH=/usr/local/musl/include/ make --quiet depend && \

@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](./introduction.md)
+- [Pewpew design overview](./design.md)
 - [Config file](./config.md)
   - [config section](./config/config-section.md)
   - [load_pattern section](./config/load_pattern-section.md)

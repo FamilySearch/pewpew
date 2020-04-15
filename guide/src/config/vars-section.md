@@ -5,7 +5,7 @@ vars:
   <i>variable_name</i>: <i>definition</i>
 </pre>
 
-Variables are used where a single pre-defined value is needed in the test a test. The variable *definition* can be any valid yaml type where any strings will be interpreted as a [template](./common-types.md#templates). In variable templates only environment variables can be interpolated in expressions.
+Variables are used where a single pre-defined value is needed in the test a test. The variable *definition* can be any valid YAML type where any strings will be interpreted as a [template](./common-types.md#templates). In variable templates only environment variables can be interpolated in expressions.
 
 **Examples**:
 ```yaml

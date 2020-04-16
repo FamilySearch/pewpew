@@ -1,0 +1,58 @@
+/* Guide version notice banner */
+.version-banner {
+  border-left: 4px solid #2196f3;
+  padding: 12px 16px;
+  margin: 0 0 24px 0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.version-banner a {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Preview version - orange warning style */
+.version-banner-preview {
+  background: #fff3e0;
+  border-left-color: #ff9800;
+  color: #e65100;
+}
+
+.version-banner-preview a {
+  color: #e65100;
+}
+
+.version-banner-preview a:hover {
+  color: #bf360c;
+}
+
+html.navy .version-banner-preview, html.coal .version-banner-preview {
+  background: #2d1f0f;
+  border-left-color: #ffb74d;
+  color: #ffb74d;
+}
+
+html.navy .version-banner-preview a, html.coal .version-banner-preview a {
+  color: #ffcc80;
+}
+
+html.ayu .version-banner-preview {
+  background: #1a1106;
+  border-left-color: #ff9800;
+  color: #ffb74d;
+}
+
+html.ayu .version-banner-preview a {
+  color: #ffcc80;
+}
+
+.diagram {
+  margin: 1em 0;
+}
+html.navy .diagram, html.coal .diagram {
+  filter: invert(1) saturate(3) contrast(0.7);
+}
+html.ayu .diagram {
+  filter: invert(1) hue-rotate(180deg) saturate(3) contrast(0.5);
+}

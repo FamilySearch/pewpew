@@ -32,6 +32,8 @@ In most load tests it is desirable to not only generate considerable traffic but
 
 ***load pattern*** - the pattern that generated traffic will follow over time. Load patterns are termed in percentages over some duration.
 
-For example, suppose we were creating a load test against the pepper service. After some research we determine that the peak load should be 50HPM (50 hits per minute) and that the load pattern should increase from 0% (no traffic) to 50% over 20 minutes, stay at 50% for 40 minutes, then go up to 100% over 10 minutes and stay there for 50 minutes.
+For example, suppose we were creating a load test against the pepper service. After some research we determine that the peak load should be 50HPM (50 hits per minute) and that the load pattern should increase from 0% (no traffic) to 50% (25HPM) over 20 minutes, remain steady for 40 minutes, then go up to 100% (50HPM) over 10 minutes and stay there for 50 minutes.
+
+Here's what the load pattern would look like charted out over time:
 
 <img class="diagram" src="./design/load-pattern-example.svg" alt="Example load pattern" />

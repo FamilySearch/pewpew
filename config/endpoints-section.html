@@ -1,0 +1,514 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>endpoints section - Pewpew Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-0392ca55.css">
+        <link rel="stylesheet" href="../css/chrome-fc474251.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/custom-12f35d69.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "../searchindex-6e25601d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-fc0ca87c.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Pewpew Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="endpoints-section"><a class="header" href="#endpoints-section">endpoints section</a></h1>
+<pre>
+endpoints:
+  - [declare: <i>declare_subsection</i>]
+    [headers: <i>headers</i>]
+    [body: <i>body</i>]
+    [load_pattern: <i>load_pattern_subsection</i>]
+    [method: <i>method</i>]
+    [peak_load: <i>peak_load</i>]
+    [tags: <i>tags</i>]
+    url: <i>template</i>
+    [provides: <i>provides_subsection</i>]
+    [on_demand: <i>boolean</i>]
+    [logs: <i>logs_subsection</i>]
+    [max_parallel_requests: <i>unsigned integer</i>]
+    [no_auto_returns: <i>boolean</i>]
+    [request_timeout: <i>duration</i>]
+</pre>
+
+<p>The <code>endpoints</code> section declares what HTTP endpoints will be called during a test.</p>
+<ul>
+<li>
+<p><strong><code>declare</code></strong> <sub><sup><em>Optional</em></sup></sub> - See the <a href="#declare-subsection">declare subsection</a></p>
+</li>
+<li>
+<p><strong><code>headers</code></strong> <sub><sup><em>Optional</em></sup></sub> - See <a href="./common-types.html#headers">headers</a></p>
+</li>
+<li>
+<p><strong><code>body</code></strong> <sub><sup><em>Optional</em></sup></sub> - See the <a href="#body-subsection">body subsection</a></p>
+</li>
+<li>
+<p><strong><code>load_pattern</code></strong> <sub><sup><em>Optional</em></sup></sub> - See the <a href="./load_pattern-section.html">load_pattern section</a></p>
+</li>
+<li>
+<p><strong><code>method</code></strong> <sub><sup><em>Optional</em></sup></sub> - A string representation for a valid HTTP method verb. Defaults to <code>GET</code></p>
+</li>
+<li>
+<p><strong><code>peak_load</code></strong> <sub><sup><em>Optional</em>*</sup></sub> - A <a href="./common-types.html#templates]">template</a> representing what the “peak load” for this endpoint should be. The term “peak load” represents how much traffic is generated for this endpoint when the <a href="./load_pattern-section.html">load_pattern</a> reaches <code>100%</code>. A <code>load_pattern</code> can go higher than <code>100%</code>, so a <code>load_pattern</code> of <code>200%</code>, for example, would mean it would go double the defined <code>peak_load</code>. Only variables defined in the <a href="./vars-section.html">vars section</a> can be interpolated.</p>
+<p>* While <code>peak_load</code> is marked as <em>optional</em> that is only true if the current endpoint has a <em>provides_subsection</em>, and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.</p>
+<p>A valid <code>load_pattern</code> is a number–integer or decimal–followed by an optional space and the string “hpm” (meaning “hits per minute”) or “hps” (meaning “hits per second”).</p>
+<p>Examples:</p>
+<p><code>50hpm</code> - 50 hits per minute</p>
+<p><code>300 hps</code> - 300 hits per second</p>
+</li>
+<li>
+<p><strong><code>tags</code></strong> <sub><sup><em>Optional</em></sup></sub> - Key/value string/<a href="./common-types.html#templates">template</a> pairs.</p>
+<p>Tags are a series of key/value pairs used to distinguish each endpoint. Tags can be used to include certain endpoints in a <a href="../cli.html#Command-line-options"><code>try</code></a> run, and also make it possible for a single endpoint to have its results statistics aggregated in multiple groups. Because tag values are <a href="./common-types.html#templates">templates</a> only tags which can be resolved statically at the beginning of a test can be used with the <code>include</code> flag of a <code>try</code> run. A reference to a provider can cause a single endpoint to have multiple groups of tags. Each one of these groups will have its own statistics in the results. For example if an endpoint had the following tags:</p>
+<pre><code>  tags:
+    name: Subscribe
+    status: ${response.status}
+</code></pre>
+<p>A new group of aggregated stats will be created for every status code returned by the endpoint.</p>
+<p>All endpoints have the following implicitly defined tags:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>method</code></td><td>The HTTP method for the endpoint.</td></tr>
+<tr><td><code>url</code></td><td>The endpoint’s url with any dynamic pieces being replaced with an asterisk.</td></tr>
+<tr><td><code>_id</code></td><td>The index of this endpoint in the list of endpoints, starting with 0.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Of the implicitly defined tags only <code>url</code> can be overwritten which is helpful in cases such as when an entire url is dynamically generated and it would otherwise show up as <code>*</code>.</p>
+</li>
+<li>
+<p><strong><code>url</code></strong> - A <a href="./common-types.html#templates">template</a> specifying the fully qualified url to the endpoint which will be requested.</p>
+</li>
+<li>
+<p><strong><code>provides</code></strong> <sub><sup><em>Optional</em></sup></sub> - See the <a href="#provides-subsection">provides subsection</a></p>
+</li>
+<li>
+<p><strong><code>on_demand</code></strong> <sub><sup><em>Optional</em></sup></sub> - A boolean which indicates that this endpoint should only be called when another endpoint first needs data that this endpoint provides. If the endpoint has no <code>provides</code> it has no affect.</p>
+</li>
+<li>
+<p><strong><code>logs</code></strong> <sub><sup><em>Optional</em></sup></sub> - See the <a href="#logs-subsection">logs subsection</a></p>
+</li>
+<li>
+<p><strong><code>max_parallel_requests</code></strong> <sub><sup><em>Optional</em></sup></sub> - Limits how many requests can be “open” at any point for the endpoint. <em>WARNING</em>: this can cause coordinated omission, invalidating the test statistics.</p>
+</li>
+<li>
+<p><strong><code>no_auto_returns</code></strong> <sub><sup><em>Optional</em></sup></sub> - A boolean which indicates that any <code>auto_return</code> providers referenced within this endpoint will have <code>auto_return</code> disabled–meaning values pulled from those providers will not be automatically pushed back to the provider after a response is received. Defaults to <code>false</code>.</p>
+</li>
+<li>
+<p><strong><code>request_timeout</code></strong> <sub><sup><em>Optional</em></sup></sub> - A <a href="./common-types.html#duration">duration</a> signifying how long a request will wait for a response before it times out. When not specified, the value from the <a href="./config-section.html#client">client config</a> will be used.</p>
+</li>
+</ul>
+<h2 id="using-providers-to-build-a-request"><a class="header" href="#using-providers-to-build-a-request">Using providers to build a request</a></h2>
+<p>Providers can be referenced anywhere <a href="./common-types.html#templates">templates</a> can be used and also in the <code>declare</code> subsection.</p>
+<h2 id="body-subsection"><a class="header" href="#body-subsection">body subsection</a></h2>
+<pre>
+body: <i>template</i>
+</pre>
+
+<pre>
+body:
+  file: <i>template</i>
+</pre>
+
+<pre>
+body:
+  multipart: 
+    <i>field_name</i>:
+      [headers: <i>headers</i>]
+      body: <i>template</i>
+    <i>field_name</i>:
+      [headers: <i>headers</i>]
+      body:
+        file: <i>template</i>
+</pre>
+
+<p>A request body can be in one of three formats: a <a href="./common-types.html#templates">template</a> to send a string as the body, a file which will send the contents of a file as the body, or a multipart body.</p>
+<p>To send the contents of a file the body parameter should be an object with a single key of <code>file</code> and the value being a template. Relative paths resolve relative to the config file used to execute pewpew.</p>
+<p>To send a multipart body, the body parameter should be an object with a single key of <code>multipart</code> and the value being an object of key/value pairs, where each key/value pair represents a piece of the multipart body. The keys represent the <em>field_name</em>s used in an HTML form and the values are objects with the following properties:</p>
+<ul>
+<li><strong><code>headers</code></strong> <sub><sup><em>Optional</em></sup></sub> - <a href="./common-types.html#headers">Headers</a> that will be included with this piece of the multipart body. For example, it is not uncommon to include a <code>content-type</code> header with a piece of a multipart body which includes a file.</li>
+<li><strong><code>body</code></strong> - Either a <a href="./common-types.html#templates">template</a> which will send a string value or an object with a single key of <code>file</code> and the value being a <a href="./common-types.html#templates">template</a>–which will send the contents of a file.</li>
+</ul>
+<p>When a multipart body is used for an endpoint each request will have the <code>content-type</code> header added with the value <code>multipart/form-data</code> and the necessary boundary. If there is already a <code>content-type</code> header set for the request it will be overwritten unless it is starts with <code>multipart/</code>–then the necessary boundary will be appended. If a <code>multipart/...</code> <code>content-type</code> is manually set with the request, make sure to not include a <code>boundary</code> parameter.</p>
+<p>For any request which has a <code>content-type</code> of <code>multipart/form-data</code>, a <code>Content-Disposition</code> header will be added to each piece in the multipart body with a value of <code>form-data; name=“<i>field_name</i>”</code> (where <em>field_name</em> is substituted with the piece’s <em>field_name</em>). If a <code>Content-Disposition</code> header is explicitly specified for a piece it will not be overwritten.</p>
+<p>File example:</p>
+<pre><code>body:
+  file: a_file.txt
+</code></pre>
+<p>Multipart example:</p>
+<pre><code>body:
+  multipart:
+    foo:
+      headers:
+        Content-Type: image/jpeg
+      body:
+        file: foo.jpg
+    bar:
+      body: some text
+</code></pre>
+<h2 id="declare-subsection"><a class="header" href="#declare-subsection">declare subsection</a></h2>
+<pre>
+declare:
+  <i>name</i>: <i>expression</i>
+</pre>
+
+<p>A <em>declare_subsection</em> provides the ability to select multiple values from a single provider. Without using a <em>declare_subsection</em>, multiple references to a provider will only select a single value. For example, in:</p>
+<pre><code class="language-yaml">endpoints:
+  - method: PUT
+    url: https://localhost/ship/${shipId}/speed
+    body: '{"shipId":"${shipId}","kesselRunTime":75}'
+</code></pre>
+<p>both references to the provider <code>shipId</code> will resolve to the same value, which in many cases is desired.</p>
+<p>The <em>declare_subsection</em> is in the format of key/value pairs where the value is an expression. Every key can function as a provider and can be interpolated just as a provider would be.</p>
+<h3 id="example-1"><a class="header" href="#example-1">Example 1</a></h3>
+<pre><code class="language-yaml">endpoints:
+  - declare:
+      shipIds: collect(shipId, 3, 5)
+    method: DELETE
+    url: https://localhost/ships
+    body: '{"shipIds":${shipIds}}'
+</code></pre>
+<p>Calls the endpoint <code>DELETE /ships</code> where the body is interpolated with an array of ship ids. <code>shipIds</code> will have a length between three and five.</p>
+<h3 id="example-2"><a class="header" href="#example-2">Example 2</a></h3>
+<pre><code class="language-yaml">endpoints:
+  - declare:
+      destroyedShipId: shipId
+    method: PUT
+    url: https://localhost/ship/${shipId}/destroys/${destroyedShipId}
+</code></pre>
+<p>Calls <code>PUT</code> on an endpoint where <code>shipId</code> and <code>destroyedShipId</code> are interpolated to different values.</p>
+<h2 id="provides-subsection"><a class="header" href="#provides-subsection">provides subsection</a></h2>
+<pre>
+provides:
+  <i>provider_name</i>:
+    select: <i>select</i>
+    [for_each: <i>for_each</i>]
+    [where: <i>expression</i>]
+    [send: block | force | if_not_full]
+</pre>
+
+<p>The <em>provides_subsection</em> is how data can be sent to a provider from an HTTP response. <em>provider_name</em> is a reference to a provider which must be declared in the root <a href="./providers-section.html">providers section</a>. For every HTTP response that is received, zero or more values can be sent to the provider based upon the conditions specified.</p>
+<p>Sending data to a provider is done with a SQL-like syntax. The <code>select</code>, <code>for_each</code> and <code>where</code> sections use <a href="./common-types/expressions.html">expressions</a> to reference providers in addition to the special variables “request”, “response” and “stats”. “request” provides a means of accessing data that was sent with the request, “response” provides a means of accessing data returned with the response and “stats” give access to measurements about the request (currently only <code>rtt</code> meaning round-trip time).</p>
+<p>The request object has the properties <code>start-line</code>, <code>method</code>, <code>url</code>, <code>headers</code>, <code>headers_all</code> and <code>body</code> which provide access to the respective sections in the HTTP request. Similarly, the response object has the properties <code>start-line</code>, <code>headers</code>, <code>headers_all</code> and <code>body</code> in addition to <code>status</code> which indicates the HTTP response status code. See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages">this MDN article</a> on HTTP messages for more details on the structure of HTTP requests and responses.</p>
+<p><code>start-line</code> is a string and <code>headers</code> is represented as a JSON object with key/value string pairs. In the event where a request or response has multiple headers with the same name, the <code>headers_all</code> property can be used which is a JSON object where the header name is the key and the value an array of header values. Currently, <code>body</code> in the request is always a string and <code>body</code> in the response is parsed as a JSON value, when possible, otherwise it is a string. <code>status</code> is a number. <code>method</code> is a string and <code>url</code> is an object with the same properties as the web URL object (see <a href="https://developer.mozilla.org/en-US/docs/Web/API/URL">this MDN article</a>).</p>
+<ul>
+<li>
+<p><strong><code>select</code></strong> - Determines the shape of the data sent to the provider. <code>select</code> is interpreted as a JSON object where any string value is evaluated as an <a href="./common-types/expressions.html">expression</a>.</p>
+</li>
+<li>
+<p><strong><code>for_each</code></strong> <sub><sup><em>Optional</em></sup></sub> - Evaluates <code>select</code> for each element in an array or arrays. This is specified as an array of <a href="./common-types/expressions.html">expressions</a>. Expressions can evaluate to any JSON data type, but those which evaluate to an array will have each of their elements iterated over and <code>select</code> is evaluated for each. When multiple expressions evaluate to an array then the cartesian product of the arrays is produced.</p>
+<p>The <code>select</code> and <code>where</code> parameters can access the elements provided by <code>for_each</code> through the value <code>for_each</code> just like accessing a value from a provider. Because a <code>for_each</code> can iterate over multiple arrays, each element can be accessed by indexing into the array. For example <code>for_each[1]</code> would access the element from the second array (indexes are referenced with zero based counting so <code>0</code> represents the element in the first array).</p>
+</li>
+<li>
+<p><strong><code>where</code></strong> <sub><sup><em>Optional</em></sup></sub> - Allows conditionally sending data to a provider based on a predicate. This is an <a href="./common-types/expressions.html">expression</a> which evaluates to a boolean value, indicating whether <code>select</code> should be evaluated for the current data set.</p>
+</li>
+<li>
+<p><strong><code>send</code></strong> <sub><sup><em>Optional</em></sup></sub> - Specify the behavior that should be used when sending data to a provider. Valid options for this parameter are <code>block</code>, <code>force</code>, and <code>if_not_full</code>. Defaults to <code>if_not_full</code> if the endpoint has a <code>peak_load</code> otherwise <code>block</code>.</p>
+<p><code>block</code> indicates that if the provider’s buffer is full, further endpoint calls will be blocked until there’s room in the provider’s buffer for the value. If an endpoint has multiple provides which are <code>block</code>, then the blocking will only wait for at least one of the providers’ buffers to have room.</p>
+<p><code>force</code> indicates that the value will be sent to the provider regardless of whether its buffer is “full”. This can make a provider’s buffer exceed its soft limit.</p>
+<p><code>if_not_full</code> indicates that the value will be sent to the provider only if the provider is not full.</p>
+</li>
+</ul>
+<h3 id="example-1-1"><a class="header" href="#example-1-1">Example 1</a></h3>
+<p>With an HTTP response with the following body</p>
+<pre><code class="language-json">{ "session": "abc123" }
+</code></pre>
+<p>and a provides section defined as:</p>
+<pre><code class="language-yaml">provides:
+  session:
+    select: response.body.session
+    where: response.status &lt; 400
+</code></pre>
+<p>the <code>session</code> provider would be given the value <code>"abc123"</code> if the status code was less than 400 otherwise nothing would be sent to the <code>session</code> provider.</p>
+<h3 id="example-2-1"><a class="header" href="#example-2-1">Example 2</a></h3>
+<p>With an HTTP response with the following body:</p>
+<pre><code class="language-json">{
+  "characters": [
+    {
+      "type": "Human",
+      "id": "1000",
+      "name": "Luke Skywalker",
+      "friends": ["1002", "1003", "2000", "2001"],
+      "appearsIn": [4, 5, 6],
+      "homePlanet": "Tatooine",
+    },
+    {
+      "type": "Human",
+      "id": "1001",
+      "name": "Darth Vader",
+      "friends": ["1004"],
+      "appearsIn": [4, 5, 6],
+      "homePlanet": "Tatooine",
+    },
+    {
+      "type": "Droid",
+      "id": "2001",
+      "name": "R2-D2",
+      "friends": ["1000", "1002", "1003"],
+      "appearsIn": [4, 5, 6],
+      "primaryFunction": "Astromech",
+    }
+  ]
+}
+</code></pre>
+<p>and our provides section is defined as:</p>
+<pre><code class="language-yaml">provides:
+  names:
+    select:
+      name: for_each[0].name
+    for_each:
+      - response.body.characters
+</code></pre>
+<p>The <code>names</code> provider would be sent the following values: <code>{ "name": "Luke Skywalker" }</code>, <code>{ "name": "Darth Vader" }</code>, <code>{ "name": "R2-D2" }</code>.</p>
+<h3 id="example-3"><a class="header" href="#example-3">Example 3</a></h3>
+<p>It is also possible to access the length of an array by accessing the <code>length</code> property.</p>
+<p>Using the same response data from example 2, with a provides section defined as:</p>
+<pre><code class="language-yaml">provides:
+  friendsCount:
+    select:
+      id: for_each[0].id
+      count: for_each[0].friends.length
+    for_each:
+      - response.body.characters
+</code></pre>
+<p>The <code>friendsCount</code> provider would be sent the following values: <code>{ "id": 1000, "count": 4 }</code>, <code>{ "id": 1001, "count": 1 }</code>, <code>{ "id": 2001, "count": 3 }</code>.</p>
+<h2 id="logs-subsection"><a class="header" href="#logs-subsection">logs subsection</a></h2>
+<pre>
+logs:
+  <i>logger_name</i>:
+    select: <i>select</i>
+    [for_each: <i>for_each</i>]
+    [where: <i>expression</i>]
+</pre>
+
+<p>The <em>logs_subsection</em> provides a means of sending data to a logger based on the result of an HTTP response. <em>logger_name</em> is a reference to a logger which must be declared in the root <a href="./loggers-section.html">loggers section</a>. It is structured in the same way as the <a href="#provides-subsection"><em>provides_subsection</em></a> except there is no explicit <em>send</em> parameter. When data is sent to a logger it has the same behavior as <code>send: block</code>, which means logging data can potentially block further requests from happening if a logger were to get “backed up”. This is unlikely to be a problem unless a large amount of data was consistently logged. It is also possible to log to the same logger multiple times in a single endpoint by repeating the <em>logger_name</em> with a new <code>select</code>.</p>
+<ul>
+<li><strong><code>select</code></strong> - Determines the shape of the data sent into the logger.</li>
+<li><strong><code>for_each</code></strong> <sub><sup><em>Optional</em></sup></sub> - Evaluates <code>select</code> for each element in an array or arrays.</li>
+<li><strong><code>where</code></strong> <sub><sup><em>Optional</em></sup></sub> - Allows conditionally sending data into a logger based on a predicate.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../config/loggers-section.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../config/common-types.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../config/loggers-section.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../config/common-types.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-c22b7243.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/version-banner-117c7679.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

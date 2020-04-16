@@ -1,0 +1,9 @@
+.diagram {
+  margin: 1em 0;
+}
+html.navy .diagram, html.coal .diagram {
+  filter: invert(1) saturate(3) contrast(0.7);
+}
+html.ayu .diagram {
+  filter: invert(1) hue-rotate(180deg) saturate(3) contrast(0.5);
+}

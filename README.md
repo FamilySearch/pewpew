@@ -13,6 +13,7 @@ Changes:
 Bugfix:
 - Fix regression introduced in v0.5.5 where specifying a `provider` multiple times in a `provides` would only use the last specified one.
 - Fix bug where non-ascii characters could cause an error reading a file when using the `line` (default) `format`.
+- Fix bug where the `line` `format` of a file provider would incorrectly parse files with lines longer than 8KB.
 
 ### v0.5.5
 Changes:

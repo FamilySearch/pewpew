@@ -99,8 +99,9 @@ impl LineReader {
                 return Some(Ok((value, position, i)));
             } else {
                 let start_length = self.buf_data_len;
-                self.byte_buffer.resize(KB8 + start_length, 0);
-                let mut buf = &mut self.byte_buffer[start_length..KB8];
+                let new_length = KB8 + start_length;
+                self.byte_buffer.resize(new_length, 0);
+                let mut buf = &mut self.byte_buffer[start_length..new_length];
                 match self.reader.read(&mut buf) {
                     Err(e) => return Some(Err(e)),
                     Ok(n) => {
@@ -203,6 +204,28 @@ mod tests {
                 .collect();
 
             assert_eq!(values, expect);
+        }
+    }
+
+    #[test]
+    fn lines_longer_than_buffer_work() {
+        let long_line = format!("{}{}", "a".repeat(KB8), "b".repeat(10));
+        let long_lines = [long_line.clone(), long_line];
+        let fp = config::FileProvider::default();
+
+        let expect = vec![json::json!(long_lines[0]), json::json!(long_lines[1])];
+
+        for line_ending in &["\n", "\r\n"] {
+            let mut tmp = NamedTempFile::new().unwrap();
+            write!(tmp, "{}", long_lines.join(line_ending)).unwrap();
+            let path = tmp.path().to_str().unwrap().to_string();
+
+            let values: Vec<_> = LineReader::new(&fp, &path)
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+
+            assert!(values == expect);
         }
     }
 

@@ -1,0 +1,204 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>config section</title>
+        <!-- Custom HTML head -->
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/custom.css">
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "ayu" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../design.html">Pewpew design overview</a></li><li class="chapter-item expanded "><a href="../config.html">Config file</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../config/config-section.html" class="active">config section</a></li><li class="chapter-item expanded "><a href="../config/load_pattern-section.html">load_pattern section</a></li><li class="chapter-item expanded "><a href="../config/vars-section.html">vars section</a></li><li class="chapter-item expanded "><a href="../config/providers-section.html">providers section</a></li><li class="chapter-item expanded "><a href="../config/loggers-section.html">loggers section</a></li><li class="chapter-item expanded "><a href="../config/endpoints-section.html">endpoints section</a></li><li class="chapter-item expanded "><a href="../config/common-types.html">Common types</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../config/common-types/expressions.html">Expressions</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../cli.html">Command-line options</a></li><li class="chapter-item expanded "><a href="../viewing-results.html">Viewing results</a></li><li class="chapter-item expanded "><a href="../tuning.html">Tuning a machine</a></li><li class="chapter-item expanded "><a href="../bug-report.html">Found a bug?</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title"></h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="config-section"><a class="header" href="#config-section">config section</a></h1>
+<pre>
+config:
+  client:
+    [request_timeout: <i>duration</i>]
+    [headers: <i>headers</i>]
+    [keepalive: <i>duration</i>]
+  general:
+    [auto_buffer_start_size: <i>unsigned integer</i>]
+    [bucket_size: <i>duration</i>]
+    [log_provider_stats: <i>duration</i>]
+    [watch_transition_time: <i>duration</i>]
+</pre>
+<p>The <code>config</code> section provides a means of customizing different parameters for the test. Parameters are divided into two subsections: <code>client</code> which pertains to customizations for the HTTP client and <code>general</code> which are other miscellaneous settings for the test.</p>
+<h2 id="client"><a class="header" href="#client">client</a></h2>
+<ul>
+<li><strong><code>request_timeout</code></strong> <sub><sup><em>Optional</em></sup></sub> - A <a href="./common-types.html#duration">duration</a> signifying how long a request will wait for a response before it times out. Defaults to 60 seconds.</li>
+<li><strong><code>headers</code></strong> <sub><sup><em>Optional</em></sup></sub> - <a href="./common-types.html#headers">Headers</a> which will be sent in every request. A header specified in an endpoint will override a header specified here with the same key.</li>
+<li><strong><code>keepalive</code></strong> <sub><sup><em>Optional</em></sup></sub> - The keepalive <a href="./common-types.html#duration">duration</a> that will be used on TCP socket connections. This is different from the <code>Keep-Alive</code> HTTP header. Defaults to 90 seconds.</li>
+</ul>
+<h2 id="general"><a class="header" href="#general">general</a></h2>
+<ul>
+<li><strong><code>auto_buffer_start_size</code></strong> <sub><sup><em>Optional</em></sup></sub> - The starting size for provider buffers which are <code>auto</code> sized. Defaults to 5.</li>
+<li><strong><code>bucket_size</code></strong> <sub><sup><em>Optional</em></sup></sub> - A <a href="./common-types.html#duration">duration</a> specifying how big each bucket should be for endpoints' aggregated stats. This also affects how often summary stats will be printed to the console. Defaults to 60 seconds.</li>
+<li><strong><code>log_provider_stats</code></strong> <sub><sup><em>Optional</em></sup></sub> - A boolean that enables/disabled logging to the console stats about the providers. Stats include the number of items in the provider, the limit of the provider, how many tasks are waiting to send into the provider and how many endpoints are waiting to receive from the provider. Logs data at the <code>bucket_size</code> interval. Set to <code>false</code> to turn off and not log provider stats. Defaults to <code>true</code>.</li>
+<li><strong><code>watch_transition_time</code></strong> <sub><sup><em>Optional</em></sup></sub> - A <a href="./common-types.html#duration">duration</a> specifying how long of a transition there should be when going from an old <code>load_pattern</code> to a new <code>load_pattern</code>. This option only has an affect when pewpew is running a load test with the <code>--watch</code> <a href="../cli.html">command-line</a> flag enabled. If this is not specified there will be no transition when <code>load_pattern</code>s change.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../config.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                            <a rel="next" href="../config/load_pattern-section.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../config.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                    <a rel="next" href="../config/load_pattern-section.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+        <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        <script src="../elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+    </body>
+</html>

@@ -419,7 +419,6 @@ where
                 i
             }
         };
-        self.check_current_bucket();
         self.current.append(stat, index);
         if let Some(new_tag) = new_tag {
             let a = self.write_file_message(&FileMessage::Tags(new_tag));
@@ -834,16 +833,15 @@ where
             }
             join_all(futures).then(|_| Ok::<_, TestError>(()))
         },
-    )
-    .join(print_stats)
-    .map(|_| TestEndReason::Completed)
-    .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
-    .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
-    // .map_err(|e| e.0)
-    // .and_then(move |(b, _)| stats2.lock().persist(console4()).map(move |_| b))
-    .then(move |_| {
-        let mut stats = stats3.lock();
-        stats.close_out_bucket(true).then(|_| Ok(()))
-    });
-    Ok((tx, receiver))
+    );
+    let task = print_stats
+        .join(receiver)
+        .map(|_| TestEndReason::Completed)
+        .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
+        .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
+        .then(move |_| {
+            let mut stats = stats3.lock();
+            stats.close_out_bucket(true).then(|_| Ok(()))
+        });
+    Ok((tx, task))
 }

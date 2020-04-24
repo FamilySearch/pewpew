@@ -1,615 +1,542 @@
-use config::{HitsPer, LinearBuilder, LoadPattern};
-use futures::{try_ready, Async, Future, Poll, Stream};
-use tokio::timer::Delay;
-
-use std::{
-    cmp,
-    time::{Duration, Instant},
-    vec,
+use futures::{
+    future::{self, Either},
+    stream::{self, Stream},
 };
 
-const NANOS_IN_SECOND: f64 = 1_000_000_000.0;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
-pub type LoadUpdateChannel = channel::Receiver<(LinearScaling, Option<Duration>)>;
-
-fn nanos_to_duration(n: f64) -> Duration {
-    Duration::from_nanos(n as u64)
-}
-
-// x represents the time elapsed in the test
-// y represents the amount of time between hits
-pub trait ScaleFn {
-    fn max_x(&self) -> f64;
-    fn y(&mut self, x: f64) -> f64;
-}
-
-pub struct LinearScaling {
-    pieces: vec::IntoIter<LinearScalingPiece>,
-    current: LinearScalingPiece,
-    duration_offset: f64,
-    duration: f64,
-}
-
-impl LinearScaling {
-    pub fn new(builder: LinearBuilder, peak_load: &HitsPer, start_at: Option<Duration>) -> Self {
-        let mut pieces = builder
-            .pieces
-            .into_iter()
-            .map(|piece| {
-                let peak_load = match peak_load {
-                    HitsPer::Second(n) => f64::from(*n),
-                    HitsPer::Minute(n) => f64::from(*n) / 60.0,
-                };
-                LinearScalingPiece::new(
-                    piece.start_percent,
-                    piece.end_percent,
-                    piece.duration,
-                    peak_load,
-                )
-            })
-            .collect::<Vec<_>>()
-            .into_iter();
-        let current = pieces.next().expect("should have at least one scale piece");
-        let duration_offset = start_at
-            .map(|t| -1.0 * t.as_nanos() as f64)
-            .unwrap_or_default();
-        let duration = builder.duration.as_nanos() as f64 + duration_offset;
-        LinearScaling {
-            current,
-            pieces,
-            duration,
-            duration_offset,
-        }
-    }
-
-    fn transition_from(
-        &mut self,
-        from: &mut LinearScaling,
-        transition_time: Duration,
-        time_elapsed: Duration,
-    ) {
-        let time_elapsed = time_elapsed.as_nanos() as f64;
-        let elapsed_plus_transition_time = transition_time.as_nanos() as f64 + time_elapsed;
-
-        // create the transition piece for the load_pattern
-        let x1 = time_elapsed;
-        let y1 = NANOS_IN_SECOND / from.y(x1);
-        let x2 = elapsed_plus_transition_time.min(self.duration);
-        let y2 = NANOS_IN_SECOND / self.y(x2);
-        let current = LinearScalingPiece::new_from_points(x1, y1, x2, y2);
-        let current = std::mem::replace(&mut self.current, current);
-
-        self.duration_offset += x1 - self.duration_offset;
-        let next_piece = if elapsed_plus_transition_time > self.duration {
-            None
-        } else {
-            Some(current)
-        };
-        // splice the transition into the next piece
-        if let Some(mut next_piece) = next_piece {
-            let x_diff = x2 - x1;
-            let x1 = x2;
-            let y1 = y2;
-            let x2 = next_piece.duration + x2 - x_diff;
-            let y2 = NANOS_IN_SECOND / next_piece.y(next_piece.duration);
-            let next_piece = LinearScalingPiece::new_from_points(x1, y1, x2, y2);
-            let mut pieces = vec![next_piece];
-            pieces.extend(&mut self.pieces);
-            self.pieces = pieces.into_iter();
-        }
-    }
-}
-
-impl ScaleFn for LinearScaling {
-    fn y(&mut self, mut x: f64) -> f64 {
-        while x - self.duration_offset >= self.current.duration {
-            if let Some(current) = self.pieces.next() {
-                self.duration_offset += self.current.duration;
-                self.current = current;
-            } else {
-                break;
-            }
-        }
-        x -= self.duration_offset;
-        self.current.y(x)
-    }
-
-    fn max_x(&self) -> f64 {
-        self.duration
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct LinearScalingPiece {
-    duration: f64,
-    max_y: f64,
+#[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone)]
+// for this line
+// x = number of seconds elapsed
+// y = number of hits per second
+struct LinearSegment {
     m: f64,
     b: f64,
+    zero_x: Option<f64>,
+    duration: Duration,
 }
 
-impl LinearScalingPiece {
-    pub fn new(start_percent: f64, end_percent: f64, duration: f64, peak_load: f64) -> Self {
-        let b = peak_load * start_percent;
-        let m = (end_percent * peak_load - b) / duration;
-        let max_y = match LinearScalingPiece::calc_max_y(b, m) {
-            f if f.is_nan() => duration,
-            f => f,
-        };
-        LinearScalingPiece {
-            b,
-            duration,
-            m,
-            max_y,
-        }
-    }
-
-    fn new_from_points(x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
-        let m = (y2 - y1) / (x2 - x1);
-        let max_y = LinearScalingPiece::calc_max_y(y1, m);
-        LinearScalingPiece {
-            b: y1,
-            duration: x2 - x1,
-            m,
-            max_y,
-        }
-    }
-
-    fn calc_max_y(b: f64, m: f64) -> f64 {
-        let a = NANOS_IN_SECOND;
-        // find y where y = 0.5x
-        if m >= 0.0 {
-            (-b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m)
+impl LinearSegment {
+    fn new(start_hps: f64, end_hps: f64, duration: Duration) -> Self {
+        let seconds = duration.as_secs_f64();
+        let m = (end_hps - start_hps) / seconds;
+        let b = start_hps;
+        let zero_x = if start_hps == 0.0 || end_hps == 0.0 {
+            let m = m.abs();
+            Some(1.0 / ((8.0 * m).sqrt() / (2.0 * m)))
         } else {
-            -((b + (b * b + 8.0 * m * a).sqrt()) / (2.0 * m))
-        }
-    }
-}
-
-impl ScaleFn for LinearScalingPiece {
-    fn y(&mut self, x: f64) -> f64 {
-        let hps = self.m * x + self.b;
-        self.max_y.min(NANOS_IN_SECOND / hps)
-    }
-
-    fn max_x(&self) -> f64 {
-        self.duration
-    }
-}
-
-/// A stream representing notifications at a modulating interval.
-/// This stream also has a built in end time
-#[must_use = "streams do nothing unless polled"]
-pub struct ModInterval<E> {
-    _e: std::marker::PhantomData<E>,
-    delay: Delay,
-    scale_fn: LinearScaling,
-    scale_fn_updater: Option<LoadUpdateChannel>,
-    start_end_time: Option<(Instant, Instant)>,
-}
-
-impl<E> ModInterval<E> {
-    pub fn new(
-        load_pattern: LoadPattern,
-        peak_load: &HitsPer,
-        scale_fn_updater: Option<LoadUpdateChannel>,
-        start_at: Option<Duration>,
-    ) -> Self {
-        match load_pattern {
-            LoadPattern::Linear(lb) => {
-                let scale_fn = LinearScaling::new(lb, peak_load, start_at);
-                ModInterval {
-                    _e: std::marker::PhantomData,
-                    delay: Delay::new(Instant::now()),
-                    scale_fn,
-                    scale_fn_updater,
-                    start_end_time: None,
-                }
-            }
-        }
-    }
-}
-
-impl<E> Stream for ModInterval<E>
-where
-    E: From<tokio::timer::Error>,
-{
-    type Item = Instant;
-    type Error = E;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let now = Instant::now();
-        // deadline represents a time when the next item will be provided from the stream
-        let mut deadline = Delay::deadline(&self.delay);
-        let (start_time, mut end_time) = match self.start_end_time {
-            // the first time `poll` is called
-            None => {
-                let end = now + nanos_to_duration(self.scale_fn.max_x());
-                deadline = now + nanos_to_duration(self.scale_fn.y(0.0));
-                self.delay.reset(deadline);
-                self.start_end_time = Some((now, end));
-                (now, end)
-            }
-            // subsequent calls to `poll`
-            Some(t) => t,
+            None
         };
 
-        let update_delay = move |s: &mut Self, current: Instant| {
-            // Calculate how long the next delay should be
-            let next_deadline = {
-                let x = (current - start_time).as_nanos() as f64;
-                let y = s.scale_fn.y(x);
-                cmp::min(start_time + nanos_to_duration(y + x), end_time)
+        LinearSegment {
+            m,
+            b,
+            zero_x,
+            duration,
+        }
+    }
+
+    fn get_hps_at(&self, time: Duration) -> f64 {
+        let x = time.as_secs_f64();
+        let mut y = self.m * x + self.b;
+        if let (true, Some(y2)) = (y.is_nan() || y == 0.0, self.zero_x) {
+            y = y2;
+        }
+        match y.is_finite() {
+            true => y,
+            false => 0.0,
+        }
+    }
+}
+
+// stored as per minute
+pub struct PerX(u64);
+
+impl PerX {
+    pub fn minute(min: u64) -> Self {
+        PerX(min)
+    }
+
+    pub fn second(sec: u64) -> Self {
+        PerX(sec * 60)
+    }
+
+    fn as_per_second(&self) -> f64 {
+        self.0 as f64 / 60.0
+    }
+}
+
+// each ModInterval segment is evaluated independenty at [t0, tDuration]
+// `x_offset` helps to keep track of the progression within the entire ModInterval
+// or in other words
+struct ModIntervalStreamState {
+    end_time: Instant,
+    segment: LinearSegment,
+    start_time: Instant,
+    x_offset: Duration,
+}
+
+#[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone)]
+pub struct ModInterval {
+    segments: VecDeque<LinearSegment>,
+    duration: Duration,
+}
+
+impl ModInterval {
+    pub fn new() -> Self {
+        ModInterval {
+            segments: VecDeque::new(),
+            duration: Default::default(),
+        }
+    }
+
+    pub fn transition_from(&mut self, mut old: Self, at: Duration, mut over: Duration) {
+        // if either mod_interval is shorter than the `at` point, return
+        if old.duration < at || self.duration < at {
+            return;
+        }
+
+        if self.duration < at + over {
+            over = self.duration - at;
+        }
+
+        fn find_segment(
+            mod_interval: &mut ModInterval,
+            time: Duration,
+        ) -> (usize, &mut LinearSegment, Duration) {
+            let mut x_offset = Default::default();
+            let last_i = mod_interval.segments.len() - 1;
+            for (i, segment) in mod_interval.segments.iter_mut().enumerate() {
+                if segment.duration + x_offset > time || i == last_i {
+                    return (i, segment, x_offset);
+                }
+                x_offset += segment.duration;
+            }
+            unreachable!("segment should be long enough");
+        }
+
+        // find out the starting hps for the transition from the old mod_interval
+        let transition_start_hps = {
+            let (_, segment, x_offset) = find_segment(&mut old, at);
+            segment.get_hps_at(at - x_offset)
+        };
+
+        // find out the ending hps for the transition from self
+        let (i, post_transition_segment, x_offset) = find_segment(self, at + over);
+
+        // adjust the segment following transition to be the correct size
+        let segment_x = (at + over) - x_offset;
+        let transition_end_hps = post_transition_segment.get_hps_at(segment_x);
+        let after_transition_segment_duration = post_transition_segment.duration - segment_x;
+        if after_transition_segment_duration == Default::default() {
+            self.segments.pop_back();
+        } else {
+            let post_transition_segment_end_hps =
+                post_transition_segment.get_hps_at(post_transition_segment.duration);
+            *post_transition_segment = LinearSegment::new(
+                transition_end_hps,
+                post_transition_segment_end_hps,
+                after_transition_segment_duration,
+            );
+        }
+
+        // remove segments upto where the transition goes
+        self.segments.drain(..i);
+        let transition_segment = LinearSegment::new(transition_start_hps, transition_end_hps, over);
+
+        // add the transition
+        self.segments.push_front(transition_segment);
+
+        // adjust for the new duration
+        self.duration -= at;
+    }
+
+    pub fn append_segment(&mut self, start: PerX, duration: Duration, end: PerX) {
+        self.duration += duration;
+
+        let start_hps = start.as_per_second();
+        let end_hps = end.as_per_second();
+        let segment = LinearSegment::new(start_hps, end_hps, duration);
+        self.segments.push_back(segment);
+    }
+
+    pub fn into_stream(mut self, start_at: Option<Duration>) -> impl Stream<Item = Instant> {
+        let mut state = None;
+        stream::unfold((), move |_| {
+            let now = time::now();
+            if state.is_none() {
+                // first time through
+                let segment = match self.segments.pop_front() {
+                    Some(s) => s,
+                    None => {
+                        return Either::Left(future::ready(None));
+                    }
+                };
+                let s = ModIntervalStreamState {
+                    end_time: now + self.duration,
+                    segment,
+                    start_time: now - start_at.unwrap_or_default(),
+                    x_offset: Default::default(),
+                };
+                state = Some(s);
+            }
+            let state = state.as_mut().unwrap();
+            let mut time = now - state.start_time - state.x_offset;
+
+            // if we've reached the end of the current segment
+            if time >= state.segment.duration {
+                let segment = match self.segments.pop_front() {
+                    Some(s) => s,
+                    None => {
+                        return Either::Left(future::ready(None));
+                    }
+                };
+                time -= state.segment.duration;
+                state.x_offset += state.segment.duration;
+                state.segment = segment;
+            }
+
+            let target_hits_per_second = state.segment.get_hps_at(time);
+
+            // if there is no valid target hits per second
+            // (happens when scaling from 0 to 0)
+            let y = if target_hits_per_second == 0.0 {
+                if self.segments.is_empty() {
+                    // no more segments, we can end
+                    return Either::Left(future::ready(None));
+                } else {
+                    // there are more segments, just sleep through the rest of this segment
+                    state.segment.duration - time
+                }
+            } else {
+                // convert from hits per second to the amount of time we should wait
+                Duration::from_secs_f64(target_hits_per_second.recip())
             };
 
-            // set the next delay
-            s.delay.reset(next_deadline);
-        };
+            let result = now + y;
 
-        if let Some(updater) = &mut self.scale_fn_updater {
-            let mut update = None;
-            while let Ok(Async::Ready(u @ Some(_))) = updater.poll() {
-                update = u;
+            // if the sleep extends past the entire ModInterval's end time then end now
+            if result > state.end_time {
+                return Either::Left(future::ready(None));
             }
-            if let Some((mut scale_fn, transition_time)) = update {
-                if let Some(transition_time) = transition_time {
-                    scale_fn.transition_from(&mut self.scale_fn, transition_time, now - start_time);
-                    end_time = start_time + nanos_to_duration(scale_fn.max_x());
-                    self.start_end_time = Some((start_time, end_time));
-                }
-                self.scale_fn = scale_fn;
-                update_delay(self, now);
+
+            let right = async move {
+                time::sleep(y).await;
+                Some((result, ()))
+            };
+            Either::Right(right)
+        })
+    }
+}
+
+// time mod is an abstraction for async sleeping. It's abstracted out so we can have a test implementation
+// which fakes sleeping
+#[cfg(not(test))]
+mod time {
+    use super::*;
+    use futures_timer::Delay;
+
+    pub fn now() -> Instant {
+        Instant::now()
+    }
+
+    pub async fn sleep(duration: Duration) {
+        Delay::new(duration).await
+    }
+}
+
+#[cfg(test)]
+mod time {
+    use super::*;
+    use std::cell::RefCell;
+
+    thread_local! {
+        pub static TIME_KEEPER: RefCell<Option<Instant>> = RefCell::new(None);
+    }
+
+    pub fn now() -> Instant {
+        TIME_KEEPER.with(|t| {
+            if t.borrow().is_none() {
+                *t.borrow_mut() = Some(Instant::now());
             }
-        }
+            t.borrow().clone().unwrap()
+        })
+    }
 
-        // if we've reached the end
-        if now >= end_time {
-            return Ok(Async::Ready(None));
-        } else if deadline >= now {
-            // Wait for the delay to finish
-            try_ready!(self.delay.poll());
-        }
-
-        update_delay(self, deadline);
-
-        // Return the current instant
-        Ok(Some(deadline).into())
+    pub async fn sleep(duration: Duration) {
+        TIME_KEEPER.with(|t| {
+            let new = t.borrow().as_ref().take().map(|i| *i + duration);
+            *t.borrow_mut() = new;
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::executor::block_on_stream;
+    use std::{fs, str::FromStr};
 
     #[test]
-    fn linear_scaling_works() {
-        let checks = vec![
-            (
-                // scale from 0 to 0% over 30 seconds (100% = 12 hps)
-                0.0,
-                0.0,
-                30,
-                HitsPer::Second(12.0),
-                // at time t (in seconds), we should be at x hps
-                vec![
-                    (0.0, 0.03333333),
-                    (10.0, 0.03333333),
-                    (15.0, 0.03333333),
-                    (30.0, 0.03333333),
-                ],
-            ),
-            (
-                // scale from 0 to 100% over 30 seconds (100% = 12 hps)
-                0.0,
-                1.0,
-                30,
-                HitsPer::Second(12.0),
-                // at time t (in seconds), we should be at x hps
-                vec![(0.0, 0.447_213), (10.0, 4.0), (15.0, 6.0), (30.0, 12.0)],
-            ),
-            (
-                0.0,
-                1.0,
-                30,
-                HitsPer::Minute(720.0),
-                vec![(0.0, 0.447_213), (10.0, 4.0), (15.0, 6.0), (30.0, 12.0)],
-            ),
-            (
-                0.5,
-                1.0,
-                30,
-                HitsPer::Second(12.0),
-                vec![(0.0, 6.0), (10.0, 8.0), (15.0, 9.0), (30.0, 12.0)],
-            ),
-            (
-                0.0,
-                1.0,
-                60,
-                HitsPer::Second(1.0),
-                vec![(0.0, 0.091_287), (15.0, 0.25), (30.0, 0.5), (60.0, 1.0)],
-            ),
-            (
-                1.0,
-                0.0,
-                60 * 60 * 12,
-                HitsPer::Second(12.0),
-                vec![
-                    (0.0, 12.0),
-                    (21_600.0, 6.0),
-                    (32_400.0, 3.0),
-                    (43_200.0, 0.000_023),
-                ],
-            ),
-            (
-                0.1,
-                0.0,
-                60 * 60 * 12,
-                HitsPer::Second(10.0),
-                vec![
-                    (0.0, 1.0),
-                    (21_600.0, 0.5),
-                    (32_400.0, 0.25),
-                    (43_200.0, 0.000_023),
-                ],
-            ),
-            (
-                1.0,
-                1.0,
-                60,
-                HitsPer::Second(10.0),
-                vec![(0.0, 10.0), (15.0, 10.0), (30.0, 10.0), (60.0, 10.0)],
-            ),
-            (
-                0.5,
-                0.5,
-                60,
-                HitsPer::Second(10.0),
-                vec![(0.0, 5.0), (15.0, 5.0), (30.0, 5.0), (60.0, 5.0)],
-            ),
-        ];
-        let nis = NANOS_IN_SECOND;
-        for (i, (start_percent, end_percent, duration, hitsper, expects)) in
-            checks.into_iter().enumerate()
-        {
-            let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
-            for (i2, (secs, hps)) in expects.iter().enumerate() {
-                let nanos = secs * nis;
-                let right = 1.0 / (scale_fn.y(nanos) / nis);
-                let left = hps;
-                let diff = (right - left).abs();
-                let close_enough = diff < 0.000_001;
-                assert!(
-                    close_enough,
-                    "index ({}, {}) left {} != right {}",
-                    i, i2, left, right
-                );
-            }
+    fn single_segment() {
+        // start perx, duration, end perx
+        let segments = [(0, 30, 12), (30, 30, 0), (0, 120, 30), (0, 15, 0)];
+        for (i, (start, duration, end)) in segments.iter().enumerate() {
+            let mut mod_interval = ModInterval::new();
+            mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+            let stream = Box::pin(mod_interval.into_stream(None));
+
+            let mut start = None;
+            let elapsed_times: Vec<_> = block_on_stream(stream)
+                .map(|instant| {
+                    let start = start.get_or_insert(instant);
+                    (instant - *start).as_secs_f64()
+                })
+                .collect();
+
+            let expects = fs::read_to_string(format!("tests/single-segment{}.out", i))
+                .unwrap()
+                .lines()
+                .map(FromStr::from_str)
+                .collect::<Result<Vec<f64>, _>>()
+                .unwrap();
+
+            assert_eq!(
+                elapsed_times, expects,
+                "elapsed times were not as expected for segment at index {}",
+                i
+            );
         }
     }
 
     #[test]
-    fn start_at_works() {
-        let checks = vec![
-            (
-                // scale from 0 to 100% over 30 seconds (100% = 12 hps)
-                0.0,
-                1.0,
-                30,
-                HitsPer::Second(12.0),
-                // at time t (in seconds), we should be at x hps
-                vec![(0.0, 4.0), (5.0, 6.0), (20.0, 12.0)],
-                // start at 10 seconds
-                Duration::from_secs(10),
-            ),
-            (
-                0.0,
-                1.0,
-                30,
-                HitsPer::Minute(720.0),
-                vec![(0.0, 4.0), (5.0, 6.0), (20.0, 12.0)],
-                Duration::from_secs(10),
-            ),
-            (
-                0.5,
-                1.0,
-                30,
-                HitsPer::Second(12.0),
-                vec![(0.0, 8.0), (5.0, 9.0), (20.0, 12.0)],
-                Duration::from_secs(10),
-            ),
-            (
-                0.0,
-                1.0,
-                60,
-                HitsPer::Second(1.0),
-                vec![(0.0, 0.25), (15.0, 0.5), (45.0, 1.0)],
-                Duration::from_secs(15),
-            ),
-        ];
-        let nis = NANOS_IN_SECOND;
-        for (i, (start_percent, end_percent, duration, hitsper, expects, start_at)) in
-            checks.into_iter().enumerate()
-        {
-            let lb = LinearBuilder::new(start_percent, end_percent, Duration::from_secs(duration));
-            let mut scale_fn = LinearScaling::new(lb, &hitsper, Some(start_at));
-            for (i2, (secs, hps)) in expects.iter().enumerate() {
-                let nanos = secs * nis;
-                let right = 1.0 / (scale_fn.y(nanos) / nis);
-                let left = hps;
-                let diff = (right - left).abs();
-                let close_enough = diff < 0.000_001;
-                assert!(
-                    close_enough,
-                    "index ({}, {}) left {} != right {}",
-                    i, i2, left, right
-                );
-            }
-        }
-    }
+    fn single_segment_start_at() {
+        let (start, duration, end) = (0, 30, 12);
 
-    #[test]
-    fn multiple_scaling_works() {
-        let mut lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
-        lb.append(99.0, 500.0, Duration::from_secs(60));
-        lb.append(1.0, 0.5, Duration::from_secs(60));
-        let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
-        let nis = NANOS_IN_SECOND;
-        let mut y_values: std::collections::VecDeque<_> = (0..60)
-            .step_by(10)
-            .chain((120..=180).step_by(10))
-            .map(|secs| {
-                let nanos = f64::from(secs) * nis;
-                (secs, scale_fn.y(nanos))
+        let mut mod_interval = ModInterval::new();
+        mod_interval.append_segment(
+            PerX::second(start),
+            Duration::from_secs(duration),
+            PerX::second(end),
+        );
+        let stream = Box::pin(mod_interval.into_stream(Some(Duration::from_secs(15))));
+
+        let mut start = None;
+        let elapsed_times: Vec<_> = block_on_stream(stream)
+            .map(|instant| {
+                let start = start.get_or_insert(instant);
+                (instant - *start).as_secs_f64()
             })
             .collect();
-        while !y_values.is_empty() {
-            match (y_values.pop_front(), y_values.pop_back()) {
-                (Some((left_x, left_y)), Some((right_x, right_y))) => {
-                    let diff = (right_y - left_y).abs();
-                    let close_enough = diff < 0.000_001;
-                    assert!(
-                        close_enough,
-                        "times: ({}, {}) left {} != right {}",
-                        left_x, right_x, left_y, right_y
-                    );
-                }
-                _ => break,
-            }
-        }
+
+        let expects = fs::read_to_string("tests/single-segment-start-at.out")
+            .unwrap()
+            .lines()
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<f64>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            elapsed_times, expects,
+            "elapsed times were not as expected for segment",
+        );
     }
 
     #[test]
-    fn transitions_work() {
-        let mut lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
-        lb.append(99.0, 500.0, Duration::from_secs(60));
-        lb.append(1.0, 0.5, Duration::from_secs(60));
-        let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
-        lb = LinearBuilder::new(0.5, 1.0, Duration::from_secs(60));
-        lb.append(99.0, 500.0, Duration::from_secs(60));
-        lb.append(1.0, 0.5, Duration::from_secs(60));
-        lb.append(1.0, 1.0, Duration::from_secs(60));
-        let mut scale_fn2 = LinearScaling::new(lb, &hitsper, None);
-        scale_fn2.transition_from(
-            &mut scale_fn,
-            Duration::from_secs(10),
-            Duration::from_secs(3 * 60),
+    fn multiple_segments() {
+        // start perx, duration, end perx, file
+        let segments = [(0, 30, 5), (5, 30, 30), (30, 30, 10)];
+        let mut mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        let stream = Box::pin(mod_interval.into_stream(None));
+
+        let mut start = None;
+        let elapsed_times: Vec<_> = block_on_stream(stream)
+            .map(|instant| {
+                let start = start.get_or_insert(instant);
+                (instant - *start).as_secs_f64()
+            })
+            .collect();
+
+        let expects = fs::read_to_string("tests/multiple-segments.out")
+            .unwrap()
+            .lines()
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<f64>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            elapsed_times, expects,
+            "elapsed times were not as expected for multiple segments"
+        );
+    }
+
+    #[test]
+    fn multiple_segments_start_at() {
+        // start perx, duration, end perx, file
+        let segments = [(0, 30, 5), (5, 30, 30), (30, 30, 10)];
+        let mut mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        let stream = Box::pin(mod_interval.into_stream(Some(Duration::from_secs(75))));
+
+        let mut start = None;
+        let elapsed_times: Vec<_> = block_on_stream(stream)
+            .map(|instant| {
+                let start = start.get_or_insert(instant);
+                (instant - *start).as_secs_f64()
+            })
+            .collect();
+
+        let expects = fs::read_to_string("tests/multiple-segments-start-at.out")
+            .unwrap()
+            .lines()
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<f64>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            elapsed_times, expects,
+            "elapsed times were not as expected for multiple segments"
+        );
+    }
+
+    #[test]
+    fn multiple_segments_with_zero() {
+        // start perx, duration, end perx, file
+        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        let mut mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        let stream = Box::pin(mod_interval.into_stream(None));
+
+        let mut start = None;
+        let elapsed_times: Vec<_> = block_on_stream(stream)
+            .map(|instant| {
+                let start = start.get_or_insert(instant);
+                (instant - *start).as_secs_f64()
+            })
+            .collect();
+
+        let expects = fs::read_to_string("tests/multiple-segments-with-zero.out")
+            .unwrap()
+            .lines()
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<f64>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            elapsed_times, expects,
+            "elapsed times were not as expected for multiple segments"
+        );
+    }
+
+    #[test]
+    fn transition_works() {
+        // start perx, duration, end perx, file
+        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        let mut old_mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            old_mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        let segments = [(0, 30, 10), (10, 30, 30), (30, 30, 50)];
+        let mut new_mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            new_mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        new_mod_interval.transition_from(
+            old_mod_interval,
+            Duration::from_secs(45),
+            Duration::from_secs(15),
         );
 
-        let left = scale_fn2.duration;
-        let right = 240_000_000_000.0;
-        assert!(left.eq(&right), "total duration {} != {}", left, right);
+        let segments = [(0, 15, 30), (30, 30, 50)];
+        let mut expect_mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            expect_mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
 
-        let left = scale_fn2.current.duration;
-        let right = 10_000_000_000.0;
-        assert!(left.eq(&right), "transition duration {} != {}", left, right);
+        assert_eq!(new_mod_interval, expect_mod_interval);
+    }
 
-        let left = scale_fn2.current.y(0.0).trunc();
-        let right = 200_000_000.0;
-        assert!(left.eq(&right), "transition @ x = 0 {} != {}", left, right);
+    #[test]
+    fn transition_too_long_works() {
+        // start perx, duration, end perx, file
+        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        let mut old_mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            old_mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
 
-        let left = scale_fn2.y(scale_fn2.duration_offset).trunc();
-        let right = 200_000_000.0;
-        assert!(
-            left.eq(&right),
-            "scale_fn @ x = duration offset {} != {}",
-            left,
-            right
+        let segments = [(0, 30, 10), (10, 30, 30), (30, 30, 50)];
+        let mut new_mod_interval = ModInterval::new();
+        for (start, duration, end) in segments.iter() {
+            new_mod_interval.append_segment(
+                PerX::second(*start),
+                Duration::from_secs(*duration),
+                PerX::second(*end),
+            );
+        }
+
+        new_mod_interval.transition_from(
+            old_mod_interval,
+            Duration::from_secs(45),
+            Duration::from_secs(90),
         );
 
-        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
-        let right = 100_000_000.0;
-        assert!(
-            left.eq(&right),
-            "transition @ x = end {} != {}",
-            left,
-            right
+        let mut expect_mod_interval = ModInterval::new();
+        expect_mod_interval.append_segment(
+            PerX::second(0),
+            Duration::from_secs(45),
+            PerX::second(50),
         );
 
-        let left = scale_fn2
-            .y(scale_fn2.duration_offset + scale_fn2.current.duration)
-            .trunc();
-        let right = 100_000_000.0;
-        assert!(
-            left.eq(&right),
-            "scale_fn @ x = current duration {} != {}",
-            left,
-            right
-        );
-
-        let left = scale_fn2.current.duration;
-        let right = 50_000_000_000.0;
-        assert!(
-            left.eq(&right),
-            "spliced piece duration {} != {}",
-            left,
-            right
-        );
-
-        let left = scale_fn2.current.y(0.0).trunc();
-        let right = 100_000_000.0;
-        assert!(
-            left.eq(&right),
-            "spliced piece @ x = 0 {} != {}",
-            left,
-            right
-        );
-
-        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
-        let right = 100_000_000.0;
-        assert!(
-            left.eq(&right),
-            "spliced piece @ x = end {} != {}",
-            left,
-            right
-        );
-
-        let next = scale_fn2.pieces.next();
-        assert!(
-            next.is_none(),
-            "there should not be any pieces after spliced piece"
-        );
-
-        let mut lb = LinearBuilder::new(0.4, 1.0, Duration::from_secs(60));
-        lb.append(99.0, 500.0, Duration::from_secs(60));
-        lb.append(1.0, 0.5, Duration::from_secs(60));
-        let hitsper = HitsPer::Second(10.0);
-        let mut scale_fn = LinearScaling::new(lb, &hitsper, None);
-        lb = LinearBuilder::new(1.2, 1.8, Duration::from_secs(60));
-        let mut scale_fn2 = LinearScaling::new(lb, &hitsper, None);
-        scale_fn2.transition_from(
-            &mut scale_fn,
-            Duration::from_secs(20),
-            Duration::from_secs(50),
-        );
-
-        let left = scale_fn2.current.duration;
-        let right = 10_000_000_000.0;
-        assert!(
-            left.eq(&right),
-            "transition2 duration (should be cut short) {} != {}",
-            left,
-            right
-        );
-
-        let left = scale_fn2.current.y(0.0).trunc();
-        let right = 111_111_111.0;
-        assert!(left.eq(&right), "transition2 @ x = 0 {} != {}", left, right);
-
-        let left = scale_fn2.current.y(scale_fn2.current.duration).trunc();
-        let right = 55_555_555.0;
-        assert!(
-            left.eq(&right),
-            "transition2 @ x = end {} != {}",
-            left,
-            right
-        );
-
-        let next = scale_fn2.pieces.next();
-        assert!(
-            next.is_none(),
-            "there should not be any pieces after transition2"
-        );
+        assert_eq!(new_mod_interval, expect_mod_interval);
     }
 }

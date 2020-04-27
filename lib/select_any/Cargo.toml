@@ -9,8 +9,4 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-futures = "0.1"
-
-[dev-dependencies]
-ether = { path = "../either" }
-tokio = "0.1"
+futures = "0.3"

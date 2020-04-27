@@ -1,9 +1,10 @@
-use futures::{Async, Poll, Stream};
+use futures::{Stream, task::{Context, Poll}};
+use std::pin::Pin;
 
 #[must_use = "streams do nothing unless polled"]
 pub struct SelectAny<T>
 where
-    T: Stream,
+    T: Stream + Unpin,
 {
     elems: Vec<T>,
     last_yield_index: usize,
@@ -11,31 +12,30 @@ where
 
 impl<T> Stream for SelectAny<T>
 where
-    T: Stream,
+    T: Stream + Unpin,
 {
     type Item = T::Item;
-    type Error = T::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let last_yield_index = self.last_yield_index + 1;
         let mut done_count = 0;
         for i in 0..self.elems.len() {
             let i = (i + last_yield_index) % self.elems.len();
-            let stream = &mut self.elems[i];
-            match stream.poll() {
-                v @ Ok(Async::Ready(Some(_))) => {
+            let mut this = self.as_mut();
+            let stream = Pin::new(&mut this.elems[i]);
+            match stream.poll_next(cx) {
+                v @ Poll::Ready(Some(_)) => {
                     self.last_yield_index = i;
                     return v;
                 }
-                Ok(Async::Ready(None)) => done_count += 1,
-                e @ Err(_) => return e,
+                Poll::Ready(None) => done_count += 1,
                 _ => (),
             }
         }
         if done_count == self.elems.len() {
-            Ok(Async::Ready(None))
+            Poll::Ready(None)
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
 }
@@ -43,7 +43,7 @@ where
 pub fn select_any<I>(elems: I) -> SelectAny<I::Item>
 where
     I: IntoIterator,
-    I::Item: Stream,
+    I::Item: Stream + Unpin,
 {
     let elems: Vec<_> = elems.into_iter().collect();
     SelectAny {
@@ -56,83 +56,64 @@ where
 mod tests {
     use super::*;
 
-    use ether::{Either, Either3};
-    use futures::{stream, Future};
+    use futures::{stream, executor::block_on_stream, future::Either, task::Poll};
     use std::{
         rc::Rc,
         sync::atomic::{AtomicUsize, Ordering},
     };
-    use tokio::runtime::current_thread;
 
     #[test]
     fn select_any_works() {
         let baton_a = Rc::new(AtomicUsize::new(0));
         let baton_b = baton_a.clone();
-        let baton_c = baton_a.clone();
-        let a = Either3::A(stream::poll_fn(move || {
+        let a = Either::Left(stream::poll_fn(move |_| {
             let n = baton_a.load(Ordering::SeqCst);
             if let 0 | 2 | 4 | 6 = n {
                 baton_a.store(n + 1, Ordering::SeqCst);
-                Ok(Async::Ready(Some(1)))
+                Poll::Ready(Some(1))
             } else {
-                Ok(Async::NotReady)
+                Poll::Pending
             }
         }));
-        let b = Either3::B(stream::poll_fn(move || {
+        let b = Either::Right(stream::poll_fn(move |_| {
             let n = baton_b.load(Ordering::SeqCst);
-            if let 1 | 5 | 7 = n {
+            if let 1 | 3 | 5|  7 = n {
                 baton_b.store(n + 1, Ordering::SeqCst);
-                Ok(Async::Ready(Some(2)))
+                Poll::Ready(Some(2))
             } else {
-                Ok(Async::NotReady)
-            }
-        }));
-        let c = Either3::C(stream::poll_fn(move || {
-            let n = baton_c.load(Ordering::SeqCst);
-            if let 3 | 8 = n {
-                baton_c.store(n + 1, Ordering::SeqCst);
-                Ok(Async::Ready(Some(3)))
-            } else {
-                Ok(Async::NotReady)
+                Poll::Pending
             }
         }));
 
-        let expects = vec![1, 2, 1, 3, 1, 2, 1, 2, 3];
+        let expects = vec![1, 2, 1, 2, 1, 2, 1, 2];
 
-        let stream = select_any(vec![a, b, c])
-            .zip(stream::iter_ok(expects.into_iter().enumerate()))
-            .for_each(|(l, (i, r))| {
-                assert_eq!(l, r, "index: {}", i);
-                Ok(())
-            })
-            .map_err(|e: ()| panic!(e));
+        let values: Vec<_> = block_on_stream(select_any(vec![a, b]))
+            .take(8)
+            .collect();
 
-        current_thread::run(stream);
+        assert_eq!(values, expects);
     }
 
     #[test]
     fn select_any_ends_when_all_streams_finish() {
-        let a = Either::A(stream::empty::<u8, ()>());
+        let a = Either::Left(stream::empty::<u8>());
 
         let mut b_counter = 0u8;
-        let b = Either::B(stream::poll_fn(move || {
+        let b = Either::Right(stream::poll_fn(move |_| {
             if b_counter < 3 {
                 b_counter += 1;
-                Ok(Async::Ready(Some(b_counter)))
+                Poll::Ready(Some(b_counter))
             } else {
-                Ok(Async::Ready(None))
+                Poll::Ready(None)
             }
         }));
 
-        let c = Either::A(stream::empty::<u8, ()>());
+        let c = Either::Left(stream::empty::<u8>());
 
-        let expects = Ok(vec![1, 2, 3]);
+        let expects = vec![1, 2, 3];
 
-        let stream = select_any(vec![a, b, c]).collect().then(move |left| {
-            assert_eq!(left, expects);
-            Ok(())
-        });
+        let values: Vec<_> = block_on_stream(select_any(vec![a, b, c])).collect();
 
-        current_thread::run(stream);
+        assert_eq!(values, expects);
     }
 }

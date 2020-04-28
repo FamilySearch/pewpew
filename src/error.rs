@@ -49,7 +49,7 @@ pub enum TestError {
     Recoverable(RecoverableError),
     RequestBuilderErr(Arc<HttpError>),
     SslError(Arc<native_tls::Error>),
-    TimerError(Arc<tokio::timer::Error>),
+    TimerError(Arc<tokio::time::Error>),
     WritingToLogger(String, Arc<std::io::Error>),
 }
 
@@ -100,8 +100,8 @@ impl StdError for TestError {
     }
 }
 
-impl From<tokio::timer::Error> for TestError {
-    fn from(te: tokio::timer::Error) -> Self {
+impl From<tokio::time::Error> for TestError {
+    fn from(te: tokio::time::Error) -> Self {
         TimerError(te.into())
     }
 }

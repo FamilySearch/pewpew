@@ -8,10 +8,13 @@ use crate::error::TestError;
 use crate::util::json_value_to_string;
 use crate::TestEndReason;
 
-use bytes::{Buf, Bytes, IntoBuf};
+use bytes::{Buf, Bytes};
 use ether::{Either, Either3};
 use futures::{
-    stream, sync::mpsc::Sender as FCSender, Async, AsyncSink, Future, IntoFuture, Sink, Stream,
+    stream,
+    io::Sink,
+    channel::mpsc::Sender as FCSender, Future, Stream,
+    task::Poll,
 };
 use serde_json as json;
 use tokio_threadpool::blocking;
@@ -87,7 +90,7 @@ pub fn response(template: config::ResponseProvider) -> Provider {
 }
 
 pub fn literals(list: config::StaticList) -> Provider {
-    let rs = stream::iter_ok::<_, channel::ChannelClosed>(list.into_iter());
+    let rs = stream::iter::<_, channel::ChannelClosed>(list.into_iter());
     let (tx, rx) = channel::channel(config::Limit::auto());
     let tx2 = tx.clone();
     let prime_tx = rs
@@ -100,7 +103,7 @@ pub fn literals(list: config::StaticList) -> Provider {
 
 pub fn range(range: config::RangeProvider) -> Provider {
     let (tx, rx) = channel::channel(config::Limit::auto());
-    let prime_tx = stream::iter_ok::<_, channel::ChannelClosed>(range.0.map(json::Value::from))
+    let prime_tx = stream::iter::<_, channel::ChannelClosed>(range.0.map(json::Value::from))
         .forward(tx.clone())
         // Error propagate here when sender channel closes at test conclusion
         .then(|_| Ok(()));
@@ -131,8 +134,8 @@ where
     ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
         if self.buf.is_some() {
             match self.poll_complete() {
-                Ok(Async::Ready(_)) => (),
-                Ok(Async::NotReady) => return Ok(AsyncSink::NotReady(item)),
+                Poll::Ready(_) => (),
+                Poll::Pending => return Ok(AsyncSink::NotReady(item)),
                 Err(e) => return Err(e),
             }
         }
@@ -152,15 +155,15 @@ where
         loop {
             if let Some(ref mut buf) = &mut self.buf {
                 match self.writer.write_buf(buf) {
-                    Ok(Async::Ready(_)) if !buf.has_remaining() => {
+                    Poll::Ready(_) if !buf.has_remaining() => {
                         self.buf = None;
                         return self
                             .writer
                             .poll_flush()
                             .map_err(|e| TestError::WritingToLogger(self.name.clone(), e.into()));
                     }
-                    Ok(Async::Ready(_)) => continue,
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Poll::Ready(_) => continue,
+                    Poll::Pending => return Poll::Pending,
                     Err(e) => {
                         let e = TestError::WritingToLogger(self.name.clone(), e.into());
                         return Err(e);
@@ -236,7 +239,7 @@ mod tests {
     use super::*;
 
     use config::FromYaml;
-    use futures::{future, sync::mpsc::channel as futures_channel, Async};
+    use futures::{future, channel::mpsc::channel as futures_channel};
     use json::json;
     use test_common::TestWriter;
     use tokio::runtime::current_thread;
@@ -256,7 +259,7 @@ mod tests {
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
             let p = range(range_params.into());
-            let expects = stream::iter_ok(0..=20);
+            let expects = stream::iter(0..=20);
 
             let f = p.rx.zip(expects).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -272,7 +275,7 @@ mod tests {
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
             let p = range(range_params.into());
-            let expects = stream::iter_ok((0..=20).step_by(2));
+            let expects = stream::iter((0..=20).step_by(2));
 
             let f = p.rx.zip(expects).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -289,7 +292,7 @@ mod tests {
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
             let p = range(range_params.into());
-            let expects = stream::iter_ok((0..=20).cycle());
+            let expects = stream::iter((0..=20).cycle());
 
             p.rx.zip(expects).take(100).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -310,7 +313,7 @@ mod tests {
             };
 
             let p = literals(esl.into());
-            let expects = stream::iter_ok(jsons.clone().into_iter());
+            let expects = stream::iter(jsons.clone().into_iter());
 
             let f = p.rx.zip(expects).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -343,7 +346,7 @@ mod tests {
             };
 
             let p = literals(esl.into());
-            let expects = stream::iter_ok(jsons.clone().into_iter().cycle());
+            let expects = stream::iter(jsons.clone().into_iter().cycle());
 
             let f = p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -377,7 +380,7 @@ mod tests {
             tokio::spawn(f);
 
             let p = literals(jsons.clone().into());
-            let expects = stream::iter_ok(jsons.into_iter().cycle());
+            let expects = stream::iter(jsons.into_iter().cycle());
 
             p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -395,10 +398,10 @@ mod tests {
                 buffer: config::Limit::auto(),
             };
             let p = response(rp);
-            let responses = stream::iter_ok(jsons.clone().into_iter().cycle());
+            let responses = stream::iter(jsons.clone().into_iter().cycle());
             current_thread::spawn(p.tx.send_all(responses).then(|_| Ok(())));
 
-            let expects = stream::iter_ok(jsons.into_iter().cycle());
+            let expects = stream::iter(jsons.into_iter().cycle());
 
             p.rx.zip(expects).take(50).for_each(|(left, right)| {
                 assert_eq!(left, right);
@@ -428,7 +431,7 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
                     .then(|_| Ok(())),
             );
 
@@ -438,7 +441,7 @@ mod tests {
                     let right = "1\n";
                     assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Ok(Async::Ready(Some(Ok(TestEndReason::KilledByLogger)))) =
+                    let check = if let Poll::Ready(Some(Ok(TestEndReason::KilledByLogger))) =
                         test_killed_rx.poll()
                     {
                         true
@@ -481,16 +484,16 @@ mod tests {
             }).collect();
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec![right.clone().into()]))
+                tx.send_all(stream::iter(vec![right.clone().into()]))
                     .then(|_| Ok(())),
             );
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
+            let f = tokio::time::Delay::new(Instant::now() + Duration::from_millis(100)).then(
                 move |_| {
                     let left = writer.get_string();
                     assert_eq!(left, format!("{}\n", right), "value in writer should match");
 
-                    let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
+                    let check = if let Poll::Ready(Some(Err(_))) = test_killed_rx.poll() {
                         false
                     } else {
                         true
@@ -528,7 +531,7 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
                     .then(|_| Ok(())),
             );
 
@@ -538,7 +541,7 @@ mod tests {
                     let right = "1\n2\n";
                     assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Ok(Async::Ready(Some(Err(_)))) = test_killed_rx.poll() {
+                    let check = if let Poll::Ready(Some(Err(_))) = test_killed_rx.poll() {
                         false
                     } else {
                         true
@@ -576,7 +579,7 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec![json!(1), json!(2)]))
+                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
                     .then(|_| Ok(())),
             );
 
@@ -586,7 +589,7 @@ mod tests {
                     let right = "1\n";
                     assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Ok(Async::NotReady) = test_killed_rx.poll() {
+                    let check = if let Poll::Pending = test_killed_rx.poll() {
                         true
                     } else {
                         false
@@ -624,7 +627,7 @@ mod tests {
             let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
 
             tokio::spawn(
-                tx.send_all(stream::iter_ok(vec![json!({"foo": [1, 2, 3]}), json!(2)]))
+                tx.send_all(stream::iter(vec![json!({"foo": [1, 2, 3]}), json!(2)]))
                     .then(|_| Ok(())),
             );
 
@@ -634,7 +637,7 @@ mod tests {
                     let right = "{\n  \"foo\": [\n    1,\n    2,\n    3\n  ]\n}\n2\n";
                     assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Ok(Async::NotReady) = test_killed_rx.poll() {
+                    let check = if let Poll::Pending = test_killed_rx.poll() {
                         true
                     } else {
                         false

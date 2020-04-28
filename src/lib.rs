@@ -14,13 +14,14 @@ use bytes::BytesMut;
 use ether::{Either, Either3};
 use futures::{
     future::{self, join_all},
-    sink::Sink,
     stream,
-    sync::{
+    channel::{
         mpsc::{self as futures_channel, Receiver as FCReceiver, Sender as FCSender},
         oneshot,
     },
-    Async, Future, IntoFuture, Stream,
+    task::Poll,
+    Future,
+    Stream,
 };
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
@@ -28,7 +29,7 @@ use itertools::Itertools;
 use mod_interval::ModInterval;
 use native_tls::TlsConnector;
 use serde_json as json;
-use tokio::io::{read_to_end, write_all, AsyncRead, AsyncWrite};
+use tokio::io::AsyncWrite;
 use yansi::Paint;
 
 use std::{
@@ -37,6 +38,7 @@ use std::{
     cmp,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
+    fs,
     io::SeekFrom,
     mem,
     path::PathBuf,
@@ -79,7 +81,7 @@ impl Endpoints {
         filter_fn: F,
         builder_ctx: &mut request::BuilderContext,
         response_providers: &BTreeSet<String>,
-    ) -> Result<Vec<Box<dyn Future<Item = (), Error = TestError> + Send>>, TestError>
+    ) -> Result<Vec<Box<dyn Future<Output = Result<(), TestError>> + Send>>, TestError>
     where
         F: Fn(&BTreeMap<String, String>) -> bool,
     {
@@ -130,10 +132,10 @@ impl Endpoints {
                     let mut ran = false;
                     ep.add_start_stream(stream::poll_fn(move || {
                         if ran {
-                            Ok(Async::Ready(None))
+                            Poll::Ready(None)
                         } else {
                             ran = true;
-                            Ok(Async::Ready(Some(request::StreamItem::None)))
+                            Poll::Ready(Some(request::StreamItem::None))
                         }
                     }));
                 }
@@ -283,11 +285,12 @@ where
     let stderr2 = stderr();
     let output_format = exec_config.get_output_format();
     let config_file = exec_config.get_config_file().clone();
-    tokio::fs::File::open(config_file.clone())
+    fs::File::open(config_file.clone())
         .then(move |file| {
             match file {
                 Ok(file) => {
-                    let a = read_to_end(file, Vec::new())
+                    todo!("blocking async");
+                    let a = file.read_to_end(Vec::new())
                         .map_err(|e| TestError::CannotOpenFile(config_file, e.into()));
                     Either::A(a)
                 }
@@ -363,7 +366,8 @@ where
                             format!("{}\n", json)
                         }
                     };
-                    let a = write_all(stderr2, msg);
+                    todo!("blocking async");
+                    let a = stderr2.write_all(msg);
                     Either::A(a)
                 }
                 Ok(TestEndReason::KilledByLogger) => {
@@ -378,7 +382,8 @@ where
                             "{\"type\":\"end\",\"msg\":\"Test killed early by logger\"}\n".to_string()
                         }
                     };
-                    let a = write_all(stderr2, msg);
+                    todo!("blocking async");
+                    let a = stderr2.write_all(msg);
                     Either::A(a)
                 }
                 Ok(TestEndReason::CtrlC) => {
@@ -393,7 +398,8 @@ where
                             "{\"type\":\"end\",\"msg\":\"Test killed early by Ctrl-c\"}\n".to_string()
                         }
                     };
-                    let a = write_all(stderr2, msg);
+                    todo!("blocking async");
+                    let a = stderr2.write_all(msg);
                     Either::A(a)
                 }
                 Ok(TestEndReason::ProviderEnded) => {
@@ -408,7 +414,8 @@ where
                             "{\"type\":\"end\",\"msg\":\"Test ended early because one or more providers ended\"}\n".to_string()
                         }
                     };
-                    let a = write_all(stderr2, msg);
+                    todo!("blocking async");
+                    let a = stderr2.write_all(msg);
                     Either::A(a)
                 }
                 _ => Either::B(Ok::<_, ()>(()).into_future()),
@@ -425,7 +432,7 @@ where
 
 fn create_load_watcher(
     config: &config::LoadTest,
-    mut file: tokio::fs::File,
+    mut file: fs::File,
     env_vars: BTreeMap<String, String>,
 ) -> (
     Vec<mod_interval::LoadUpdateChannel>,
@@ -435,7 +442,7 @@ fn create_load_watcher(
         .map(|_| channel::channel(config::Limit::auto()))
         .unzip();
     let (duration_sender, duration_receiver) = channel::channel(config::Limit::auto());
-    let mut interval = tokio::timer::Interval::new_interval(Duration::from_millis(1000));
+    let mut interval = tokio::time::Interval::new_interval(Duration::from_millis(1000));
     let mut file_seeked = false;
     let mut interval_triggered = false;
     let mut modified = None;
@@ -443,7 +450,7 @@ fn create_load_watcher(
     let mut file_bytes = BytesMut::with_capacity(4096);
     let f = future::poll_fn(move || {
         if senders.iter().all(channel::Sender::no_receivers) {
-            return Ok(Async::Ready(()));
+            return Poll::Ready(());
         }
         let mut should_reset = false;
         'outer: loop {
@@ -456,26 +463,25 @@ fn create_load_watcher(
             should_reset = true;
             if !interval_triggered {
                 match interval.poll() {
-                    Ok(Async::Ready(Some(_))) => {
+                    Poll::Ready(Some(_)) => {
                         interval_triggered = true;
                     }
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
+                    Poll::Pending => return Ok(Poll::Pending),
+                    Poll::Ready(None) => return Ok(Poll::Ready(())),
                     Err(_) => return Err(()),
                 }
             }
             if !file_seeked {
                 match file.poll_seek(SeekFrom::Start(0)) {
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Ok(Async::Ready(_)) => file_seeked = true,
-                    Err(_) => continue,
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(_) => file_seeked = true,
                 }
             }
             let modified_time = if let Some(m) = modified {
                 m
             } else {
                 match file.poll_metadata() {
-                    Ok(Async::Ready(md)) => {
+                    Poll::Ready(md) => {
                         let m = match md.modified() {
                             Ok(m) => m,
                             Err(_) => continue,
@@ -483,8 +489,7 @@ fn create_load_watcher(
                         modified = Some(m);
                         m
                     }
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(_) => continue,
+                    Poll::Pending => return Poll::Pending,
                 }
             };
             match last_modified {
@@ -492,10 +497,9 @@ fn create_load_watcher(
                     loop {
                         file_bytes.reserve(1024);
                         match file.read_buf(&mut file_bytes) {
-                            Ok(Async::Ready(n)) if n == 0 => break,
-                            Ok(Async::Ready(_)) => (),
-                            Ok(Async::NotReady) => return Ok(Async::NotReady),
-                            Err(_) => continue,
+                            Poll::Ready(n) if n == 0 => break,
+                            Poll::Ready(_) => (),
+                            Poll::Pending => return Poll::Pending,
                         }
                     }
                     last_modified = Some(modified_time);
@@ -837,7 +841,7 @@ where
             Ok(stats_tx) => {
                 let test_start = Instant::now();
                 let test_end = test_start + duration;
-                let mut test_end_delay = tokio::timer::Delay::new(test_end);
+                let mut test_end_delay = tokio::time::Delay::new(test_end);
                 let a = join_all(endpoint_calls)
                     .map(move |_r| {
                         if Instant::now() >= test_end {
@@ -847,24 +851,24 @@ where
                         }
                     })
                     .select(future::poll_fn(move || {
-                        if let Async::Ready(_) =
+                        if let Poll::Ready(_) =
                             test_end_delay.poll().map_err::<TestError, _>(Into::into)?
                         {
-                            return Ok(Async::Ready(TestEndReason::Completed));
+                            return Poll::Ready(TestEndReason::Completed);
                         }
-                        if let Ok(Async::Ready(_)) = ctrlc_channel.poll() {
-                            return Ok(Async::Ready(TestEndReason::CtrlC));
+                        if let Poll::Ready(_) = ctrlc_channel.poll() {
+                            return Poll::Ready(TestEndReason::CtrlC);
                         }
                         if let Some(duration_updater2) = &mut duration_updater {
                             let mut duration = None;
                             loop {
                                 match duration_updater2.poll() {
-                                    Ok(Async::Ready(Some(d))) => duration = Some(d),
-                                    Ok(Async::Ready(None)) | Err(_) => {
+                                    Poll::Ready(Some(d)) => duration = Some(d),
+                                    Poll::Ready(None) => {
                                         duration_updater = None;
                                         break;
                                     }
-                                    Ok(Async::NotReady) => break,
+                                    Poll::Pending => break,
                                 }
                             }
                             if let Some(duration) = duration {
@@ -877,7 +881,7 @@ where
                                 }
                             }
                         }
-                        Ok(Async::NotReady)
+                        Poll::Pending
                     }))
                     .map(|r| r.0)
                     .map_err(|e| e.0)
@@ -900,7 +904,7 @@ where
 pub(crate) fn create_http_client(
     keepalive: Duration,
 ) -> Result<
-    Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>>,
+    Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>,
     TestError,
 > {
     let mut http = HttpConnector::new_with_tokio_threadpool_resolver();
@@ -980,7 +984,7 @@ where
                     };
                     file_path.push(to);
                     let name2 = name.clone();
-                    let f = tokio::fs::File::create(file_path)
+                    let f = fs::File::create(file_path)
                         .map(Either3::C)
                         .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()));
                     Either::B(f)

@@ -1,7 +1,7 @@
 # Pewpew
 Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://familysearch.github.io/pewpew) for details on its use.
 
-![CI](https://github.com/FamilySearch/pewpew/workflows/CI/badge.svg)
+![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
 
 ## Changelog
 ### v0.5.6

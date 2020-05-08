@@ -1,6 +1,6 @@
 # Found a bug?
 
-Before filing a new issue on [GitHub](https://github.com/fs-eng/pewpew/issues), it is helpful to create a reproducible test case. To do that, please do the following:
+Before filing a new issue on [GitHub](https://github.com/FamilySearch/pewpew/issues), it is helpful to create a reproducible test case. To do that, please do the following:
 
 1) Remove all `endpoints`, `providers`, `loggers`, `vars`, `load_pattern`s and `config` options not needed to reproduce the issue.
 2) When possible, replace `file` providers with a variable (`vars`) or a concise `list` provider. If the `file` provider is required to replicate the issue, make the file as small as possible.
@@ -12,7 +12,7 @@ Before filing a new issue on [GitHub](https://github.com/fs-eng/pewpew/issues), 
 
 The Pewpew test server provides a way to reproduce problems without generating load against others' servers. The test server is a simple, locally run HTTP server which is usually run from the same machine that Pewpew runs from.
 
-To run the test server first download the latest test server binaries [here](https://github.com/fs-eng/pewpew/releases), extract the archive and run the executable from the command-line. You should then see a message like:
+To run the test server first download the latest test server binaries [here](https://github.com/FamilySearch/pewpew/releases), extract the archive and run the executable from the command-line. You should then see a message like:
 
 ```
 Listening on port 2073

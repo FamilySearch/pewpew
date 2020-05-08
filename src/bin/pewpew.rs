@@ -32,7 +32,7 @@ fn main() {
     let filter_reg = Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex");
     let filter_reg2 = filter_reg.clone();
     let matches = App::new("pewpew")
-        .about("The HTTP load test tool https://fs-eng.github.io/pewpew")
+        .about("The HTTP load test tool https://familysearch.github.io/pewpew")
         .version(crate_version!())
         .setting(AppSettings::DisableHelpSubcommand)
         // .setting(AppSettings::InferSubcommands) // disabled until https://github.com/clap-rs/clap/issues/1463 is fixed

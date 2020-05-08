@@ -14,7 +14,7 @@ Please fill out all of the sections below. Simply omit all of the italicised ins
 *A clear and concise description of what you expected to happen.*
 
 ## Config file
-*Paste your [simplified config file](https://fs-eng.github.io/pewpew/bug-report.html) below.*
+*Paste your [simplified config file](https://familysearch.github.io/pewpew/bug-report.html) below.*
 
 ```yaml
 # config file here

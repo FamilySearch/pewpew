@@ -1,7 +1,10 @@
 use futures::{
-    future::{self, Either},
+    future,
     stream::{self, Stream},
+    FutureExt,
 };
+
+use ether::EitherExt;
 
 use std::{
     collections::VecDeque,
@@ -54,19 +57,19 @@ impl LinearSegment {
 }
 
 // stored as per minute
-pub struct PerX(u64);
+pub struct PerX(f64);
 
 impl PerX {
-    pub fn minute(min: u64) -> Self {
+    pub fn minute(min: f64) -> Self {
         PerX(min)
     }
 
-    pub fn second(sec: u64) -> Self {
-        PerX(sec * 60)
+    pub fn second(sec: f64) -> Self {
+        PerX(sec * 60.0)
     }
 
     fn as_per_second(&self) -> f64 {
-        self.0 as f64 / 60.0
+        self.0 / 60.0
     }
 }
 
@@ -174,7 +177,7 @@ impl ModInterval {
                 let segment = match self.segments.pop_front() {
                     Some(s) => s,
                     None => {
-                        return Either::Left(future::ready(None));
+                        return future::ready(None).a();
                     }
                 };
                 let s = ModIntervalStreamState {
@@ -193,7 +196,7 @@ impl ModInterval {
                 let segment = match self.segments.pop_front() {
                     Some(s) => s,
                     None => {
-                        return Either::Left(future::ready(None));
+                        return future::ready(None).a();
                     }
                 };
                 time -= state.segment.duration;
@@ -208,7 +211,7 @@ impl ModInterval {
             let y = if target_hits_per_second == 0.0 {
                 if self.segments.is_empty() {
                     // no more segments, we can end
-                    return Either::Left(future::ready(None));
+                    return future::ready(None).a();
                 } else {
                     // there are more segments, just sleep through the rest of this segment
                     state.segment.duration - time
@@ -222,14 +225,10 @@ impl ModInterval {
 
             // if the sleep extends past the entire ModInterval's end time then end now
             if result > state.end_time {
-                return Either::Left(future::ready(None));
+                return future::ready(None).a();
             }
 
-            let right = async move {
-                time::sleep(y).await;
-                Some((result, ()))
-            };
-            Either::Right(right)
+            time::sleep(y).map(move |_| Some((result, ()))).b()
         })
     }
 }
@@ -285,7 +284,12 @@ mod tests {
     #[test]
     fn single_segment() {
         // start perx, duration, end perx
-        let segments = [(0, 30, 12), (30, 30, 0), (0, 120, 30), (0, 15, 0)];
+        let segments = [
+            (0.0, 30, 12.0),
+            (30.0, 30, 0.0),
+            (0.0, 120, 30.0),
+            (0.0, 15, 0.0),
+        ];
         for (i, (start, duration, end)) in segments.iter().enumerate() {
             let mut mod_interval = ModInterval::new();
             mod_interval.append_segment(
@@ -320,7 +324,7 @@ mod tests {
 
     #[test]
     fn single_segment_start_at() {
-        let (start, duration, end) = (0, 30, 12);
+        let (start, duration, end) = (0.0, 30, 12.0);
 
         let mut mod_interval = ModInterval::new();
         mod_interval.append_segment(
@@ -353,8 +357,8 @@ mod tests {
 
     #[test]
     fn multiple_segments() {
-        // start perx, duration, end perx, file
-        let segments = [(0, 30, 5), (5, 30, 30), (30, 30, 10)];
+        // start perx, duration, end perx
+        let segments = [(0.0, 30, 5.0), (5.0, 30, 30.0), (30.0, 30, 10.0)];
         let mut mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             mod_interval.append_segment(
@@ -389,8 +393,8 @@ mod tests {
 
     #[test]
     fn multiple_segments_start_at() {
-        // start perx, duration, end perx, file
-        let segments = [(0, 30, 5), (5, 30, 30), (30, 30, 10)];
+        // start perx, duration, end perx
+        let segments = [(0.0, 30, 5.0), (5.0, 30, 30.0), (30.0, 30, 10.0)];
         let mut mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             mod_interval.append_segment(
@@ -425,8 +429,8 @@ mod tests {
 
     #[test]
     fn multiple_segments_with_zero() {
-        // start perx, duration, end perx, file
-        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        // start perx, duration, end perx
+        let segments = [(0.0, 30, 5.0), (0.0, 30, 0.0), (30.0, 30, 10.0)];
         let mut mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             mod_interval.append_segment(
@@ -461,8 +465,8 @@ mod tests {
 
     #[test]
     fn transition_works() {
-        // start perx, duration, end perx, file
-        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        // start perx, duration, end perx
+        let segments = [(0.0, 30, 5.0), (0.0, 30, 0.0), (30.0, 30, 10.0)];
         let mut old_mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             old_mod_interval.append_segment(
@@ -472,7 +476,7 @@ mod tests {
             );
         }
 
-        let segments = [(0, 30, 10), (10, 30, 30), (30, 30, 50)];
+        let segments = [(0.0, 30, 10.0), (10.0, 30, 30.0), (30.0, 30, 50.0)];
         let mut new_mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             new_mod_interval.append_segment(
@@ -488,7 +492,7 @@ mod tests {
             Duration::from_secs(15),
         );
 
-        let segments = [(0, 15, 30), (30, 30, 50)];
+        let segments = [(0.0, 15, 30.0), (30.0, 30, 50.0)];
         let mut expect_mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             expect_mod_interval.append_segment(
@@ -503,8 +507,8 @@ mod tests {
 
     #[test]
     fn transition_too_long_works() {
-        // start perx, duration, end perx, file
-        let segments = [(0, 30, 5), (0, 30, 0), (30, 30, 10)];
+        // start perx, duration, end perx
+        let segments = [(0.0, 30, 5.0), (0.0, 30, 0.0), (30.0, 30, 10.0)];
         let mut old_mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             old_mod_interval.append_segment(
@@ -514,7 +518,7 @@ mod tests {
             );
         }
 
-        let segments = [(0, 30, 10), (10, 30, 30), (30, 30, 50)];
+        let segments = [(0.0, 30, 10.0), (10.0, 30, 30.0), (30.0, 30, 50.0)];
         let mut new_mod_interval = ModInterval::new();
         for (start, duration, end) in segments.iter() {
             new_mod_interval.append_segment(
@@ -532,9 +536,9 @@ mod tests {
 
         let mut expect_mod_interval = ModInterval::new();
         expect_mod_interval.append_segment(
-            PerX::second(0),
+            PerX::second(0.0),
             Duration::from_secs(45),
-            PerX::second(50),
+            PerX::second(50.0),
         );
 
         assert_eq!(new_mod_interval, expect_mod_interval);

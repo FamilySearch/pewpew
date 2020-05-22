@@ -11,8 +11,8 @@ doctest = false
 [dependencies]
 base64 = "0.12"
 ether = { path = "../either" }
-futures = "0.1"
-http = "0.1"
+futures = "0.3"
+http = "0.2"
 itertools = "0.9"
 jsonpath_lib = "=0.2.3"
 percent-encoding = "1"
@@ -30,4 +30,4 @@ zip_all = { path = "../zip_all" }
 [dev-dependencies]
 maplit = "1"
 test_common = { path = "../test_common" }
-tokio = "0.1"
+tokio = "0.2"

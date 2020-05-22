@@ -5,21 +5,29 @@ mod line_reader;
 use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineReader};
 
 use crate::error::TestError;
+use crate::line_writer::MsgType;
 use crate::util::json_value_to_string;
 use crate::TestEndReason;
 
-use bytes::{Buf, Bytes};
-use ether::{Either, Either3};
+use ether::Either3;
 use futures::{
-    stream,
-    io::Sink,
-    channel::mpsc::Sender as FCSender, Future, Stream,
-    task::Poll,
+    channel::mpsc::{self, channel, Sender as FCSender},
+    sink::{Sink, SinkExt},
+    stream, Stream, StreamExt, TryStreamExt,
 };
 use serde_json as json;
-use tokio_threadpool::blocking;
+use tokio::{sync::broadcast, task::spawn_blocking};
 
-use std::{borrow::Cow, io};
+use std::{
+    borrow::Cow,
+    io,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicIsize, Ordering},
+        Arc,
+    },
+    task::{Context, Poll},
+};
 
 pub struct Provider {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
@@ -45,7 +53,7 @@ impl Provider {
 
 pub fn file(
     mut template: config::FileProvider,
-    test_killer: FCSender<Result<TestEndReason, TestError>>,
+    test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
 ) -> Result<Provider, TestError> {
     let file = std::mem::take(&mut template.path);
     let file2 = file.clone();
@@ -68,17 +76,20 @@ pub fn file(
     };
     let (tx, rx) = channel::channel(template.buffer);
     let tx2 = tx.clone();
-    let prime_tx = stream
-        .map_err(move |e| {
-            let e = TestError::FileReading(file2.clone(), e.into());
-            channel::ChannelClosed::wrapped(e)
-        })
-        .forward(tx2)
-        .map(|_| ())
-        .or_else(move |e| match e.inner_cast() {
-            Some(e) => Either::A(test_killer.send(Err(*e)).then(|_| Ok(()))),
-            None => Either::B(Ok(()).into_future()),
-        });
+    let prime_tx = async move {
+        let r = stream
+            .map_err(move |e| {
+                let e = TestError::FileReading(file2.clone(), e.into());
+                channel::ChannelClosed::wrapped(e)
+            })
+            .forward(tx2)
+            .await;
+        if let Err(e) = r {
+            if let Some(e) = e.inner_cast() {
+                let _ = test_killer.send(Err(*e));
+            }
+        }
+    };
 
     tokio::spawn(prime_tx);
     Ok(Provider::new(template.auto_return, rx, tx))
@@ -90,567 +101,416 @@ pub fn response(template: config::ResponseProvider) -> Provider {
 }
 
 pub fn literals(list: config::StaticList) -> Provider {
-    let rs = stream::iter::<_, channel::ChannelClosed>(list.into_iter());
+    let rs = stream::iter(list.into_iter().map(Ok));
     let (tx, rx) = channel::channel(config::Limit::auto());
     let tx2 = tx.clone();
-    let prime_tx = rs
-        .forward(tx2)
-        // Error propagate here when sender channel closes at test conclusion
-        .then(|_| Ok(()));
+    let prime_tx = rs.forward(tx2);
     tokio::spawn(prime_tx);
     Provider::new(None, rx, tx)
 }
 
 pub fn range(range: config::RangeProvider) -> Provider {
     let (tx, rx) = channel::channel(config::Limit::auto());
-    let prime_tx = stream::iter::<_, channel::ChannelClosed>(range.0.map(json::Value::from))
-        .forward(tx.clone())
-        // Error propagate here when sender channel closes at test conclusion
-        .then(|_| Ok(()));
+    let prime_tx = stream::iter(range.0.map(|v| Ok(v.into()))).forward(tx.clone());
     tokio::spawn(prime_tx);
     Provider::new(None, rx, tx)
 }
 
-struct LogSink<W>
-where
-    W: tokio::io::AsyncWrite + Send + Sync + 'static,
-{
-    buf: Option<io::Cursor<Bytes>>,
-    name: String,
+#[derive(Clone)]
+pub struct Logger {
+    limit: Option<Arc<AtomicIsize>>,
     pretty: bool,
-    writer: W,
+    test_killer: Option<broadcast::Sender<Result<TestEndReason, TestError>>>,
+    writer: FCSender<MsgType>,
 }
 
-impl<W> Sink for LogSink<W>
-where
-    W: tokio::io::AsyncWrite + Send + Sync + 'static,
-{
-    type SinkItem = json::Value;
-    type SinkError = TestError;
-
-    fn start_send(
-        &mut self,
-        item: Self::SinkItem,
-    ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        if self.buf.is_some() {
-            match self.poll_complete() {
-                Poll::Ready(_) => (),
-                Poll::Pending => return Ok(AsyncSink::NotReady(item)),
-                Err(e) => return Err(e),
-            }
-        }
-        let buf = if self.pretty && !item.is_string() {
-            let pretty = format!("{:#}\n", item);
-            Bytes::from(pretty).into_buf()
+impl Logger {
+    fn json_to_msg_type(&self, j: json::Value) -> MsgType {
+        let s = if self.pretty && !j.is_string() {
+            format!("{:#}\n", j)
         } else {
-            let mut s = json_value_to_string(Cow::Owned(item)).into_owned();
+            let mut s = json_value_to_string(Cow::Owned(j)).into_owned();
             s.push('\n');
-            Bytes::from(s).into_buf()
+            s
         };
-        self.buf = Some(buf);
-        Ok(AsyncSink::Ready)
+        MsgType::Other(s)
     }
 
-    fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-        loop {
-            if let Some(ref mut buf) = &mut self.buf {
-                match self.writer.write_buf(buf) {
-                    Poll::Ready(_) if !buf.has_remaining() => {
-                        self.buf = None;
-                        return self
-                            .writer
-                            .poll_flush()
-                            .map_err(|e| TestError::WritingToLogger(self.name.clone(), e.into()));
-                    }
-                    Poll::Ready(_) => continue,
-                    Poll::Pending => return Poll::Pending,
-                    Err(e) => {
-                        let e = TestError::WritingToLogger(self.name.clone(), e.into());
-                        return Err(e);
-                    }
+    pub fn try_send(&mut self, msg: json::Value) -> Result<(), ()> {
+        let msg = self.json_to_msg_type(msg);
+        if let Some(limit) = &self.limit {
+            let i = limit.fetch_sub(1, Ordering::Release);
+            if i <= 0 {
+                if let Some(killer) = &self.test_killer {
+                    let _ = killer.send(Ok(TestEndReason::KilledByLogger));
                 }
-            } else {
-                return self
-                    .writer
-                    .poll_flush()
-                    .map_err(|e| TestError::WritingToLogger(self.name.clone(), e.into()));
+                return Err(());
             }
         }
+        self.writer.try_send(msg).map_err(|_| ())
     }
 }
 
-pub fn logger<F, W>(
-    name: String,
+impl Sink<json::Value> for Logger {
+    type Error = mpsc::SendError;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = Pin::into_inner(self);
+        Pin::new(&mut this.writer).poll_ready(cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: json::Value) -> Result<(), Self::Error> {
+        let this = Pin::into_inner(self);
+        let item = this.json_to_msg_type(item);
+        Pin::new(&mut this.writer).start_send(item)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = Pin::into_inner(self);
+        Pin::new(&mut this.writer).poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = Pin::into_inner(self);
+        Pin::new(&mut this.writer).poll_close(cx)
+    }
+}
+
+pub fn logger(
     template: config::Logger,
-    test_killer: FCSender<Result<TestEndReason, TestError>>,
-    writer_future: F,
-) -> channel::Sender<json::Value>
-where
-    F: Future<Item = W, Error = TestError> + Send + Sync + 'static,
-    W: tokio::io::AsyncWrite + Send + Sync + 'static,
-{
-    let (tx, rx) = channel::channel::<json::Value>(config::Limit::Integer(5));
+    test_killer: &broadcast::Sender<Result<TestEndReason, TestError>>,
+    writer: FCSender<MsgType>,
+) -> Logger {
     let pretty = template.pretty;
     let kill = template.kill;
+
+    let test_killer = if kill {
+        Some(test_killer.clone())
+    } else {
+        None
+    };
+
     let limit = if kill && template.limit.is_none() {
         Some(1)
     } else {
         template.limit
-    };
-    let logger = writer_future
-        .and_then(move |writer| {
-            let sink = LogSink {
-                buf: None,
-                name,
-                pretty,
-                writer,
-            };
-            let rx = if let Some(limit) = limit {
-                Either::A(rx.take(limit as u64))
-            } else {
-                Either::B(rx)
-            };
-            rx.map_err(|_| unreachable!("logger receiver unexpectedly errored"))
-                .forward(sink)
-        })
-        .then(move |r| match r {
-            Ok(_) if kill => Either3::A(
-                test_killer
-                    .send(Ok(TestEndReason::KilledByLogger))
-                    .then(|_| Ok(())),
-            ),
-            Ok(_) => Either3::B(Ok(()).into_future()),
-            Err(e) => Either3::C(test_killer.send(Err(e)).then(|_| Ok::<_, ()>(()))),
-        });
-    tokio::spawn(logger);
-    tx
+    }
+    .map(|limit| Arc::new(AtomicIsize::new(limit as isize)));
+
+    Logger {
+        limit,
+        pretty,
+        test_killer,
+        writer,
+    }
 }
 
-fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>>>(
-    mut iter: I,
-) -> impl Stream<Item = json::Value, Error = io::Error> {
-    stream::poll_fn(move || blocking(|| iter.next()))
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-        .and_then(|r| r)
+fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>> + Send + 'static>(
+    iter: I,
+) -> impl Stream<Item = Result<json::Value, io::Error>> {
+    let (mut tx, rx) = channel(5);
+    spawn_blocking(move || async move {
+        for value in iter {
+            let value = value.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+            let _ = tx.send(value).await;
+        }
+    });
+    rx
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::line_writer::blocking_writer;
 
     use config::FromYaml;
-    use futures::{future, channel::mpsc::channel as futures_channel};
+    use futures::executor::{block_on, block_on_stream};
     use json::json;
     use test_common::TestWriter;
-    use tokio::runtime::current_thread;
-
-    use std::{
-        collections::BTreeSet,
-        time::{Duration, Instant},
-    };
+    use tokio::runtime::Runtime;
 
     #[test]
     fn range_provider_works() {
-        current_thread::run(future::lazy(|| {
-            let range_params = r#"
-                start: 0
-                end: 20
-            "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
-            let expects = stream::iter(0..=20);
+        let range_params = r#"
+            start: 0
+            end: 20
+        "#;
+        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+        let p = range(range_params.into());
+        let expect: Vec<_> = (0..=20).collect();
 
-            let f = p.rx.zip(expects).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            });
-            current_thread::spawn(f);
+        let values: Vec<_> = block_on_stream(p.rx).take(20).collect();
 
-            let range_params = r#"
-                start: 0
-                end: 20
-                step: 2
-            "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
-            let expects = stream::iter((0..=20).step_by(2));
+        assert_eq!(values, expect);
 
-            let f = p.rx.zip(expects).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            });
-            current_thread::spawn(f);
+        let range_params = r#"
+            start: 0
+            end: 20
+        "#;
+        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+        let p = range(range_params.into());
 
-            let range_params = r#"
+        let expect: Vec<_> = (0..=20).step_by(2).collect();
+
+        let values: Vec<_> = block_on_stream(p.rx).take(10).collect();
+
+        assert_eq!(values, expect);
+
+        let range_params = r#"
                 start: 0
                 end: 20
                 repeat: true
             "#;
+        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+        let p = range(range_params.into());
 
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
-            let expects = stream::iter((0..=20).cycle());
+        let expect: Vec<_> = (0..=20).step_by(2).cycle().take(100).collect();
 
-            p.rx.zip(expects).take(100).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            })
-        }));
+        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
+
+        assert_eq!(values, expect);
     }
 
     #[test]
     fn literals_provider_works() {
-        current_thread::run(future::lazy(|| {
-            let jsons = vec![json!(1), json!(2), json!(3)];
+        let jsons = vec![json!(1), json!(2), json!(3)];
+        let esl = config::ExplicitStaticList {
+            values: jsons.clone(),
+            repeat: false,
+            random: false,
+        };
 
-            let esl = config::ExplicitStaticList {
-                values: jsons.clone(),
-                repeat: false,
-                random: false,
-            };
+        let p = literals(esl.into());
+        let expect: Vec<_> = jsons.clone().into_iter().collect();
 
-            let p = literals(esl.into());
-            let expects = stream::iter(jsons.clone().into_iter());
+        let values: Vec<_> = block_on_stream(p.rx).collect();
 
-            let f = p.rx.zip(expects).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            });
+        assert_eq!(values, expect);
 
-            tokio::spawn(f);
+        let esl = config::ExplicitStaticList {
+            values: jsons.clone(),
+            repeat: false,
+            random: true,
+        };
 
-            let esl = config::ExplicitStaticList {
-                values: jsons.clone(),
-                repeat: false,
-                random: true,
-            };
+        let p = literals(esl.into());
+        let expect: Vec<_> = jsons.clone().into_iter().collect();
 
-            let p = literals(esl.into());
+        let values: Vec<_> = block_on_stream(p.rx).collect();
 
-            let jsons2 = jsons.clone();
-            let f = p.rx.collect().and_then(move |mut v| {
-                v.sort_unstable_by_key(|v| v.clone().as_u64().unwrap());
-                assert_eq!(v, jsons2);
-                Ok(())
-            });
+        assert_eq!(values, expect);
 
-            tokio::spawn(f);
+        let esl = config::ExplicitStaticList {
+            values: jsons.clone(),
+            repeat: true,
+            random: false,
+        };
 
-            let esl = config::ExplicitStaticList {
-                values: jsons.clone(),
-                repeat: true,
-                random: false,
-            };
+        let p = literals(esl.into());
+        let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-            let p = literals(esl.into());
-            let expects = stream::iter(jsons.clone().into_iter().cycle());
+        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
 
-            let f = p.rx.zip(expects).take(50).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            });
+        assert_eq!(values, expect);
 
-            tokio::spawn(f);
+        let esl = config::ExplicitStaticList {
+            values: jsons.clone(),
+            repeat: true,
+            random: true,
+        };
 
-            let esl = config::ExplicitStaticList {
-                values: jsons.clone(),
-                repeat: true,
-                random: true,
-            };
+        let p = literals(esl.into());
+        let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-            let p = literals(esl.into());
-            let expects: BTreeSet<_> = jsons
-                .clone()
-                .into_iter()
-                .map(|v| v.as_u64().unwrap())
-                .collect();
-            let jsons2: Vec<_> = jsons.clone().into_iter().cycle().take(500).collect();
+        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
 
-            let f = p.rx.take(500).collect().and_then(move |v| {
-                assert_ne!(v, jsons2);
-                for j in v {
-                    assert!(expects.contains(&j.as_u64().unwrap()));
-                }
-                Ok(())
-            });
-
-            tokio::spawn(f);
-
-            let p = literals(jsons.clone().into());
-            let expects = stream::iter(jsons.into_iter().cycle());
-
-            p.rx.zip(expects).take(50).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            })
-        }));
+        assert_eq!(values, expect);
     }
 
     #[test]
     fn response_provider_works() {
-        current_thread::run(future::lazy(|| {
-            let jsons = vec![json!(1), json!(2), json!(3)];
-            let rp = config::ResponseProvider {
-                auto_return: None,
-                buffer: config::Limit::auto(),
-            };
-            let p = response(rp);
-            let responses = stream::iter(jsons.clone().into_iter().cycle());
-            current_thread::spawn(p.tx.send_all(responses).then(|_| Ok(())));
+        let jsons = vec![json!(1), json!(2), json!(3)];
+        let rp = config::ResponseProvider {
+            auto_return: None,
+            buffer: config::Limit::auto(),
+        };
+        let mut p = response(rp);
+        for value in &jsons {
+            let _ = block_on(p.tx.send(value.clone()));
+        }
 
-            let expects = stream::iter(jsons.into_iter().cycle());
+        let expects = jsons;
 
-            p.rx.zip(expects).take(50).for_each(|(left, right)| {
-                assert_eq!(left, right);
-                Ok(())
-            })
-        }));
+        let values: Vec<_> = block_on_stream(p.rx).collect();
+
+        assert_eq!(values, expects);
     }
 
     #[test]
     fn basic_logger_works() {
-        current_thread::run(future::lazy(|| {
-            let logger_params = r#"
-                to: ""
-                kill: true
-            "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
-            let (test_killer, mut test_killed_rx) = futures_channel(1);
-            let writer = TestWriter::new();
-            let writer_future = future::ok(writer.clone());
+        let logger_params = r#"
+            to: ""
+            kill: true
+        "#;
+        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+        let (logger_params, _) = config::Logger::from_pre_processed(
+            logger_params,
+            &Default::default(),
+            &mut Default::default(),
+        )
+        .unwrap();
+        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+        let writer = TestWriter::new();
+        let writer_channel = blocking_writer(writer.clone());
 
-            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+        let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-            tokio::spawn(
-                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
-                    .then(|_| Ok(())),
-            );
+        for value in vec![json!(1), json!(2)] {
+            let _ = block_on(tx.send(value));
+        }
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
-                move |_| {
-                    let left = writer.get_string();
-                    let right = "1\n";
-                    assert_eq!(left, right, "value in writer should match");
+        let left = writer.get_string();
+        let right = "1\n";
+        assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Poll::Ready(Some(Ok(TestEndReason::KilledByLogger))) =
-                        test_killed_rx.poll()
-                    {
-                        true
-                    } else {
-                        false
-                    };
-                    assert!(check, "test should be killed");
-                    drop(test_killer);
-                    Ok(())
-                },
-            );
-
-            tokio::spawn(f);
-
-            Ok(())
-        }));
+        let check = if let Ok(Ok(TestEndReason::KilledByLogger)) = test_killed_rx.try_recv() {
+            true
+        } else {
+            false
+        };
+        assert!(check, "test should be killed");
     }
 
     #[test]
     fn basic_logger_works_with_large_data() {
-        current_thread::run(future::lazy(|| {
-            let logger_params = r#"
-                to: ""
-            "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
-            let (test_killer, mut test_killed_rx) = futures_channel(1);
-            let writer = TestWriter::new();
-            let writer_future = future::ok(writer.clone());
+        let logger_params = r#"
+            to: ""
+        "#;
+        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+        let (logger_params, _) = config::Logger::from_pre_processed(
+            logger_params,
+            &Default::default(),
+            &mut Default::default(),
+        )
+        .unwrap();
+        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+        let writer = TestWriter::new();
+        let writer_channel = blocking_writer(writer.clone());
 
-            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+        let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-            let right: String = (0..1000).map(|_| {
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
-            }).collect();
+        let right: String = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".repeat(1000);
 
-            tokio::spawn(
-                tx.send_all(stream::iter(vec![right.clone().into()]))
-                    .then(|_| Ok(())),
-            );
+        let _ = block_on(tx.send(right.clone().into()));
 
-            let f = tokio::time::Delay::new(Instant::now() + Duration::from_millis(100)).then(
-                move |_| {
-                    let left = writer.get_string();
-                    assert_eq!(left, format!("{}\n", right), "value in writer should match");
+        let left = writer.get_string();
+        assert_eq!(left, format!("{}\n", right), "value in writer should match");
 
-                    let check = if let Poll::Ready(Some(Err(_))) = test_killed_rx.poll() {
-                        false
-                    } else {
-                        true
-                    };
-                    assert!(check, "test should not be killed");
-                    drop(test_killer);
-                    Ok(())
-                },
-            );
-
-            tokio::spawn(f);
-
-            Ok(())
-        }));
+        let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
+            false
+        } else {
+            true
+        };
+        assert!(check, "test should not be killed");
     }
 
     #[test]
     fn basic_logger_works_with_would_block() {
-        current_thread::run(future::lazy(|| {
-            let logger_params = r#"
-                to: ""
-            "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
-            let (test_killer, mut test_killed_rx) = futures_channel(1);
-            let writer = TestWriter::new();
-            writer.do_would_block_on_next_write();
-            let writer_future = future::ok(writer.clone());
+        let logger_params = r#"
+            to: ""
+        "#;
+        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+        let (logger_params, _) = config::Logger::from_pre_processed(
+            logger_params,
+            &Default::default(),
+            &mut Default::default(),
+        )
+        .unwrap();
+        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+        let writer = TestWriter::new();
+        writer.do_would_block_on_next_write();
+        let writer_channel = blocking_writer(writer.clone());
 
-            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+        let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-            tokio::spawn(
-                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
-                    .then(|_| Ok(())),
-            );
+        for value in vec![json!(1), json!(2)] {
+            let _ = block_on(tx.send(value));
+        }
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
-                move |_| {
-                    let left = writer.get_string();
-                    let right = "1\n2\n";
-                    assert_eq!(left, right, "value in writer should match");
+        let left = writer.get_string();
+        let right = "1\n2\n";
+        assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Poll::Ready(Some(Err(_))) = test_killed_rx.poll() {
-                        false
-                    } else {
-                        true
-                    };
-                    assert!(check, "test should not be killed");
-                    drop(test_killer);
-                    Ok(())
-                },
-            );
-
-            tokio::spawn(f);
-
-            Ok(())
-        }));
+        let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
+            false
+        } else {
+            true
+        };
+        assert!(check, "test should not be killed");
     }
 
     #[test]
     fn logger_limit_works() {
-        current_thread::run(future::lazy(|| {
-            let logger_params = r#"
-                to: ""
-                limit: 1
-            "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
-            let (test_killer, mut test_killed_rx) = futures_channel(1);
-            let writer = TestWriter::new();
-            let writer_future = future::ok(writer.clone());
+        let logger_params = r#"
+            to: ""
+            limit: 1
+        "#;
+        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+        let (logger_params, _) = config::Logger::from_pre_processed(
+            logger_params,
+            &Default::default(),
+            &mut Default::default(),
+        )
+        .unwrap();
+        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+        let writer = TestWriter::new();
+        let writer_channel = blocking_writer(writer.clone());
 
-            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+        let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-            tokio::spawn(
-                tx.send_all(stream::iter(vec![json!(1), json!(2)]))
-                    .then(|_| Ok(())),
-            );
+        for value in vec![json!(1), json!(2)] {
+            let _ = block_on(tx.send(value));
+        }
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
-                move |_| {
-                    let left = writer.get_string();
-                    let right = "1\n";
-                    assert_eq!(left, right, "value in writer should match");
+        let left = writer.get_string();
+        let right = "1\n";
+        assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Poll::Pending = test_killed_rx.poll() {
-                        true
-                    } else {
-                        false
-                    };
-                    assert!(check, "test should not be killed");
-                    drop(test_killer);
-                    Ok(())
-                },
-            );
-
-            tokio::spawn(f);
-
-            Ok(())
-        }));
+        let check = test_killed_rx.try_recv().is_err();
+        assert!(check, "test should not be killed");
     }
 
     #[test]
     fn logger_pretty_works() {
-        current_thread::run(future::lazy(|| {
-            let logger_params = r#"
-                to: ""
-                pretty: true
-            "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
-            let (test_killer, mut test_killed_rx) = futures_channel(1);
-            let writer = TestWriter::new();
-            let writer_future = future::ok(writer.clone());
+        let logger_params = r#"
+            to: ""
+            pretty: true
+        "#;
+        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+        let (logger_params, _) = config::Logger::from_pre_processed(
+            logger_params,
+            &Default::default(),
+            &mut Default::default(),
+        )
+        .unwrap();
+        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+        let writer = TestWriter::new();
 
-            let tx = logger("".into(), logger_params, test_killer.clone(), writer_future);
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let writer_channel = blocking_writer(writer.clone());
+            let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-            tokio::spawn(
-                tx.send_all(stream::iter(vec![json!({"foo": [1, 2, 3]}), json!(2)]))
-                    .then(|_| Ok(())),
-            );
+            for value in vec![json!({"foo": [1, 2, 3]}), json!(2)] {
+                let _ = block_on(tx.send(value));
+            }
 
-            let f = tokio::timer::Delay::new(Instant::now() + Duration::from_millis(100)).then(
-                move |_| {
-                    let left = writer.get_string();
-                    let right = "{\n  \"foo\": [\n    1,\n    2,\n    3\n  ]\n}\n2\n";
-                    assert_eq!(left, right, "value in writer should match");
+            let left = writer.get_string();
+            let right = "{\n  \"foo\": [\n    1,\n    2,\n    3\n  ]\n}\n2\n";
+            assert_eq!(left, right, "value in writer should match");
 
-                    let check = if let Poll::Pending = test_killed_rx.poll() {
-                        true
-                    } else {
-                        false
-                    };
-                    assert!(check, "test should not be killed");
-                    drop(test_killer);
-                    Ok(())
-                },
-            );
-
-            tokio::spawn(f);
-
-            Ok(())
-        }));
+            let check = test_killed_rx.try_recv().is_err();
+            assert!(check, "test should not be killed");
+        });
     }
 }

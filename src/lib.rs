@@ -1,7 +1,9 @@
 #![warn(rust_2018_idioms)]
 #![type_length_limit = "1550232"]
+#![feature(drain_filter)]
 
 mod error;
+mod line_writer;
 mod providers;
 mod request;
 mod stats;
@@ -10,39 +12,36 @@ mod util;
 use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
 
-use bytes::BytesMut;
-use ether::{Either, Either3};
+use ether::Either;
 use futures::{
-    future::{self, join_all},
-    stream,
-    channel::{
-        mpsc::{self as futures_channel, Receiver as FCReceiver, Sender as FCSender},
-        oneshot,
-    },
-    task::Poll,
-    Future,
-    Stream,
+    channel::mpsc::{Sender as FCSender, UnboundedReceiver as FCUnboundedReceiver},
+    future::{self, try_join_all},
+    sink::SinkExt,
+    FutureExt, Stream, StreamExt,
 };
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use itertools::Itertools;
-use mod_interval::ModInterval;
+use line_writer::{blocking_writer, MsgType};
+use mod_interval::{ModInterval, PerX};
 use native_tls::TlsConnector;
 use serde_json as json;
-use tokio::io::AsyncWrite;
+use tokio::{sync::broadcast, task::spawn_blocking};
 use yansi::Paint;
 
 use std::{
     borrow::Cow,
     cell::RefCell,
-    cmp,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
-    fs,
-    io::SeekFrom,
+    fs::File,
+    future::Future,
+    io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, SeekFrom, Write},
     mem,
     path::PathBuf,
+    pin::Pin,
     sync::{atomic::Ordering, Arc},
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -81,7 +80,7 @@ impl Endpoints {
         filter_fn: F,
         builder_ctx: &mut request::BuilderContext,
         response_providers: &BTreeSet<String>,
-    ) -> Result<Vec<Box<dyn Future<Output = Result<(), TestError>> + Send>>, TestError>
+    ) -> Result<Vec<impl Future<Output = Result<(), TestError>> + Send>, TestError>
     where
         F: Fn(&BTreeMap<String, String>) -> bool,
     {
@@ -129,19 +128,11 @@ impl Endpoints {
             .map(|(_, (mut ep, provides_needed))| {
                 if !provides_needed {
                     ep.clear_provides();
-                    let mut ran = false;
-                    ep.add_start_stream(stream::poll_fn(move || {
-                        if ran {
-                            Poll::Ready(None)
-                        } else {
-                            ran = true;
-                            Poll::Ready(Some(request::StreamItem::None))
-                        }
-                    }));
+                    ep.add_start_stream(future::ready(Ok(request::StreamItem::None)).into_stream());
                 }
                 ep.into_future()
             })
-            .collect();
+            .collect::<Vec<_>>();
         Ok(ret)
     }
 }
@@ -204,10 +195,9 @@ impl TryFrom<&str> for TryRunFormat {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RunConfig {
     pub config_file: PathBuf,
-    pub ctrlc_channel: futures_channel::UnboundedReceiver<()>,
     pub output_format: RunOutputFormat,
     pub results_dir: Option<PathBuf>,
     pub stats_file: PathBuf,
@@ -259,308 +249,285 @@ pub enum TestEndReason {
     CtrlC,
     KilledByLogger,
     ProviderEnded,
+    TestUpdate,
 }
 
 type TestEndedChannel = (
-    FCSender<Result<TestEndReason, TestError>>,
-    FCReceiver<Result<TestEndReason, TestError>>,
+    broadcast::Sender<Result<TestEndReason, TestError>>,
+    broadcast::Receiver<Result<TestEndReason, TestError>>,
 );
 
-type LoadPatternUpdates = Option<(
-    Vec<mod_interval::LoadUpdateChannel>,
-    channel::Receiver<Duration>,
-)>;
-
-pub fn create_run<Se, So, Sef, Sof>(
+async fn _create_run(
     exec_config: ExecConfig,
-    stdout: Sof,
-    stderr: Sef,
-) -> impl Future<Item = (), Error = ()>
-where
-    Se: AsyncWrite + Send + Sync + 'static,
-    So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
-    Sof: Fn() -> So + Clone + Send + Sync + 'static,
-{
-    let stderr2 = stderr();
-    let output_format = exec_config.get_output_format();
+    mut ctrlc_channel: FCUnboundedReceiver<()>,
+    stdout: FCSender<MsgType>,
+    stderr: FCSender<MsgType>,
+    test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
+    mut test_ended_rx: broadcast::Receiver<Result<TestEndReason, TestError>>,
+) -> Result<TestEndReason, TestError> {
     let config_file = exec_config.get_config_file().clone();
-    fs::File::open(config_file.clone())
-        .then(move |file| {
-            match file {
-                Ok(file) => {
-                    todo!("blocking async");
-                    let a = file.read_to_end(Vec::new())
-                        .map_err(|e| TestError::CannotOpenFile(config_file, e.into()));
-                    Either::A(a)
-                }
-                Err(_) => {
-                    let b = Err(TestError::InvalidConfigFilePath(config_file))
-                        .into_future();
-                    Either::B(b)
-                }
+    let config_file2 = config_file.clone();
+    let (file, config_bytes) = spawn_blocking(|| {
+        let mut file = File::open(config_file.clone())
+            .map_err(|_| TestError::InvalidConfigFilePath(config_file.clone()))?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|e| TestError::CannotOpenFile(config_file, e.into()))?;
+        Ok::<_, TestError>((file, bytes))
+    })
+    .await
+    .map_err(move |e| {
+        let e = IOError::new(IOErrorKind::Other, e);
+        TestError::CannotOpenFile(config_file2, e.into())
+    })??;
+
+    // watch for ctrl-c and kill the test
+    let test_ended_tx2 = test_ended_tx.clone();
+    let mut test_ended_rx2 = test_ended_tx.subscribe();
+    tokio::spawn(future::poll_fn(move |cx| {
+        match ctrlc_channel.poll_next_unpin(cx) {
+            Poll::Ready(_) => {
+                let _ = test_ended_tx2.send(Ok(TestEndReason::CtrlC));
+                Poll::Ready(())
             }
-        })
-        .and_then(move |(file, config_bytes)| {
-            let env_vars = std::env::vars_os()
-                .map(|(k, v)| {
-                    (
-                        k.to_string_lossy().into(),
-                        v.to_string_lossy().into(),
-                    )
-                })
-                .collect();
-            let config = match config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars) {
-                Ok(c) => c,
-                Err(e) => return Either3::B(Err(e.into()).into_future()),
+            Poll::Pending => test_ended_rx2.poll_next_unpin(cx).map(|_| ()),
+        }
+    }));
+
+    let env_vars = std::env::vars_os()
+        .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
+        .collect();
+    let output_format = exec_config.get_output_format();
+    let config_file_path = exec_config.get_config_file().clone();
+    let config =
+        config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
+    let test_runner = match exec_config {
+        ExecConfig::Try(t) => create_try_run_future(
+            config,
+            t,
+            (test_ended_tx.clone(), test_ended_tx.subscribe()),
+            stdout,
+            stderr,
+        )
+        .map(Either::A),
+        ExecConfig::Run(r) => {
+            if r.watch_config_file {
+                create_config_watcher(
+                    file,
+                    env_vars,
+                    stdout.clone(),
+                    stderr.clone(),
+                    test_ended_tx.clone(),
+                    output_format,
+                    r.clone(),
+                    config_file_path,
+                );
+            }
+            let test_ended_rx = test_ended_tx.subscribe();
+            create_load_test_future(config, r, (test_ended_tx, test_ended_rx), stdout, stderr)
+                .map(Either::B)
+        }
+    };
+    match test_runner {
+        Ok(f) => {
+            tokio::spawn(f);
+            let mut test_result = Ok(TestEndReason::Completed);
+            while let Some(v) = test_ended_rx.next().await {
+                match v {
+                    Ok(Ok(TestEndReason::TestUpdate)) => continue,
+                    Ok(v) => {
+                        test_result = v;
+                    }
+                    _ => (),
+                };
+                break;
+            }
+            test_result
+        }
+        Err(e) => Err(e),
+    }
+}
+
+pub async fn create_run<So, Se>(
+    exec_config: ExecConfig,
+    ctrlc_channel: FCUnboundedReceiver<()>,
+    stdout: So,
+    stderr: Se,
+) -> Result<(), ()>
+where
+    So: Write + Send + 'static,
+    Se: Write + Send + 'static,
+{
+    let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
+    let output_format = exec_config.get_output_format();
+    let stdout = blocking_writer(stdout);
+    let mut stderr = blocking_writer(stderr);
+    let test_result = _create_run(
+        exec_config,
+        ctrlc_channel,
+        stdout,
+        stderr.clone(),
+        test_ended_tx.clone(),
+        test_ended_rx,
+    )
+    .await;
+
+    match test_result {
+        Err(e) => {
+            // send the test end message to ensure the stats channel closes
+            let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
+            let msg = match output_format {
+                RunOutputFormat::Human => format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),
+                RunOutputFormat::Json => {
+                    let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
+                    format!("{}\n", json)
+                }
             };
-            let (test_ended_tx, test_ended_rx) = futures_channel::channel(0);
-            let work = match exec_config {
-                ExecConfig::Try(t) => create_try_run_future(
-                    config,
-                    t,
-                    (test_ended_tx.clone(), test_ended_rx),
-                    stdout,
-                    stderr,
-                )
-                .map(Either::A),
-                ExecConfig::Run(r) => {
-                    let load_pattern_updates = if r.watch_config_file {
-                        let lpu = create_load_watcher(&config, file, env_vars);
-                        Some(lpu)
-                    } else {
-                        None
-                    };
-                    create_load_test_future(
-                        config,
-                        r,
-                        (test_ended_tx.clone(), test_ended_rx),
-                        stdout,
-                        stderr,
-                        load_pattern_updates,
+            let _ = stderr.send(MsgType::Final(msg)).await;
+            return Err(());
+        }
+        Ok(TestEndReason::KilledByLogger) => {
+            let msg = match output_format {
+                RunOutputFormat::Human => format!(
+                    "\n{}\n",
+                    Paint::yellow("Test killed early by logger").bold()
+                ),
+                RunOutputFormat::Json => {
+                    "{\"type\":\"end\",\"msg\":\"Test killed early by logger\"}\n".to_string()
+                }
+            };
+            let _ = stderr.send(MsgType::Final(msg)).await;
+        }
+        Ok(TestEndReason::CtrlC) => {
+            let msg = match output_format {
+                RunOutputFormat::Human => format!(
+                    "\n{}\n",
+                    Paint::yellow("Test killed early by Ctrl-c").bold()
+                ),
+                RunOutputFormat::Json => {
+                    "{\"type\":\"end\",\"msg\":\"Test killed early by Ctrl-c\"}\n".to_string()
+                }
+            };
+            let _ = stderr.send(MsgType::Final(msg)).await;
+        }
+        Ok(TestEndReason::ProviderEnded) => {
+            let msg = match output_format {
+                RunOutputFormat::Human => {
+                    format!(
+                        "\n{}\n",
+                        Paint::yellow("Test ended early because one or more providers ended")
                     )
-                    .map(Either::B)
+                }
+                RunOutputFormat::Json => {
+                    "{\"type\":\"end\",\"msg\":\"Test ended early because one or more providers ended\"}\n".to_string()
+                }
+            };
+            let _ = stderr.send(MsgType::Final(msg)).await;
+        }
+        _ => (),
+    };
+    Ok(())
+}
+
+fn create_config_watcher(
+    mut file: File,
+    env_vars: BTreeMap<String, String>,
+    stdout: FCSender<MsgType>,
+    mut stderr: FCSender<MsgType>,
+    test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
+    output_format: RunOutputFormat,
+    run_config: RunConfig,
+    config_file_path: PathBuf,
+) {
+    let mut interval = tokio::time::interval(Duration::from_millis(1000));
+    let mut last_modified = None;
+    spawn_blocking(move || async move {
+        while let Some(_) = interval.next().await {
+            let modified = match file.metadata() {
+                Ok(m) => match m.modified() {
+                    Ok(m) => m,
+                    Err(_) => continue,
                 },
+                Err(_) => continue,
             };
-            match work {
-                Ok(a) => Either3::A(a),
-                Err(e) => {
-                    // send the test_ended message in case the stats monitor
-                    // is running
-                    let c = test_ended_tx
-                        .send(Ok(TestEndReason::Completed))
-                        .then(|_| Err::<TestEndReason, _>(e));
-                    Either3::C(c)
+
+            match last_modified {
+                Some(lm) if modified < lm => continue,
+                None => {
+                    last_modified = Some(modified);
+                    continue;
                 }
+                _ => last_modified = Some(modified),
             }
-        })
-        .then(move |r| {
-            let f = match &r {
+
+            if file.seek(SeekFrom::Start(0)).is_err() {
+                continue;
+            }
+
+            let mut config_bytes = Vec::new();
+            if file.read_to_end(&mut config_bytes).is_err() {
+                continue;
+            }
+
+            let config = config::LoadTest::from_config(&config_bytes, &config_file_path, &env_vars);
+            let config = match config {
+                Ok(m) => m,
                 Err(e) => {
                     let msg = match output_format {
-                        RunOutputFormat::Human => {
-                            format!("\n{} {}\n", Paint::red("Fatal error").bold(), e)
-                        }
+                        RunOutputFormat::Human => format!(
+                            "\n{} {}\n",
+                            Paint::yellow("Could not reload config file"),
+                            e
+                        ),
                         RunOutputFormat::Json => {
-                            let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
+                            let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
                             format!("{}\n", json)
                         }
                     };
-                    todo!("blocking async");
-                    let a = stderr2.write_all(msg);
-                    Either::A(a)
+                    let _ = stderr.send(MsgType::Other(msg)).await;
+                    continue;
                 }
-                Ok(TestEndReason::KilledByLogger) => {
-                    let msg = match output_format {
-                        RunOutputFormat::Human => {
-                            format!(
-                                "\n{}\n",
-                                Paint::yellow("Test killed early by logger").bold()
-                            )
-                        }
-                        RunOutputFormat::Json => {
-                            "{\"type\":\"end\",\"msg\":\"Test killed early by logger\"}\n".to_string()
-                        }
-                    };
-                    todo!("blocking async");
-                    let a = stderr2.write_all(msg);
-                    Either::A(a)
-                }
-                Ok(TestEndReason::CtrlC) => {
-                    let msg = match output_format {
-                        RunOutputFormat::Human => {
-                            format!(
-                                "\n{}\n",
-                                Paint::yellow("Test killed early by Ctrl-c").bold()
-                            )
-                        }
-                        RunOutputFormat::Json => {
-                            "{\"type\":\"end\",\"msg\":\"Test killed early by Ctrl-c\"}\n".to_string()
-                        }
-                    };
-                    todo!("blocking async");
-                    let a = stderr2.write_all(msg);
-                    Either::A(a)
-                }
-                Ok(TestEndReason::ProviderEnded) => {
-                    let msg = match output_format {
-                        RunOutputFormat::Human => {
-                            format!(
-                                "\n{}\n",
-                                Paint::yellow("Test ended early because one or more providers ended")
-                            )
-                        }
-                        RunOutputFormat::Json => {
-                            "{\"type\":\"end\",\"msg\":\"Test ended early because one or more providers ended\"}\n".to_string()
-                        }
-                    };
-                    todo!("blocking async");
-                    let a = stderr2.write_all(msg);
-                    Either::A(a)
-                }
-                _ => Either::B(Ok::<_, ()>(()).into_future()),
             };
-            f.map_a(|a| a.then(|_| Ok(())))
-                .then(move |_| r)
-                .map(|_| {
-                    // FIXME: the event loop doesn't immediately shutdown on ctrl c 
-                    std::process::exit(0);
-                })
-                .map_err(|_| ())
-        })
-}
 
-fn create_load_watcher(
-    config: &config::LoadTest,
-    mut file: fs::File,
-    env_vars: BTreeMap<String, String>,
-) -> (
-    Vec<mod_interval::LoadUpdateChannel>,
-    channel::Receiver<Duration>,
-) {
-    let (senders, receivers): (Vec<_>, Vec<_>) = (0..config.endpoints.len())
-        .map(|_| channel::channel(config::Limit::auto()))
-        .unzip();
-    let (duration_sender, duration_receiver) = channel::channel(config::Limit::auto());
-    let mut interval = tokio::time::Interval::new_interval(Duration::from_millis(1000));
-    let mut file_seeked = false;
-    let mut interval_triggered = false;
-    let mut modified = None;
-    let mut last_modified = None;
-    let mut file_bytes = BytesMut::with_capacity(4096);
-    let f = future::poll_fn(move || {
-        if senders.iter().all(channel::Sender::no_receivers) {
-            return Poll::Ready(());
-        }
-        let mut should_reset = false;
-        'outer: loop {
-            if should_reset {
-                interval_triggered = false;
-                modified = None;
-                file_seeked = false;
-                file_bytes.clear();
-            }
-            should_reset = true;
-            if !interval_triggered {
-                match interval.poll() {
-                    Poll::Ready(Some(_)) => {
-                        interval_triggered = true;
-                    }
-                    Poll::Pending => return Ok(Poll::Pending),
-                    Poll::Ready(None) => return Ok(Poll::Ready(())),
-                    Err(_) => return Err(()),
-                }
-            }
-            if !file_seeked {
-                match file.poll_seek(SeekFrom::Start(0)) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(_) => file_seeked = true,
-                }
-            }
-            let modified_time = if let Some(m) = modified {
-                m
-            } else {
-                match file.poll_metadata() {
-                    Poll::Ready(md) => {
-                        let m = match md.modified() {
-                            Ok(m) => m,
-                            Err(_) => continue,
-                        };
-                        modified = Some(m);
-                        m
-                    }
-                    Poll::Pending => return Poll::Pending,
+            let f = create_load_test_future(
+                config,
+                run_config.clone(),
+                (test_ended_tx.clone(), test_ended_tx.subscribe()),
+                stdout.clone(),
+                stderr.clone(),
+            );
+            let f = match f {
+                Ok(f) => f,
+                Err(e) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => format!(
+                            "\n{} {}\n",
+                            Paint::yellow("Could not reload config file"),
+                            e
+                        ),
+                        RunOutputFormat::Json => {
+                            let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
+                            format!("{}\n", json)
+                        }
+                    };
+                    let _ = stderr.send(MsgType::Other(msg)).await;
+                    continue;
                 }
             };
-            match last_modified {
-                Some(time) if modified_time > time => {
-                    loop {
-                        file_bytes.reserve(1024);
-                        match file.read_buf(&mut file_bytes) {
-                            Poll::Ready(n) if n == 0 => break,
-                            Poll::Ready(_) => (),
-                            Poll::Pending => return Poll::Pending,
-                        }
-                    }
-                    last_modified = Some(modified_time);
-                    let config = match config::LoadTest::from_config(
-                        &file_bytes[..],
-                        &Default::default(),
-                        &env_vars,
-                    ) {
-                        Ok(c) => c,
-                        Err(_) => continue,
-                    };
-                    let transition_time = config.config.general.watch_transition_time;
-                    let mut duration = Duration::new(0, 0);
-                    for (endpoint, sender) in config.endpoints.into_iter().zip(senders.iter()) {
-                        if let Some(peak_load) = endpoint.peak_load {
-                            let load_pattern = match endpoint.load_pattern {
-                                Some(l) => l,
-                                None => continue 'outer,
-                            };
-                            duration = cmp::max(duration, load_pattern.duration());
-                            let builder = load_pattern.builder();
-                            let ls = mod_interval::LinearScaling::new(builder, &peak_load, None);
-                            if !sender.no_receivers() {
-                                sender.force_send((ls, transition_time));
-                            }
-                        }
-                    }
-                    duration_sender.force_send(duration);
-                }
-                None => {
-                    last_modified = Some(modified_time);
-                }
-                _ => (),
-            }
+
+            tokio::spawn(f);
         }
     });
-    tokio::spawn(f);
-    (receivers, duration_receiver)
 }
 
-fn create_try_run_future<Se, So, Sef, Sof>(
+fn create_try_run_future(
     mut config: config::LoadTest,
     try_config: TryConfig,
     test_ended: TestEndedChannel,
-    stdout: Sof,
-    stderr: Sef,
-) -> Result<impl Future<Item = TestEndReason, Error = TestError>, TestError>
-where
-    Se: AsyncWrite + Send + Sync + 'static,
-    So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
-    Sof: Fn() -> So + Clone + Send + Sync + 'static,
-{
-    let (test_ended_tx, test_ended_rx) = test_ended;
-    let test_ended_rx = test_ended_rx
-        .into_future()
-        .then(|v| match v {
-            Ok((Some(r), _)) => r,
-            _ => unreachable!("test_ended should not error at this point"),
-        })
-        .shared();
+    stdout: FCSender<MsgType>,
+    stderr: FCSender<MsgType>,
+) -> Result<impl Future<Output = ()>, TestError> {
+    let (test_ended_tx, mut test_ended_rx) = test_ended;
 
     let select = if let TryRunFormat::Human = try_config.format {
         r#""`\
@@ -648,7 +615,7 @@ where
         &test_ended_tx,
         stdout,
         stderr.clone(),
-    );
+    )?;
 
     let mut endpoints = Endpoints::new();
 
@@ -690,12 +657,8 @@ where
 
     let client = create_http_client(config_config.client.keepalive)?;
 
-    let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_rx.clone(), stderr);
-    let (tx, stats_done) = oneshot::channel::<()>();
-    tokio::spawn(stats_rx.then(move |_| {
-        drop(tx);
-        Ok(())
-    }));
+    let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_tx.subscribe(), stderr);
+    tokio::spawn(stats_rx);
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
@@ -708,41 +671,29 @@ where
 
     let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
 
-    let endpoint_calls = join_all(endpoint_calls)
-        .map(|_| TestEndReason::Completed)
-        .then(move |r| test_ended_tx.send(r.clone()).then(|_| r))
-        .select(test_ended_rx.map(|r| *r).map_err(|e| (&*e).clone()))
-        .map(|r| r.0)
-        .map_err(|e| e.0)
-        .then(move |r| stats_done.then(move |_| r));
-
-    Ok(endpoint_calls)
+    let mut left = try_join_all(endpoint_calls).map(move |r| {
+        let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
+    });
+    let f = future::poll_fn(move |cx| match left.poll_unpin(cx) {
+        Poll::Ready(_) => Poll::Ready(()),
+        Poll::Pending => match test_ended_rx.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(_))) => Poll::Ready(()),
+            _ => Poll::Pending,
+        },
+    });
+    Ok(f)
 }
 
-fn create_load_test_future<Se, So, Sef, Sof>(
+fn create_load_test_future(
     config: config::LoadTest,
     run_config: RunConfig,
     test_ended: TestEndedChannel,
-    stdout: Sof,
-    stderr: Sef,
-    load_pattern_updates: LoadPatternUpdates,
-) -> Result<impl Future<Item = TestEndReason, Error = TestError>, TestError>
-where
-    Se: AsyncWrite + Send + Sync + 'static,
-    So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
-    Sof: Fn() -> So + Clone + Send + Sync + 'static,
-{
+    stdout: FCSender<MsgType>,
+    stderr: FCSender<MsgType>,
+) -> Result<impl Future<Output = ()>, TestError> {
     config.ok_for_loadtest()?;
 
-    let (test_ended_tx, test_ended_rx) = test_ended;
-    let test_ended_rx = test_ended_rx
-        .into_future()
-        .then(|v| match v {
-            Ok((Some(r), _)) => r,
-            _ => unreachable!("test_ended should not error at this point"),
-        })
-        .shared();
+    let (test_ended_tx, mut test_ended_rx) = test_ended;
 
     let mut duration = config.get_duration();
     if let Some(t) = run_config.start_at {
@@ -766,37 +717,36 @@ where
         &test_ended_tx,
         stdout.clone(),
         stderr,
-    );
+    )?;
 
     // create the endpoints
-    let (endpoints_iter, mut duration_updater) = if let Some((receivers, du)) = load_pattern_updates
-    {
-        let ei = Either::A(
-            config
-                .endpoints
-                .into_iter()
-                .zip_eq(receivers.into_iter().map(Some)),
-        );
-        (ei, Some(du))
-    } else {
-        let ei = Either::B(config.endpoints.into_iter().map(|ep| (ep, None)));
-        (ei, None)
-    };
-    let builders: Vec<_> = endpoints_iter
-        .map(|(mut endpoint, receiver)| {
-            let mut mod_interval: Option<
-                Box<dyn Stream<Item = Instant, Error = TestError> + Send>,
-            > = None;
+    let builders: Vec<_> = config
+        .endpoints
+        .into_iter()
+        .map(|mut endpoint| {
+            let mut mod_interval: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>> = None;
 
             if let (Some(peak_load), Some(load_pattern)) =
                 (endpoint.peak_load.as_ref(), endpoint.load_pattern.take())
             {
-                mod_interval = Some(Box::new(ModInterval::new(
-                    load_pattern,
-                    peak_load,
-                    receiver,
-                    run_config.start_at,
-                )));
+                let mut mod_interval2 = ModInterval::new();
+                let pieces = match load_pattern {
+                    config::LoadPattern::Linear(l) => l.pieces,
+                };
+                for piece in pieces {
+                    let (start, end) = match peak_load {
+                        config::HitsPer::Minute(m) => (
+                            PerX::minute(piece.start_percent * *m as f64),
+                            PerX::minute(piece.end_percent * *m as f64),
+                        ),
+                        config::HitsPer::Second(s) => (
+                            PerX::second(piece.start_percent * *s as f64),
+                            PerX::second(piece.end_percent * *s as f64),
+                        ),
+                    };
+                    mod_interval2.append_segment(start, duration, end);
+                }
+                mod_interval = Some(Box::pin(mod_interval2.into_stream(run_config.start_at)));
             }
 
             request::Builder::new(endpoint, mod_interval)
@@ -806,18 +756,13 @@ where
     let client = create_http_client(config_config.client.keepalive)?;
 
     let (stats_tx, stats_rx) = create_stats_channel(
-        test_ended_rx.clone(),
-        test_ended_tx.clone(),
+        test_ended_tx.subscribe(),
         &config_config.general,
         &providers,
         stdout,
         &run_config,
     )?;
-    let (tx, stats_done) = oneshot::channel::<()>();
-    tokio::spawn(stats_rx.then(move |_| {
-        drop(tx);
-        Ok(())
-    }));
+    tokio::spawn(stats_rx);
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
@@ -832,73 +777,17 @@ where
         .into_iter()
         .map(move |builder| builder.build(&mut builder_ctx).into_future());
 
-    let mut ctrlc_channel = run_config.ctrlc_channel;
-    let test_ended_tx2 = test_ended_tx.clone();
-    let endpoint_calls = stats_tx
-        .send(StatsMessage::Start(duration))
-        .map_err(|_| unreachable!("Error sending test start signal"))
-        .then(move |r| match r {
-            Ok(stats_tx) => {
-                let test_start = Instant::now();
-                let test_end = test_start + duration;
-                let mut test_end_delay = tokio::time::Delay::new(test_end);
-                let a = join_all(endpoint_calls)
-                    .map(move |_r| {
-                        if Instant::now() >= test_end {
-                            TestEndReason::Completed
-                        } else {
-                            TestEndReason::ProviderEnded
-                        }
-                    })
-                    .select(future::poll_fn(move || {
-                        if let Poll::Ready(_) =
-                            test_end_delay.poll().map_err::<TestError, _>(Into::into)?
-                        {
-                            return Poll::Ready(TestEndReason::Completed);
-                        }
-                        if let Poll::Ready(_) = ctrlc_channel.poll() {
-                            return Poll::Ready(TestEndReason::CtrlC);
-                        }
-                        if let Some(duration_updater2) = &mut duration_updater {
-                            let mut duration = None;
-                            loop {
-                                match duration_updater2.poll() {
-                                    Poll::Ready(Some(d)) => duration = Some(d),
-                                    Poll::Ready(None) => {
-                                        duration_updater = None;
-                                        break;
-                                    }
-                                    Poll::Pending => break,
-                                }
-                            }
-                            if let Some(duration) = duration {
-                                test_end_delay.reset(test_start + duration);
-                                if stats_tx
-                                    .unbounded_send(StatsMessage::Start(duration))
-                                    .is_err()
-                                {
-                                    duration_updater = None;
-                                }
-                            }
-                        }
-                        Poll::Pending
-                    }))
-                    .map(|r| r.0)
-                    .map_err(|e| e.0)
-                    .then(|r| test_ended_tx2.send(r.clone()).then(|_| r));
-                Either::A(a)
-            }
-            Err(e) => {
-                let e = Err(e);
-                Either::B(test_ended_tx.send(e.clone()).then(|_| e))
-            }
-        })
-        .select(test_ended_rx.map(|r| *r).map_err(|e| (&*e).clone()))
-        .map(|r| r.0)
-        .map_err(|e| e.0)
-        .then(move |r| stats_done.then(move |_| r));
+    let _ = stats_tx.unbounded_send(StatsMessage::Start(duration));
+    let mut f = try_join_all(endpoint_calls);
+    let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
+        Poll::Ready(r) => {
+            let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
+            Poll::Ready(())
+        }
+        Poll::Pending => test_ended_rx.poll_next_unpin(cx).map(|_| ()),
+    });
 
-    Ok(endpoint_calls)
+    Ok(f)
 }
 
 pub(crate) fn create_http_client(
@@ -907,11 +796,11 @@ pub(crate) fn create_http_client(
     Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>,
     TestError,
 > {
-    let mut http = HttpConnector::new_with_tokio_threadpool_resolver();
+    let mut http = HttpConnector::new();
     http.set_keepalive(Some(keepalive));
     http.set_reuse_address(true);
     http.enforce_http(false);
-    let https = HttpsConnector::from((http, TlsConnector::new()?));
+    let https = HttpsConnector::from((http, TlsConnector::new()?.into()));
     Ok(Client::builder().set_host(false).build::<_, Body>(https))
 }
 
@@ -920,7 +809,7 @@ type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<S
 fn get_providers_from_config(
     config_providers: BTreeMap<String, config::Provider>,
     auto_size: usize,
-    test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
+    test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
@@ -956,26 +845,21 @@ fn get_providers_from_config(
     Ok((providers, response_providers))
 }
 
-fn get_loggers_from_config<Se, So, Sef, Sof>(
+fn get_loggers_from_config(
     config_loggers: BTreeMap<String, config::Logger>,
     results_dir: Option<&PathBuf>,
-    test_ended_tx: &FCSender<Result<TestEndReason, TestError>>,
-    stdout: Sof,
-    stderr: Sef,
-) -> BTreeMap<String, channel::Sender<json::Value>>
-where
-    Se: AsyncWrite + Send + Sync + 'static,
-    So: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se,
-    Sof: Fn() -> So,
-{
+    test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
+    stdout: FCSender<MsgType>,
+    stderr: FCSender<MsgType>,
+) -> Result<BTreeMap<String, providers::Logger>, TestError> {
     config_loggers
         .into_iter()
         .map(|(name, mut template)| {
             let to = mem::take(&mut template.to);
-            let writer_future = match to.as_str() {
-                "stderr" => Either::A(future::ok(Either3::A(stderr()))),
-                "stdout" => Either::A(future::ok(Either3::B(stdout()))),
+            let name2 = name.clone();
+            let writer = match to.as_str() {
+                "stdout" => stdout.clone(),
+                "stderr" => stderr.clone(),
                 _ => {
                     let mut file_path = if let Some(results_dir) = results_dir {
                         results_dir.clone()
@@ -983,16 +867,13 @@ where
                         PathBuf::new()
                     };
                     file_path.push(to);
-                    let name2 = name.clone();
-                    let f = fs::File::create(file_path)
-                        .map(Either3::C)
-                        .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()));
-                    Either::B(f)
+                    let f = File::create(file_path)
+                        .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()))?;
+                    blocking_writer(f)
                 }
             };
-            let sender =
-                providers::logger(name.clone(), template, test_ended_tx.clone(), writer_future);
-            (name, sender)
+            let sender = providers::logger(template, &test_ended_tx, writer);
+            Ok((name, sender))
         })
         .collect()
 }

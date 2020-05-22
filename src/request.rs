@@ -7,11 +7,14 @@ use self::request_maker::RequestMaker;
 
 use request_maker::ProviderDelays;
 
-use ether::{Either, Either3};
+use bytes::{Bytes, BytesMut};
+use ether::{Either, Either3, EitherExt};
 use for_each_parallel::ForEachParallel;
 use futures::{
-    future::join_all, stream, sync::mpsc as futures_channel, Async, Future, IntoFuture, Sink,
-    Stream,
+    channel::mpsc as futures_channel,
+    future::{self, try_join_all},
+    sink::SinkExt,
+    stream, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
 };
 use hyper::{
     client::HttpConnector,
@@ -19,11 +22,10 @@ use hyper::{
     Body as HyperBody, Client, Method, Response,
 };
 use hyper_tls::HttpsConnector;
-use parking_lot::Mutex;
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
-use tokio::{fs::File as TokioFile, io::AsyncRead};
+use tokio::task::spawn_blocking;
 use zip_all::zip_all;
 
 use crate::error::{RecoverableError, TestError};
@@ -38,11 +40,16 @@ use config::{
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
+    fs::File,
+    future::Future,
+    io::{Error as IOError, ErrorKind as IOErrorKind, Read},
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
     path::PathBuf,
+    pin::Pin,
     str,
     sync::Arc,
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -66,56 +73,27 @@ impl AutoReturn {
         }
     }
 
-    pub fn into_future(self) -> AutoReturnFuture {
-        AutoReturnFuture::new(self)
-    }
-}
-
-type ARInner = Box<dyn Future<Item = (), Error = ()> + Send + Sync>;
-
-pub struct AutoReturnFuture {
-    inner: Either<ARInner, (bool, channel::Sender<json::Value>, Vec<json::Value>)>,
-}
-
-impl AutoReturnFuture {
-    fn new(ar: AutoReturn) -> Self {
-        let channel = ar.channel;
-        let jsons = ar.jsons;
-        let inner = match ar.send_option {
+    pub async fn into_future(mut self) {
+        match self.send_option {
             EndpointProvidesSendOptions::Block => {
-                let a: ARInner =
-                    Box::new(channel.send_all(stream::iter_ok(jsons)).then(|_| Ok(())));
-                Either::A(a)
+                let _ = self
+                    .channel
+                    .send_all(&mut stream::iter(self.jsons).map(Ok))
+                    .await;
             }
-            EndpointProvidesSendOptions::Force => Either::B((true, channel, jsons)),
-            EndpointProvidesSendOptions::IfNotFull => Either::B((false, channel, jsons)),
-        };
-        AutoReturnFuture { inner }
-    }
-}
-
-impl Future for AutoReturnFuture {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Result<Async<()>, ()> {
-        match &mut self.inner {
-            Either::A(ref mut a) => a.poll(),
-            Either::B((true, ref channel, ref mut jsons)) => {
-                while let Some(json) = jsons.pop() {
-                    channel.force_send(json);
+            EndpointProvidesSendOptions::Force => {
+                while let Some(json) = self.jsons.pop() {
+                    self.channel.force_send(json);
                 }
-                Ok(Async::Ready(()))
             }
-            Either::B((false, ref channel, ref mut jsons)) => {
-                while let Some(json) = jsons.pop() {
-                    if !channel.try_send(json).is_success() {
+            EndpointProvidesSendOptions::IfNotFull => {
+                while let Some(json) = self.jsons.pop() {
+                    if self.channel.send(json).now_or_never().is_none() {
                         break;
                     }
                 }
-                Ok(Async::Ready(()))
             }
-        }
+        };
     }
 }
 
@@ -158,25 +136,37 @@ impl From<json::Value> for TemplateValues {
     }
 }
 
+#[derive(Clone)]
+enum ProviderOrLogger {
+    Provider(channel::Sender<json::Value>),
+    Logger(providers::Logger),
+}
+
+impl ProviderOrLogger {
+    fn is_logger(&self) -> bool {
+        match &self {
+            Self::Provider(_) => false,
+            Self::Logger(_) => true,
+        }
+    }
+}
+
 struct Outgoing {
-    cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
-    logger: bool,
+    cb: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     select: Arc<Select>,
-    tx: channel::Sender<json::Value>,
+    tx: ProviderOrLogger,
 }
 
 impl Outgoing {
     fn new(
         select: Select,
-        tx: channel::Sender<json::Value>,
-        cb: Option<Arc<dyn Fn(bool) + Send + Sync + 'static>>,
-        logger: bool,
+        tx: ProviderOrLogger,
+        cb: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     ) -> Self {
         Outgoing {
             cb,
             select: select.into(),
             tx,
-            logger,
         }
     }
 }
@@ -185,23 +175,19 @@ impl ProviderStream<AutoReturn> for providers::Provider {
     fn into_stream(
         &self,
     ) -> Box<
-        dyn Stream<Item = (json::Value, Vec<AutoReturn>), Error = config::ExpressionError>
+        dyn Stream<Item = Result<(json::Value, Vec<AutoReturn>), config::ExecutingExpressionError>>
             + Send
-            + Sync
+            + Unpin
             + 'static,
     > {
         let auto_return = self.auto_return.map(|ar| (ar, self.tx.clone()));
-        let future = self
-            .rx
-            .clone()
-            .map_err(move |_e| unreachable!("unexpected error from provider"))
-            .map(move |v| {
-                let mut outgoing = Vec::new();
-                if let Some((ar, tx)) = &auto_return {
-                    outgoing.push(AutoReturn::new(*ar, tx.clone(), vec![v.clone()]));
-                };
-                (v, outgoing)
-            });
+        let future = self.rx.clone().map(move |v| {
+            let mut outgoing = Vec::new();
+            if let Some((ar, tx)) = &auto_return {
+                outgoing.push(AutoReturn::new(*ar, tx.clone(), vec![v.clone()]));
+            };
+            Ok((v, outgoing))
+        });
         Box::new(future)
     }
 }
@@ -210,28 +196,25 @@ pub struct BuilderContext {
     pub config: config::Config,
     pub config_path: PathBuf,
     // the http client
-    pub client: Arc<
-        Client<
-            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
-        >,
-    >,
+    pub client:
+        Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     // a mapping of names to their prospective providers
     pub providers: BTreeMap<String, providers::Provider>,
     // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, channel::Sender<json::Value>>,
+    pub loggers: BTreeMap<String, providers::Logger>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: StatsTx,
 }
 
 pub struct Builder {
     endpoint: config::Endpoint,
-    start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
+    start_stream: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>>,
 }
 
 impl Builder {
     pub fn new(
         endpoint: config::Endpoint,
-        start_stream: Option<Box<dyn Stream<Item = Instant, Error = TestError> + Send>>,
+        start_stream: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>>,
     ) -> Self {
         Builder {
             endpoint,
@@ -288,19 +271,22 @@ impl Builder {
                 } else {
                     None
                 };
-                Outgoing::new(v, tx, cb, false)
+                Outgoing::new(v, ProviderOrLogger::Provider(tx), cb)
             })
             .collect();
         let mut streams: StreamCollection = Vec::new();
         if let Some(start_stream) = self.start_stream {
-            streams.push((true, Box::new(start_stream.map(StreamItem::Instant))));
+            streams.push((
+                true,
+                Box::new(start_stream.map(|v| Ok(StreamItem::Instant(v)))),
+            ));
         } else if let Some(set) = provides_set {
-            let stream = stream::poll_fn(move || {
+            let stream = stream::poll_fn(move |_| {
                 let done = set.iter().all(channel::Sender::no_receivers);
                 if done {
-                    Ok(Async::Ready(None))
+                    Poll::Ready(None)
                 } else {
-                    Ok(Async::Ready(Some(StreamItem::None)))
+                    Poll::Ready(Some(Ok(StreamItem::None)))
                 }
             });
             streams.push((true, Box::new(stream)));
@@ -310,7 +296,7 @@ impl Builder {
                 .loggers
                 .get(&k)
                 .expect("logs should reference a valid logger");
-            outgoing.push(Outgoing::new(v, tx.clone(), None, true));
+            outgoing.push(Outgoing::new(v, ProviderOrLogger::Logger(tx.clone()), None));
         }
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
@@ -327,25 +313,26 @@ impl Builder {
                 .map(|send_option| (send_option, provider.tx.clone()));
             let limit = provider.tx.limit();
             provider_limits.insert(name.clone(), limit);
-            let provider_stream = Box::new(
-                Stream::map(receiver, move |v| {
-                    let ar = if no_auto_returns {
-                        None
-                    } else {
-                        ar.clone().map(|(send_option, tx)| {
-                            AutoReturn::new(send_option, tx, vec![v.clone()])
-                        })
-                    };
-                    StreamItem::TemplateValue(name.clone(), v, ar, Instant::now())
-                })
-                .map_err(|_| unreachable!("Unexpected error from receiver")),
-            );
+            let provider_stream = Box::new(receiver.map(move |v| {
+                let ar = if no_auto_returns {
+                    None
+                } else {
+                    ar.clone()
+                        .map(|(send_option, tx)| AutoReturn::new(send_option, tx, vec![v.clone()]))
+                };
+                Ok(StreamItem::TemplateValue(
+                    name.clone(),
+                    v,
+                    ar,
+                    Instant::now(),
+                ))
+            }));
             streams.push((false, provider_stream));
         }
         for (name, vce) in self.endpoint.declare {
             let stream = vce
                 .into_stream(&ctx.providers, false)
-                .map(move |(v, returns)| {
+                .map_ok(move |(v, returns)| {
                     StreamItem::Declare(name.clone(), v, returns, Instant::now())
                 })
                 .map_err(Into::into);
@@ -389,7 +376,7 @@ fn multipart_body_as_hyper_body<'a>(
     content_type_entry: HeaderEntry<'a, HeaderValue>,
     copy_body_value: bool,
     body_value: &mut Option<String>,
-) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
+) -> Result<impl Future<Output = Result<(u64, HyperBody), TestError>>, TestError> {
     let boundary: String = Alphanumeric
         .sample_iter(&mut rand::thread_rng())
         .take(20)
@@ -398,36 +385,20 @@ fn multipart_body_as_hyper_body<'a>(
     let is_form = {
         let content_type =
             content_type_entry.or_insert_with(|| HeaderValue::from_static("multipart/form-data"));
-        let ct_str = match content_type.to_str() {
-            Ok(c) => c,
-            Err(e) => {
-                return Either::A(Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future())
-            }
-        };
+        let ct_str = content_type
+            .to_str()
+            .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
+
         if ct_str.starts_with("multipart/") {
             let is_form = ct_str.starts_with("multipart/form-data");
             *content_type =
-                match HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary)) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        return Either::A(
-                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                        )
-                    }
-                };
+                HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary))
+                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
             is_form
         } else {
-            *content_type = match HeaderValue::from_str(&format!(
-                "multipart/form-data;boundary={}",
-                boundary
-            )) {
-                Ok(c) => c,
-                Err(e) => {
-                    return Either::A(
-                        Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                    )
-                }
-            };
+            *content_type =
+                HeaderValue::from_str(&format!("multipart/form-data;boundary={}", boundary))
+                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
             true
         }
     };
@@ -439,18 +410,15 @@ fn multipart_body_as_hyper_body<'a>(
 
     let mut body_value2 = Vec::new();
 
-    let pieces: Vec<_> = multipart_body
+    let pieces = multipart_body
         .pieces
         .iter()
         .enumerate()
         .map(|(i, mp)| {
-            let mut body = match mp
+            let mut body = mp
                 .template
                 .evaluate(Cow::Borrowed(template_values.as_json()), None)
-            {
-                Ok(b) => b,
-                Err(e) => return Either3::A(Err(TestError::from(e)).into_future()),
-            };
+                .map_err(TestError::from)?;
 
             let mut has_content_disposition = false;
 
@@ -463,26 +431,13 @@ fn multipart_body_as_hyper_body<'a>(
             piece_data.extend_from_slice(boundary.as_bytes());
 
             for (k, t) in mp.headers.iter() {
-                let key = match HeaderName::from_bytes(k.as_bytes()) {
-                    Ok(k) => k,
-                    Err(e) => {
-                        return Either3::A(
-                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                        )
-                    }
-                };
-                let value = match t.evaluate(Cow::Borrowed(template_values.as_json()), None) {
-                    Ok(v) => v,
-                    Err(e) => return Either3::A(Err(e.into()).into_future()),
-                };
-                let value = match HeaderValue::from_str(&value) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Either3::A(
-                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                        )
-                    }
-                };
+                let key = HeaderName::from_bytes(k.as_bytes())
+                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
+                let value = t
+                    .evaluate(Cow::Borrowed(template_values.as_json()), None)
+                    .map_err::<TestError, _>(Into::into)?;
+                let value = HeaderValue::from_str(&value)
+                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
 
                 let content_disposition = CONTENT_DISPOSITION;
                 has_content_disposition |= key == content_disposition;
@@ -502,14 +457,8 @@ fn multipart_body_as_hyper_body<'a>(
                 } else {
                     HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
                 };
-                let value = match value {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Either3::A(
-                            Err(RecoverableError::BodyErr(Arc::new(e)).into()).into_future(),
-                        )
-                    }
-                };
+                let value = value
+                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
 
                 piece_data.extend_from_slice(b"\r\ncontent-disposition: ");
                 piece_data.extend_from_slice(value.as_bytes());
@@ -517,7 +466,7 @@ fn multipart_body_as_hyper_body<'a>(
 
             piece_data.extend_from_slice(b"\r\n\r\n");
 
-            if mp.is_file {
+            let ret = if mp.is_file {
                 if copy_body_value {
                     body_value2.extend_from_slice(&piece_data);
                     body_value2.extend_from_slice(b"<<contents of file: ");
@@ -525,25 +474,26 @@ fn multipart_body_as_hyper_body<'a>(
                     body_value2.extend_from_slice(b">>");
                 }
                 let piece_data_bytes = piece_data.len() as u64;
-                let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
+                let piece_stream = future::ok(Bytes::from(piece_data)).into_stream();
                 tweak_path(&mut body, &multipart_body.path);
-                let b = create_file_hyper_body(body).map(move |(bytes, body)| {
-                    let stream = Either::A(piece_stream.chain(body));
+                let a = create_file_hyper_body(body).map_ok(move |(bytes, body)| {
+                    let stream = piece_stream.chain(body).a();
                     (bytes + piece_data_bytes, stream)
                 });
-                Either3::B(b)
+                Either::A(a)
             } else {
                 piece_data.extend_from_slice(body.as_bytes());
                 if copy_body_value {
                     body_value2.extend_from_slice(&piece_data);
                 }
                 let piece_data_bytes = piece_data.len() as u64;
-                let piece_stream = stream::once(Ok(hyper::Chunk::from(piece_data)));
-                let c = Ok((piece_data_bytes, Either::B(piece_stream)));
-                Either3::C(c.into_future())
-            }
+                let piece_stream = future::ok(Bytes::from(piece_data)).into_stream().b();
+                let b = future::ok((piece_data_bytes, piece_stream));
+                Either::B(b)
+            };
+            Ok::<_, TestError>(ret)
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if copy_body_value {
         body_value2.extend_from_slice(&closing_boundary);
@@ -554,46 +504,68 @@ fn multipart_body_as_hyper_body<'a>(
         *body_value = Some(bv);
     }
 
-    let b = join_all(pieces).map(move |results| {
-        let (bytes, bodies) = results.into_iter().fold(
-            (closing_boundary.len() as u64, Vec::new()),
-            |(bytes, mut bodies), (bytes2, body)| {
-                bodies.push(body);
-                (bytes + bytes2, bodies)
-            },
-        );
+    let ret = try_join_all(pieces).map_ok(move |results| {
+        let mut bytes = closing_boundary.len() as u64;
+        let mut bodies = Vec::new();
+        for (bytes2, body) in results {
+            bodies.push(body);
+            bytes += bytes2;
+        }
 
-        let closing_boundary = hyper::Chunk::from(closing_boundary);
+        let closing_boundary = Bytes::from(closing_boundary);
 
-        let stream = stream::iter_ok::<_, hyper::Error>(bodies)
+        let stream = stream::iter(bodies)
             .flatten()
-            .chain(stream::once(Ok(closing_boundary)));
+            .chain(stream::once(future::ok(closing_boundary)));
 
         (bytes, HyperBody::wrap_stream(stream))
     });
-    Either::B(b)
+    Ok(ret)
 }
 
-fn create_file_hyper_body(file: String) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
-    TokioFile::open(file)
-        .and_then(TokioFile::metadata)
-        .map(|(mut file, metadata)| {
-            let bytes = metadata.len();
-            let mut buf = bytes::BytesMut::with_capacity(8 * (1 << 10));
-            let stream = stream::poll_fn(move || {
-                buf.reserve(8 * (1 << 10));
-                let ret = match file.read_buf(&mut buf)? {
-                    Async::Ready(n) if n == 0 => Async::Ready(None),
-                    Async::Ready(_) => Async::Ready(buf.take().freeze().into()),
-                    Async::NotReady => Async::NotReady,
-                };
-                Ok::<_, tokio::io::Error>(ret)
-            });
+fn create_file_hyper_body(
+    filename: String,
+) -> impl Future<Output = Result<(u64, HyperBody), TestError>> {
+    let filename2 = filename.clone();
+    spawn_blocking(|| {
+        let mut file = match File::open(&filename) {
+            Ok(f) => f,
+            Err(e) => return Err(TestError::FileReading(filename, e.into())),
+        };
+        let metadata = match file.metadata() {
+            Ok(m) => m,
+            Err(e) => return Err(TestError::FileReading(filename.clone(), e.into())),
+        };
+        let bytes = metadata.len();
 
-            let body = HyperBody::wrap_stream(stream);
-            (bytes, body)
-        })
-        .map_err(|e| TestError::Recoverable(RecoverableError::BodyErr(Arc::new(e))))
+        let (mut tx, rx) = futures_channel::channel(5);
+        let mut buf = BytesMut::with_capacity(8 * (1 << 10));
+
+        spawn_blocking(move || async move {
+            loop {
+                match file.read(&mut buf) {
+                    Ok(n) if n == 0 => break,
+                    Ok(n) => {
+                        let bytes_to_send = buf.split_off(n);
+                        let _ = tx.send(Ok(bytes_to_send)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e)).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        let body = HyperBody::wrap_stream(rx);
+        Ok((bytes, body))
+    })
+    .map(|r| {
+        r.map_err(|e| {
+            let e = IOError::new(IOErrorKind::Other, e);
+            TestError::FileReading(filename2, e.into())
+        })?
+    })
 }
 
 fn body_template_as_hyper_body<'a>(
@@ -602,24 +574,25 @@ fn body_template_as_hyper_body<'a>(
     copy_body_value: bool,
     body_value: &mut Option<String>,
     content_type_entry: HeaderEntry<'a, HeaderValue>,
-) -> impl Future<Item = (u64, HyperBody), Error = TestError> {
+) -> impl Future<Output = Result<(u64, HyperBody), TestError>> {
     let template = match body_template {
         BodyTemplate::File(_, t) => t,
         BodyTemplate::Multipart(m) => {
-            return Either3::A(multipart_body_as_hyper_body(
+            let r = multipart_body_as_hyper_body(
                 m,
                 template_values,
                 content_type_entry,
                 copy_body_value,
                 body_value,
-            ))
+            );
+            return Either3::A(future::ready(r).and_then(|x| x));
         }
-        BodyTemplate::None => return Either3::B(Ok((0, HyperBody::empty())).into_future()),
+        BodyTemplate::None => return Either3::B(future::ok((0, HyperBody::empty()))),
         BodyTemplate::String(t) => t,
     };
     let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
         Ok(b) => b,
-        Err(e) => return Either3::B(Err(TestError::from(e)).into_future()),
+        Err(e) => return Either3::B(future::err(TestError::from(e))),
     };
     if let BodyTemplate::File(path, _) = body_template {
         tweak_path(&mut body, path);
@@ -631,24 +604,20 @@ fn body_template_as_hyper_body<'a>(
         if copy_body_value {
             *body_value = Some(body.clone());
         }
-        Either3::B(Ok((body.as_bytes().len() as u64, body.into())).into_future())
+        Either3::B(future::ok((body.as_bytes().len() as u64, body.into())))
     }
 }
 
 type StreamCollection = Vec<(
     bool,
-    Box<dyn Stream<Item = StreamItem, Error = TestError> + Send + 'static>,
+    Box<dyn Stream<Item = Result<StreamItem, TestError>> + Send + Unpin + 'static>,
 )>;
-type OnDemandStreams = Vec<Box<dyn Stream<Item = (), Error = ()> + Send + 'static>>;
+type OnDemandStreams = Vec<Box<dyn Stream<Item = ()> + Send + Unpin + 'static>>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
     body: BodyTemplate,
-    client: Arc<
-        Client<
-            HttpsConnector<HttpConnector<hyper::client::connect::dns::TokioThreadpoolGaiResolver>>,
-        >,
-    >,
+    client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     headers: Vec<(String, Template)>,
     limits: Vec<Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
@@ -674,7 +643,7 @@ impl Endpoint {
 
     pub fn add_start_stream<S>(&mut self, stream: S)
     where
-        S: Stream<Item = StreamItem, Error = TestError> + Send + 'static,
+        S: Stream<Item = Result<StreamItem, TestError>> + Send + Unpin + 'static,
     {
         let stream = Box::new(stream);
         match self.stream_collection.get_mut(0) {
@@ -686,7 +655,7 @@ impl Endpoint {
     }
 
     // This returns a boxed future because otherwise the type system runs out of memory for the type
-    pub fn into_future(self) -> Box<dyn Future<Item = (), Error = TestError> + Send> {
+    pub fn into_future(self) -> impl Future<Output = Result<(), TestError>> + Send {
         let url = self.url;
         let method = self.method;
         let headers = self.headers;
@@ -696,32 +665,31 @@ impl Endpoint {
         let stats_tx = self.stats_tx;
         let no_auto_returns = self.no_auto_returns;
         let streams = self.stream_collection.into_iter().map(|t| t.1);
+        let mut zipped_streams = zip_all(streams);
         let stream = if !self.on_demand_streams.is_empty() && !self.provides.is_empty() {
             let mut on_demand_streams = select_any(self.on_demand_streams);
-            let mut zipped_streams = zip_all(streams);
             let mut od_continue = false;
-            let stream = stream::poll_fn(move || {
-                let p = on_demand_streams.poll();
+            stream::poll_fn(move |cx| {
+                let p = on_demand_streams.poll_next_unpin(cx);
                 if !od_continue {
                     match p {
-                        Ok(Async::Ready(Some(_))) => od_continue = true,
-                        Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-                        Ok(Async::NotReady) => return Ok(Async::NotReady),
-                        Err(_) => unreachable!("on demand streams should never error"),
+                        Poll::Ready(Some(_)) => od_continue = true,
+                        Poll::Ready(None) => return Poll::Ready(None),
+                        Poll::Pending => return Poll::Pending,
                     }
                 }
-                let p = zipped_streams.poll();
+                let p = zipped_streams.poll_next_unpin(cx);
                 match p {
-                    Ok(Async::NotReady) => (),
+                    Poll::Pending => (),
                     _ => {
                         od_continue = false;
                     }
                 }
                 p
-            });
-            Either::A(stream)
+            })
+            .a()
         } else {
-            Either::B(zip_all(streams))
+            zipped_streams.b()
         };
         let mut outgoing = self.outgoing;
         outgoing.extend(self.provides);
@@ -747,77 +715,63 @@ impl Endpoint {
             tags,
             timeout,
         };
-        Box::new(ForEachParallel::new(
-            limits,
-            max_parallel_requests,
-            stream,
-            move |values| rm.send_request(values),
-        ))
+        let limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>> =
+            match (limits.is_empty(), max_parallel_requests) {
+                (false, Some(n)) => {
+                    let limit_fn = move || {
+                        let limit = limits.iter().fold(0, |prev, l| prev.max(l.get()));
+                        if limit == 0 {
+                            n.get()
+                        } else {
+                            limit.min(n.get())
+                        }
+                    };
+                    Some(Box::new(limit_fn))
+                }
+                (false, None) => {
+                    let limit_fn = move || limits.iter().fold(0, |prev, l| prev.max(l.get()));
+                    Some(Box::new(limit_fn))
+                }
+                (true, Some(n)) => Some(Box::new(move || n.get())),
+                (true, None) => None,
+            };
+        ForEachParallel::new(limit_fn, stream, move |values| rm.send_request(values))
     }
 }
 
-struct BlockSender<V: Iterator<Item = Result<json::Value, TestError>>> {
-    cb: Option<
-        std::sync::Arc<(dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static)>,
-    >,
-    last_value: Option<json::Value>,
-    tx: channel::Sender<serde_json::value::Value>,
-    value_added: bool,
+struct BlockSender<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> {
+    cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
+    tx: ProviderOrLogger,
     values: V,
 }
 
-impl<V: Iterator<Item = Result<json::Value, TestError>>> BlockSender<V> {
+impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> BlockSender<V> {
     fn new(
         values: V,
-        tx: channel::Sender<serde_json::value::Value>,
-        cb: Option<
-            std::sync::Arc<
-                (dyn std::ops::Fn(bool) + std::marker::Send + std::marker::Sync + 'static),
-            >,
-        >,
+        tx: ProviderOrLogger,
+        cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
     ) -> Self {
-        BlockSender {
-            cb,
-            last_value: None,
-            tx,
-            value_added: false,
-            values,
-        }
+        BlockSender { cb, tx, values }
     }
-}
 
-impl<V: Iterator<Item = Result<json::Value, TestError>>> Future for BlockSender<V> {
-    type Item = ();
-    type Error = TestError;
-
-    fn poll(&mut self) -> Result<Async<()>, TestError> {
-        loop {
-            let v = if let Some(v) = self.last_value.take() {
-                v
-            } else if let Some(r) = self.values.next() {
-                r?
-            } else {
-                return Ok(Async::Ready(()));
-            };
-            match self.tx.try_send(v) {
-                channel::SendState::Closed => return Ok(Async::Ready(())),
-                channel::SendState::Full(v) => {
-                    self.last_value = Some(v);
-                    return Ok(Async::NotReady);
+    async fn into_future(mut self) -> Result<(), RecoverableError> {
+        // let mut this = Pin::new(&mut self);
+        let mut value_sent = false;
+        for r in &mut self.values {
+            let r = r?;
+            match &mut self.tx {
+                ProviderOrLogger::Provider(tx) => {
+                    let _ = tx.send(r).await;
                 }
-                channel::SendState::Success => {
-                    self.value_added = true;
+                ProviderOrLogger::Logger(tx) => {
+                    let _ = tx.send(r).await;
                 }
             }
+            value_sent = true;
         }
-    }
-}
-
-impl<V: Iterator<Item = Result<json::Value, TestError>>> Drop for BlockSender<V> {
-    fn drop(&mut self) {
-        let _ = self.poll();
-        if let Some(cb) = &self.cb {
-            cb(self.value_added);
+        if let Some(cb) = self.cb {
+            cb(value_sent);
         }
+        Ok(())
     }
 }

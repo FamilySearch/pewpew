@@ -115,7 +115,7 @@ impl LineReader {
         }
     }
 
-    pub fn into_stream(self) -> impl Stream<Item = json::Value, Error = io::Error> {
+    pub fn into_stream(self) -> impl Stream<Item = Result<json::Value, io::Error>> {
         super::into_stream(self)
     }
 }

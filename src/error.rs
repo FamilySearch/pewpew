@@ -7,7 +7,7 @@ pub enum RecoverableError {
     ProviderDelay(String),
     BodyErr(Arc<dyn StdError + Send + Sync>),
     ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
-    IndexingJson(Box<config::ExpressionError>),
+    ExecutingExpression(Box<config::ExecutingExpressionError>),
     Timeout(SystemTime),
 }
 
@@ -18,7 +18,7 @@ impl RecoverableError {
         match self {
             BodyErr(_) => 1,
             ConnectionErr(..) => 2,
-            IndexingJson(..) => 3,
+            ExecutingExpression(..) => 3,
             Timeout(_) => 4,
             ProviderDelay(_) => 5,
         }
@@ -30,7 +30,7 @@ impl fmt::Display for RecoverableError {
         match self {
             BodyErr(e) => write!(f, "body error: {}", e),
             ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
-            IndexingJson(e) => e.fmt(f),
+            ExecutingExpression(e) => e.fmt(f),
             ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{}`", p),
             Timeout(..) => write!(f, "request timed out"),
         }
@@ -108,18 +108,32 @@ impl From<tokio::time::Error> for TestError {
 
 impl From<config::Error> for TestError {
     fn from(ce: config::Error) -> Self {
-        if let config::Error::ExpressionErr(e @ config::ExpressionError::IndexingIntoJson(..)) = ce
+        if let config::Error::ExpressionErr(config::CreatingExpressionError::Executing(
+            e @ config::ExecutingExpressionError::IndexingIntoJson(..),
+        )) = ce
         {
-            Recoverable(IndexingJson(e.into()))
+            Recoverable(ExecutingExpression(e.into()))
         } else {
             Config(ce.into())
         }
     }
 }
 
-impl From<config::ExpressionError> for TestError {
-    fn from(ce: config::ExpressionError) -> Self {
+impl From<config::CreatingExpressionError> for TestError {
+    fn from(ce: config::CreatingExpressionError) -> Self {
         Config(Box::new(ce.into()))
+    }
+}
+
+impl From<config::ExecutingExpressionError> for TestError {
+    fn from(e: config::ExecutingExpressionError) -> Self {
+        Config(Box::new(e.into()))
+    }
+}
+
+impl From<config::ExecutingExpressionError> for RecoverableError {
+    fn from(e: config::ExecutingExpressionError) -> Self {
+        ExecutingExpression(Box::new(e.into()))
     }
 }
 

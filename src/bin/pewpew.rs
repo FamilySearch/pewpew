@@ -1,6 +1,7 @@
 use std::{
     convert::TryInto,
     fs::create_dir_all,
+    io,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
     time::UNIX_EPOCH,
@@ -8,15 +9,12 @@ use std::{
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use config::duration_from_string;
-use futures::{sync::mpsc as futures_channel, Future};
+use futures::{channel::mpsc as futures_channel, TryFutureExt};
 use pewpew::{
     create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,
 };
 use regex::Regex;
-use tokio::{
-    self,
-    io::{stderr, stdout},
-};
+use tokio::runtime::Runtime;
 use yansi::Paint;
 
 fn main() {
@@ -160,6 +158,12 @@ fn main() {
         )
         .get_matches();
 
+    let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();
+
+    let _ = ctrlc::set_handler(move || {
+        let _ = ctrl_c_tx.unbounded_send(());
+    });
+
     let cli_config = if let Some(matches) = matches.subcommand_matches("run") {
         let config_file: PathBuf = matches
             .value_of("CONFIG")
@@ -175,11 +179,6 @@ fn main() {
                 .expect("should have output_format cli arg"),
         )
         .expect("output_format cli arg unrecognized");
-        let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();
-
-        let _ = ctrlc::set_handler(move || {
-            let _ = ctrl_c_tx.unbounded_send(());
-        });
         let stats_file = matches
             .value_of_os("stats-file")
             .map(PathBuf::from)
@@ -210,7 +209,6 @@ fn main() {
             .map(|s| duration_from_string(s.to_string()).expect("start_at should match pattern"));
         let run_config = RunConfig {
             config_file,
-            ctrlc_channel,
             output_format,
             results_dir,
             start_at,
@@ -278,9 +276,10 @@ fn main() {
         unreachable!();
     };
 
-    let f = create_run(cli_config, stdout, stderr)
+    let f = create_run(cli_config, ctrlc_channel, io::stdout(), io::stderr())
         .map_err(|_| HAD_FATAL_ERROR.store(true, Ordering::Relaxed));
-    tokio::run(f);
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(f).unwrap();
 
     if HAD_FATAL_ERROR.load(Ordering::Relaxed) {
         std::process::exit(1)

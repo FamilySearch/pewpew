@@ -1,33 +1,36 @@
 use crate::error::{RecoverableError, TestError};
+use crate::line_writer::{blocking_writer, MsgType};
 use crate::providers;
 use crate::TestEndReason;
 use crate::{RunConfig, RunOutputFormat};
 
-use bytes::Buf;
+use channel::ChannelStatsReader;
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
-use ether::{Either, Either3};
+use ether::Either;
 use futures::{
-    future::{join_all, poll_fn, Shared},
-    sync::mpsc::{self as futures_channel, Sender as FCSender},
-    Async, Future, IntoFuture, Sink, Stream,
+    channel::mpsc::{self as futures_channel, Sender as FCSender},
+    future::join_all,
+    sink::SinkExt,
+    stream, FutureExt, StreamExt,
 };
 use hdrhistogram::Histogram;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tokio::{
-    fs::File as TokioFile,
-    io::{write_all, AsyncWrite},
-    timer::Interval,
+    sync::broadcast,
+    time::{self, Duration, Instant},
 };
 use yansi::Paint;
 
 use std::{
     collections::BTreeMap,
-    fs, io, mem,
+    fs::File,
+    future::Future,
+    io, mem,
     path::Path,
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    task::Poll,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 mod histogram_serde {
@@ -327,18 +330,15 @@ fn is_zero(n: &u64) -> bool {
     *n == 0
 }
 
-struct Stats<C, Cf>
-where
-    C: AsyncWrite + Send + Sync + 'static,
-    Cf: Fn() -> C + Clone + Send + Sync + 'static,
-{
+struct Stats {
     bucket_size: u64,
     current: TimeBucket,
-    console: Cf,
+    console: FCSender<MsgType>,
     duration: u64,
-    file: fs::File,
+    file: FCSender<MsgType>,
     format: RunOutputFormat,
     previous: Option<TimeBucket>,
+    providers: Vec<ChannelStatsReader<json::Value>>,
     tags: BTreeMap<Tags, usize>,
     totals: TimeBucket,
 }
@@ -351,18 +351,15 @@ fn round_time(time: u64, bucket_size: u64) -> u64 {
     time / bucket_size * bucket_size
 }
 
-impl<C, Cf> Stats<C, Cf>
-where
-    C: AsyncWrite + Send + Sync + 'static,
-    Cf: Fn() -> C + Clone + Send + Sync + 'static,
-{
+impl Stats {
     fn new(
         file_name: &Path,
         bucket_size: u64,
         format: RunOutputFormat,
-        console: Cf,
+        console: FCSender<MsgType>,
+        providers: Vec<ChannelStatsReader<json::Value>>,
     ) -> Result<Self, io::Error> {
-        let file = std::fs::File::create(file_name)?;
+        let file = blocking_writer(File::create(file_name)?);
         Ok(Stats {
             bucket_size,
             current: TimeBucket::new(rounded_epoch(bucket_size)),
@@ -371,6 +368,7 @@ where
             file,
             format,
             previous: None,
+            providers,
             tags: BTreeMap::new(),
             totals: TimeBucket::new(get_epoch()),
         })
@@ -405,7 +403,7 @@ where
         })
     }
 
-    fn append(&mut self, stat: ResponseStat) -> impl Future<Item = (), Error = ()> {
+    async fn append(&mut self, stat: ResponseStat) {
         let mut new_tag = None;
         let index = match self.tags.get(&stat.tags) {
             Some(i) => *i,
@@ -421,72 +419,93 @@ where
         };
         self.current.append(stat, index);
         if let Some(new_tag) = new_tag {
-            let a = self.write_file_message(&FileMessage::Tags(new_tag));
-            Either::A(a)
-        } else {
-            let b = Ok(()).into_future();
-            Either::B(b)
+            self.write_file_message(FileMessage::Tags(new_tag)).await;
         }
     }
 
-    fn write_file_message(&self, msg: &FileMessage) -> impl Future<Item = (), Error = ()> {
-        let file = match self.file.try_clone() {
-            Ok(f) => f,
-            Err(_) => return Either::A(Err(()).into_future()),
-        };
+    // this fn returns an impl future instead of being async, so as not to capture a reference to `self`
+    fn write_file_message(&self, msg: FileMessage) -> impl Future<Output = ()> {
+        let mut file = self.file.clone();
 
-        let bytes = match serde_json::to_vec(msg) {
-            Ok(b) => b,
-            Err(_) => return Either::A(Err(()).into_future()),
-        };
+        async move {
+            let msg = match serde_json::to_string(&msg) {
+                Ok(m) => m,
+                Err(_) => return,
+            };
 
-        let mut buf = io::Cursor::new(bytes);
-        let mut file = TokioFile::from_std(file);
-
-        let b = poll_fn(move || match file.write_buf(&mut buf) {
-            Ok(Async::Ready(_)) => {
-                if !buf.has_remaining() {
-                    Ok(Async::Ready(()))
-                } else {
-                    Ok(Async::NotReady)
-                }
-            }
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(_) => Err(()),
-        });
-        Either::B(b)
+            let _ = file.send(MsgType::Other(msg)).await;
+        }
     }
 
-    fn close_out_bucket(
-        &mut self,
-        test_complete: bool,
-    ) -> impl Future<Item = (), Error = TestError> {
+    fn create_provider_stats_summary(&self, time: u64) -> String {
+        let is_human_format = self.format.is_human();
+        let mut string_to_print = if is_human_format && !self.providers.is_empty() {
+            format!("{}", Paint::new("\nProvider Stats\n").bold())
+        } else {
+            String::new()
+        };
+        for reader in self.providers.iter() {
+            let stats = reader.get_stats(time);
+            let piece = if is_human_format {
+                format!(
+                    "\n- {}:\n  length: {}\n  limit: {}\n  \
+                     tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
+                     number of receivers: {}\n  number of senders: {}\n",
+                    Paint::yellow(stats.provider).dimmed(),
+                    stats.len,
+                    stats.limit,
+                    stats.waiting_to_send,
+                    stats.waiting_to_receive,
+                    stats.receiver_count,
+                    stats.sender_count,
+                )
+            } else {
+                let mut s = json::to_string(&stats).expect("could not serialize provider stats");
+                s.push('\n');
+                s
+            };
+            string_to_print.push_str(&piece);
+        }
+
+        string_to_print
+    }
+
+    async fn close_out_bucket(&mut self, test_complete: bool) {
         let mut is_new_bucket = false;
+        let time = rounded_epoch(self.bucket_size) - self.bucket_size;
         let bucket = match self.get_previous_bucket(test_complete) {
             Some(b) => b,
             None => {
                 is_new_bucket = true;
-                let time = rounded_epoch(self.bucket_size) - self.bucket_size;
                 TimeBucket::new(time)
             }
         };
-        let print_string =
-            bucket.create_print_summary(&self.tags, self.format, self.bucket_size, false);
-        let console_output = write_all((self.console)(), print_string).then(|_| Ok(()));
-        let mut futures = vec![Either3::A(console_output)];
+        let mut print_string = if test_complete {
+            String::new()
+        } else {
+            self.create_provider_stats_summary(time)
+        };
+        let piece = bucket.create_print_summary(&self.tags, self.format, self.bucket_size, false);
+        print_string.push_str(&piece);
+
+        let mut futures = Vec::new();
         if !is_new_bucket {
             let file_message = FileMessage::Buckets(bucket);
-            futures.push(Either3::B(self.write_file_message(&file_message)))
+            futures.push(Either::B(self.write_file_message(file_message)))
         }
-        if test_complete {
+        let msg = if test_complete {
             let blank = TimeBucket::new(0);
             let bucket = std::mem::replace(&mut self.totals, blank);
-            let print_string =
+            let print_string2 =
                 bucket.create_print_summary(&self.tags, self.format, self.duration, true);
-            let console_output = write_all((self.console)(), print_string).then(|_| Ok(()));
-            futures.push(Either3::C(console_output));
-        }
-        join_all(futures).then(|_| Ok(()))
+            print_string.push_str(&print_string2);
+            MsgType::Final(print_string)
+        } else {
+            MsgType::Other(print_string)
+        };
+        let console_output = self.console.send(msg).map(|_| ());
+        futures.push(Either::A(console_output));
+        join_all(futures).await;
     }
 }
 
@@ -602,134 +621,69 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     format!("in approximately {}", long_time)
 }
 
-pub fn create_try_run_stats_channel<F, C, Cf>(
-    test_complete: Shared<F>,
-    console: Cf,
+pub fn create_try_run_stats_channel(
+    mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
+    mut console: FCSender<MsgType>,
 ) -> (
     futures_channel::UnboundedSender<StatsMessage>,
-    impl Future<Item = (), Error = ()> + Send,
-)
-where
-    F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
-    C: AsyncWrite + Send + Sync + 'static,
-    Cf: Fn() -> C + Clone + Send + Sync + 'static,
-{
-    let aggregates = Bucket::default();
-    let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
-    let f = rx
-        .fold(aggregates, move |mut summary, s| {
+    impl Future<Output = ()> + Send,
+) {
+    let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
+
+    let f = async move {
+        let mut stats = Bucket::default();
+
+        // continue pulling values from the rx channel until it ends or the test_complete future fires
+        let mut stream = stream::poll_fn(|cx| match rx.poll_next_unpin(cx) {
+            p @ Poll::Ready(_) => p,
+            p @ Poll::Pending => match test_complete.poll_next_unpin(cx) {
+                Poll::Ready(_) => Poll::Ready(None),
+                _ => p,
+            },
+        });
+
+        while let Some(s) = stream.next().await {
             if let StatsMessage::ResponseStat(rs) = s {
-                summary.append(rs);
+                stats.append(rs);
             }
-            Ok(summary)
-        })
-        .and_then(move |stats| {
-            let mut output = format!(
-                "{}\n  calls made: {}\n  status counts: {:?}",
-                Paint::yellow("Try run summary:"),
-                stats.rtt_histogram.len(),
-                stats.status_counts
-            );
-            if stats.request_timeouts > 0 {
-                let piece = format!("\n  request timeouts: {:?}", stats.request_timeouts);
-                output.push_str(&piece);
-            }
-            if !stats.test_errors.is_empty() {
-                let piece = format!("\n  test errors: {:?}", stats.test_errors);
-                output.push_str(&piece);
-            }
-            output.push('\n');
-            write_all(console(), output).then(|_| Ok(()))
-        })
-        .join(test_complete.then(|_| Ok::<_, ()>(())))
-        .then(|_| Ok(()));
+        }
+
+        let mut output = format!(
+            "{}\n  calls made: {}\n  status counts: {:?}",
+            Paint::yellow("Try run summary:"),
+            stats.rtt_histogram.len(),
+            stats.status_counts
+        );
+        if stats.request_timeouts > 0 {
+            let piece = format!("\n  request timeouts: {:?}", stats.request_timeouts);
+            output.push_str(&piece);
+        }
+        if !stats.test_errors.is_empty() {
+            let piece = format!("\n  test errors: {:?}", stats.test_errors);
+            output.push_str(&piece);
+        }
+        output.push('\n');
+
+        let _ = console.send(MsgType::Final(output)).await;
+    };
+
     (tx, f)
 }
 
-fn create_provider_stats_printer<C, Cf>(
-    providers: &BTreeMap<String, providers::Provider>,
-    interval: Duration,
-    now: Instant,
-    start_sec: u64,
-    output_format: RunOutputFormat,
-    console: Cf,
-) -> impl Future<Item = (), Error = TestError>
-where
-    C: AsyncWrite + Send + Sync + 'static,
-    Cf: Fn() -> C + Clone + Send + Sync + 'static,
-{
-    let first_print = start_sec / interval.as_secs() * interval.as_secs();
-    let start_print =
-        Duration::from_millis((interval.as_secs() - (start_sec - first_print)) * 1000 + 1);
-    let providers: Vec<_> = providers
-        .iter()
-        .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
-        .collect();
-    Interval::new(now + start_print, interval)
-        .map_err(|_| unreachable!("something happened while printing stats"))
-        .for_each(move |_| {
-            let time = Local::now();
-            let is_human_format = output_format.is_human();
-            let mut string_to_print = if is_human_format {
-                format!(
-                    "{}",
-                    Paint::new(format!(
-                        "\nProvider Stats {}\n",
-                        time.format("%T %-e-%b-%Y")
-                    ))
-                    .bold()
-                )
-            } else {
-                String::new()
-            };
-            let time = time.timestamp();
-            for reader in providers.iter() {
-                let stats = reader.get_stats(time);
-                let piece = if is_human_format {
-                    format!(
-                        "\n- {}:\n  length: {}\n  limit: {}\n  \
-                         tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
-                         number of receivers: {}\n  number of senders: {}\n",
-                        Paint::yellow(stats.provider).dimmed(),
-                        stats.len,
-                        stats.limit,
-                        stats.waiting_to_send,
-                        stats.waiting_to_receive,
-                        stats.receiver_count,
-                        stats.sender_count,
-                    )
-                } else {
-                    let mut s =
-                        json::to_string(&stats).expect("could not serialize provider stats");
-                    s.push('\n');
-                    s
-                };
-                string_to_print.push_str(&piece);
-            }
-            write_all(console(), string_to_print).then(|_| Ok(()))
-        })
-}
-
-pub fn create_stats_channel<F, Sef, Se>(
-    test_complete: Shared<F>,
-    test_killer: FCSender<Result<TestEndReason, TestError>>,
+pub fn create_stats_channel(
+    mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
-    console: Sef,
+    mut console: FCSender<MsgType>,
     run_config: &RunConfig,
 ) -> Result<
     (
         futures_channel::UnboundedSender<StatsMessage>,
-        impl Future<Item = (), Error = ()> + Send,
+        impl Future<Output = ()> + Send,
     ),
     TestError,
->
-where
-    F: Future<Item = TestEndReason, Error = TestError> + Send + 'static,
-    Se: AsyncWrite + Send + Sync + 'static,
-    Sef: Fn() -> Se + Clone + Send + Sync + 'static,
-{
-    let (tx, rx) = futures_channel::unbounded::<StatsMessage>();
+> {
+    let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
     let bucket_size = config.bucket_size;
@@ -744,41 +698,59 @@ where
         .unwrap_or_default();
     let file_path = run_config.stats_file.clone();
     let output_format = run_config.output_format;
-    let stats =
-        Stats::new(&file_path, bucket_size_secs, output_format, console.clone()).map_err(|e| {
-            TestError::CannotCreateStatsFile(file_path.to_string_lossy().into_owned(), e.into())
-        })?;
-    let stats = Arc::new(Mutex::new(stats));
-    let stats3 = stats.clone();
-    let stats4 = stats.clone();
-    let print_stats = Interval::new(now + next_bucket, bucket_size)
-        .map_err(|_e| unreachable!("something happened while printing stats"))
-        .for_each(move |_| {
-            let mut stats = stats4.lock();
-            stats.close_out_bucket(false)
-        });
-    let print_stats = if let Some(interval) = config.log_provider_stats {
-        let print_provider_stats = create_provider_stats_printer(
-            providers,
-            interval,
-            now,
-            start_sec,
-            output_format,
-            console.clone(),
-        );
-        let a = print_stats.join(print_provider_stats).map(|_| ());
-        Either::A(a)
+    let providers: Vec<_> = if config.log_provider_stats.is_some() {
+        providers
+            .iter()
+            .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
+            .collect()
     } else {
-        Either::B(print_stats)
+        Vec::new()
     };
+    let mut stats = Stats::new(
+        &file_path,
+        bucket_size_secs,
+        output_format,
+        console.clone(),
+        providers,
+    )
+    .map_err(|e| {
+        TestError::CannotCreateStatsFile(file_path.to_string_lossy().into_owned(), e.into())
+    })?;
+
     let mut test_start_time = None;
-    let receiver = Stream::for_each(
-        rx.map_err(|_| unreachable!("Error receiving stats")),
-        move |datum| {
-            let mut futures = Vec::new();
-            let mut stats = stats.lock();
+
+    let receiver = async move {
+        let mut print_stats_interval = time::interval_at(now + next_bucket, bucket_size);
+        // create a stream which combines getting incoming messages, printing stats on an interval
+        // and checking if the test has ended
+        let mut stream = stream::poll_fn(move |cx| {
+            match test_complete.poll_next_unpin(cx) {
+                // test is not complete
+                Poll::Ready(Some(Ok(Ok(TestEndReason::TestUpdate)))) | Poll::Pending => {
+                    match print_stats_interval.poll_next_unpin(cx) {
+                        Poll::Ready(Some(_)) => Poll::Ready(Some(Either::A(false))),
+                        _ => match rx.poll_next_unpin(cx) {
+                            Poll::Ready(Some(s)) => Poll::Ready(Some(Either::B(s))),
+                            Poll::Ready(None) => Poll::Ready(None),
+                            Poll::Pending => Poll::Pending,
+                        },
+                    }
+                }
+                // test is complete
+                Poll::Ready(_) => Poll::Ready(Some(Either::A(true))),
+            }
+        });
+
+        while let Some(datum) = stream.next().await {
             match datum {
-                StatsMessage::Start(d) => {
+                Either::A(test_complete) => {
+                    stats.close_out_bucket(test_complete).await;
+                    if test_complete {
+                        break;
+                    }
+                }
+                Either::B(StatsMessage::Start(d)) => {
+                    let mut futures = Vec::new();
                     let duration = d.as_secs();
                     let (start_time, msg) = if let Some(start_time) = test_start_time {
                         let msg = if duration == stats.duration {
@@ -816,32 +788,21 @@ where
                             bin: bin_version,
                             bucket_size: bucket_size_secs,
                         };
-                        let c = stats
-                            .write_file_message(&FileMessage::Header(header))
-                            .then(|_| Ok::<_, TestError>(()));
-                        futures.push(Either3::C(c));
+                        let left = stats
+                            .write_file_message(FileMessage::Header(header))
+                            .map(|_| ());
+                        futures.push(Either::A(left));
                         (now, msg)
                     };
                     test_start_time = Some(start_time);
-                    let a = write_all(console(), msg).then(|_| Ok::<_, TestError>(()));
-                    futures.push(Either3::A(a))
+                    let right = console.send(MsgType::Other(msg)).map(|_| ());
+                    futures.push(Either::B(right));
+                    join_all(futures).await;
                 }
-                StatsMessage::ResponseStat(rs) => {
-                    let b = stats.append(rs).then(|_| Ok::<_, TestError>(()));
-                    futures.push(Either3::B(b));
-                }
+                Either::B(StatsMessage::ResponseStat(rs)) => stats.append(rs).await,
             }
-            join_all(futures).then(|_| Ok::<_, TestError>(()))
-        },
-    );
-    let task = print_stats
-        .join(receiver)
-        .map(|_| TestEndReason::Completed)
-        .or_else(move |e| test_killer.send(Err(e.clone())).then(move |_| Err(e)))
-        .select(test_complete.map(|e| *e).map_err(|e| (&*e).clone()))
-        .then(move |_| {
-            let mut stats = stats3.lock();
-            stats.close_out_bucket(true).then(|_| Ok(()))
-        });
-    Ok((tx, task))
+        }
+    };
+
+    Ok((tx, receiver))
 }

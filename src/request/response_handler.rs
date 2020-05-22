@@ -1,7 +1,7 @@
 use super::*;
 
 use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_HEADERS_ALL, RESPONSE_STARTLINE, STATS};
-use futures::future::IntoFuture;
+use futures::StreamExt;
 
 pub(super) struct ResponseHandler {
     pub(super) provider_delays: ProviderDelays,
@@ -15,13 +15,13 @@ pub(super) struct ResponseHandler {
 }
 
 impl ResponseHandler {
-    pub(super) fn handle<F>(
+    pub(super) async fn handle<F>(
         self,
         response: hyper::Response<HyperBody>,
-        auto_returns: Arc<Mutex<Option<F>>>,
-    ) -> impl Future<Item = (), Error = TestError>
+        auto_returns: Option<F>,
+    ) -> Result<(), RecoverableError>
     where
-        F: Future<Item = (), Error = TestError>,
+        F: Future<Output = ()> + Send,
     {
         let status_code = response.status();
         let status = status_code.as_u16();
@@ -43,7 +43,7 @@ impl ResponseHandler {
         let where_clause_special_providers = self.precheck_rr_providers;
         // executing the where clause determine which of the provides and logs need
         // to be executed
-        let included_outgoing_indexes: Result<BTreeSet<_>, _> = self
+        let included_outgoing_indexes = self
             .outgoing
             .iter()
             .enumerate()
@@ -68,11 +68,7 @@ impl ResponseHandler {
                 }
             })
             .filter_map(Result::transpose)
-            .collect();
-        let included_outgoing_indexes = match included_outgoing_indexes {
-            Ok(v) => v,
-            Err(e) => return Either::B(Err(e).into_future()),
-        };
+            .collect::<Result<BTreeSet<_>, RecoverableError>>()?;
         let ce_header = response.headers().get("content-encoding").map(|h| {
             h.to_str()
                 .expect("content-encoding header should cast to str")
@@ -81,40 +77,52 @@ impl ResponseHandler {
             Some(s) => s,
             None => "",
         };
-        let body_stream = match (
+        let body_value = match (
             response_fields_added & RESPONSE_BODY != 0,
             body_reader::Compression::try_from(ce_header),
         ) {
             (true, Some(ce)) => {
+                let mut body = response.into_body();
                 let mut br = body_reader::BodyReader::new(ce);
-                let a = response
-                    .into_body()
-                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
-                    .fold(bytes::BytesMut::new(), move |mut out_bytes, chunks| {
-                        br.decode(chunks.into_bytes(), &mut out_bytes)
-                            .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))?;
-                        Ok::<_, RecoverableError>(out_bytes)
-                    })
-                    .and_then(|body| {
-                        let s = str::from_utf8(&body).unwrap_or("<<binary data>>");
-                        let value = if let Ok(value) = json::from_str(s) {
-                            value
-                        } else {
-                            json::Value::String(s.into())
-                        };
-                        Ok(Some(value)).into_future()
-                    });
-                Either::A(a)
+                let mut body_buffer = bytes::BytesMut::new();
+                let mut body_value = None;
+                while let Some(r) = body.next().await {
+                    // in the case there's an error receiving or parsing the body, we want to pass it on
+                    // to the body handler so it can log it
+                    let chunks = match r {
+                        Ok(c) => c,
+                        Err(e) => {
+                            body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
+                            break;
+                        }
+                    };
+                    if let Err(e) = br.decode(chunks, &mut body_buffer) {
+                        body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
+                        break;
+                    }
+                }
+                if body_value.is_none() {
+                    let body_string = str::from_utf8(&body_buffer).unwrap_or("<<binary data>>");
+                    let value = if let Ok(value) = json::from_str(body_string) {
+                        value
+                    } else {
+                        json::Value::String(body_string.into())
+                    };
+                    body_value = Some(Ok(value))
+                }
+                body_value
             }
             _ => {
-                // if we don't need the body, skip parsing it
-                Either::B(
-                    response
-                        .into_body()
-                        .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
-                        .for_each(|_| Ok(()))
-                        .and_then(|_| Ok(None)),
-                )
+                let mut body_value = None;
+                let mut body = response.into_body();
+                // if we don't need the body, skip parsing it, but make sure we get it all
+                while let Some(r) = body.next().await {
+                    if let Err(e) = r {
+                        body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
+                        break;
+                    }
+                }
+                body_value
             }
         };
         let provider_delays = self.provider_delays;
@@ -131,8 +139,7 @@ impl ResponseHandler {
             status,
             tags: self.tags,
         };
-        let a = body_stream.then(move |result| bh.handle(result, auto_returns));
-        Either::A(a)
+        bh.handle(body_value.transpose(), auto_returns).await
     }
 }
 
@@ -189,38 +196,31 @@ fn handle_response_requirements(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::lazy;
-    use tokio::runtime::current_thread;
+    use futures::executor::block_on;
 
     #[test]
     fn handles_response() {
-        current_thread::run(lazy(|| {
-            let template_values = TemplateValues::new();
-            let precheck_rr_providers = 0;
-            let rr_providers = 0;
-            let outgoing = Vec::new().into();
-            let now = Instant::now();
-            let (stats_tx, stats_rx) = futures_channel::unbounded();
-            let tags = Arc::new(BTreeMap::new());
-            let rh = ResponseHandler {
-                provider_delays: ProviderDelays::new(),
-                template_values,
-                precheck_rr_providers,
-                rr_providers,
-                outgoing,
-                now,
-                stats_tx,
-                tags,
-            };
+        let template_values = TemplateValues::new();
+        let precheck_rr_providers = 0;
+        let rr_providers = 0;
+        let outgoing = Vec::new().into();
+        let now = Instant::now();
+        let (stats_tx, _) = futures_channel::unbounded();
+        let tags = Arc::new(BTreeMap::new());
+        let rh = ResponseHandler {
+            provider_delays: ProviderDelays::new(),
+            template_values,
+            precheck_rr_providers,
+            rr_providers,
+            outgoing,
+            now,
+            stats_tx,
+            tags,
+        };
 
-            let auto_returns: Arc<Mutex<Option<futures::future::Empty<_, _>>>> =
-                Arc::new(Mutex::new(None));
+        let auto_returns: Option<futures::future::Pending<_>> = None;
 
-            rh.handle(Default::default(), auto_returns).then(move |r| {
-                assert!(r.is_ok());
-                drop(stats_rx);
-                Ok(())
-            })
-        }));
+        let r = block_on(rh.handle(Default::default(), auto_returns));
+        assert!(r.is_ok());
     }
 }

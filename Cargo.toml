@@ -29,7 +29,7 @@ crossbeam = "0.7"
 csv = "1"
 ctrlc = "3"
 chrono = "0.4"
-ether = { path = "./lib/either", features = ["async-write"] }
+ether = { path = "./lib/either" }
 for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.3"
 hdrhistogram = "7"
@@ -48,6 +48,7 @@ serde_json = "1"
 test_common = { path = "./lib/test_common" }
 tokio = "0.2"
 tokio-threadpool = "0.1"
+tokio-tls = "0.3"
 url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }

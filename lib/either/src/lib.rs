@@ -1,10 +1,13 @@
-use std::{cmp::PartialEq, fmt, io};
+use std::{
+    cmp::PartialEq,
+    fmt,
+    future::Future,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-#[cfg(feature = "async-write")]
-use futures::Async;
-use futures::{Future, Poll, Stream};
-#[cfg(feature = "async-write")]
-use tokio::io::AsyncWrite;
+use futures::Stream;
 
 pub enum Either<A, B> {
     A(A),
@@ -45,14 +48,16 @@ impl<A> Either<A, A> {
 impl<A, B> Stream for Either<A, B>
 where
     A: Stream,
-    B: Stream<Item = A::Item, Error = A::Error>,
+    B: Stream<Item = A::Item>,
 {
     type Item = A::Item;
-    type Error = A::Error;
-    fn poll(&mut self) -> Poll<Option<A::Item>, A::Error> {
-        match *self {
-            Either::A(ref mut a) => a.poll(),
-            Either::B(ref mut b) => b.poll(),
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<A::Item>> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                Either::A(x) => Pin::new_unchecked(x).poll_next(cx),
+                Either::B(x) => Pin::new_unchecked(x).poll_next(cx),
+            }
         }
     }
 }
@@ -128,15 +133,16 @@ where
 impl<A, B> Future for Either<A, B>
 where
     A: Future,
-    B: Future<Item = A::Item, Error = A::Error>,
+    B: Future<Output = A::Output>,
 {
-    type Item = A::Item;
-    type Error = A::Error;
+    type Output = A::Output;
 
-    fn poll(&mut self) -> Poll<A::Item, A::Error> {
-        match *self {
-            Either::A(ref mut a) => a.poll(),
-            Either::B(ref mut b) => b.poll(),
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<A::Output> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                Either::A(x) => Pin::new_unchecked(x).poll(cx),
+                Either::B(x) => Pin::new_unchecked(x).poll(cx),
+            }
         }
     }
 }
@@ -150,16 +156,17 @@ pub enum Either3<A, B, C> {
 impl<A, B, C> Stream for Either3<A, B, C>
 where
     A: Stream,
-    B: Stream<Item = A::Item, Error = A::Error>,
-    C: Stream<Item = A::Item, Error = A::Error>,
+    B: Stream<Item = A::Item>,
+    C: Stream<Item = A::Item>,
 {
     type Item = A::Item;
-    type Error = A::Error;
-    fn poll(&mut self) -> Poll<Option<A::Item>, A::Error> {
-        match *self {
-            Either3::A(ref mut e) => e.poll(),
-            Either3::B(ref mut e) => e.poll(),
-            Either3::C(ref mut e) => e.poll(),
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<A::Item>> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                Either3::A(x) => Pin::new_unchecked(x).poll_next(cx),
+                Either3::B(x) => Pin::new_unchecked(x).poll_next(cx),
+                Either3::C(x) => Pin::new_unchecked(x).poll_next(cx),
+            }
         }
     }
 }
@@ -167,17 +174,18 @@ where
 impl<A, B, C> Future for Either3<A, B, C>
 where
     A: Future,
-    B: Future<Item = A::Item, Error = A::Error>,
-    C: Future<Item = A::Item, Error = A::Error>,
+    B: Future<Output = A::Output>,
+    C: Future<Output = A::Output>,
 {
-    type Item = A::Item;
-    type Error = A::Error;
+    type Output = A::Output;
 
-    fn poll(&mut self) -> Poll<A::Item, A::Error> {
-        match *self {
-            Either3::A(ref mut a) => a.poll(),
-            Either3::B(ref mut b) => b.poll(),
-            Either3::C(ref mut b) => b.poll(),
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<A::Output> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                Either3::A(x) => Pin::new_unchecked(x).poll(cx),
+                Either3::B(x) => Pin::new_unchecked(x).poll(cx),
+                Either3::C(x) => Pin::new_unchecked(x).poll(cx),
+            }
         }
     }
 }
@@ -267,18 +275,81 @@ where
     }
 }
 
-#[cfg(feature = "async-write")]
-impl<A, B, C> AsyncWrite for Either3<A, B, C>
-where
-    A: AsyncWrite,
-    B: AsyncWrite,
-    C: AsyncWrite,
-{
-    fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
-        match self {
-            Either3::A(a) => a.shutdown(),
-            Either3::B(b) => b.shutdown(),
-            Either3::C(c) => c.shutdown(),
-        }
+pub trait FutureExt: Future + Sized {
+    fn a<B>(self) -> Either<Self, B>
+    where
+        B: Future<Output = Self::Output>,
+    {
+        Either::A(self)
+    }
+
+    fn b<A>(self) -> Either<A, Self>
+    where
+        A: Future<Output = Self::Output>,
+    {
+        Either::B(self)
+    }
+
+    fn a3<B, C>(self) -> Either3<Self, B, C>
+    where
+        B: Future<Output = Self::Output>,
+        C: Future<Output = Self::Output>,
+    {
+        Either3::A(self)
+    }
+
+    fn b3<A, C>(self) -> Either3<A, Self, C>
+    where
+        A: Future<Output = Self::Output>,
+        C: Future<Output = Self::Output>,
+    {
+        Either3::B(self)
+    }
+
+    fn c3<A, B>(self) -> Either3<A, B, Self>
+    where
+        A: Future<Output = Self::Output>,
+        B: Future<Output = Self::Output>,
+    {
+        Either3::C(self)
+    }
+}
+
+impl<T: ?Sized> EitherExt for T {}
+
+pub trait EitherExt {
+    fn a<B>(self) -> Either<Self, B>
+    where
+        Self: Sized,
+    {
+        Either::A(self)
+    }
+
+    fn b<A>(self) -> Either<A, Self>
+    where
+        Self: Sized,
+    {
+        Either::B(self)
+    }
+
+    fn a3<B, C>(self) -> Either3<Self, B, C>
+    where
+        Self: Sized,
+    {
+        Either3::A(self)
+    }
+
+    fn b3<A, C>(self) -> Either3<A, Self, C>
+    where
+        Self: Sized,
+    {
+        Either3::B(self)
+    }
+
+    fn c3<A, B>(self) -> Either3<A, B, Self>
+    where
+        Self: Sized,
+    {
+        Either3::C(self)
     }
 }

@@ -1,19 +1,26 @@
-use std::fmt;
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-use futures::{Async, Poll, Stream};
+use futures::{Stream, TryStream, TryStreamExt};
 
 #[must_use = "streams do nothing unless polled"]
 pub struct ZipAll<T>
 where
-    T: Stream,
+    T: TryStream + Unpin,
+    T::Ok: Unpin,
+    T::Error: Unpin,
 {
-    elems: Vec<(T, Option<T::Item>)>,
+    elems: Vec<(T, Option<T::Ok>)>,
 }
 
 impl<T> fmt::Debug for ZipAll<T>
 where
-    T: Stream + fmt::Debug,
-    T::Item: fmt::Debug,
+    T: TryStream + Unpin + fmt::Debug,
+    T::Ok: Unpin + fmt::Debug,
+    T::Error: Unpin + fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("ZipAll")
@@ -24,31 +31,32 @@ where
 
 impl<T> Stream for ZipAll<T>
 where
-    T: Stream,
+    T: TryStream + Unpin,
+    T::Ok: Unpin,
+    T::Error: Unpin,
 {
-    type Item = Vec<T::Item>;
-    type Error = T::Error;
+    type Item = Result<Vec<T::Ok>, T::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut all_done = true;
-        for (s, result) in &mut self.elems.iter_mut() {
+        let this = Pin::into_inner(self);
+        for (s, result) in &mut this.elems.iter_mut() {
             match result {
-                None => match s.poll() {
-                    Ok(Async::Ready(v)) => {
-                        if let Some(v) = v {
-                            *result = Some(v);
-                        } else {
-                            self.elems.clear();
-                            return Ok(Async::Ready(None));
-                        }
+                None => match s.try_poll_next_unpin(cx) {
+                    Poll::Ready(Some(Ok(v))) => {
+                        *result = Some(v);
                     }
-                    Ok(Async::NotReady) => {
+                    Poll::Ready(Some(Err(e))) => {
+                        this.elems.clear();
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                    Poll::Ready(None) => {
+                        this.elems.clear();
+                        return Poll::Ready(None);
+                    }
+                    Poll::Pending => {
                         all_done = false;
                         continue;
-                    }
-                    Err(e) => {
-                        self.elems.clear();
-                        return Err(e);
                     }
                 },
                 Some(_) => continue,
@@ -56,22 +64,28 @@ where
         }
 
         if all_done {
-            let result = self
+            let result: Vec<_> = this
                 .elems
                 .iter_mut()
                 .map(|(_, o)| o.take().unwrap())
                 .collect();
-            Ok(Async::Ready(Some(result)))
+            if result.is_empty() {
+                Poll::Ready(None)
+            } else {
+                Poll::Ready(Some(Ok(result)))
+            }
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
 }
 
-pub fn zip_all<I>(elems: I) -> ZipAll<I::Item>
+pub fn zip_all<I, T>(elems: I) -> ZipAll<I::Item>
 where
-    I: IntoIterator,
-    I::Item: Stream,
+    I: IntoIterator<Item = T>,
+    T: TryStream + Unpin,
+    T::Ok: Unpin,
+    T::Error: Unpin,
 {
     let elems = elems.into_iter().map(|s| (s, None)).collect();
     ZipAll { elems }
@@ -80,37 +94,46 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ether::Either;
-    use futures::stream;
+    use futures::{executor::block_on_stream, stream, StreamExt};
+
+    #[derive(Debug, PartialEq)]
+    enum NumOrChar {
+        Num(u8),
+        Char(&'static char),
+    }
 
     #[test]
     fn zip_all_works() {
         // stream that yields: 1, 2, 3, 4
-        let a = Either::A(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
-            (1..5).map(Either::A).collect(),
-        ));
+        let a = stream::iter::<Vec<Result<NumOrChar, ()>>>(
+            (1..5).map(|v| Ok(NumOrChar::Num(v))).collect(),
+        )
+        .boxed();
         // stream that yields: 6, 7, 8, 9
-        let b = Either::A(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
-            (6..10).map(Either::A).collect(),
-        ));
+        let b = stream::iter::<Vec<Result<NumOrChar, ()>>>(
+            (6..10).map(|v| Ok(NumOrChar::Num(v))).collect(),
+        )
+        .boxed();
         // stream that yields: 'a', 'b', 'c', 'd'
-        let c = Either::B(stream::iter_ok::<Vec<Either<u8, &char>>, ()>(
-            ['a', 'b', 'c', 'd'].iter().map(Either::B).collect(),
-        ));
+        let c = stream::iter::<Vec<Result<NumOrChar, ()>>>(
+            ['a', 'b', 'c', 'd']
+                .iter()
+                .map(|v| Ok(NumOrChar::Char(v)))
+                .collect(),
+        )
+        .boxed();
         let streams = vec![a, b, c];
 
         let mut expects = vec![
-            vec![Either::A(1), Either::A(6), Either::B(&'a')],
-            vec![Either::A(2), Either::A(7), Either::B(&'b')],
-            vec![Either::A(3), Either::A(8), Either::B(&'c')],
-            vec![Either::A(4), Either::A(9), Either::B(&'d')],
+            vec![NumOrChar::Num(1), NumOrChar::Num(6), NumOrChar::Char(&'a')],
+            vec![NumOrChar::Num(2), NumOrChar::Num(7), NumOrChar::Char(&'b')],
+            vec![NumOrChar::Num(3), NumOrChar::Num(8), NumOrChar::Char(&'c')],
+            vec![NumOrChar::Num(4), NumOrChar::Num(9), NumOrChar::Char(&'d')],
         ];
 
-        for r in zip_all(streams).wait() {
-            if let Ok(r) = r {
-                let expect = expects.remove(0);
-                assert_eq!(r, expect);
-            }
+        for r in block_on_stream(zip_all(streams)) {
+            let expect = expects.remove(0);
+            assert_eq!(r, Ok(expect));
         }
 
         assert!(expects.is_empty());

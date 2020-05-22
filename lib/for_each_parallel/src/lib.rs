@@ -1,43 +1,45 @@
 #![feature(drain_filter)]
+use futures::{channel::oneshot, Future, FutureExt, Stream, StreamExt, TryFutureExt};
 
-use config::Limit;
-use futures::{sync::oneshot, Async, Future, IntoFuture, Poll, Stream};
-
-use std::{cmp, num::NonZeroUsize};
+use std::{
+    marker::Unpin,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// A stream combinator which executes a closure over each item on a
 /// stream in parallel. If the stream or any of the futures returned from
 /// the closure return an error, the first error will be the result of the
 /// future.
 #[must_use = "futures do nothing unless polled"]
-pub struct ForEachParallel<St, If, Fm, F, E>
+pub struct ForEachParallel<St, StI, Fm, F, E>
 where
-    St: Stream<Error = E>,
-    Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
-    F: Future<Item = (), Error = St::Error> + Send + 'static,
-    E: Send + 'static,
+    St: Stream<Item = Result<StI, E>> + Unpin,
+    Fm: FnMut(StI) -> F + Unpin,
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static + Unpin,
 {
-    cap: Option<NonZeroUsize>,
     f: Fm,
-    futures: Vec<oneshot::Receiver<St::Error>>,
-    limits: Vec<Limit>,
+    limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>>,
+    futures: Vec<oneshot::Receiver<E>>,
     stream: Option<St>,
-    error: Option<St::Error>,
+    error: Option<E>,
 }
 
-impl<St, If, Fm, F, E> ForEachParallel<St, If, Fm, F, E>
+impl<St, StI, Fm, F, E> ForEachParallel<St, StI, Fm, F, E>
 where
-    St: Stream<Error = E>,
-    Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
-    F: Future<Item = (), Error = St::Error> + Send + 'static,
-    E: Send + 'static,
+    St: Stream<Item = Result<StI, E>> + Unpin,
+    Fm: FnMut(StI) -> F + Unpin,
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static + Unpin,
 {
-    pub fn new(limits: Vec<Limit>, cap: Option<NonZeroUsize>, stream: St, f: Fm) -> Self {
+    pub fn new(
+        limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>>,
+        stream: St,
+        f: Fm,
+    ) -> Self {
         ForEachParallel {
-            cap,
-            limits,
+            limit_fn,
             f,
             futures: Vec::new(),
             stream: Some(stream),
@@ -46,59 +48,51 @@ where
     }
 }
 
-impl<St, If, Fm, F, E> Future for ForEachParallel<St, If, Fm, F, E>
+impl<St, StI, Fm, F, E> Future for ForEachParallel<St, StI, Fm, F, E>
 where
-    St: Stream<Error = E>,
-    Fm: FnMut(St::Item) -> If,
-    If: IntoFuture<Future = F, Item = F::Item, Error = St::Error>,
-    F: Future<Item = (), Error = St::Error> + Send + 'static,
-    E: Send + 'static,
+    St: Stream<Item = Result<StI, E>> + Unpin,
+    Fm: FnMut(StI) -> F + Unpin,
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static + Unpin,
 {
-    type Item = ();
-    type Error = F::Error;
+    type Output = Result<(), E>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut limit = self
-            .limits
-            .iter()
-            .fold(0, |prev, l| cmp::max(prev, l.get()));
-        if let Some(n) = self.cap {
-            limit = if limit == 0 {
-                n.get()
-            } else {
-                limit.min(n.get())
-            }
-        }
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = Pin::into_inner(self);
+        let limit = match &mut this.limit_fn {
+            Some(lf) => lf(),
+            None => 0,
+        };
         loop {
             let mut made_progress_this_iter = false;
             // Try and pull an item from the stream
-            if let Some(stream) = &mut self.stream {
-                if limit == 0 || limit > self.futures.len() {
-                    match stream.poll() {
-                        Ok(Async::Ready(Some(elem))) => {
+            if let Some(stream) = &mut this.stream {
+                if limit == 0 || limit > this.futures.len() {
+                    match stream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(elem))) => {
                             made_progress_this_iter = true;
                             let (tx, rx) = oneshot::channel();
-                            let next_future = (self.f)(elem).into_future().map_err(move |e| {
+                            let next_future = (this.f)(elem).map_err(move |e| {
                                 let _ = tx.send(e);
                             });
                             tokio::spawn(next_future);
-                            self.futures.push(rx);
+                            this.futures.push(rx);
                         }
-                        Ok(Async::Ready(None)) => self.stream = None,
-                        Ok(Async::NotReady) => (),
-                        Err(e) => {
-                            self.error = Some(e);
-                            self.futures.clear();
-                            self.stream = None;
+                        Poll::Ready(None) => this.stream = None,
+                        Poll::Pending => (),
+                        Poll::Ready(Some(Err(e))) => {
+                            this.error = Some(e);
+                            this.futures.clear();
+                            this.stream = None;
                         }
                     }
                 }
             }
 
-            let mut error = self.error.take();
-            self.futures.drain_filter(|fut| match fut.poll() {
-                Ok(Async::NotReady) => false,
-                Ok(Async::Ready(e)) => {
+            let mut error = this.error.take();
+            this.futures.drain_filter(|fut| match fut.poll_unpin(cx) {
+                Poll::Pending => false,
+                Poll::Ready(Ok(e)) => {
                     error = Some(e);
                     made_progress_this_iter = true;
                     true
@@ -108,21 +102,21 @@ where
                     true
                 }
             });
-            self.error = error;
-            if self.error.is_some() {
-                self.futures.clear();
-                self.stream = None;
+            this.error = error;
+            if this.error.is_some() {
+                this.futures.clear();
+                this.stream = None;
             }
 
-            if self.futures.is_empty() && self.stream.is_none() || self.error.is_some() {
-                if let Some(e) = self.error.take() {
-                    self.futures.clear();
-                    self.stream = None;
-                    return Err(e);
+            if this.futures.is_empty() && this.stream.is_none() || this.error.is_some() {
+                if let Some(e) = this.error.take() {
+                    this.futures.clear();
+                    this.stream = None;
+                    return Poll::Ready(Err(e));
                 }
-                return Ok(Async::Ready(()));
+                return Poll::Ready(Ok(()));
             } else if !made_progress_this_iter {
-                return Ok(Async::NotReady);
+                return Poll::Pending;
             }
         }
     }
@@ -132,7 +126,10 @@ where
 mod tests {
     use super::*;
     use futures::stream;
-    use tokio::{runtime::current_thread, timer::Delay};
+    use tokio::{
+        runtime::Runtime,
+        time::{delay_for, Duration},
+    };
 
     use std::{
         iter,
@@ -140,7 +137,7 @@ mod tests {
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
-        time::{Duration, Instant},
+        time::Instant,
     };
 
     #[test]
@@ -149,16 +146,20 @@ mod tests {
         // how many iterations to run
         let n = 500;
         let counter2 = counter.clone();
-        let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
+        let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(vec![], None, s, move |_| {
-            counter.fetch_add(1, Ordering::Relaxed);
-            Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
-        })
-        .then(|_| Ok(()));
+        let fep = ForEachParallel::new(None, s, move |_| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::Relaxed);
+                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Ok(())
+            }
+        });
         let start = Instant::now();
-        current_thread::run(fep);
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(fep).unwrap();
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);
@@ -175,21 +176,20 @@ mod tests {
         // how many iterations to run
         let n = 500;
         let counter2 = counter.clone();
-        let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
+        let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(
-            vec![Limit::Integer(100), Limit::Integer(250)],
-            None,
-            s,
-            move |_| {
+        let fep = ForEachParallel::new(None, s, move |_| {
+            let counter = counter.clone();
+            async move {
                 counter.fetch_add(1, Ordering::Relaxed);
-                Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
-            },
-        )
-        .then(|_| Ok(()));
+                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Ok(())
+            }
+        });
         let start = Instant::now();
-        current_thread::run(fep);
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(fep).unwrap();
         let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);
@@ -207,21 +207,20 @@ mod tests {
         // how many iterations to run
         let n = 150;
         let counter2 = counter.clone();
-        let s = stream::iter_ok::<_, ()>(iter::repeat(()).take(n));
+        let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(
-            vec![Limit::Integer(100), Limit::Integer(250)],
-            Some(NonZeroUsize::new(50).unwrap()),
-            s,
-            move |_| {
+        let fep = ForEachParallel::new(Some(Box::new(|| 50)), s, move |_| {
+            let counter = counter.clone();
+            async move {
                 counter.fetch_add(1, Ordering::Relaxed);
-                Delay::new(Instant::now() + Duration::from_millis(wait_time_ms)).then(|_| Ok(()))
-            },
-        )
-        .then(|_| Ok(()));
+                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Ok(())
+            }
+        });
         // let start = Instant::now();
-        current_thread::run(fep);
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(fep).unwrap();
         // let elapsed = start.elapsed();
         // check that the function ran n times
         assert_eq!(counter2.load(Ordering::Relaxed), n);

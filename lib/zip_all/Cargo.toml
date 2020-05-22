@@ -8,7 +8,4 @@ publish = false
 doctest = false
 
 [dependencies]
-futures = "0.1"
-
-[dev-dependencies]
-ether = { path = "../either" }
+futures = "0.3"

@@ -10,9 +10,9 @@ doctest = false
 path = "test_common.rs"
 
 [dependencies]
-futures = "0.1"
-hyper = "0.12"
-http = "0.1"
+futures = "0.3"
+hyper = "0.13"
+http = "0.2"
 parking_lot = "0.10"
-tokio = "0.1"
+tokio = { version = "0.2", features = ["full"] }
 url = "2"

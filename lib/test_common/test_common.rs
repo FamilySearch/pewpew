@@ -1,73 +1,21 @@
-use std::{
-    io,
-    str::FromStr,
-    sync::Arc,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{io, str::FromStr, sync::Arc, thread};
 
-use futures::{Async, Future};
+use futures::io::AllowStdIo;
 use http::{header, StatusCode};
-use hyper::{service::service_fn_ok, Body, Request, Response, Server};
+use hyper::{
+    server::conn::AddrStream,
+    service::{make_service_fn, service_fn},
+    Body, Error, Request, Response, Server,
+};
 use parking_lot::Mutex;
-use tokio::{self, io::AsyncWrite, timer::Delay};
+use tokio::{
+    self,
+    runtime::Runtime,
+    time::{delay_for, Duration},
+};
 use url::Url;
 
-// fn multipart(
-//     multipart: Multipart,
-// ) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
-//     multipart
-//         .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
-//         .for_each(|field| {
-//             if let Some(sha1_expect) = field.headers().get("sha1") {
-//                 let sha1_expect = if let Ok(s) = sha1_expect.to_str() {
-//                     s.to_string()
-//                 } else {
-//                     return Either::B(
-//                         Err(HttpResponse::with_body(
-//                             StatusCode::BAD_REQUEST,
-//                             "invalid sha1 header".into(),
-//                         ))
-//                         .into_future(),
-//                     );
-//                 };
-//                 let a = field
-//                     .map_err(|_| HttpResponse::new(StatusCode::BAD_REQUEST))
-//                     .fold(Sha1::new(), |mut sha_er, bytes| {
-//                         sha_er.input(&bytes[..]);
-//                         Ok::<_, HttpResponse>(sha_er)
-//                     })
-//                     .and_then(move |mut sha_er| {
-//                         let sha1 = sha_er.result_str();
-//                         if sha1.eq_ignore_ascii_case(&sha1_expect) {
-//                             Ok(())
-//                         } else {
-//                             Err(HttpResponse::with_body(
-//                                 StatusCode::BAD_REQUEST,
-//                                 format!(
-//                                     "sha1 doesn't match. saw: {}, expected: {}",
-//                                     sha1, sha1_expect
-//                                 )
-//                                 .into(),
-//                             ))
-//                         }
-//                     });
-//                 Either::A(a)
-//             } else {
-//                 Either::B(
-//                     Err(HttpResponse::with_body(
-//                         StatusCode::BAD_REQUEST,
-//                         "missing sha1 header".into(),
-//                     ))
-//                     .into_future(),
-//                 )
-//             }
-//         })
-//         .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
-//         .or_else(Ok)
-// }
-
-fn echo_route(req: Request<Body>) -> Response<Body> {
+async fn echo_route(req: Request<Body>) -> Response<Body> {
     let headers = req.headers();
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -106,10 +54,8 @@ fn echo_route(req: Request<Body>) -> Response<Body> {
     };
     let ms = wait.and_then(|c| FromStr::from_str(&*c).ok()).unwrap_or(0);
     let old_body = std::mem::replace(response.body_mut(), Body::empty());
-    let delayed_body = Delay::new(Instant::now() + Duration::from_millis(ms))
-        .then(move |_| Ok(old_body))
-        .flatten_stream();
-    let _ = std::mem::replace(response.body_mut(), Body::wrap_stream(delayed_body));
+    delay_for(Duration::from_millis(ms)).await;
+    let _ = std::mem::replace(response.body_mut(), old_body);
     response
 }
 
@@ -117,20 +63,30 @@ pub fn start_test_server(port: Option<u16>) -> (u16, thread::JoinHandle<()>) {
     let port = port.unwrap_or(0);
     let address = ([127, 0, 0, 1], port).into();
 
-    let server = Server::bind(&address).serve(|| {
-        service_fn_ok(|req| match req.uri().path() {
-            "/" => echo_route(req),
-            _ => Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::empty())
-                .unwrap(),
-        })
+    let make_svc = make_service_fn(|_: &AddrStream| async {
+        let service = service_fn(|req: Request<Body>| async {
+            let response = match req.uri().path() {
+                "/" => echo_route(req).await,
+                _ => {
+                    let not_found = Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body(Body::empty())
+                        .unwrap();
+                    not_found
+                }
+            };
+            Ok::<_, Error>(response)
+        });
+        Ok::<_, Error>(service)
     });
+
+    let server = Server::bind(&address).serve(make_svc);
 
     let port = server.local_addr().port();
 
     let handle = thread::spawn(move || {
-        tokio::run(server.then(|_| Ok(())));
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(server).unwrap();
     });
 
     (port, handle)
@@ -152,6 +108,10 @@ impl TestWriter {
     pub fn do_would_block_on_next_write(&self) {
         self.0.lock().0 = true;
     }
+
+    pub fn to_async(self) -> AllowStdIo<Self> {
+        AllowStdIo::new(self)
+    }
 }
 
 impl io::Write for TestWriter {
@@ -170,11 +130,5 @@ impl io::Write for TestWriter {
         } else {
             io::Write::flush(&mut inner.1)
         }
-    }
-}
-
-impl AsyncWrite for TestWriter {
-    fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
-        Ok(Async::Ready(()))
     }
 }

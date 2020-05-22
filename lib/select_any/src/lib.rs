@@ -1,5 +1,9 @@
-use futures::{Stream, task::{Context, Poll}};
-use std::pin::Pin;
+use futures::{Stream, StreamExt};
+
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 #[must_use = "streams do nothing unless polled"]
 pub struct SelectAny<T>
@@ -22,8 +26,8 @@ where
         for i in 0..self.elems.len() {
             let i = (i + last_yield_index) % self.elems.len();
             let mut this = self.as_mut();
-            let stream = Pin::new(&mut this.elems[i]);
-            match stream.poll_next(cx) {
+            let stream = &mut this.elems[i];
+            match stream.poll_next_unpin(cx) {
                 v @ Poll::Ready(Some(_)) => {
                     self.last_yield_index = i;
                     return v;
@@ -56,7 +60,7 @@ where
 mod tests {
     use super::*;
 
-    use futures::{stream, executor::block_on_stream, future::Either, task::Poll};
+    use futures::{executor::block_on_stream, future::Either, stream};
     use std::{
         rc::Rc,
         sync::atomic::{AtomicUsize, Ordering},
@@ -77,7 +81,7 @@ mod tests {
         }));
         let b = Either::Right(stream::poll_fn(move |_| {
             let n = baton_b.load(Ordering::SeqCst);
-            if let 1 | 3 | 5|  7 = n {
+            if let 1 | 3 | 5 | 7 = n {
                 baton_b.store(n + 1, Ordering::SeqCst);
                 Poll::Ready(Some(2))
             } else {
@@ -87,9 +91,7 @@ mod tests {
 
         let expects = vec![1, 2, 1, 2, 1, 2, 1, 2];
 
-        let values: Vec<_> = block_on_stream(select_any(vec![a, b]))
-            .take(8)
-            .collect();
+        let values: Vec<_> = block_on_stream(select_any(vec![a, b])).take(8).collect();
 
         assert_eq!(values, expects);
     }

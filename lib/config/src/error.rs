@@ -6,12 +6,29 @@ use yaml_rust::scanner::{Marker, ScanError};
 type PestError = pest::error::Error<crate::select_parser::Rule>;
 
 #[derive(Clone, Debug)]
-pub enum ExpressionError {
+pub enum ExecutingExpressionError {
     IndexingIntoJson(String, json::Value, Marker),
-    InvalidExpression(PestError, Marker),
     InvalidFunctionArguments(&'static str, Marker),
+}
+
+#[derive(Clone, Debug)]
+pub enum CreatingExpressionError {
+    Executing(ExecutingExpressionError),
+    InvalidExpression(PestError, Marker),
     UnknownFunction(String, Marker),
     UnknownProvider(String, Marker),
+}
+
+impl From<ExecutingExpressionError> for CreatingExpressionError {
+    fn from(e: ExecutingExpressionError) -> Self {
+        CreatingExpressionError::Executing(e)
+    }
+}
+
+impl From<ExecutingExpressionError> for Error {
+    fn from(e: ExecutingExpressionError) -> Self {
+        CreatingExpressionError::Executing(e).into()
+    }
 }
 
 // impl ExpressionError {
@@ -28,7 +45,7 @@ pub enum ExpressionError {
 
 #[derive(Clone, Debug)]
 pub enum Error {
-    ExpressionErr(ExpressionError),
+    ExpressionErr(CreatingExpressionError),
     InvalidDuration(String, Marker),
     InvalidLoadPattern(Marker),
     InvalidPeakLoad(String, Marker),
@@ -67,11 +84,9 @@ pub enum Error {
 // }
 // }
 
-use Error::*;
-use ExpressionError::*;
-
-impl fmt::Display for ExpressionError {
+impl fmt::Display for CreatingExpressionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use CreatingExpressionError::*;
         match self {
             InvalidExpression(e, m) => write!(
                 f,
@@ -80,20 +95,7 @@ impl fmt::Display for ExpressionError {
                 m.line(),
                 m.col()
             ),
-            IndexingIntoJson(p, _, m) => write!(
-                f,
-                "indexing into json. Path was `{}` at line {} column {}",
-                p,
-                m.line(),
-                m.col()
-            ),
-            InvalidFunctionArguments(func, m) => write!(
-                f,
-                "invalid arguments for function `{}` at line {} column {}",
-                func,
-                m.line(),
-                m.col()
-            ),
+            Executing(e) => e.fmt(f),
             UnknownFunction(func, m) => write!(
                 f,
                 "unknown function `{}` at line {} column {}",
@@ -112,8 +114,31 @@ impl fmt::Display for ExpressionError {
     }
 }
 
+impl fmt::Display for ExecutingExpressionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ExecutingExpressionError::*;
+        match self {
+            IndexingIntoJson(p, _, m) => write!(
+                f,
+                "indexing into json. Path was `{}` at line {} column {}",
+                p,
+                m.line(),
+                m.col()
+            ),
+            InvalidFunctionArguments(func, m) => write!(
+                f,
+                "invalid arguments for function `{}` at line {} column {}",
+                func,
+                m.line(),
+                m.col()
+            ),
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Error::*;
         match self {
             ExpressionErr(e) => e.fmt(f),
             InvalidDuration(d, m) => write!(f, "invalid duration `{}` at line {} column {}", d, m.line(), m.col()),
@@ -139,10 +164,10 @@ impl fmt::Display for Error {
     }
 }
 
-impl StdError for ExpressionError {
+impl StdError for CreatingExpressionError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            InvalidExpression(e, _) => Some(e),
+            CreatingExpressionError::InvalidExpression(e, _) => Some(e),
             _ => None,
         }
     }
@@ -151,21 +176,21 @@ impl StdError for ExpressionError {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            ExpressionErr(e) => Some(e),
-            InvalidYaml(e) => Some(e),
+            Error::ExpressionErr(e) => Some(e),
+            Error::InvalidYaml(e) => Some(e),
             _ => None,
         }
     }
 }
 
-impl From<ExpressionError> for Error {
-    fn from(ee: ExpressionError) -> Self {
-        ExpressionErr(ee)
+impl From<CreatingExpressionError> for Error {
+    fn from(ee: CreatingExpressionError) -> Self {
+        Error::ExpressionErr(ee)
     }
 }
 
 impl From<ScanError> for Error {
     fn from(se: ScanError) -> Self {
-        InvalidYaml(se)
+        Error::InvalidYaml(se)
     }
 }

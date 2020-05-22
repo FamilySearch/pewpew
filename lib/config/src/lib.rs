@@ -6,7 +6,7 @@ mod expression_functions;
 mod from_yaml;
 mod select_parser;
 
-pub use error::{Error, ExpressionError};
+pub use error::{CreatingExpressionError, Error, ExecutingExpressionError};
 use ether::{Either, Either3};
 pub use from_yaml::FromYaml;
 use from_yaml::{Nullable, ParseResult, TupleVec, YamlDecoder, YamlEvent};
@@ -2056,12 +2056,10 @@ impl PreVar {
             match v {
                 json::Value::String(s) => {
                     let t =
-                        Template::new(s, env_vars, &mut RequiredProviders::new(), false, marker)
-                            .map_err(Error::ExpressionErr)?;
+                        Template::new(s, env_vars, &mut RequiredProviders::new(), false, marker)?;
                     let s = match t.evaluate(Cow::Owned(json::Value::Null), None) {
                         Ok(s) => s,
-                        Err(ExpressionError::UnknownProvider(s, marker))
-                        | Err(ExpressionError::IndexingIntoJson(s, _, marker)) => {
+                        Err(ExecutingExpressionError::IndexingIntoJson(s, _, marker)) => {
                             return Err(Error::MissingEnvironmentVariable(s, marker))
                         }
                         Err(e) => return Err(e.into()),
@@ -2345,6 +2343,7 @@ pub struct Endpoint {
     pub url: Template,
 }
 
+#[derive(Clone)]
 pub struct MultipartPiece {
     pub name: String,
     pub headers: Vec<(String, Template)>,
@@ -2352,11 +2351,13 @@ pub struct MultipartPiece {
     pub template: Template,
 }
 
+#[derive(Clone)]
 pub struct MultipartBody {
     pub path: PathBuf,
     pub pieces: Vec<MultipartPiece>,
 }
 
+#[derive(Clone)]
 pub enum BodyTemplate {
     File(PathBuf, Template),
     Multipart(MultipartBody),
@@ -2810,7 +2811,7 @@ impl LoadTest {
         mut providers: I,
     ) -> Result<(), Error> {
         if let Some((p, marker)) = providers.find(|(p, _)| !self.providers.contains_key(*p)) {
-            let e = ExpressionError::UnknownProvider(p.clone(), *marker);
+            let e = CreatingExpressionError::UnknownProvider(p.clone(), *marker);
             Err(e.into())
         } else {
             Ok(())

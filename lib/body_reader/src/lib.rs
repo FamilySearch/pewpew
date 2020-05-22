@@ -1,5 +1,5 @@
 use brotli_decompressor as brotli;
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use libflate::non_blocking::{deflate, gzip};
 
 use std::{
@@ -178,7 +178,7 @@ mod tests {
             let mut reader = BodyReader::new(compression);
             let mut decoded_bytes = BytesMut::new();
             for n in (0..input.len()).step_by(4) {
-                let slice = input.slice(n, cmp::min(n + 4, input.len()));
+                let slice = input.slice(n..cmp::min(n + 4, input.len()));
                 reader.decode(slice, &mut decoded_bytes).unwrap();
             }
             let decoded_bytes = decoded_bytes.freeze();

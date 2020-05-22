@@ -9,9 +9,9 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-bytes = "0.4"
+bytes = "0.5"
 brotli-decompressor = "2"
-libflate = "0.1"
+libflate = "1"
 
 [dev-dependencies]
 brotli = "3"

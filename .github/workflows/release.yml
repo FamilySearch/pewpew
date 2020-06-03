@@ -9,10 +9,22 @@ jobs:
     name: Create release
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
+
       # https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/44937/highlight/true#M5978
       - name: Get the version
         id: get_version
-        run: echo ::set-env name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: |
+          version=${GITHUB_REF/refs\/tags\//}
+          echo ::set-env name=VERSION::$version
+          # check that the version in Cargo.toml is equal to the tag
+          grep -q 'version = "$version"' Cargo.toml
+          # check if this is a "preview" release and should be marked as "prerelease" in GitHub releases
+          if [[ $version == *"preview"* ]]; then
+            echo ::set-env name=PRERELEASE::true
+          else
+            echo ::set-env name=PRERELEASE::false
+          fi
         shell: bash
 
       - name: Create GitHub release
@@ -23,6 +35,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           release_name: ${{ env.VERSION }}
+          prerelease: ${{ env.PRERELEASE }}
 
       - name: Save artifacts
         run: |

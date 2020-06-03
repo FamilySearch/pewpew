@@ -92,6 +92,7 @@ pub struct ModInterval {
 }
 
 impl ModInterval {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         ModInterval {
             segments: VecDeque::new(),

@@ -28,15 +28,15 @@ use std::{
     sync::Arc,
 };
 
+type ProviderStreamStream<Ar> = Box<
+    dyn Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>>
+        + Send
+        + Unpin
+        + 'static,
+>;
+
 pub trait ProviderStream<Ar: Clone + Send + Unpin + 'static> {
-    fn into_stream(
-        &self,
-    ) -> Box<
-        dyn Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>>
-            + Send
-            + Unpin
-            + 'static,
-    >;
+    fn into_stream(&self) -> ProviderStreamStream<Ar>;
 }
 
 #[derive(Clone, Debug, Default)]
@@ -361,7 +361,7 @@ fn index_json2<'a>(
     marker: Marker,
 ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
     for index in indexes.iter() {
-        let r = index.evaluate(Cow::Borrowed(&*json), for_each.clone())?;
+        let r = index.evaluate(Cow::Borrowed(&*json), for_each)?;
         let o = match (json, r) {
             (Cow::Borrowed(json::Value::Object(m)), Either::A(ref s)) => {
                 m.get(s).map(Cow::Borrowed)
@@ -418,7 +418,7 @@ impl Path {
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         let (v, rest) = match (&self.start, for_each) {
             (PathStart::FunctionCall(f), _) => (
-                f.evaluate(d, no_recoverable_error, for_each.clone())?,
+                f.evaluate(d, no_recoverable_error, for_each)?,
                 self.rest.as_slice(),
             ),
             (PathStart::Ident(s), Some(v)) if s == "for_each" => {
@@ -519,9 +519,7 @@ impl Path {
                 })
                 .a3(),
             PathStart::Ident(s) => {
-                let s = Arc::new(s);
-                let s2 = s.clone();
-                let provider = match providers.get(&*s2) {
+                let provider = match providers.get(&s) {
                     Some(p) => p,
                     None => unreachable!("provider should be available"),
                 };
@@ -898,10 +896,10 @@ impl Expression {
         let mut v = if let Some((op, rhs)) = &self.op {
             let v = match &self.lhs {
                 ExpressionLhs::Expression(e) => {
-                    e.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                    e.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                 }
                 ExpressionLhs::Value(v) => {
-                    v.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                    v.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                 }
             };
             let rhs = rhs.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each);
@@ -1062,7 +1060,7 @@ impl ParsedSelect {
                 let v = v
                     .iter()
                     .map(|p| {
-                        p.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())
+                        p.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)
                             .map(Cow::into_owned)
                     })
                     .collect::<Result<_, _>>()?;
@@ -1073,7 +1071,7 @@ impl ParsedSelect {
                     .iter()
                     .map(|(k, v)| {
                         let v = v
-                            .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                            .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                             .into_owned();
                         Ok::<_, ExecutingExpressionError>((k.clone(), v))
                     })
@@ -1226,11 +1224,8 @@ impl Template {
             .iter()
             .map(|piece| match piece {
                 TemplatePiece::Expression(voe) => {
-                    let v = voe.evaluate(
-                        Cow::Borrowed(&*d),
-                        self.no_recoverable_error,
-                        for_each.clone(),
-                    )?;
+                    let v =
+                        voe.evaluate(Cow::Borrowed(&*d), self.no_recoverable_error, for_each)?;
                     Ok(json_value_to_string(v).into_owned())
                 }
                 TemplatePiece::NotExpression(s) => Ok(s.clone()),

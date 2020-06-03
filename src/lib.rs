@@ -465,6 +465,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_config_watcher(
     mut file: File,
     env_vars: BTreeMap<String, String>,
@@ -805,7 +806,7 @@ fn create_load_test_future(
         config.loggers,
         run_config.results_dir.as_ref(),
         &test_ended_tx,
-        stdout.clone(),
+        stdout,
         stderr,
     )?;
 

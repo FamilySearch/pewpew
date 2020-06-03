@@ -484,9 +484,9 @@ impl If {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
-        let first =
-            self.first
-                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+        let first = self
+            .first
+            .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
         if bool_value(&*first) {
             Ok(self.second.evaluate(d, no_recoverable_error, for_each)?)
         } else {
@@ -550,13 +550,13 @@ impl If {
                     }
                     Poll::Ready(Some(Err(e))) => {
                         done = true;
-                        return Poll::Ready(Some(Err(e)));
+                        Poll::Ready(Some(Err(e)))
                     }
                     Poll::Ready(None) => {
                         done = true;
-                        return Poll::Ready(None);
+                        Poll::Ready(None)
                     }
-                    Poll::Pending => return Poll::Pending,
+                    Poll::Pending => Poll::Pending,
                 }
             } else {
                 Poll::Ready(None)
@@ -950,7 +950,7 @@ impl MinMax {
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         let mut left: Option<(f64, json::Value)> = None;
         for fa in &self.args {
-            let right = fa.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+            let right = fa.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
             let r = f64_value(&*right);
             if let Some((l, _)) = &left {
                 match (l.partial_cmp(&r), self.min, l.is_finite()) {
@@ -1261,7 +1261,7 @@ impl Range {
             Range::Args(args) => {
                 let (first, second, marker) = &**args;
                 let first = first
-                    .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?
+                    .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                     .as_u64()
                     .ok_or_else(|| {
                         ExecutingExpressionError::InvalidFunctionArguments("range", *marker)
@@ -1470,11 +1470,11 @@ impl Replace {
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         let needle_value =
             self.needle
-                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
         let needle = json_value_to_string(needle_value).into_owned();
         let replacer_value =
             self.replacer
-                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each.clone())?;
+                .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
         let replacer = json_value_to_string(replacer_value).into_owned();
         let mut haystack = self.haystack.evaluate(d, no_recoverable_error, for_each)?;
         Replace::replace(haystack.to_mut(), &*needle, &*replacer);

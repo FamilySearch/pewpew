@@ -333,7 +333,7 @@ impl RequestMaker {
                         stats_tx,
                         tags,
                     };
-                    rh.handle(response, auto_returns.clone())
+                    rh.handle(response, auto_returns)
                         .map_err(TestError::from)
                 })
                 .or_else(move |r| {

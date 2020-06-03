@@ -65,13 +65,10 @@ pub fn start_test_server(
         let service = service_fn(|req: Request<Body>| async {
             let response = match req.uri().path() {
                 "/" => echo_route(req).await,
-                _ => {
-                    let not_found = Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Body::empty())
-                        .unwrap();
-                    not_found
-                }
+                _ => Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap(),
             };
             Ok::<_, Error>(response)
         });

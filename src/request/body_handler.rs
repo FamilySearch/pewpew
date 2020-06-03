@@ -4,7 +4,7 @@ use crate::stats;
 use config::{EndpointProvidesSendOptions, Template};
 use ether::EitherExt;
 use futures::{
-    future::{join_all, select_all, try_join_all},
+    future::{select_all, try_join_all},
     task::noop_waker,
     FutureExt, TryFutureExt,
 };
@@ -32,11 +32,13 @@ pub(super) struct BodyHandler {
 }
 
 impl BodyHandler {
-    pub(super) async fn handle<F>(
+    // this function is not async because of a compiler bug which raises a nonsensical error
+    // https://github.com/rust-lang/rust/issues/71723
+    pub(super) fn handle<F>(
         self,
         result: Result<Option<json::Value>, RecoverableError>,
         auto_returns: Option<F>,
-    ) -> Result<(), RecoverableError>
+    ) -> impl Future<Output = Result<(), RecoverableError>>
     where
         F: Future<Output = ()> + Send,
     {
@@ -117,10 +119,10 @@ impl BodyHandler {
             );
             try_join_all(futures).map_ok(|_| ())
         };
-        if let Some(f) = auto_returns {
-            f.await;
-        }
         let mut futures = Vec::new();
+        if let Some(f) = auto_returns {
+            futures.push(f.map(|_| Ok(())).a().b3());
+        }
         if let Some(e) = error_result {
             let kind = stats::StatKind::RecoverableError(e);
             futures.push(send_response_stat(kind, None).a3());
@@ -207,14 +209,11 @@ impl BodyHandler {
                     }
                     Ok(())
                 });
-                futures.push(f.b3());
+                futures.push(f.b().b3());
             }
         }
         futures.push(send_response_stat(stats::StatKind::Response(self.status), Some(rtt)).a3());
-        for r in join_all(futures).await {
-            r?;
-        }
-        Ok(())
+        try_join_all(futures).map_ok(|_| ())
     }
 }
 

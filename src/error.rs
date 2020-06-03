@@ -49,8 +49,7 @@ pub enum TestError {
     Recoverable(RecoverableError),
     RequestBuilderErr(Arc<HttpError>),
     SslError(Arc<native_tls::Error>),
-    TimerError(Arc<tokio::time::Error>),
-    WritingToLogger(String, Arc<std::io::Error>),
+    WritingToFile(String, Arc<std::io::Error>),
 }
 
 impl From<RecoverableError> for TestError {
@@ -76,8 +75,7 @@ impl fmt::Display for TestError {
             Recoverable(r) => write!(f, "recoverable error: {}", r),
             RequestBuilderErr(e) => write!(f, "error creating request: {}", e),
             SslError(e) => write!(f, "error creating ssl connector: {}", e),
-            TimerError(e) => write!(f, "error with timer: {}", e),
-            WritingToLogger(l, e) => write!(f, "error writing to logger `{}`: {}", l, e),
+            WritingToFile(l, e) => write!(f, "error writing to file `{}`: {}", l, e),
         }
     }
 }
@@ -94,15 +92,9 @@ impl StdError for TestError {
             Recoverable(ConnectionErr(_, e)) => Some(&**e),
             RequestBuilderErr(e) => Some(&**e),
             SslError(e) => Some(&**e),
-            WritingToLogger(_, e) => Some(&**e),
+            WritingToFile(_, e) => Some(&**e),
             _ => None,
         }
-    }
-}
-
-impl From<tokio::time::Error> for TestError {
-    fn from(te: tokio::time::Error) -> Self {
-        TimerError(te.into())
     }
 }
 

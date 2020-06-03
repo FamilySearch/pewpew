@@ -17,12 +17,17 @@ jobs:
         run: |
           version=${GITHUB_REF/refs\/tags\//}
           echo ::set-env name=VERSION::$version
-          # check that the version in Cargo.toml is equal to the tag
-          grep -q 'version = "$version"' Cargo.toml
+          # remove the leading "v" for subsequent usage
+          version=${version/v/}
           # check if this is a "preview" release and should be marked as "prerelease" in GitHub releases
           if [[ $version == *"preview"* ]]; then
+            # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
+            cp Cargo.toml Cargo2.toml
+            sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
             echo ::set-env name=PRERELEASE::true
           else
+            # check that the version in Cargo.toml is equal to the tag
+            grep -q "version = \"${version}\"" Cargo.toml || echo "$(tput setaf 1)Tag version did NOT match version in Cargo.toml" && false
             echo ::set-env name=PRERELEASE::false
           fi
         shell: bash

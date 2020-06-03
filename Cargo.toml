@@ -32,6 +32,7 @@ chrono = "0.4"
 ether = { path = "./lib/either" }
 for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.3"
+futures-timer = "3"
 hdrhistogram = "7"
 http = "0.2"
 hyper = "0.13"
@@ -54,6 +55,7 @@ yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
 
 [dev-dependencies]
+futures-timer = "3"
 maplit = "1"
 tempfile = "3"
 

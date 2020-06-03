@@ -358,8 +358,13 @@ impl Stats {
         format: RunOutputFormat,
         console: FCSender<MsgType>,
         providers: Vec<ChannelStatsReader<json::Value>>,
+        test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
     ) -> Result<Self, io::Error> {
-        let file = blocking_writer(File::create(file_name)?);
+        let file = blocking_writer(
+            File::create(file_name)?,
+            test_killer,
+            file_name.to_string_lossy().to_string(),
+        );
         Ok(Stats {
             bucket_size,
             current: TimeBucket::new(rounded_epoch(bucket_size)),
@@ -671,7 +676,8 @@ pub fn create_try_run_stats_channel(
 }
 
 pub fn create_stats_channel(
-    mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
+    test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
+    // mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
     mut console: FCSender<MsgType>,
@@ -698,7 +704,8 @@ pub fn create_stats_channel(
         .unwrap_or_default();
     let file_path = run_config.stats_file.clone();
     let output_format = run_config.output_format;
-    let providers: Vec<_> = if config.log_provider_stats.is_some() {
+    let log_provider_stats = config.log_provider_stats.is_some();
+    let providers: Vec<_> = if log_provider_stats {
         providers
             .iter()
             .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
@@ -706,58 +713,85 @@ pub fn create_stats_channel(
     } else {
         Vec::new()
     };
+
+    let mut test_complete = test_killer.subscribe();
+
     let mut stats = Stats::new(
         &file_path,
         bucket_size_secs,
         output_format,
         console.clone(),
         providers,
+        test_killer,
     )
     .map_err(|e| {
         TestError::CannotCreateStatsFile(file_path.to_string_lossy().into_owned(), e.into())
     })?;
 
-    let mut test_start_time = None;
+    let mut test_start_time: Option<Instant> = None;
 
     let receiver = async move {
         let mut print_stats_interval = time::interval_at(now + next_bucket, bucket_size);
         // create a stream which combines getting incoming messages, printing stats on an interval
         // and checking if the test has ended
+        enum StreamItem {
+            TestComplete,
+            NewBucket,
+            StatsMessage(StatsMessage),
+            UpdateProviders(Vec<ChannelStatsReader<json::Value>>),
+        }
+
         let mut stream = stream::poll_fn(move |cx| {
             match test_complete.poll_next_unpin(cx) {
                 // test is not complete
-                Poll::Ready(Some(Ok(Ok(TestEndReason::TestUpdate)))) | Poll::Pending => {
-                    match print_stats_interval.poll_next_unpin(cx) {
-                        Poll::Ready(Some(_)) => Poll::Ready(Some(Either::A(false))),
-                        _ => match rx.poll_next_unpin(cx) {
-                            Poll::Ready(Some(s)) => Poll::Ready(Some(Either::B(s))),
-                            Poll::Ready(None) => Poll::Ready(None),
-                            Poll::Pending => Poll::Pending,
-                        },
+                Poll::Pending => match print_stats_interval.poll_next_unpin(cx) {
+                    Poll::Ready(Some(_)) => Poll::Ready(Some(StreamItem::NewBucket)),
+                    _ => match rx.poll_next_unpin(cx) {
+                        Poll::Ready(Some(s)) => Poll::Ready(Some(StreamItem::StatsMessage(s))),
+                        Poll::Ready(None) => Poll::Ready(None),
+                        Poll::Pending => Poll::Pending,
+                    },
+                },
+                // test config is updated and there's a new set of providers
+                Poll::Ready(Some(Ok(Ok(TestEndReason::ConfigUpdate(providers))))) => {
+                    if log_provider_stats {
+                        let providers = providers
+                            .iter()
+                            .map(|(name, kind)| {
+                                channel::ChannelStatsReader::new(name.clone(), &kind.rx)
+                            })
+                            .collect();
+                        Poll::Ready(Some(StreamItem::UpdateProviders(providers)))
+                    } else {
+                        Poll::Pending
                     }
                 }
                 // test is complete
-                Poll::Ready(_) => Poll::Ready(Some(Either::A(true))),
+                Poll::Ready(_) => Poll::Ready(Some(StreamItem::TestComplete)),
             }
         });
 
         while let Some(datum) = stream.next().await {
             match datum {
-                Either::A(test_complete) => {
-                    stats.close_out_bucket(test_complete).await;
-                    if test_complete {
-                        break;
-                    }
+                StreamItem::TestComplete => {
+                    stats.close_out_bucket(true).await;
+                    break;
                 }
-                Either::B(StatsMessage::Start(d)) => {
+                StreamItem::NewBucket => {
+                    stats.close_out_bucket(false).await;
+                }
+                StreamItem::UpdateProviders(providers) => {
+                    stats.providers = providers;
+                }
+                StreamItem::StatsMessage(StatsMessage::Start(d)) => {
                     let mut futures = Vec::new();
-                    let duration = d.as_secs();
                     let (start_time, msg) = if let Some(start_time) = test_start_time {
-                        let msg = if duration == stats.duration {
+                        let duration = start_time.elapsed() + d;
+                        let msg = if (duration.as_secs_f64() - stats.duration as f64).abs() < 1.0 {
                             String::new()
                         } else {
-                            let test_end_message =
-                                duration_till_end_to_pretty_string(start_time + d - Instant::now());
+                            stats.duration = duration.as_secs();
+                            let test_end_message = duration_till_end_to_pretty_string(d);
                             match output_format {
                                 RunOutputFormat::Human => {
                                     format!("Test duration updated. {}\n", test_end_message)
@@ -770,7 +804,7 @@ pub fn create_stats_channel(
                         };
                         (start_time, msg)
                     } else {
-                        stats.duration = duration;
+                        stats.duration = d.as_secs();
                         let now = Instant::now();
                         let test_end_message = duration_till_end_to_pretty_string(d);
                         let bin_version = clap::crate_version!().into();
@@ -799,7 +833,7 @@ pub fn create_stats_channel(
                     futures.push(Either::B(right));
                     join_all(futures).await;
                 }
-                Either::B(StatsMessage::ResponseStat(rs)) => stats.append(rs).await,
+                StreamItem::StatsMessage(StatsMessage::ResponseStat(rs)) => stats.append(rs).await,
             }
         }
     };

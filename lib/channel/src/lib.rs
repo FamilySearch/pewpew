@@ -1,4 +1,3 @@
-#![feature(no_more_cas)]
 use config::Limit;
 use crossbeam_queue::SegQueue;
 use futures::{sink::Sink, stream, Stream};
@@ -405,17 +404,15 @@ impl<T: Send + 'static> OnDemandReceiver<T> {
                 let receivers_waiting = !self.demander_parked_receivers.0.is_empty();
                 let signal_state = self
                     .signal
-                    .fetch_update(
-                        |prev| match (receivers_waiting, prev) {
+                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
+                        match (receivers_waiting, prev) {
                             (true, SIGNAL_INIT) | (_, SIGNAL_WILL_TRIGGER) => {
                                 Some(SIGNAL_WAITING_FOR_CALLBACK)
                             }
                             (_, SIGNAL_WAITING_FOR_RECEIVER) => Some(SIGNAL_WILL_TRIGGER),
                             _ => None,
-                        },
-                        Ordering::Acquire,
-                        Ordering::AcqRel,
-                    )
+                        }
+                    })
                     .unwrap_or_else(|e| e);
 
                 if (receivers_waiting && signal_state == SIGNAL_INIT)

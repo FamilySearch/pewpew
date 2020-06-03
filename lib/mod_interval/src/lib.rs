@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg_attr(test, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 #[derive(Clone)]
 // for this line
 // x = number of seconds elapsed
@@ -81,9 +81,10 @@ struct ModIntervalStreamState {
     segment: LinearSegment,
     start_time: Instant,
     x_offset: Duration,
+    next_start: Instant,
 }
 
-#[cfg_attr(test, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 #[derive(Clone)]
 pub struct ModInterval {
     segments: VecDeque<LinearSegment>,
@@ -173,7 +174,7 @@ impl ModInterval {
         stream::unfold((), move |_| {
             let now = time::now();
             if state.is_none() {
-                // first time through
+                // first time through, setup the state
                 let segment = match self.segments.pop_front() {
                     Some(s) => s,
                     None => {
@@ -185,13 +186,14 @@ impl ModInterval {
                     segment,
                     start_time: now - start_at.unwrap_or_default(),
                     x_offset: Default::default(),
+                    next_start: now,
                 };
                 state = Some(s);
             }
             let state = state.as_mut().unwrap();
             let mut time = now - state.start_time - state.x_offset;
 
-            // if we've reached the end of the current segment
+            // when we've reached the end of the current segment, get the next one
             if time >= state.segment.duration {
                 let segment = match self.segments.pop_front() {
                     Some(s) => s,
@@ -221,7 +223,16 @@ impl ModInterval {
                 Duration::from_secs_f64(target_hits_per_second.recip())
             };
 
-            let result = now + y;
+            let next_start = state.next_start;
+            let result = next_start + y;
+            state.next_start = result;
+
+            // adjust the wait time to account for extra latency between polls, sleeps, etc
+            let y = match y.checked_sub(now - next_start) {
+                Some(y) => y,
+                // we're past the time we should have fired, so fire now
+                None => return future::ready(Some((result, ()))).a(),
+            };
 
             // if the sleep extends past the entire ModInterval's end time then end now
             if result > state.end_time {

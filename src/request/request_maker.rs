@@ -10,6 +10,7 @@ use futures::{
     future::{self, join_all},
     FutureExt, TryFutureExt,
 };
+use futures_timer::Delay;
 use hyper::{
     client::HttpConnector,
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST},
@@ -17,7 +18,6 @@ use hyper::{
 };
 use hyper_tls::HttpsConnector;
 use serde_json as json;
-use tokio::time as TokioTime;
 
 use super::{
     body_template_as_hyper_body, response_handler::ResponseHandler, AutoReturn, BlockSender,
@@ -30,6 +30,7 @@ use std::{
     error::Error as StdError,
     future::Future,
     sync::{atomic::Ordering, Arc},
+    task::Poll,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -80,10 +81,12 @@ impl ProviderDelays {
 }
 
 impl RequestMaker {
+    // this function is not async because of a compiler bug which raises a nonsensical error
+    // https://github.com/rust-lang/rust/issues/71723
     pub(super) fn send_request(
         &self,
         values: Vec<StreamItem>,
-    ) -> impl Future<Output = Result<(), TestError>> + Send {
+    ) -> impl Future<Output = Result<(), TestError>> {
         let mut template_values = TemplateValues::new();
         let mut auto_returns = Vec::new();
         let mut target_instant = None;
@@ -184,10 +187,11 @@ impl RequestMaker {
         let method = self.method.clone();
         let timeout = self.timeout;
         let tags = self.tags.clone();
+        let auto_returns2 = auto_returns.clone();
 
-        body.and_then(|(content_length, body)| {
+        body.and_then(move |(content_length, body)| {
             let request = request.body(body);
-            let request = match request {
+            let mut request = match request {
                 Ok(r) => r,
                 Err(e) => {
                     let e = TestError::RequestBuilderErr(e.into());
@@ -280,7 +284,7 @@ impl RequestMaker {
             template_values.insert("request".into(), request_provider);
             request.headers_mut().extend(headers);
 
-            let response_future = client.request(request).map_err(|e| {
+            let mut response_future = client.request(request).map_err(|e| {
                 let err: Arc<dyn StdError + Send + Sync> = if let Some(io_error_maybe) = e.source()
                 {
                     if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
@@ -298,16 +302,27 @@ impl RequestMaker {
                 };
                 TestError::from(RecoverableError::ConnectionErr(SystemTime::now(), err))
             });
-            let now = Instant::now();
             let outgoing2 = outgoing.clone();
+            let mut template_values2 = template_values.clone();
+            let stats_tx2 = stats_tx.clone();
+            let tags2 = tags.clone();
+            let now = Instant::now();
 
-            TokioTime::timeout(timeout, response_future)
-                .map_err(move |_| TestError::from(RecoverableError::Timeout(SystemTime::now())))
-                // .try_flatten()
-                .and_then(|r| {
+            let mut timeout = Delay::new(timeout);
+                future::poll_fn(move |cx| {
+                    match timeout.poll_unpin(cx) {
+                        Poll::Ready(_) => Poll::Ready(Err(TestError::from(RecoverableError::Timeout(SystemTime::now())))),
+                        Poll::Pending => {
+                            match response_future.poll_unpin(cx) {
+                                Poll::Ready(v) => Poll::Ready(Ok(v)),
+                                Poll::Pending => Poll::Pending,
+                            }
+                        }
+                    }
+                }).and_then(|r| {
                     future::ready(r)
                 })
-                .and_then(|response| {
+                .and_then(move |response| {
                     let rh = ResponseHandler {
                         provider_delays,
                         template_values,
@@ -321,29 +336,29 @@ impl RequestMaker {
                     rh.handle(response, auto_returns.clone())
                         .map_err(TestError::from)
                 })
-                .or_else(|r| {
+                .or_else(move |r| {
                     let r = match r {
                         TestError::Recoverable(r) => r,
                         _ => return future::err(r).a(),
                     };
-                    let tags = tags
+                    let tags = tags2
                         .iter()
                         .filter_map(|(k, v)| {
-                            v.evaluate(Cow::Borrowed(template_values.as_json()), None)
+                            v.evaluate(Cow::Borrowed(template_values2.as_json()), None)
                                 .ok()
                                 .map(move |v| (k.clone(), v))
                         })
                         .collect();
                     let tags = Arc::new(tags);
                     let mut futures = Vec::new();
-                    if outgoing.iter().any(|o| o.tx.is_logger()) {
+                    if outgoing2.iter().any(|o| o.tx.is_logger()) {
                         let error = json::json!({
                             "msg": format!("{}", r),
                             "code": r.code(),
                         });
-                        template_values.insert("error".into(), error);
-                        let template_values: Arc<_> = template_values.0.into();
-                        for o in outgoing.iter() {
+                        template_values2.insert("error".into(), error);
+                        let template_values: Arc<_> = template_values2.0.into();
+                        for o in outgoing2.iter() {
                             let select = o.select.clone();
                             if let (true, Ok(iter)) =
                                 (o.tx.is_logger(), select.iter(template_values.clone()))
@@ -368,7 +383,7 @@ impl RequestMaker {
                             cb(false);
                         }
                     }
-                    let _ = stats_tx.unbounded_send(
+                    let _ = stats_tx2.unbounded_send(
                         stats::ResponseStat {
                             kind: stats::StatKind::RecoverableError(r),
                             rtt,
@@ -381,8 +396,8 @@ impl RequestMaker {
                         .map(|_| Ok(()))
                         .b()
                 }).b()
-        }).then(|_| {
-            if let Some(f) = auto_returns {
+        }).then(move |_| {
+            if let Some(f) = auto_returns2 {
                 f.map(|_| Ok(())).a()
             } else {
                 future::ready(Ok(())).b()
@@ -395,42 +410,46 @@ impl RequestMaker {
 mod tests {
     use super::*;
     use crate::create_http_client;
-    use futures::{channel::mpsc as futures_channel, executor::block_on};
+    use futures::channel::mpsc as futures_channel;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn sends_request() {
-        let (port, _) = test_common::start_test_server(None);
-        let url = Template::simple(&format!("https://127.0.0.1:{}", port));
-        let method = Method::GET;
-        let headers = Vec::new();
-        let body = BodyTemplate::None;
-        let rr_providers = 0;
-        let precheck_rr_providers = 0;
-        let provider_limits = Default::default();
-        let client = create_http_client(Duration::from_secs(60)).unwrap().into();
-        let (stats_tx, _) = futures_channel::unbounded();
-        let no_auto_returns = true;
-        let outgoing = Vec::new().into();
-        let timeout = Duration::from_secs(120);
-        let tags = Arc::new(BTreeMap::new());
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let (port, ..) = test_common::start_test_server(None);
+            let url = Template::simple(&format!("https://127.0.0.1:{}", port));
+            let method = Method::GET;
+            let headers = Vec::new();
+            let body = BodyTemplate::None;
+            let rr_providers = 0;
+            let precheck_rr_providers = 0;
+            let provider_limits = Default::default();
+            let client = create_http_client(Duration::from_secs(60)).unwrap().into();
+            let (stats_tx, _) = futures_channel::unbounded();
+            let no_auto_returns = true;
+            let outgoing = Vec::new().into();
+            let timeout = Duration::from_secs(120);
+            let tags = Arc::new(BTreeMap::new());
 
-        let rm = RequestMaker {
-            url,
-            method,
-            headers,
-            body,
-            rr_providers,
-            client,
-            stats_tx,
-            no_auto_returns,
-            outgoing,
-            precheck_rr_providers,
-            provider_limits,
-            tags,
-            timeout,
-        };
+            let rm = RequestMaker {
+                url,
+                method,
+                headers,
+                body,
+                rr_providers,
+                client,
+                stats_tx,
+                no_auto_returns,
+                outgoing,
+                precheck_rr_providers,
+                provider_limits,
+                tags,
+                timeout,
+            };
 
-        let r = block_on(rm.send_request(Vec::new()));
-        assert!(r.is_ok());
+            let r = rm.send_request(Vec::new()).await;
+            assert!(r.is_ok());
+        });
     }
 }

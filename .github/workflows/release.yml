@@ -21,9 +21,6 @@ jobs:
           version=${version/v/}
           # check if this is a "preview" release and should be marked as "prerelease" in GitHub releases
           if [[ $version == *"preview"* ]]; then
-            # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
-            cp Cargo.toml Cargo2.toml
-            sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
             echo ::set-env name=PRERELEASE::true
           else
             # check that the version in Cargo.toml is equal to the tag
@@ -78,6 +75,16 @@ jobs:
           echo "::set-env name=RELEASE_UPLOAD_URL::$release_upload_url"
           release_version="$(cat artifacts/release-version)"
           echo "::set-env name=VERSION::$release_version"
+
+      - name: Set Cargo.toml version
+        id: set_cargo_version
+        shell: bash
+        run: |
+          # remove the leading "v" for subsequent usage
+          version=${VERSION/v/}
+          # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
+          cp Cargo.toml Cargo2.toml
+          sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
 
       - name: Build for non-Linux
         uses: actions-rs/toolchain@v1

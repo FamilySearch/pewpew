@@ -1,6 +1,7 @@
-use std::{io, str::FromStr, sync::Arc, thread};
+use std::{future::Future, io, str::FromStr, sync::Arc, time::Duration};
 
-use futures::io::AllowStdIo;
+use futures::{channel::oneshot, future::select, FutureExt};
+use futures_timer::Delay;
 use http::{header, StatusCode};
 use hyper::{
     server::conn::AddrStream,
@@ -8,11 +9,6 @@ use hyper::{
     Body, Error, Request, Response, Server,
 };
 use parking_lot::Mutex;
-use tokio::{
-    self,
-    runtime::Runtime,
-    time::{delay_for, Duration},
-};
 use url::Url;
 
 async fn echo_route(req: Request<Body>) -> Response<Body> {
@@ -54,12 +50,14 @@ async fn echo_route(req: Request<Body>) -> Response<Body> {
     };
     let ms = wait.and_then(|c| FromStr::from_str(&*c).ok()).unwrap_or(0);
     let old_body = std::mem::replace(response.body_mut(), Body::empty());
-    delay_for(Duration::from_millis(ms)).await;
+    Delay::new(Duration::from_millis(ms)).await;
     let _ = std::mem::replace(response.body_mut(), old_body);
     response
 }
 
-pub fn start_test_server(port: Option<u16>) -> (u16, thread::JoinHandle<()>) {
+pub fn start_test_server(
+    port: Option<u16>,
+) -> (u16, oneshot::Sender<()>, impl Future<Output = ()>) {
     let port = port.unwrap_or(0);
     let address = ([127, 0, 0, 1], port).into();
 
@@ -80,16 +78,17 @@ pub fn start_test_server(port: Option<u16>) -> (u16, thread::JoinHandle<()>) {
         Ok::<_, Error>(service)
     });
 
+    let (tx, rx) = oneshot::channel();
+
     let server = Server::bind(&address).serve(make_svc);
 
     let port = server.local_addr().port();
 
-    let handle = thread::spawn(move || {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(server).unwrap();
-    });
+    let future = select(server, rx);
 
-    (port, handle)
+    let handle = tokio::spawn(future).map(|_| ());
+
+    (port, tx, handle)
 }
 
 #[derive(Clone)]
@@ -107,10 +106,6 @@ impl TestWriter {
 
     pub fn do_would_block_on_next_write(&self) {
         self.0.lock().0 = true;
-    }
-
-    pub fn to_async(self) -> AllowStdIo<Self> {
-        AllowStdIo::new(self)
     }
 }
 

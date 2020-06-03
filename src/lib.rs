@@ -1,6 +1,5 @@
 #![warn(rust_2018_idioms)]
-#![type_length_limit = "1550232"]
-#![feature(drain_filter)]
+#![type_length_limit = "19550232"]
 
 mod error;
 mod line_writer;
@@ -14,7 +13,11 @@ use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMess
 
 use ether::Either;
 use futures::{
-    channel::mpsc::{Sender as FCSender, UnboundedReceiver as FCUnboundedReceiver},
+    channel::mpsc::{
+        Sender as FCSender, UnboundedReceiver as FCUnboundedReceiver,
+        UnboundedSender as FCUnboundedSender,
+    },
+    executor::{block_on, block_on_stream},
     future::{self, try_join_all},
     sink::SinkExt,
     FutureExt, Stream, StreamExt,
@@ -243,13 +246,13 @@ impl ExecConfig {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone)]
 pub enum TestEndReason {
     Completed,
     CtrlC,
     KilledByLogger,
     ProviderEnded,
-    TestUpdate,
+    ConfigUpdate(Arc<BTreeMap<String, providers::Provider>>),
 }
 
 type TestEndedChannel = (
@@ -286,8 +289,10 @@ async fn _create_run(
     let mut test_ended_rx2 = test_ended_tx.subscribe();
     tokio::spawn(future::poll_fn(move |cx| {
         match ctrlc_channel.poll_next_unpin(cx) {
-            Poll::Ready(_) => {
-                let _ = test_ended_tx2.send(Ok(TestEndReason::CtrlC));
+            Poll::Ready(r) => {
+                if r.is_some() {
+                    let _ = test_ended_tx2.send(Ok(TestEndReason::CtrlC));
+                }
                 Poll::Ready(())
             }
             Poll::Pending => test_ended_rx2.poll_next_unpin(cx).map(|_| ()),
@@ -299,7 +304,7 @@ async fn _create_run(
         .collect();
     let output_format = exec_config.get_output_format();
     let config_file_path = exec_config.get_config_file().clone();
-    let config =
+    let mut config =
         config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
     let test_runner = match exec_config {
         ExecConfig::Try(t) => create_try_run_future(
@@ -311,6 +316,26 @@ async fn _create_run(
         )
         .map(Either::A),
         ExecConfig::Run(r) => {
+            let config_providers = mem::take(&mut config.providers);
+            // build and register the providers
+            let (providers, _) = get_providers_from_config(
+                &config_providers,
+                config.config.general.auto_buffer_start_size,
+                &test_ended_tx,
+                &r.config_file,
+            )?;
+
+            let (stats_tx, stats_rx) = create_stats_channel(
+                test_ended_tx.clone(),
+                &config.config.general,
+                &providers,
+                stdout.clone(),
+                &r,
+            )?;
+            tokio::spawn(stats_rx);
+
+            let providers = Arc::new(providers);
+
             if r.watch_config_file {
                 create_config_watcher(
                     file,
@@ -321,11 +346,22 @@ async fn _create_run(
                     output_format,
                     r.clone(),
                     config_file_path,
+                    stats_tx.clone(),
+                    config_providers,
+                    providers.clone(),
                 );
             }
             let test_ended_rx = test_ended_tx.subscribe();
-            create_load_test_future(config, r, (test_ended_tx, test_ended_rx), stdout, stderr)
-                .map(Either::B)
+            create_load_test_future(
+                config,
+                r,
+                (test_ended_tx, test_ended_rx),
+                providers,
+                stats_tx,
+                stdout,
+                stderr,
+            )
+            .map(Either::B)
         }
     };
     match test_runner {
@@ -334,7 +370,7 @@ async fn _create_run(
             let mut test_result = Ok(TestEndReason::Completed);
             while let Some(v) = test_ended_rx.next().await {
                 match v {
-                    Ok(Ok(TestEndReason::TestUpdate)) => continue,
+                    Ok(Ok(TestEndReason::ConfigUpdate(_))) => continue,
                     Ok(v) => {
                         test_result = v;
                     }
@@ -360,8 +396,8 @@ where
 {
     let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
     let output_format = exec_config.get_output_format();
-    let stdout = blocking_writer(stdout);
-    let mut stderr = blocking_writer(stderr);
+    let stdout = blocking_writer(stdout, test_ended_tx.clone(), "stdout".into());
+    let mut stderr = blocking_writer(stderr, test_ended_tx.clone(), "stderr".into());
     let test_result = _create_run(
         exec_config,
         ctrlc_channel,
@@ -438,11 +474,15 @@ fn create_config_watcher(
     output_format: RunOutputFormat,
     run_config: RunConfig,
     config_file_path: PathBuf,
+    stats_tx: FCUnboundedSender<StatsMessage>,
+    mut previous_config_providers: BTreeMap<String, config::Provider>,
+    mut previous_providers: Arc<BTreeMap<String, providers::Provider>>,
 ) {
-    let mut interval = tokio::time::interval(Duration::from_millis(1000));
+    let start_time = Instant::now();
+    let interval = tokio::time::interval(Duration::from_millis(1000));
     let mut last_modified = None;
-    spawn_blocking(move || async move {
-        while let Some(_) = interval.next().await {
+    spawn_blocking(move || {
+        for _ in block_on_stream(interval) {
             let modified = match file.metadata() {
                 Ok(m) => match m.modified() {
                     Ok(m) => m,
@@ -452,7 +492,7 @@ fn create_config_watcher(
             };
 
             match last_modified {
-                Some(lm) if modified < lm => continue,
+                Some(lm) if modified == lm => continue,
                 None => {
                     last_modified = Some(modified);
                     continue;
@@ -470,7 +510,7 @@ fn create_config_watcher(
             }
 
             let config = config::LoadTest::from_config(&config_bytes, &config_file_path, &env_vars);
-            let config = match config {
+            let mut config = match config {
                 Ok(m) => m,
                 Err(e) => {
                     let msg = match output_format {
@@ -484,15 +524,71 @@ fn create_config_watcher(
                             format!("{}\n", json)
                         }
                     };
-                    let _ = stderr.send(MsgType::Other(msg)).await;
+                    let _ = block_on(stderr.send(MsgType::Other(msg)));
                     continue;
                 }
             };
 
+            let config_providers = mem::take(&mut config.providers);
+
+            // build and register the providers
+            let providers = get_providers_from_config(
+                &config_providers,
+                config.config.general.auto_buffer_start_size,
+                &test_ended_tx,
+                &run_config.config_file,
+            );
+            let mut providers = match providers {
+                Ok((p, _)) => p,
+                Err(e) => {
+                    let msg = match output_format {
+                        RunOutputFormat::Human => format!(
+                            "\n{} {}\n",
+                            Paint::yellow("Could not reload config file"),
+                            e
+                        ),
+                        RunOutputFormat::Json => {
+                            let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
+                            format!("{}\n", json)
+                        }
+                    };
+                    let _ = block_on(stderr.send(MsgType::Other(msg)));
+                    continue;
+                }
+            };
+
+            // see which providers haven't changed and reuse the old providers for the new run
+            for (name, p) in &config_providers {
+                match previous_config_providers.get(name) {
+                    Some(p2) if p == p2 => {
+                        if let Some(p) = previous_providers.get(name) {
+                            providers.insert(name.clone(), p.clone());
+                        }
+                    }
+                    _ => (),
+                }
+            }
+
+            let providers = Arc::new(providers);
+            previous_providers = providers.clone();
+            previous_config_providers = config_providers;
+
+            let mut run_config = run_config.clone();
+            run_config.start_at = Some(Instant::now() - start_time);
+
+            if test_ended_tx
+                .send(Ok(TestEndReason::ConfigUpdate(providers.clone())))
+                .is_err()
+            {
+                break;
+            }
+
             let f = create_load_test_future(
                 config,
-                run_config.clone(),
+                run_config,
                 (test_ended_tx.clone(), test_ended_tx.subscribe()),
+                providers,
+                stats_tx.clone(),
                 stdout.clone(),
                 stderr.clone(),
             );
@@ -510,7 +606,7 @@ fn create_config_watcher(
                             format!("{}\n", json)
                         }
                     };
-                    let _ = stderr.send(MsgType::Other(msg)).await;
+                    let _ = block_on(stderr.send(MsgType::Other(msg)));
                     continue;
                 }
             };
@@ -569,7 +665,7 @@ fn create_try_run_future(
 
     // build and register the providers
     let (providers, response_providers) = get_providers_from_config(
-        config.providers,
+        &config.providers,
         config_config.general.auto_buffer_start_size,
         &test_ended_tx,
         &try_config.config_file,
@@ -665,7 +761,7 @@ fn create_try_run_future(
         config_path: try_config.config_file,
         client: Arc::new(client),
         loggers,
-        providers,
+        providers: providers.into(),
         stats_tx,
     };
 
@@ -688,6 +784,8 @@ fn create_load_test_future(
     config: config::LoadTest,
     run_config: RunConfig,
     test_ended: TestEndedChannel,
+    providers: Arc<BTreeMap<String, providers::Provider>>,
+    stats_tx: FCUnboundedSender<StatsMessage>,
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
@@ -697,18 +795,10 @@ fn create_load_test_future(
 
     let mut duration = config.get_duration();
     if let Some(t) = run_config.start_at {
-        duration -= t;
+        duration = duration.checked_sub(t).unwrap_or_default();
     }
 
     let config_config = config.config;
-
-    // build and register the providers
-    let (providers, _) = get_providers_from_config(
-        config.providers,
-        config_config.general.auto_buffer_start_size,
-        &test_ended_tx,
-        &run_config.config_file,
-    )?;
 
     // create the loggers
     let loggers = get_loggers_from_config(
@@ -755,15 +845,6 @@ fn create_load_test_future(
 
     let client = create_http_client(config_config.client.keepalive)?;
 
-    let (stats_tx, stats_rx) = create_stats_channel(
-        test_ended_tx.subscribe(),
-        &config_config.general,
-        &providers,
-        stdout,
-        &run_config,
-    )?;
-    tokio::spawn(stats_rx);
-
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
         config_path: run_config.config_file,
@@ -807,7 +888,7 @@ pub(crate) fn create_http_client(
 type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<String>), TestError>;
 
 fn get_providers_from_config(
-    config_providers: BTreeMap<String, config::Provider>,
+    config_providers: &BTreeMap<String, config::Provider>,
     auto_size: usize,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
     config_path: &PathBuf,
@@ -816,7 +897,7 @@ fn get_providers_from_config(
     let mut response_providers = BTreeSet::new();
     let default_buffer_size = config::default_auto_buffer_start_size();
     for (name, template) in config_providers {
-        let provider = match template {
+        let provider = match template.clone() {
             config::Provider::File(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
@@ -838,9 +919,9 @@ fn get_providers_from_config(
                 response_providers.insert(name.clone());
                 providers::response(template)
             }
-            config::Provider::List(values) => providers::literals(values),
+            config::Provider::List(values) => providers::literals(values.clone()),
         };
-        providers.insert(name, provider);
+        providers.insert(name.clone(), provider);
     }
     Ok((providers, response_providers))
 }
@@ -867,9 +948,13 @@ fn get_loggers_from_config(
                         PathBuf::new()
                     };
                     file_path.push(to);
-                    let f = File::create(file_path)
+                    let f = File::create(&file_path)
                         .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()))?;
-                    blocking_writer(f)
+                    blocking_writer(
+                        f,
+                        test_ended_tx.clone(),
+                        file_path.to_string_lossy().to_string(),
+                    )
                 }
             };
             let sender = providers::logger(template, &test_ended_tx, writer);

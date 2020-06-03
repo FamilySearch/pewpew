@@ -1,7 +1,9 @@
-use futures::{channel::mpsc, StreamExt};
-use tokio::task::spawn_blocking;
+use futures::{channel::mpsc, executor::block_on_stream};
+use tokio::{sync::broadcast, task::spawn_blocking};
 
-use std::io::{Error as IOError, Write};
+use crate::{TestEndReason, TestError};
+
+use std::io::Write;
 
 pub enum MsgType {
     Final(String),
@@ -84,22 +86,32 @@ pub enum MsgType {
 //     }
 // }
 
-pub fn blocking_writer<W: Write + Send + 'static>(mut writer: W) -> mpsc::Sender<MsgType> {
-    let (tx, mut rx) = mpsc::channel(5);
-    spawn_blocking(move || async move {
+pub fn blocking_writer<W: Write + Send + 'static>(
+    mut writer: W,
+    test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
+    file_name: String,
+) -> mpsc::Sender<MsgType> {
+    let (tx, rx) = mpsc::channel(5);
+    spawn_blocking(move || {
         let mut final_msg = None;
-        while let Some(msg) = rx.next().await {
+        for msg in block_on_stream(rx) {
             match msg {
                 MsgType::Final(s) => final_msg = Some(s),
                 MsgType::Other(s) => {
-                    writer.write_all(s.as_bytes())?;
+                    if let Err(e) = writer.write_all(s.as_bytes()) {
+                        let _ =
+                            test_killer.send(Err(TestError::WritingToFile(file_name, e.into())));
+                        return;
+                    }
                 }
             }
         }
         if let Some(s) = final_msg {
-            writer.write_all(s.as_bytes())?;
+            if let Err(e) = writer.write_all(s.as_bytes()) {
+                let _ = test_killer.send(Err(TestError::WritingToFile(file_name, e.into())));
+                return;
+            }
         }
-        Ok::<_, IOError>(())
     });
     tx
 }

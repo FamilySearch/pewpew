@@ -126,10 +126,8 @@ where
 mod tests {
     use super::*;
     use futures::stream;
-    use tokio::{
-        runtime::Runtime,
-        time::{delay_for, Duration},
-    };
+    use futures_timer::Delay;
+    use tokio::runtime::Runtime;
 
     use std::{
         iter,
@@ -137,7 +135,7 @@ mod tests {
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
-        time::Instant,
+        time::{Duration, Instant},
     };
 
     #[test]
@@ -153,7 +151,7 @@ mod tests {
             let counter = counter.clone();
             async move {
                 counter.fetch_add(1, Ordering::Relaxed);
-                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Delay::new(Duration::from_millis(wait_time_ms)).await;
                 Ok(())
             }
         });
@@ -179,11 +177,13 @@ mod tests {
         let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(None, s, move |_| {
+        let limit_fn: Option<Box<dyn std::ops::FnMut() -> usize + Send + Unpin + 'static>> =
+            Some(Box::new(|| 250));
+        let fep = ForEachParallel::new(limit_fn, s, move |_| {
             let counter = counter.clone();
             async move {
                 counter.fetch_add(1, Ordering::Relaxed);
-                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Delay::new(Duration::from_millis(wait_time_ms)).await;
                 Ok(())
             }
         });
@@ -197,7 +197,9 @@ mod tests {
         // with a certain limit of concurrent tasks)
         assert!(
             elapsed < Duration::from_millis(wait_time_ms * 3)
-                && elapsed > Duration::from_millis(wait_time_ms * 2)
+                && elapsed > Duration::from_millis(wait_time_ms * 2),
+            "{:?}",
+            elapsed
         );
     }
 
@@ -214,7 +216,7 @@ mod tests {
             let counter = counter.clone();
             async move {
                 counter.fetch_add(1, Ordering::Relaxed);
-                delay_for(Duration::from_millis(wait_time_ms)).await;
+                Delay::new(Duration::from_millis(wait_time_ms)).await;
                 Ok(())
             }
         });

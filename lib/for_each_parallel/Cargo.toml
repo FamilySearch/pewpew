@@ -13,3 +13,6 @@ channel = { path = "../channel" }
 config = { path = "../config" }
 futures = "0.3"
 tokio = "0.2"
+
+[dev-dependencies]
+futures-timer = "3"

@@ -12,6 +12,7 @@ use crate::TestEndReason;
 use ether::Either3;
 use futures::{
     channel::mpsc::{self, channel, Sender as FCSender},
+    executor::block_on,
     sink::{Sink, SinkExt},
     stream, Stream, StreamExt, TryStreamExt,
 };
@@ -29,6 +30,7 @@ use std::{
     task::{Context, Poll},
 };
 
+#[derive(Clone)]
 pub struct Provider {
     pub auto_return: Option<config::EndpointProvidesSendOptions>,
     pub rx: channel::Receiver<json::Value>,
@@ -135,20 +137,6 @@ impl Logger {
         };
         MsgType::Other(s)
     }
-
-    pub fn try_send(&mut self, msg: json::Value) -> Result<(), ()> {
-        let msg = self.json_to_msg_type(msg);
-        if let Some(limit) = &self.limit {
-            let i = limit.fetch_sub(1, Ordering::Release);
-            if i <= 0 {
-                if let Some(killer) = &self.test_killer {
-                    let _ = killer.send(Ok(TestEndReason::KilledByLogger));
-                }
-                return Err(());
-            }
-        }
-        self.writer.try_send(msg).map_err(|_| ())
-    }
 }
 
 impl Sink<json::Value> for Logger {
@@ -159,10 +147,18 @@ impl Sink<json::Value> for Logger {
         Pin::new(&mut this.writer).poll_ready(cx)
     }
 
-    fn start_send(self: Pin<&mut Self>, item: json::Value) -> Result<(), Self::Error> {
-        let this = Pin::into_inner(self);
-        let item = this.json_to_msg_type(item);
-        Pin::new(&mut this.writer).start_send(item)
+    fn start_send(mut self: Pin<&mut Self>, item: json::Value) -> Result<(), Self::Error> {
+        let msg = self.json_to_msg_type(item);
+        if let Some(limit) = &self.limit {
+            let i = limit.fetch_sub(1, Ordering::Release);
+            if i <= 0 {
+                if let Some(killer) = &self.test_killer {
+                    let _ = killer.send(Ok(TestEndReason::KilledByLogger));
+                }
+                self.writer.disconnect();
+            }
+        }
+        self.writer.start_send(msg)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -209,10 +205,13 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>> + Send + 'stat
     iter: I,
 ) -> impl Stream<Item = Result<json::Value, io::Error>> {
     let (mut tx, rx) = channel(5);
-    spawn_blocking(move || async move {
+    spawn_blocking(move || {
         for value in iter {
             let value = value.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-            let _ = tx.send(value).await;
+            // this should only error when the receiver is dropped, and in that case we can stop sending
+            if block_on(tx.send(value)).is_err() {
+                break;
+            }
         }
     });
     rx
@@ -225,106 +224,149 @@ mod tests {
 
     use config::FromYaml;
     use futures::executor::{block_on, block_on_stream};
+    use futures_timer::Delay;
     use json::json;
     use test_common::TestWriter;
     use tokio::runtime::Runtime;
 
+    use std::time::Duration;
+
     #[test]
     fn range_provider_works() {
-        let range_params = r#"
-            start: 0
-            end: 20
-        "#;
-        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-        let p = range(range_params.into());
-        let expect: Vec<_> = (0..=20).collect();
-
-        let values: Vec<_> = block_on_stream(p.rx).take(20).collect();
-
-        assert_eq!(values, expect);
-
-        let range_params = r#"
-            start: 0
-            end: 20
-        "#;
-        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-        let p = range(range_params.into());
-
-        let expect: Vec<_> = (0..=20).step_by(2).collect();
-
-        let values: Vec<_> = block_on_stream(p.rx).take(10).collect();
-
-        assert_eq!(values, expect);
-
-        let range_params = r#"
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let range_params = r#"
                 start: 0
                 end: 20
-                repeat: true
             "#;
-        let range_params = config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-        let p = range(range_params.into());
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
+            let expect: Vec<_> = (0..=20).collect();
 
-        let expect: Vec<_> = (0..=20).step_by(2).cycle().take(100).collect();
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
 
-        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
+            let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
 
-        assert_eq!(values, expect);
+            assert_eq!(values, expect, "first");
+
+            let range_params = r#"
+                start: 0
+                end: 20
+                step: 2
+            "#;
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
+
+            let expect: Vec<_> = (0..=20).step_by(2).collect();
+
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
+
+            let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
+
+            assert_eq!(values, expect, "second");
+
+            let range_params = r#"
+                    start: 0
+                    end: 20
+                    repeat: true
+                "#;
+            let range_params =
+                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let p = range(range_params.into());
+
+            let expect: Vec<_> = (0..=20).cycle().take(100).collect();
+
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
+
+            let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+
+            assert_eq!(values, expect, "third");
+        });
     }
 
     #[test]
     fn literals_provider_works() {
-        let jsons = vec![json!(1), json!(2), json!(3)];
-        let esl = config::ExplicitStaticList {
-            values: jsons.clone(),
-            repeat: false,
-            random: false,
-        };
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let jsons = vec![json!(1), json!(2), json!(3)];
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: false,
+                random: false,
+            };
 
-        let p = literals(esl.into());
-        let expect: Vec<_> = jsons.clone().into_iter().collect();
+            let p = literals(esl.into());
+            let expect = jsons.clone();
 
-        let values: Vec<_> = block_on_stream(p.rx).collect();
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
 
-        assert_eq!(values, expect);
+            let values: Vec<_> = rx.collect().await;
 
-        let esl = config::ExplicitStaticList {
-            values: jsons.clone(),
-            repeat: false,
-            random: true,
-        };
+            assert_eq!(values, expect, "first");
 
-        let p = literals(esl.into());
-        let expect: Vec<_> = jsons.clone().into_iter().collect();
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: false,
+                random: true,
+            };
 
-        let values: Vec<_> = block_on_stream(p.rx).collect();
+            let p = literals(esl.into());
+            let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
-        assert_eq!(values, expect);
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
 
-        let esl = config::ExplicitStaticList {
-            values: jsons.clone(),
-            repeat: true,
-            random: false,
-        };
+            let mut values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
 
-        let p = literals(esl.into());
-        let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
+            expect.sort_unstable();
+            values.sort_unstable();
 
-        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
+            assert_eq!(values, expect, "second");
 
-        assert_eq!(values, expect);
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: true,
+                random: false,
+            };
 
-        let esl = config::ExplicitStaticList {
-            values: jsons.clone(),
-            repeat: true,
-            random: true,
-        };
+            let p = literals(esl.into());
+            let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-        let p = literals(esl.into());
-        let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
+            let values: Vec<_> = p.rx.take(100).collect().await;
 
-        let values: Vec<_> = block_on_stream(p.rx).take(100).collect();
+            assert_eq!(values, expect, "third");
 
-        assert_eq!(values, expect);
+            let esl = config::ExplicitStaticList {
+                values: jsons.clone(),
+                repeat: true,
+                random: true,
+            };
+
+            let p = literals(esl.into());
+            let mut expect: Vec<_> = jsons
+                .iter()
+                .cycle()
+                .take(100)
+                .map(|j| j.as_u64().unwrap())
+                .collect();
+
+            let mut values: Vec<_> = p.rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+
+            assert_ne!(values, expect, "fourth");
+
+            expect.sort_unstable();
+            expect.dedup();
+            values.sort_unstable();
+            values.dedup();
+
+            assert_eq!(values, expect, "fifth");
+        });
     }
 
     #[test]
@@ -341,169 +383,198 @@ mod tests {
 
         let expects = jsons;
 
-        let values: Vec<_> = block_on_stream(p.rx).collect();
+        let Provider { rx, tx, .. } = p;
+        drop(tx);
+
+        let values: Vec<_> = block_on_stream(rx).collect();
 
         assert_eq!(values, expects);
     }
 
     #[test]
     fn basic_logger_works() {
-        let logger_params = r#"
-            to: ""
-            kill: true
-        "#;
-        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-        let (logger_params, _) = config::Logger::from_pre_processed(
-            logger_params,
-            &Default::default(),
-            &mut Default::default(),
-        )
-        .unwrap();
-        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
-        let writer = TestWriter::new();
-        let writer_channel = blocking_writer(writer.clone());
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let logger_params = r#"
+                to: ""
+                kill: true
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
+            let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+            let writer = TestWriter::new();
+            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
-        let mut tx = logger(logger_params, &test_killer, writer_channel);
+            let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-        for value in vec![json!(1), json!(2)] {
-            let _ = block_on(tx.send(value));
-        }
+            for value in vec![json!(1), json!(2)] {
+                let _ = tx.send(value).await;
+            }
 
-        let left = writer.get_string();
-        let right = "1\n";
-        assert_eq!(left, right, "value in writer should match");
+            // add slight delay because writing to the channel does not mean it's yet written to the file
+            Delay::new(Duration::from_millis(100)).await;
 
-        let check = if let Ok(Ok(TestEndReason::KilledByLogger)) = test_killed_rx.try_recv() {
-            true
-        } else {
-            false
-        };
-        assert!(check, "test should be killed");
+            let left = writer.get_string();
+            let right = "1\n";
+            assert_eq!(left, right, "value in writer should match");
+
+            let check = if let Ok(Ok(TestEndReason::KilledByLogger)) = test_killed_rx.try_recv() {
+                true
+            } else {
+                false
+            };
+            assert!(check, "test should be killed");
+        });
     }
 
     #[test]
     fn basic_logger_works_with_large_data() {
-        let logger_params = r#"
-            to: ""
-        "#;
-        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-        let (logger_params, _) = config::Logger::from_pre_processed(
-            logger_params,
-            &Default::default(),
-            &mut Default::default(),
-        )
-        .unwrap();
-        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
-        let writer = TestWriter::new();
-        let writer_channel = blocking_writer(writer.clone());
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let logger_params = r#"
+                to: ""
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
+            let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+            let writer = TestWriter::new();
+            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
-        let mut tx = logger(logger_params, &test_killer, writer_channel);
+            let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-        let right: String = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".repeat(1000);
+            let right: String = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".repeat(1000);
 
-        let _ = block_on(tx.send(right.clone().into()));
+            let _ = tx.send(right.clone().into()).await;
 
-        let left = writer.get_string();
-        assert_eq!(left, format!("{}\n", right), "value in writer should match");
+            // add slight delay because writing to the channel does not mean it's yet written to the file
+            Delay::new(Duration::from_millis(100)).await;
 
-        let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
-            false
-        } else {
-            true
-        };
-        assert!(check, "test should not be killed");
+            let left = writer.get_string();
+            assert_eq!(left, format!("{}\n", right), "value in writer should match");
+
+            let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
+                false
+            } else {
+                true
+            };
+            assert!(check, "test should not be killed");
+        });
     }
 
     #[test]
     fn basic_logger_works_with_would_block() {
-        let logger_params = r#"
-            to: ""
-        "#;
-        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-        let (logger_params, _) = config::Logger::from_pre_processed(
-            logger_params,
-            &Default::default(),
-            &mut Default::default(),
-        )
-        .unwrap();
-        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
-        let writer = TestWriter::new();
-        writer.do_would_block_on_next_write();
-        let writer_channel = blocking_writer(writer.clone());
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let logger_params = r#"
+                to: ""
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
+            let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+            let writer = TestWriter::new();
+            writer.do_would_block_on_next_write();
+            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
-        let mut tx = logger(logger_params, &test_killer, writer_channel);
+            let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-        for value in vec![json!(1), json!(2)] {
-            let _ = block_on(tx.send(value));
-        }
+            for value in vec![json!(1), json!(2)] {
+                let _ = tx.send(value).await;
+            }
 
-        let left = writer.get_string();
-        let right = "1\n2\n";
-        assert_eq!(left, right, "value in writer should match");
+            // add slight delay because writing to the channel does not mean it's yet written to the file
+            Delay::new(Duration::from_millis(100)).await;
 
-        let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
-            false
-        } else {
-            true
-        };
-        assert!(check, "test should not be killed");
+            let left = writer.get_string();
+            let right = "1\n2\n";
+            assert_eq!(left, right, "value in writer should match");
+
+            let check = if let Ok(Err(_)) = test_killed_rx.try_recv() {
+                false
+            } else {
+                true
+            };
+            assert!(check, "test should not be killed");
+        });
     }
 
     #[test]
     fn logger_limit_works() {
-        let logger_params = r#"
-            to: ""
-            limit: 1
-        "#;
-        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-        let (logger_params, _) = config::Logger::from_pre_processed(
-            logger_params,
-            &Default::default(),
-            &mut Default::default(),
-        )
-        .unwrap();
-        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
-        let writer = TestWriter::new();
-        let writer_channel = blocking_writer(writer.clone());
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let logger_params = r#"
+                to: ""
+                limit: 1
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
+            let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+            let writer = TestWriter::new();
+            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
-        let mut tx = logger(logger_params, &test_killer, writer_channel);
+            let mut tx = logger(logger_params, &test_killer, writer_channel);
 
-        for value in vec![json!(1), json!(2)] {
-            let _ = block_on(tx.send(value));
-        }
+            for value in vec![json!(1), json!(2)] {
+                let _ = tx.send(value).await;
+            }
 
-        let left = writer.get_string();
-        let right = "1\n";
-        assert_eq!(left, right, "value in writer should match");
+            // add slight delay because writing to the channel does not mean it's yet written to the file
+            Delay::new(Duration::from_millis(100)).await;
 
-        let check = test_killed_rx.try_recv().is_err();
-        assert!(check, "test should not be killed");
+            let left = writer.get_string();
+            let right = "1\n";
+            assert_eq!(left, right, "value in writer should match");
+
+            let check = test_killed_rx.try_recv().is_err();
+            assert!(check, "test should not be killed");
+        });
     }
 
     #[test]
     fn logger_pretty_works() {
-        let logger_params = r#"
-            to: ""
-            pretty: true
-        "#;
-        let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-        let (logger_params, _) = config::Logger::from_pre_processed(
-            logger_params,
-            &Default::default(),
-            &mut Default::default(),
-        )
-        .unwrap();
-        let (test_killer, mut test_killed_rx) = broadcast::channel(1);
-        let writer = TestWriter::new();
-
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            let writer_channel = blocking_writer(writer.clone());
+            let logger_params = r#"
+                to: ""
+                pretty: true
+            "#;
+            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
+            let (logger_params, _) = config::Logger::from_pre_processed(
+                logger_params,
+                &Default::default(),
+                &mut Default::default(),
+            )
+            .unwrap();
+            let (test_killer, mut test_killed_rx) = broadcast::channel(1);
+            let writer = TestWriter::new();
+            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 
             for value in vec![json!({"foo": [1, 2, 3]}), json!(2)] {
-                let _ = block_on(tx.send(value));
+                let _ = tx.send(value).await;
             }
+            // add slight delay because writing to the channel does not mean it's yet written to the file
+            Delay::new(Duration::from_millis(100)).await;
 
             let left = writer.get_string();
             let right = "{\n  \"foo\": [\n    1,\n    2,\n    3\n  ]\n}\n2\n";

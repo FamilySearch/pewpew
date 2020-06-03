@@ -1,7 +1,7 @@
 use super::*;
 
 use config::{RESPONSE_BODY, RESPONSE_HEADERS, RESPONSE_HEADERS_ALL, RESPONSE_STARTLINE, STATS};
-use futures::StreamExt;
+use futures::TryStreamExt;
 
 pub(super) struct ResponseHandler {
     pub(super) provider_delays: ProviderDelays,
@@ -15,11 +15,13 @@ pub(super) struct ResponseHandler {
 }
 
 impl ResponseHandler {
-    pub(super) async fn handle<F>(
+    // this function is not async because of a compiler bug which raises a nonsensical error
+    // https://github.com/rust-lang/rust/issues/71723
+    pub(super) fn handle<F>(
         self,
         response: hyper::Response<HyperBody>,
         auto_returns: Option<F>,
-    ) -> Result<(), RecoverableError>
+    ) -> impl Future<Output = Result<(), RecoverableError>>
     where
         F: Future<Output = ()> + Send,
     {
@@ -68,7 +70,11 @@ impl ResponseHandler {
                 }
             })
             .filter_map(Result::transpose)
-            .collect::<Result<BTreeSet<_>, RecoverableError>>()?;
+            .collect::<Result<BTreeSet<_>, RecoverableError>>();
+        let included_outgoing_indexes = match included_outgoing_indexes {
+            Ok(i) => i,
+            Err(e) => return future::err(e).a(),
+        };
         let ce_header = response.headers().get("content-encoding").map(|h| {
             h.to_str()
                 .expect("content-encoding header should cast to str")
@@ -77,69 +83,64 @@ impl ResponseHandler {
             Some(s) => s,
             None => "",
         };
-        let body_value = match (
+        let body_future = match (
             response_fields_added & RESPONSE_BODY != 0,
             body_reader::Compression::try_from(ce_header),
         ) {
             (true, Some(ce)) => {
-                let mut body = response.into_body();
-                let mut br = body_reader::BodyReader::new(ce);
-                let mut body_buffer = bytes::BytesMut::new();
-                let mut body_value = None;
-                while let Some(r) = body.next().await {
-                    // in the case there's an error receiving or parsing the body, we want to pass it on
-                    // to the body handler so it can log it
-                    let chunks = match r {
-                        Ok(c) => c,
-                        Err(e) => {
-                            body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
-                            break;
-                        }
-                    };
-                    if let Err(e) = br.decode(chunks, &mut body_buffer) {
-                        body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
-                        break;
-                    }
-                }
-                if body_value.is_none() {
+                let body = response
+                    .into_body()
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)));
+                let br = body_reader::BodyReader::new(ce);
+                let body_buffer = bytes::BytesMut::new();
+                body.try_fold(
+                    (br, body_buffer),
+                    |(mut br, mut body_buffer), chunks| match br.decode(chunks, &mut body_buffer) {
+                        Ok(_) => future::ready(Ok((br, body_buffer))),
+                        Err(e) => future::ready(Err(RecoverableError::BodyErr(Arc::new(e)))),
+                    },
+                )
+                .map_ok(|(_, body_buffer)| {
                     let body_string = str::from_utf8(&body_buffer).unwrap_or("<<binary data>>");
                     let value = if let Ok(value) = json::from_str(body_string) {
                         value
                     } else {
                         json::Value::String(body_string.into())
                     };
-                    body_value = Some(Ok(value))
-                }
-                body_value
+                    Some(value)
+                })
+                .a()
             }
             _ => {
-                let mut body_value = None;
-                let mut body = response.into_body();
-                // if we don't need the body, skip parsing it, but make sure we get it all
-                while let Some(r) = body.next().await {
-                    if let Err(e) = r {
-                        body_value = Some(Err(RecoverableError::BodyErr(Arc::new(e))));
-                        break;
-                    }
-                }
-                body_value
+                // when we don't need the body, skip parsing it, but make sure we get it all
+                response
+                    .into_body()
+                    .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
+                    .try_fold((), |_, _| future::ok(()))
+                    .map_ok(|_| None)
+                    .b()
             }
         };
         let provider_delays = self.provider_delays;
         let now = self.now;
         let outgoing = self.outgoing;
         let stats_tx = self.stats_tx;
-        let bh = BodyHandler {
-            provider_delays,
-            now,
-            template_values,
-            included_outgoing_indexes,
-            outgoing,
-            stats_tx,
-            status,
-            tags: self.tags,
-        };
-        bh.handle(body_value.transpose(), auto_returns).await
+        let tags = self.tags;
+        body_future
+            .then(move |body_value| {
+                let bh = BodyHandler {
+                    provider_delays,
+                    now,
+                    template_values,
+                    included_outgoing_indexes,
+                    outgoing,
+                    stats_tx,
+                    status,
+                    tags,
+                };
+                bh.handle(body_value, auto_returns)
+            })
+            .b()
     }
 }
 

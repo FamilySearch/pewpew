@@ -12,6 +12,7 @@ use ether::{Either, Either3, EitherExt};
 use for_each_parallel::ForEachParallel;
 use futures::{
     channel::mpsc as futures_channel,
+    executor::block_on,
     future::{self, try_join_all},
     sink::SinkExt,
     stream, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
@@ -49,7 +50,7 @@ use std::{
     pin::Pin,
     str,
     sync::Arc,
-    task::Poll,
+    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
@@ -199,7 +200,7 @@ pub struct BuilderContext {
     pub client:
         Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     // a mapping of names to their prospective providers
-    pub providers: BTreeMap<String, providers::Provider>,
+    pub providers: Arc<BTreeMap<String, providers::Provider>>,
     // a mapping of names to their prospective loggers
     pub loggers: BTreeMap<String, providers::Logger>,
     // channel that receives and aggregates stats for the test
@@ -541,18 +542,18 @@ fn create_file_hyper_body(
         let (mut tx, rx) = futures_channel::channel(5);
         let mut buf = BytesMut::with_capacity(8 * (1 << 10));
 
-        spawn_blocking(move || async move {
-            loop {
-                match file.read(&mut buf) {
-                    Ok(n) if n == 0 => break,
-                    Ok(n) => {
-                        let bytes_to_send = buf.split_off(n);
-                        let _ = tx.send(Ok(bytes_to_send)).await;
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
+        spawn_blocking(move || loop {
+            match file.read(&mut buf) {
+                Ok(n) if n == 0 => break,
+                Ok(n) => {
+                    let bytes_to_send = buf.split_off(n);
+                    if block_on(tx.send(Ok(bytes_to_send))).is_err() {
                         break;
                     }
+                }
+                Err(e) => {
+                    let _ = block_on(tx.send(Err(e)));
+                    break;
                 }
             }
         });
@@ -655,7 +656,7 @@ impl Endpoint {
     }
 
     // This returns a boxed future because otherwise the type system runs out of memory for the type
-    pub fn into_future(self) -> impl Future<Output = Result<(), TestError>> + Send {
+    pub fn into_future(self) -> Box<dyn Future<Output = Result<(), TestError>> + Send + Unpin> {
         let url = self.url;
         let method = self.method;
         let headers = self.headers;
@@ -735,7 +736,8 @@ impl Endpoint {
                 (true, Some(n)) => Some(Box::new(move || n.get())),
                 (true, None) => None,
             };
-        ForEachParallel::new(limit_fn, stream, move |values| rm.send_request(values))
+        let f = ForEachParallel::new(limit_fn, stream, move |values| rm.send_request(values));
+        Box::new(f)
     }
 }
 
@@ -743,6 +745,8 @@ struct BlockSender<V: Iterator<Item = Result<json::Value, RecoverableError>> + U
     cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
     tx: ProviderOrLogger,
     values: V,
+    value_added: bool,
+    next_value: Option<json::Value>,
 }
 
 impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> BlockSender<V> {
@@ -751,27 +755,81 @@ impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> BlockSen
         tx: ProviderOrLogger,
         cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
     ) -> Self {
-        BlockSender { cb, tx, values }
+        BlockSender {
+            cb,
+            tx,
+            values,
+            value_added: false,
+            next_value: None,
+        }
     }
+}
 
-    async fn into_future(mut self) -> Result<(), RecoverableError> {
-        // let mut this = Pin::new(&mut self);
-        let mut value_sent = false;
-        for r in &mut self.values {
-            let r = r?;
+impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Future for BlockSender<V> {
+    type Output = Result<(), RecoverableError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            let v = match self.next_value.take() {
+                Some(v) => v,
+                None => match self.values.next() {
+                    Some(Ok(v)) => v,
+                    Some(Err(e)) => return Poll::Ready(Err(e)),
+                    None => break,
+                },
+            };
             match &mut self.tx {
-                ProviderOrLogger::Provider(tx) => {
-                    let _ = tx.send(r).await;
-                }
+                ProviderOrLogger::Logger(tx) => match tx.poll_ready_unpin(cx) {
+                    Poll::Ready(Ok(())) => {
+                        if tx.start_send_unpin(v).is_err() {
+                            break;
+                        }
+                        self.value_added = true;
+                    }
+                    Poll::Pending => {
+                        self.next_value = Some(v);
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Err(_)) => break,
+                },
+                ProviderOrLogger::Provider(tx) => match tx.poll_ready_unpin(cx) {
+                    Poll::Ready(Ok(())) => {
+                        if tx.start_send_unpin(v).is_err() {
+                            break;
+                        }
+                        self.value_added = true;
+                    }
+                    Poll::Pending => {
+                        self.next_value = Some(v);
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Err(_)) => break,
+                },
+            }
+        }
+        if self.value_added {
+            match &mut self.tx {
                 ProviderOrLogger::Logger(tx) => {
-                    let _ = tx.send(r).await;
+                    if let Poll::Pending = tx.poll_flush_unpin(cx) {
+                        return Poll::Pending;
+                    }
+                }
+                ProviderOrLogger::Provider(tx) => {
+                    if let Poll::Pending = tx.poll_flush_unpin(cx) {
+                        return Poll::Pending;
+                    }
                 }
             }
-            value_sent = true;
         }
-        if let Some(cb) = self.cb {
-            cb(value_sent);
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Drop for BlockSender<V> {
+    fn drop(&mut self) {
+        let _ = self.now_or_never();
+        if let Some(cb) = &self.cb {
+            cb(self.value_added);
         }
-        Ok(())
     }
 }

@@ -3,18 +3,17 @@ use std::{
     fs::create_dir_all,
     io,
     path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use config::duration_from_string;
-use futures::{channel::mpsc as futures_channel, TryFutureExt};
+use futures::channel::mpsc as futures_channel;
 use pewpew::{
     create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,
 };
 use regex::Regex;
-use tokio::runtime::Runtime;
+use tokio::runtime;
 use yansi::Paint;
 
 fn main() {
@@ -276,14 +275,21 @@ fn main() {
         unreachable!();
     };
 
-    let f = create_run(cli_config, ctrlc_channel, io::stdout(), io::stderr())
-        .map_err(|_| HAD_FATAL_ERROR.store(true, Ordering::Relaxed));
-    let mut rt = Runtime::new().unwrap();
-    rt.block_on(f).unwrap();
+    let f = create_run(cli_config, ctrlc_channel, io::stdout(), io::stderr());
 
-    if HAD_FATAL_ERROR.load(Ordering::Relaxed) {
+    let mut rt = runtime::Builder::new()
+        .threaded_scheduler()
+        .enable_time()
+        .enable_io()
+        .thread_name("pewpew-worker")
+        .build()
+        .unwrap();
+    let result = rt.block_on(f);
+    // shutdown the runtime in case there are any hanging threads/tasks
+    // but give enough time to flush out any console output
+    rt.shutdown_timeout(Duration::from_millis(500));
+
+    if result.is_err() {
         std::process::exit(1)
     }
 }
-
-static HAD_FATAL_ERROR: AtomicBool = AtomicBool::new(false);

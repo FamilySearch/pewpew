@@ -172,15 +172,15 @@ impl Outgoing {
     }
 }
 
+type ProviderStreamStream<Ar> = Box<
+    dyn Stream<Item = Result<(json::Value, Vec<Ar>), config::ExecutingExpressionError>>
+        + Send
+        + Unpin
+        + 'static,
+>;
+
 impl ProviderStream<AutoReturn> for providers::Provider {
-    fn into_stream(
-        &self,
-    ) -> Box<
-        dyn Stream<Item = Result<(json::Value, Vec<AutoReturn>), config::ExecutingExpressionError>>
-            + Send
-            + Unpin
-            + 'static,
-    > {
+    fn into_stream(&self) -> ProviderStreamStream<AutoReturn> {
         let auto_return = self.auto_return.map(|ar| (ar, self.tx.clone()));
         let future = self.rx.clone().map(move |v| {
             let mut outgoing = Vec::new();
@@ -535,7 +535,7 @@ fn create_file_hyper_body(
         };
         let metadata = match file.metadata() {
             Ok(m) => m,
-            Err(e) => return Err(TestError::FileReading(filename.clone(), e.into())),
+            Err(e) => return Err(TestError::FileReading(filename, e.into())),
         };
         let bytes = metadata.len();
 

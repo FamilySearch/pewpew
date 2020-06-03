@@ -125,7 +125,7 @@ impl From<config::ExecutingExpressionError> for TestError {
 
 impl From<config::ExecutingExpressionError> for RecoverableError {
     fn from(e: config::ExecutingExpressionError) -> Self {
-        ExecutingExpression(Box::new(e.into()))
+        ExecutingExpression(Box::new(e))
     }
 }
 

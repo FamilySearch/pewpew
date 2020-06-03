@@ -550,8 +550,8 @@ impl From<RangeProviderPreProcessed> for RangeProvider {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
-#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, PartialEq)]
 pub struct RangeProviderPreProcessed {
     start: i64,
     end: i64,

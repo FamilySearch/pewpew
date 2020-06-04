@@ -47,7 +47,6 @@ fn int1() {
 
         // let stdout = stdout2.get_string();
         let stderr = stderr2.get_string();
-        dbg!(&stderr);
         assert!(
             did_succeed2.load(Ordering::Relaxed),
             "test run failed. {}",

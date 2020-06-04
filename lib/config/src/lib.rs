@@ -142,7 +142,6 @@ impl LinearBuilder {
 
     pub fn append(&mut self, start_percent: f64, end_percent: f64, duration: Duration) {
         self.duration += duration;
-        let duration = duration.as_nanos() as f64;
         let lb = LinearBuilderPiece::new(start_percent, end_percent, duration);
         self.pieces.push(lb);
     }
@@ -156,11 +155,11 @@ impl LinearBuilder {
 pub struct LinearBuilderPiece {
     pub start_percent: f64,
     pub end_percent: f64,
-    pub duration: f64,
+    pub duration: Duration,
 }
 
 impl LinearBuilderPiece {
-    fn new(start_percent: f64, end_percent: f64, duration: f64) -> Self {
+    fn new(start_percent: f64, end_percent: f64, duration: Duration) -> Self {
         LinearBuilderPiece {
             start_percent,
             end_percent,

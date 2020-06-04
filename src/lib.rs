@@ -835,7 +835,7 @@ fn create_load_test_future(
                             PerX::second(piece.end_percent * *s as f64),
                         ),
                     };
-                    mod_interval2.append_segment(start, duration, end);
+                    mod_interval2.append_segment(start, piece.duration, end);
                 }
                 mod_interval = Some(Box::pin(mod_interval2.into_stream(run_config.start_at)));
             }

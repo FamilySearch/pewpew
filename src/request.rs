@@ -34,8 +34,7 @@ use crate::providers;
 use crate::stats;
 use crate::util::tweak_path;
 use config::{
-    BodyTemplate, EndpointProvidesSendOptions, Limit, MultipartBody, ProviderStream, Select,
-    Template,
+    BodyTemplate, EndpointProvidesSendOptions, MultipartBody, ProviderStream, Select, Template,
 };
 
 use std::{
@@ -224,7 +223,6 @@ impl Builder {
     }
 
     pub fn build(self, ctx: &mut BuilderContext) -> Endpoint {
-        let mut limits = Vec::new();
         let mut outgoing = Vec::new();
         let mut on_demand_streams: OnDemandStreams = Vec::new();
 
@@ -262,9 +260,6 @@ impl Builder {
                 if let Some(set) = &mut provides_set {
                     set.insert(tx.clone());
                 }
-                if v.get_send_behavior().is_block() {
-                    limits.push(tx.limit());
-                }
                 let cb = if on_demand {
                     let (stream, cb) = provider.on_demand.clone().into_stream();
                     on_demand_streams.push(Box::new(stream));
@@ -301,7 +296,6 @@ impl Builder {
         }
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
-        let mut provider_limits = BTreeMap::new();
         // go through the list of required providers and make sure we have them all
         for name in providers_to_stream.unique_providers() {
             let provider = match ctx.providers.get(&name) {
@@ -312,8 +306,6 @@ impl Builder {
             let ar = provider
                 .auto_return
                 .map(|send_option| (send_option, provider.tx.clone()));
-            let limit = provider.tx.limit();
-            provider_limits.insert(name.clone(), limit);
             let provider_stream = Box::new(receiver.map(move |v| {
                 let ar = if no_auto_returns {
                     None
@@ -345,14 +337,12 @@ impl Builder {
             body,
             client,
             headers,
-            limits,
             max_parallel_requests,
             method,
             no_auto_returns,
             on_demand_streams,
             outgoing,
             precheck_rr_providers,
-            provider_limits,
             provides,
             rr_providers,
             tags: Arc::new(tags),
@@ -620,14 +610,12 @@ pub struct Endpoint {
     body: BodyTemplate,
     client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     headers: Vec<(String, Template)>,
-    limits: Vec<Limit>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     no_auto_returns: bool,
     on_demand_streams: OnDemandStreams,
     outgoing: Vec<Outgoing>,
     precheck_rr_providers: u16,
-    provider_limits: BTreeMap<String, Limit>,
     provides: Vec<Outgoing>,
     rr_providers: u16,
     tags: Arc<BTreeMap<String, Template>>,
@@ -697,10 +685,15 @@ impl Endpoint {
         let outgoing = Arc::new(outgoing);
         let precheck_rr_providers = self.precheck_rr_providers;
         let timeout = self.timeout;
-        let limits = self.limits;
-        let provider_limits = self.provider_limits;
         let max_parallel_requests = self.max_parallel_requests;
         let tags = self.tags;
+        let blocking_outgoing: Vec<_> = outgoing
+            .iter()
+            .filter_map(|o| match (&o.tx, o.select.get_send_behavior().is_block()) {
+                (ProviderOrLogger::Provider(tx), true) => Some(tx.clone()),
+                _ => None,
+            })
+            .collect();
         let rm = RequestMaker {
             url,
             method,
@@ -712,25 +705,63 @@ impl Endpoint {
             no_auto_returns,
             outgoing,
             precheck_rr_providers,
-            provider_limits,
             tags,
             timeout,
         };
         let limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>> =
-            match (limits.is_empty(), max_parallel_requests) {
+            match (blocking_outgoing.is_empty(), max_parallel_requests) {
                 (false, Some(n)) => {
+                    let mut multiplier: u8 = 1;
                     let limit_fn = move || {
-                        let limit = limits.iter().fold(0, |prev, l| prev.max(l.get()));
-                        if limit == 0 {
-                            n.get()
-                        } else {
-                            limit.min(n.get())
+                        let (empty_slots, has_empty, all_full) = blocking_outgoing.iter().fold(
+                            (0usize, false, true),
+                            |(empty_slots, has_empty, all_full), tx| {
+                                let count = tx.len();
+                                let limit = tx.limit().get();
+                                (
+                                    empty_slots.max(limit - count),
+                                    has_empty || count == 0,
+                                    all_full && count == limit,
+                                )
+                            },
+                        );
+                        // if any of the block providers this endpoint provides are empty increment the multiplier
+                        // or if all the providers are full decrement the multiiplier
+                        // while keeping the multiplier between 1 and 10 inclusive
+                        if has_empty && multiplier < 10 {
+                            multiplier += 1;
+                        } else if all_full && multiplier > 1 {
+                            multiplier -= 1;
                         }
+                        n.get().min(empty_slots * multiplier as usize)
                     };
                     Some(Box::new(limit_fn))
                 }
                 (false, None) => {
-                    let limit_fn = move || limits.iter().fold(0, |prev, l| prev.max(l.get()));
+                    let mut multiplier: u8 = 1;
+                    let limit_fn = move || {
+                        let (empty_slots, has_empty, all_full) = blocking_outgoing.iter().fold(
+                            (0usize, false, true),
+                            |(empty_slots, has_empty, all_full), tx| {
+                                let count = tx.len();
+                                let limit = tx.limit().get();
+                                (
+                                    empty_slots.max(limit - count),
+                                    has_empty || count == 0,
+                                    all_full && count == limit,
+                                )
+                            },
+                        );
+                        // if any of the block providers this endpoint provides are empty increment the multiplier
+                        // or if all the providers are full decrement the multiiplier
+                        // while keeping the multiplier between 1 and 10 inclusive
+                        if has_empty && multiplier < 10 {
+                            multiplier += 1;
+                        } else if all_full && multiplier > 1 {
+                            multiplier -= 1;
+                        }
+                        empty_slots * multiplier as usize
+                    };
                     Some(Box::new(limit_fn))
                 }
                 (true, Some(n)) => Some(Box::new(move || n.get())),

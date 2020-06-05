@@ -92,7 +92,12 @@ impl ChannelClosed {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl<T> Sender<T> {
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
     pub fn limit(&self) -> Limit {
         self.limit.clone()
     }

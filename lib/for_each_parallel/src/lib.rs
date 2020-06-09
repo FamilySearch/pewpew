@@ -20,7 +20,7 @@ where
     E: Send + 'static + Unpin,
 {
     f: Fm,
-    limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>>,
+    limit_fn: Option<Box<dyn FnMut(usize) -> usize + Send + Unpin>>,
     futures: Vec<oneshot::Receiver<E>>,
     stream: Option<St>,
     error: Option<E>,
@@ -34,7 +34,7 @@ where
     E: Send + 'static + Unpin,
 {
     pub fn new(
-        limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>>,
+        limit_fn: Option<Box<dyn FnMut(usize) -> usize + Send + Unpin>>,
         stream: St,
         f: Fm,
     ) -> Self {
@@ -60,7 +60,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
         let limit = match &mut this.limit_fn {
-            Some(lf) => lf(),
+            Some(lf) => lf(this.futures.len()),
             None => 0,
         };
         loop {
@@ -177,8 +177,8 @@ mod tests {
         let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let limit_fn: Option<Box<dyn std::ops::FnMut() -> usize + Send + Unpin + 'static>> =
-            Some(Box::new(|| 250));
+        let limit_fn: Option<Box<dyn std::ops::FnMut(usize) -> usize + Send + Unpin + 'static>> =
+            Some(Box::new(|_| 250));
         let fep = ForEachParallel::new(limit_fn, s, move |_| {
             let counter = counter.clone();
             async move {
@@ -212,7 +212,7 @@ mod tests {
         let s = stream::iter(iter::repeat(Ok::<_, ()>(())).take(n));
         // how long to wait before a parallel task finishes
         let wait_time_ms = 250;
-        let fep = ForEachParallel::new(Some(Box::new(|| 50)), s, move |_| {
+        let fep = ForEachParallel::new(Some(Box::new(|_| 50)), s, move |_| {
             let counter = counter.clone();
             async move {
                 counter.fetch_add(1, Ordering::Relaxed);

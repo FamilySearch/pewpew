@@ -737,7 +737,10 @@ impl Endpoint {
                         // or if all the providers are full and have been full for the same
                         // number of times as the multiplier decrement the multiiplier
                         // while keeping the multiplier between 1 and 10 inclusive
-                        if has_empty && multiplier < 10 && in_progress == empty_slots * multiplier as usize {
+                        if has_empty
+                            && multiplier < 10
+                            && in_progress == empty_slots * multiplier as usize
+                        {
                             multiplier += 1;
                         } else if all_full_count == multiplier && multiplier > 1 {
                             multiplier -= 1;
@@ -774,7 +777,10 @@ impl Endpoint {
                         // or if all the providers are full and have been full for the same
                         // number of times as the multiplier decrement the multiiplier
                         // while keeping the multiplier between 1 and 10 inclusive
-                        if has_empty && multiplier < 10 && in_progress == empty_slots * multiplier as usize {
+                        if has_empty
+                            && multiplier < 10
+                            && in_progress == empty_slots * multiplier as usize
+                        {
                             multiplier += 1;
                         } else if all_full_count == multiplier && multiplier > 1 {
                             multiplier -= 1;

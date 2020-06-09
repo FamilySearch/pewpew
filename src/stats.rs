@@ -146,8 +146,13 @@ impl TimeBucket {
         // TODO: should these be ordered?
         for (tags, index) in tags {
             if let Some(bucket) = self.entries.get(index) {
-                let piece =
-                    bucket.create_print_summary(tags, format, self.time, test_complete, bucket_size);
+                let piece = bucket.create_print_summary(
+                    tags,
+                    format,
+                    self.time,
+                    test_complete,
+                    bucket_size,
+                );
                 print_string.push_str(&piece);
             }
         }
@@ -488,7 +493,12 @@ impl Stats {
         } else {
             self.create_provider_stats_summary(time)
         };
-        let piece = bucket.create_print_summary(&self.tags, self.format, self.bucket_size, remaining_seconds);
+        let piece = bucket.create_print_summary(
+            &self.tags,
+            self.format,
+            self.bucket_size,
+            remaining_seconds,
+        );
         print_string.push_str(&piece);
 
         let mut futures = Vec::new();
@@ -499,8 +509,12 @@ impl Stats {
         let msg = if test_complete {
             let blank = TimeBucket::new(0);
             let bucket = std::mem::replace(&mut self.totals, blank);
-            let print_string2 =
-                bucket.create_print_summary(&self.tags, self.format, self.duration, remaining_seconds);
+            let print_string2 = bucket.create_print_summary(
+                &self.tags,
+                self.format,
+                self.duration,
+                remaining_seconds,
+            );
             print_string.push_str(&print_string2);
             MsgType::Final(print_string)
         } else {
@@ -776,7 +790,8 @@ pub fn create_stats_channel(
                     break;
                 }
                 StreamItem::NewBucket => {
-                    let test_end_time = test_start_time.map(|start| stats.duration - start.elapsed().as_secs());
+                    let test_end_time =
+                        test_start_time.map(|start| stats.duration - start.elapsed().as_secs());
                     stats.close_out_bucket(test_end_time).await;
                 }
                 StreamItem::UpdateProviders(providers) => {

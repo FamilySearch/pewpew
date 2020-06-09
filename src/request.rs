@@ -708,11 +708,12 @@ impl Endpoint {
             tags,
             timeout,
         };
-        let limit_fn: Option<Box<dyn FnMut() -> usize + Send + Unpin>> =
+        let limit_fn: Option<Box<dyn FnMut(usize) -> usize + Send + Unpin>> =
             match (blocking_outgoing.is_empty(), max_parallel_requests) {
                 (false, Some(n)) => {
                     let mut multiplier: u8 = 1;
-                    let limit_fn = move || {
+                    let mut all_full_count: u8 = 0;
+                    let limit_fn = move |in_progress| {
                         let (empty_slots, has_empty, all_full) = blocking_outgoing.iter().fold(
                             (0usize, false, true),
                             |(empty_slots, has_empty, all_full), tx| {
@@ -725,21 +726,34 @@ impl Endpoint {
                                 )
                             },
                         );
-                        // if any of the block providers this endpoint provides are empty increment the multiplier
-                        // or if all the providers are full decrement the multiiplier
-                        // while keeping the multiplier between 1 and 10 inclusive
-                        if has_empty && multiplier < 10 {
-                            multiplier += 1;
-                        } else if all_full && multiplier > 1 {
-                            multiplier -= 1;
+                        if all_full {
+                            all_full_count += 1;
+                        } else {
+                            all_full_count = 0;
                         }
-                        n.get().min(empty_slots * multiplier as usize)
+                        // if any of the block providers this endpoint provides are empty
+                        // and the number of empty slots * multiplier is equal to the number
+                        // of in_progress requests increment the multiplier
+                        // or if all the providers are full and have been full for the same
+                        // number of times as the multiplier decrement the multiiplier
+                        // while keeping the multiplier between 1 and 10 inclusive
+                        if has_empty
+                            && multiplier < 10
+                            && in_progress == empty_slots * multiplier as usize
+                        {
+                            multiplier += 1;
+                        } else if all_full_count == multiplier && multiplier > 1 {
+                            multiplier -= 1;
+                            all_full_count = 0;
+                        }
+                        n.get().min(empty_slots.max(1) * multiplier as usize)
                     };
                     Some(Box::new(limit_fn))
                 }
                 (false, None) => {
                     let mut multiplier: u8 = 1;
-                    let limit_fn = move || {
+                    let mut all_full_count: u8 = 0;
+                    let limit_fn = move |in_progress| {
                         let (empty_slots, has_empty, all_full) = blocking_outgoing.iter().fold(
                             (0usize, false, true),
                             |(empty_slots, has_empty, all_full), tx| {
@@ -752,19 +766,31 @@ impl Endpoint {
                                 )
                             },
                         );
-                        // if any of the block providers this endpoint provides are empty increment the multiplier
-                        // or if all the providers are full decrement the multiiplier
-                        // while keeping the multiplier between 1 and 10 inclusive
-                        if has_empty && multiplier < 10 {
-                            multiplier += 1;
-                        } else if all_full && multiplier > 1 {
-                            multiplier -= 1;
+                        if all_full {
+                            all_full_count += 1;
+                        } else {
+                            all_full_count = 0;
                         }
-                        empty_slots * multiplier as usize
+                        // if any of the block providers this endpoint provides are empty
+                        // and the number of empty slots * multiplier is equal to the number
+                        // of in_progress requests increment the multiplier
+                        // or if all the providers are full and have been full for the same
+                        // number of times as the multiplier decrement the multiiplier
+                        // while keeping the multiplier between 1 and 10 inclusive
+                        if has_empty
+                            && multiplier < 10
+                            && in_progress == empty_slots * multiplier as usize
+                        {
+                            multiplier += 1;
+                        } else if all_full_count == multiplier && multiplier > 1 {
+                            multiplier -= 1;
+                            all_full_count = 0;
+                        }
+                        empty_slots.max(1) * multiplier as usize
                     };
                     Some(Box::new(limit_fn))
                 }
-                (true, Some(n)) => Some(Box::new(move || n.get())),
+                (true, Some(n)) => Some(Box::new(move |_| n.get())),
                 (true, None) => None,
             };
         let f = ForEachParallel::new(limit_fn, stream, move |values| rm.send_request(values));

@@ -124,8 +124,9 @@ impl TimeBucket {
         tags: &BTreeMap<Tags, usize>,
         format: RunOutputFormat,
         bucket_size: u64,
-        test_complete: bool,
+        remaining_seconds: Option<u64>,
     ) -> String {
+        let test_complete = remaining_seconds.is_none();
         let end_time = self.time + bucket_size;
         let summary_type = if test_complete { "Test" } else { "Bucket" };
         let is_pretty_format = format.is_human();
@@ -142,12 +143,16 @@ impl TimeBucket {
         } else {
             String::new()
         };
-        let end_time = if test_complete { Some(end_time) } else { None };
         // TODO: should these be ordered?
         for (tags, index) in tags {
             if let Some(bucket) = self.entries.get(index) {
-                let piece =
-                    bucket.create_print_summary(tags, format, self.time, end_time, bucket_size);
+                let piece = bucket.create_print_summary(
+                    tags,
+                    format,
+                    self.time,
+                    test_complete,
+                    bucket_size,
+                );
                 print_string.push_str(&piece);
             }
         }
@@ -155,14 +160,11 @@ impl TimeBucket {
             if self.entries.is_empty() {
                 print_string.push_str("no data\n");
             }
-            if let Some(et) = end_time {
-                let now = get_epoch();
-                if et > now {
-                    let test_end_msg =
-                        duration_till_end_to_pretty_string(Duration::from_secs(et - now));
-                    let piece = format!("\n{}\n", test_end_msg);
-                    print_string.push_str(&piece);
-                }
+            if let Some(remaining_seconds) = remaining_seconds {
+                let test_end_msg =
+                    duration_till_end_to_pretty_string(Duration::from_secs(remaining_seconds));
+                let piece = format!("\n{}\n", test_end_msg);
+                print_string.push_str(&piece);
             }
         }
         print_string
@@ -238,7 +240,7 @@ impl Bucket {
         tags: &Tags,
         format: RunOutputFormat,
         time: u64,
-        end_time: Option<u64>,
+        test_complete: bool,
         bucket_size: u64,
     ) -> String {
         let calls_made = self.rtt_histogram.len();
@@ -283,7 +285,7 @@ impl Bucket {
                 print_string.push_str(&piece);
             }
             RunOutputFormat::Json => {
-                let summary_type = if end_time.is_some() { "test" } else { "bucket" };
+                let summary_type = if test_complete { "test" } else { "bucket" };
                 let output = json::json!({
                     "type": "summary",
                     "startTime": time,
@@ -475,7 +477,8 @@ impl Stats {
         string_to_print
     }
 
-    async fn close_out_bucket(&mut self, test_complete: bool) {
+    async fn close_out_bucket(&mut self, remaining_seconds: Option<u64>) {
+        let test_complete = remaining_seconds.is_none();
         let mut is_new_bucket = false;
         let time = rounded_epoch(self.bucket_size) - self.bucket_size;
         let bucket = match self.get_previous_bucket(test_complete) {
@@ -490,7 +493,12 @@ impl Stats {
         } else {
             self.create_provider_stats_summary(time)
         };
-        let piece = bucket.create_print_summary(&self.tags, self.format, self.bucket_size, false);
+        let piece = bucket.create_print_summary(
+            &self.tags,
+            self.format,
+            self.bucket_size,
+            remaining_seconds,
+        );
         print_string.push_str(&piece);
 
         let mut futures = Vec::new();
@@ -501,8 +509,12 @@ impl Stats {
         let msg = if test_complete {
             let blank = TimeBucket::new(0);
             let bucket = std::mem::replace(&mut self.totals, blank);
-            let print_string2 =
-                bucket.create_print_summary(&self.tags, self.format, self.duration, true);
+            let print_string2 = bucket.create_print_summary(
+                &self.tags,
+                self.format,
+                self.duration,
+                remaining_seconds,
+            );
             print_string.push_str(&print_string2);
             MsgType::Final(print_string)
         } else {
@@ -774,11 +786,13 @@ pub fn create_stats_channel(
         while let Some(datum) = stream.next().await {
             match datum {
                 StreamItem::TestComplete => {
-                    stats.close_out_bucket(true).await;
+                    stats.close_out_bucket(None).await;
                     break;
                 }
                 StreamItem::NewBucket => {
-                    stats.close_out_bucket(false).await;
+                    let test_end_time =
+                        test_start_time.map(|start| stats.duration - start.elapsed().as_secs());
+                    stats.close_out_bucket(test_end_time).await;
                 }
                 StreamItem::UpdateProviders(providers) => {
                     stats.providers = providers;

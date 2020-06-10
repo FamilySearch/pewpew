@@ -20,8 +20,9 @@ use futures::{
     executor::{block_on, block_on_stream},
     future::{self, try_join_all},
     sink::SinkExt,
-    FutureExt, Stream, StreamExt,
+    stream, FutureExt, Stream, StreamExt,
 };
+use futures_timer::Delay;
 use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use itertools::Itertools;
@@ -255,11 +256,6 @@ pub enum TestEndReason {
     ConfigUpdate(Arc<BTreeMap<String, providers::Provider>>),
 }
 
-type TestEndedChannel = (
-    broadcast::Sender<Result<TestEndReason, TestError>>,
-    broadcast::Receiver<Result<TestEndReason, TestError>>,
-);
-
 async fn _create_run(
     exec_config: ExecConfig,
     mut ctrlc_channel: FCUnboundedReceiver<()>,
@@ -307,14 +303,9 @@ async fn _create_run(
     let mut config =
         config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
     let test_runner = match exec_config {
-        ExecConfig::Try(t) => create_try_run_future(
-            config,
-            t,
-            (test_ended_tx.clone(), test_ended_tx.subscribe()),
-            stdout,
-            stderr,
-        )
-        .map(Either::A),
+        ExecConfig::Try(t) => {
+            create_try_run_future(config, t, test_ended_tx.clone(), stdout, stderr).map(Either::A)
+        }
         ExecConfig::Run(r) => {
             let config_providers = mem::take(&mut config.providers);
             // build and register the providers
@@ -351,11 +342,11 @@ async fn _create_run(
                     providers.clone(),
                 );
             }
-            let test_ended_rx = test_ended_tx.subscribe();
+
             create_load_test_future(
                 config,
                 r,
-                (test_ended_tx, test_ended_rx),
+                test_ended_tx,
                 providers,
                 stats_tx,
                 stdout,
@@ -396,8 +387,8 @@ where
 {
     let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
     let output_format = exec_config.get_output_format();
-    let stdout = blocking_writer(stdout, test_ended_tx.clone(), "stdout".into());
-    let mut stderr = blocking_writer(stderr, test_ended_tx.clone(), "stderr".into());
+    let (stdout, stdout_done) = blocking_writer(stdout, test_ended_tx.clone(), "stdout".into());
+    let (mut stderr, stderr_done) = blocking_writer(stderr, test_ended_tx.clone(), "stderr".into());
     let test_result = _create_run(
         exec_config,
         ctrlc_channel,
@@ -462,6 +453,10 @@ where
         }
         _ => (),
     };
+    drop(stderr);
+    // wait for all stderr and stdout output to be written
+    let _ = stderr_done.await;
+    let _ = stdout_done.await;
     Ok(())
 }
 
@@ -480,10 +475,20 @@ fn create_config_watcher(
     mut previous_providers: Arc<BTreeMap<String, providers::Provider>>,
 ) {
     let start_time = Instant::now();
-    let interval = tokio::time::interval(Duration::from_millis(1000));
+    let mut interval = tokio::time::interval(Duration::from_millis(1000));
     let mut last_modified = None;
+    let mut test_end_rx = test_ended_tx.subscribe();
+    let stream = stream::poll_fn(move |cx| match interval.poll_next_unpin(cx) {
+        Poll::Ready(_) => Poll::Ready(Some(())),
+        Poll::Pending => match test_end_rx.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(Ok(TestEndReason::ConfigUpdate(_))))) | Poll::Pending => {
+                Poll::Pending
+            }
+            Poll::Ready(_) => Poll::Ready(None),
+        },
+    });
     spawn_blocking(move || {
-        for _ in block_on_stream(interval) {
+        for _ in block_on_stream(stream) {
             let modified = match file.metadata() {
                 Ok(m) => match m.modified() {
                     Ok(m) => m,
@@ -587,7 +592,7 @@ fn create_config_watcher(
             let f = create_load_test_future(
                 config,
                 run_config,
-                (test_ended_tx.clone(), test_ended_tx.subscribe()),
+                test_ended_tx.clone(),
                 providers,
                 stats_tx.clone(),
                 stdout.clone(),
@@ -620,12 +625,10 @@ fn create_config_watcher(
 fn create_try_run_future(
     mut config: config::LoadTest,
     try_config: TryConfig,
-    test_ended: TestEndedChannel,
+    test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
-    let (test_ended_tx, mut test_ended_rx) = test_ended;
-
     let select = if let TryRunFormat::Human = try_config.format {
         r#""`\
          Request\n\
@@ -768,6 +771,7 @@ fn create_try_run_future(
 
     let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
 
+    let mut test_ended_rx = test_ended_tx.subscribe();
     let mut left = try_join_all(endpoint_calls).map(move |r| {
         let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
     });
@@ -784,15 +788,13 @@ fn create_try_run_future(
 fn create_load_test_future(
     config: config::LoadTest,
     run_config: RunConfig,
-    test_ended: TestEndedChannel,
+    test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     providers: Arc<BTreeMap<String, providers::Provider>>,
     stats_tx: FCUnboundedSender<StatsMessage>,
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
     config.ok_for_loadtest()?;
-
-    let (test_ended_tx, mut test_ended_rx) = test_ended;
 
     let mut duration = config.get_duration();
     if let Some(t) = run_config.start_at {
@@ -861,12 +863,23 @@ fn create_load_test_future(
 
     let _ = stats_tx.unbounded_send(StatsMessage::Start(duration));
     let mut f = try_join_all(endpoint_calls);
+    let mut test_timeout = Delay::new(duration);
+    let mut test_ended_rx = test_ended_tx.subscribe();
     let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
         Poll::Ready(r) => {
             let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
             Poll::Ready(())
         }
-        Poll::Pending => test_ended_rx.poll_next_unpin(cx).map(|_| ()),
+        Poll::Pending => match test_ended_rx.poll_next_unpin(cx).map(|_| ()) {
+            Poll::Ready(_) => Poll::Ready(()),
+            Poll::Pending => match test_timeout.poll_unpin(cx) {
+                Poll::Ready(_) => {
+                    let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
+                    Poll::Ready(())
+                }
+                Poll::Pending => Poll::Pending,
+            },
+        },
     });
 
     Ok(f)
@@ -956,6 +969,7 @@ fn get_loggers_from_config(
                         test_ended_tx.clone(),
                         file_path.to_string_lossy().to_string(),
                     )
+                    .0
                 }
             };
             let sender = providers::logger(template, &test_ended_tx, writer);

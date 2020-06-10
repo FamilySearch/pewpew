@@ -1,10 +1,4 @@
-use std::{
-    convert::TryInto,
-    fs::create_dir_all,
-    io,
-    path::PathBuf,
-    time::{Duration, UNIX_EPOCH},
-};
+use std::{convert::TryInto, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
 
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use config::duration_from_string;
@@ -23,7 +17,7 @@ fn main() {
             Paint::disable();
         }
     }
-    if atty::isnt(atty::Stream::Stderr) {
+    if atty::isnt(atty::Stream::Stdout) {
         Paint::disable();
     }
     let filter_reg = Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex");
@@ -286,8 +280,7 @@ fn main() {
         .unwrap();
     let result = rt.block_on(f);
     // shutdown the runtime in case there are any hanging threads/tasks
-    // but give enough time to flush out any console output
-    rt.shutdown_timeout(Duration::from_millis(500));
+    rt.shutdown_timeout(Default::default());
 
     if result.is_err() {
         std::process::exit(1)

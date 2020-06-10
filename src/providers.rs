@@ -408,7 +408,8 @@ mod tests {
             .unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
-            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+            let (writer_channel, _) =
+                blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 
@@ -448,7 +449,7 @@ mod tests {
             .unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
-            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+            let (writer_channel, _) = blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 
@@ -488,7 +489,8 @@ mod tests {
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             writer.do_would_block_on_next_write();
-            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+            let (writer_channel, _) =
+                blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 
@@ -529,7 +531,8 @@ mod tests {
             .unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
-            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+            let (writer_channel, _) =
+                blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 
@@ -566,7 +569,8 @@ mod tests {
             .unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
-            let writer_channel = blocking_writer(writer.clone(), test_killer.clone(), "".into());
+            let (writer_channel, _) =
+                blocking_writer(writer.clone(), test_killer.clone(), "".into());
 
             let mut tx = logger(logger_params, &test_killer, writer_channel);
 

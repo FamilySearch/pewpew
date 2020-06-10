@@ -362,7 +362,7 @@ impl Stats {
         providers: Vec<ChannelStatsReader<json::Value>>,
         test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
     ) -> Result<Self, io::Error> {
-        let file = blocking_writer(
+        let (file, _) = blocking_writer(
             File::create(file_name)?,
             test_killer,
             file_name.to_string_lossy().to_string(),

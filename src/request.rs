@@ -720,14 +720,16 @@ impl Endpoint {
                                 let count = tx.len();
                                 let limit = tx.limit().get();
                                 (
-                                    empty_slots.max(limit - count),
+                                    empty_slots.max(limit.saturating_sub(count)),
                                     has_empty || count == 0,
                                     all_full && count == limit,
                                 )
                             },
                         );
                         if all_full {
-                            all_full_count += 1;
+                            if all_full_count < multiplier {
+                                all_full_count += 1;
+                            }
                         } else {
                             all_full_count = 0;
                         }
@@ -760,14 +762,16 @@ impl Endpoint {
                                 let count = tx.len();
                                 let limit = tx.limit().get();
                                 (
-                                    empty_slots.max(limit - count),
+                                    empty_slots.max(limit.saturating_sub(count)),
                                     has_empty || count == 0,
                                     all_full && count == limit,
                                 )
                             },
                         );
                         if all_full {
-                            all_full_count += 1;
+                            if all_full_count < multiplier {
+                                all_full_count += 1;
+                            }
                         } else {
                             all_full_count = 0;
                         }

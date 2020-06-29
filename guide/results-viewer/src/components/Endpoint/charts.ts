@@ -3,12 +3,108 @@ import { DataPoint } from "../../model";
 
 const colors = ["#3366cc", "#dc3912", "#ff9900", "#109618", "#990099", "#0099c6", "#dd4477", "#66aa00", "#b82e2e", "#316395", "#994499", "#22aa99", "#aaaa11", "#6633cc", "#e67300", "#8b0707", "#651067", "#329262", "#5574a6", "#3b3eac"];
 
-export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
+function rttDataSet (dataPoints: DataPoint[]): Chart.ChartDataSets[] {
+  return ["avg", "min", "max", "std", 90, 95, 99].map((type, i) => {
+    const MICROS_TO_MS = 1000;
+    const borderColor = colors[i % colors.length];
+    const backgroundColor = borderColor + "46";
+    let label: string;
+    let data: Chart.ChartPoint[];
+    if (type == "avg") {
+      label = "Avg";
+      data = dataPoints.map((dp) => ({ x: dp.time, y: dp.rttHistogram.getTotalCount() ? Math.round(dp.rttHistogram.getMean()) / MICROS_TO_MS : NaN }));
+    } else if (type == "min") {
+      label = "Min";
+      data = dataPoints.map((dp) => ({ x: dp.time, y: dp.rttHistogram.getTotalCount() ? Number(dp.rttHistogram.getMinNonZeroValue()) / MICROS_TO_MS : NaN }));
+    } else if (type == "max") {
+      label = "Max";
+      data = dataPoints.map((dp) => ({ x: dp.time, y: dp.rttHistogram.getTotalCount() ? Number(dp.rttHistogram.getMaxValue()) / MICROS_TO_MS : NaN }));
+    } else if (type == "std") {
+      label = "Std Dev";
+      data = dataPoints.map((dp) => ({ x: dp.time, y: dp.rttHistogram.getTotalCount() ? (Math.round(dp.rttHistogram.getStdDeviation())) / MICROS_TO_MS : NaN}));
+    } else if (typeof type == "number") {
+      label = type + "th PCTL";
+      data = dataPoints.map((dp) => ({ x: dp.time, y: dp.rttHistogram.getTotalCount() ? Number(dp.rttHistogram.getValueAtPercentile(type)) / MICROS_TO_MS : NaN }));
+    } else {
+      throw new Error("Unexpected value when generating RTT chart");
+    }
+    return { label, borderColor, backgroundColor, data, hidden: type === "std" };
+  });
+}
+
+export class RTTChart {
+  private chart: Chart;
+
+  public constructor (el: HTMLCanvasElement, dataPoints: DataPoint[], logarithmicXScale: boolean) {
+    const chartType = logarithmicXScale ? "logarithmic" : "linear";
+
+    const datasets = rttDataSet(dataPoints);
+
+    this.chart = new Chart.Chart(el, {
+      type: "line",
+      data: { datasets },
+      options: {
+        scales: {
+          yAxes: [{
+            type: chartType,
+            scaleLabel: {
+              display: true,
+              labelString: "RTT"
+            },
+            ticks: {
+              callback: (v) => v + "ms",
+              autoSkip: true
+            }
+          }],
+          xAxes: [{
+            type: "time",
+            time: {
+              unit: "second"
+            },
+            ticks: {
+              autoSkip: true,
+              source: "data"
+            }
+          }]
+        },
+        tooltips: {
+          callbacks: {
+            label: ({yLabel}) => yLabel + "ms"
+          }
+        }
+      },
+      plugins: [{
+        beforeUpdate (chart: any, _: any) {
+          const config = chart.options.scales.yAxes[0];
+          config.afterBuildTicks = config.type === "logarithmic" ? afterBuildTicks : undefined;
+        }
+      }]
+    });
+  }
+
+  public updateDataSet (dataPoints: DataPoint[], logarithmicXScale: boolean) {
+    const chartType = logarithmicXScale ? "logarithmic" : "linear";
+    this.chart.config.options!.scales!.yAxes![0].type = chartType;
+    this.chart.config.data = { datasets: rttDataSet(dataPoints) };
+    this.chart.update();
+  }
+
+  public setYAxisType (type: "logarithmic" | "linear") {
+    this.chart.config.options!.scales!.yAxes![0].type = type;
+    this.chart.update();
+  }
+
+  public getYAxisType (): string {
+    return this.chart.config.options!.scales!.yAxes![0].type!;
+  }
+}
+
+export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[], logarithmicXScale: boolean) {
   const MICROS_TO_MS = 1000;
   const datasets: Chart.ChartDataSets[] = ["avg", "min", "max", "std", 90, 95, 99].map((type, i) => {
     const borderColor = colors[i % colors.length];
     const backgroundColor = borderColor + "46";
-    let label;
+    let label: string;
     let data: Chart.ChartPoint[];
     if (type == "avg") {
       label = "Avg";
@@ -31,14 +127,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
     return { label, borderColor, backgroundColor, data, hidden: type === "std" };
   });
 
-  let chartType = "linear";
-  dataPoints.forEach((dp) => {
-    const shouldBeLogarithmic = dp.rttHistogram.getTotalCount()
-      && Number(dp.rttHistogram.getMaxValue()) > (dp.rttHistogram.getMean() + (5 * dp.rttHistogram.getStdDeviation()));
-    if (shouldBeLogarithmic) {
-      chartType = "logarithmic";
-    }
-  });
+  const chartType = logarithmicXScale ? "logarithmic" : "linear";
 
   const mainChart = new Chart.Chart(el, {
     type: "line",
@@ -62,7 +151,8 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
             unit: "second"
           },
           ticks: {
-            autoSkip: true
+            autoSkip: true,
+            source: "data"
           }
         }]
       },
@@ -121,6 +211,98 @@ class ChartDataSets {
   }
 }
 
+export class StatusCountsChart {
+  private chart: Chart;
+
+  public constructor (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
+    const chartDataSets = new ChartDataSets();
+    for (const dp of dataPoints) {
+      const x = dp.time;
+      const statusCounts = Object.entries(dp.statusCounts)
+        .map(([k, v]) => <[string, number]> [k + " count", v]);
+      const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
+      for (const [key, count] of pairs) {
+        chartDataSets.setPoint(key, x, count);
+      }
+      chartDataSets.setPoint("total calls", x, Number(dp.rttHistogram.getTotalCount()), { fill: false });
+    }
+
+    const datasets = chartDataSets.getDataSets();
+    this.chart = new Chart.Chart(el, {
+      type: "line",
+      data: { datasets },
+      options: {
+        scales: {
+          yAxes: [{
+            ticks: <Chart.TickOptions> {
+              precision: 0,
+              autoSkip: true
+            },
+            type: "linear",
+            scaleLabel: {
+              display: true,
+              labelString: "Count"
+            }
+          }],
+          xAxes: [{
+            type: "time",
+            time: {
+              unit: "second"
+            },
+            ticks: {
+              autoSkip: true,
+              source: "data"
+            }
+          }]
+        },
+        tooltips: {
+          callbacks: {
+            label: ({ yLabel, datasetIndex }) => {
+              const { label } = datasets[datasetIndex || 0];
+              const status = label ? parseInt(label.slice(0, 3), 10) : NaN;
+              if (!isNaN(status)) {
+                return `${yLabel} HTTP ${status}s`;
+              } else if (label && label.startsWith("total")) {
+                return `${yLabel} ${label.toLowerCase()}`;
+              } else {
+                return `${yLabel} ${label}`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  public updateDataSet (dataPoints: DataPoint[]) {
+    const chartDataSets = new ChartDataSets();
+    for (const dp of dataPoints) {
+      const x = dp.time;
+      const statusCounts = Object.entries(dp.statusCounts)
+        .map(([k, v]) => <[string, number]> [k + " count", v]);
+      const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
+      for (const [key, count] of pairs) {
+        chartDataSets.setPoint(key, x, count);
+      }
+      chartDataSets.setPoint("total calls", x, Number(dp.rttHistogram.getTotalCount()), { fill: false });
+    }
+
+    const datasets = chartDataSets.getDataSets();
+
+    this.chart.config.data = { datasets };
+    this.chart.update();
+  }
+
+  public setYAxisType (type: "logarithmic" | "linear") {
+    this.chart.config.options!.scales!.yAxes![0].type = type;
+    this.chart.update();
+  }
+
+  public getYAxisType (): string {
+    return this.chart.config.options!.scales!.yAxes![0].type!;
+  }
+}
+
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
   const chartDataSets = new ChartDataSets();
   for (const dp of dataPoints) {
@@ -156,7 +338,8 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
             unit: "second"
           },
           ticks: {
-            autoSkip: true
+            autoSkip: true,
+            source: "data"
           }
         }]
       },
@@ -228,8 +411,8 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]) {
       }
       chart.update();
     } else {
-      lastLegendClick = [e.timeStamp, legend.datasetIndex, chart];
-      const meta = chart.getDatasetMeta(legend.datasetIndex);
+      lastLegendClick = [e.timeStamp, legend.datasetIndex!, chart];
+      const meta = chart.getDatasetMeta(legend.datasetIndex!);
       meta.hidden = !legend.hidden;
       chart.update();
     }

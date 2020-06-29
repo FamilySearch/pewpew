@@ -19,7 +19,8 @@ use std::{
 struct LinearSegment {
     m: f64,
     b: f64,
-    zero_x: Option<f64>,
+    min_y: f64,
+    y_limit: f64,
     duration: Duration,
 }
 
@@ -28,26 +29,26 @@ impl LinearSegment {
         let seconds = duration.as_secs_f64();
         let m = (end_hps - start_hps) / seconds;
         let b = start_hps;
-        let zero_x = if start_hps == 0.0 || end_hps == 0.0 {
+        let zero_x = {
             let m = m.abs();
-            Some(1.0 / ((8.0 * m).sqrt() / (2.0 * m)))
-        } else {
-            None
+            ((8.0 * m).sqrt() / (2.0 * m)).recip()
         };
+        let min_y = seconds.recip();
 
         LinearSegment {
             m,
             b,
-            zero_x,
+            min_y: zero_x,
             duration,
+            y_limit: min_y,
         }
     }
 
     fn get_hps_at(&self, time: Duration) -> f64 {
         let x = time.as_secs_f64();
         let mut y = self.m * x + self.b;
-        if let (true, Some(y2)) = (y.is_nan() || y == 0.0, self.zero_x) {
-            y = y2;
+        if y.is_nan() || y < self.y_limit {
+            y = self.min_y;
         }
         match y.is_finite() {
             true => y,
@@ -75,7 +76,6 @@ impl PerX {
 
 // each ModInterval segment is evaluated independenty at [t0, tDuration]
 // `x_offset` helps to keep track of the progression within the entire ModInterval
-// or in other words
 struct ModIntervalStreamState {
     end_time: Instant,
     segment: LinearSegment,
@@ -325,6 +325,43 @@ mod tests {
                 .map(FromStr::from_str)
                 .collect::<Result<Vec<f64>, _>>()
                 .unwrap();
+
+            assert_eq!(
+                elapsed_times, expects,
+                "elapsed times were not as expected for segment at index {}",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn single_segment_low_start_rate() {
+        // start perx, duration, end perx
+        let segments = [(0.3, 60, 30.0), (1.0, 30, 1.0), (1.0, 60, 1.0)];
+        for (i, (start, duration, end)) in segments.iter().enumerate() {
+            let mut mod_interval = ModInterval::new();
+            mod_interval.append_segment(
+                PerX::minute(*start),
+                Duration::from_secs(*duration),
+                PerX::minute(*end),
+            );
+            let stream = Box::pin(mod_interval.into_stream(None));
+
+            let mut start = None;
+            let elapsed_times: Vec<_> = block_on_stream(stream)
+                .map(|instant| {
+                    let start = start.get_or_insert(instant);
+                    (instant - *start).as_secs_f64()
+                })
+                .collect();
+
+            let expects =
+                fs::read_to_string(format!("tests/single-segment-low-start-rate{}.out", i))
+                    .unwrap()
+                    .lines()
+                    .map(FromStr::from_str)
+                    .collect::<Result<Vec<f64>, _>>()
+                    .unwrap();
 
             assert_eq!(
                 elapsed_times, expects,

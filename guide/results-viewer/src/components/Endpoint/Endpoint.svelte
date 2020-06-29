@@ -1,17 +1,22 @@
 <div class="endpoint">
-  <h2>{bucketId.method} {bucketId.url}</h2>
-  <ul>
-    {#each Object.entries(bucketId) as [key, value]}
-      {#if key != "method" && key != "url"}
-        <li>{key} - {value}</li>
-      {/if}
-    {/each}
-  </ul>
-  <div class="flex column center">
-    <h3>Endpoint Summary</h3>
+  {#if Object.keys(tags).length}
+  <h3>Tags</h3>
+  <table>
+    <tbody>
+      {#each Object.entries(tags) as [key, value]}
+        <tr>
+          <td>{key}</td>
+          <td title={value}>{value}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+  {/if}
+  <div class="flex column center overview">
+    <h3 class="align-self-start">Overview</h3>
     <div class="flex row">
-      <div class="flex column center table-box margin-right">
-        <h5>RTT Stats</h5>
+      <div class="flex column center margin-right">
+        <h4>RTT Stats</h4>
         <table>
           <tbody>
             {#each totalResults.stats as [label, stat]}
@@ -23,8 +28,8 @@
           </tbody>
         </table>
       </div>
-      <div class="flex column center">
-        <h5>HTTP Status Counts and Errors</h5>
+      <div class="flex column center margin-right">
+        <h4>HTTP Status Counts</h4>
         <table>
           <tbody>
             {#each totalResults.statusCounts as [status, count, percent]}
@@ -36,107 +41,122 @@
             {/each}
           </tbody>
         </table>
-        {#if totalResults.otherErrors.length > 0}
-          <h5>Other Errors</h5>
-          <table>
-            <tbody>
-              {#each totalResults.otherErrors as [msg, count]}
-                <tr>
-                  <td title={msg}>{msg}</td>
-                  <td>{count}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
       </div>
+      {#if totalResults.otherErrors.length > 0}
+      <div class="flex column center">
+        <h4>Test Errors and Warnings</h4>
+        <table>
+          <tbody>
+            {#each totalResults.otherErrors as [msg, count]}
+              <tr>
+                <td title={msg}>{msg}</td>
+                <td>{count}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {/if}
     </div>
   </div>
-  <div class="rtt flex column center">
-    <h3>RTT Stats</h3>
-    <button on:click={() => toggleChart(rttChart)}>
-      Switch to {rttButton}
-    </button>
-    <div class="flex row center">
-      <div class="canvas-box">
-        <canvas bind:this={rttCanvas} />
+  <div class="flex row">
+    <div class="rtt flex column center">
+      <h3 class="align-self-start">RTT Stats</h3>
+      <button class="align-self-start y-scale" on:click={() => toggleChart(rttChart)} title={`Switch the y-axis to use a ${rttButton} scale`}>
+        {yScaleButtonLabel[rttButton]}
+      </button>
+      <div class="flex row center">
+        <div class="canvas-box">
+          <canvas bind:this={rttCanvas} />
+        </div>
       </div>
     </div>
-  </div>
-  <div class="flex column center">
-    <h3>HTTP Status Counts and Errors</h3>
-    <button on:click={() => toggleChart(totalChart)}>
-      Switch to {totalButton}
-    </button>
-    <div class="flex row center">
-      <div class="canvas-box">
-        <canvas bind:this={totalCallsCanvas} />
+    <div class="flex column center">
+      <h3 class="align-self-start">HTTP Status Counts and Test Errors and Warnings</h3>
+      <button class="align-self-start y-scale" on:click={() => toggleChart(totalChart)} title={`Switch the y-axis to use a ${totalButton} scale`}>
+        {yScaleButtonLabel[totalButton]}
+      </button>
+      <div class="flex row center">
+        <div class="canvas-box">
+          <canvas bind:this={totalCallsCanvas} />
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-  import { RTT, totalCalls } from "./charts.ts";
+  import { RTTChart, StatusCountsChart } from "./charts.ts";
   import { onMount } from "svelte";
   
   let rttCanvas, totalCallsCanvas;
 
-  export let bucketId, dataPoints;
-  let rttChart, totalChart;
+  export let tags, dataPoints;
+  let rttChart, totalChart, totalResults, logarithmicXScale;
 
-  let rttButton, totalButton;
+  let rttButton;
+  let totalButton = "logarithmic";
+
+  const opposite = {
+    logarithmic: "linear",
+    linear: "logarithmic"
+  };
+
+  const yScaleButtonLabel = {
+    logarithmic: "log(n)",
+    linear: "n"
+  };
   
+  $: initializeData(dataPoints);
+  
+  let mounted = false;
   onMount(() => {
-    rttChart = RTT(rttCanvas, dataPoints);
-    rttButton = rttChart.config.options.scales.yAxes[0].type === "linear" ? "logarithmic" : "linear";
-    totalChart = totalCalls(totalCallsCanvas, dataPoints);
-    totalButton = "logarithmic";
+    mounted = true;
+    rttChart = new RTTChart(rttCanvas, dataPoints, logarithmicXScale);
+    rttButton = opposite[rttChart.getYAxisType()];
+    totalChart = new StatusCountsChart(totalCallsCanvas, dataPoints);
   });
 
   function toggleChart(chart) {
-    const chartConfig = chart.config.options.scales.yAxes[0];
-    if (chartConfig.type === "linear") {
-      chartConfig.type = "logarithmic";
-    } else if (chartConfig.type === "logarithmic") {
-      chartConfig.type = "linear";
-    }
-
     // This is so the button to toggle the type will display the type switching to
-    rttButton = rttChart ? (rttChart.config.options.scales.yAxes[0].type === "linear" ? "logarithmic" : "linear") : "";
-    totalButton = totalChart ? (totalChart.config.options.scales.yAxes[0].type === "linear" ? "logarithmic" : "linear") : "";  
-    chart.update();
+    if (chart == rttChart) {
+      chart.setYAxisType(rttButton);
+      rttButton = opposite[rttButton];
+    } else {
+      chart.setYAxisType(totalButton);
+      totalButton = opposite[totalButton];  
+    }
   }
 
-  function total (dataPoints) {
-    const first = dataPoints[0];
-    const totalRTT = first.rttHistogram.clone();
-    totalRTT.autoResize = true;
-    let statusCounts = Object.assign({}, first.statusCounts);
-    let otherErrors = Object.assign({}, first.testErrors);
-    let responseTimeouts = first.responseTimeouts;
-    for (let i = 1; i < dataPoints.length; i++) {
-      const dp = dataPoints[i];
-      totalRTT.add(dp.rttHistogram);
-      for (const [status, count] of Object.entries(dp.statusCounts)) {
-        statusCounts[status] = count + (statusCounts[status] || 0);
+  function initializeData (dataPoints) {
+    let stats, otherErrors, statusCounts;
+    if (dataPoints.length > 0) {
+      const first = dataPoints[0];
+      const totalRTT = first.rttHistogram.clone();
+      totalRTT.autoResize = true;
+      let statusCounts2 = Object.assign({}, first.statusCounts);
+      let otherErrors2 = Object.assign({}, first.testErrors);
+      let responseTimeouts = first.responseTimeouts;
+      for (let i = 1; i < dataPoints.length; i++) {
+        const dp = dataPoints[i];
+        totalRTT.add(dp.rttHistogram);
+        for (const [status, count] of Object.entries(dp.statusCounts)) {
+          statusCounts2[status] = count + (statusCounts2[status] || 0);
+        }
+        for (const [msg, count] of Object.entries(dp.testErrors)) {
+          otherErrors2[msg] = count + (otherErrors2[msg] || 0);
+        }
+        responseTimeouts += dp.responseTimeouts;
       }
-      for (const [msg, count] of Object.entries(dp.testErrors)) {
-        otherErrors[msg] = count + (otherErrors[msg] || 0);
+      statusCounts = Object.entries(statusCounts2).sort(([a], [b]) => a - b);
+      statusCounts.forEach((stat) => stat.push(stat[1] / Number(totalRTT.getTotalCount())));
+      statusCounts.push(["Sum", Number(totalRTT.getTotalCount()), 1]);
+      otherErrors = Object.entries(otherErrors2);
+      if (responseTimeouts > 0) {
+        otherErrors.push(["Timeout", responseTimeouts]);
       }
-      responseTimeouts += dp.responseTimeouts;
-    }
-    statusCounts = Object.entries(statusCounts).sort(([a], [b]) => a - b);
-    statusCounts.forEach((stat) => stat.push(stat[1] / Number(totalRTT.getTotalCount())));
-    statusCounts.push(["Sum", Number(totalRTT.getTotalCount()), 1]);
-    otherErrors = Object.entries(otherErrors);
-    if (responseTimeouts > 0) {
-      otherErrors.push(["Timeout", responseTimeouts]);
-    }
-    const MICROS_TO_MS = 1000;
-    return {
-      otherErrors,
-      stats: [
+      const MICROS_TO_MS = 1000;
+      stats = [
         ["Avg", Math.round(totalRTT.getMean()) / MICROS_TO_MS],
         [
           "Min",
@@ -150,53 +170,74 @@
         ["90th PCTL", Number(totalRTT.getValueAtPercentile(90)) / MICROS_TO_MS],
         ["95th PCTL", Number(totalRTT.getValueAtPercentile(95)) / MICROS_TO_MS],
         ["99th PCTL", Number(totalRTT.getValueAtPercentile(99)) / MICROS_TO_MS]
-      ],
+      ];
+      logarithmicXScale = totalRTT.getTotalCount()
+        && Number(totalRTT.getMaxValue()) > (totalRTT.getMean() + (5 * totalRTT.getStdDeviation()));
+      totalRTT.free();
+    } else {
+      stats = [];
+      otherErrors = [];
+      statusCounts = [];
+    }
+    totalResults = {
+      otherErrors,
+      stats,
       statusCounts
     };
+    if (mounted) {
+      rttChart.updateDataSet(dataPoints, logarithmicXScale);
+      rttButton = opposite[rttChart.getYAxisType()];
+      totalChart.updateDataSet(dataPoints);
+    }
   };
-
-  const totalResults = total(dataPoints);
 </script>
 
 <style>
+  button {
+    background: var(--accent);
+    color: var(--text);
+  }
   .endpoint:not(:last-child) {
     margin-bottom: 5em;
   }
   .rtt {
     margin-bottom: 2em;
   }
-  ul {
-    list-style: none;
-  }
-  .table-box {
-    max-width: 400px;
-  }
   table {
     border-spacing: 0;
   }
-  td {
+  .overview td {
     max-width: 150px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
   }
-  tr:nth-child(even) {
-    background: #efefef;
+  .overview td:last-child {
+    text-align: right;
   }
-  td:not(:first-child) {
+  .overview td:not(:first-child) {
     padding-left: 2em;
   }
   td {
+    max-width: 900px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
     padding: 5px;
   }
-  td:last-child {
-    text-align: right;
+  /* :hover pseudo class there twice to increase specificity */
+  tr:hover:hover {
+    background: var(--accent2);
+  }
+  tr:nth-child(even) {
+    background: var(--accent);
   }
   .flex {
     display: flex;
+    flex-wrap: wrap;
   }
   .flex.center {
     align-items: center;
+  }
+  .flex > .align-self-start {
+    align-self: start;
   }
   .flex.row {
     flex-direction: row;
@@ -207,8 +248,18 @@
   .flex.margin-right {
     margin-right: 15px;
   }
-  .canvas-box {
-    position: relative;
-    width: calc(100vw - 100px);
+  .y-scale {
+    position: absolute;
+    transform: translateY(50px);
+  }
+  @media (min-width: 1100px) {
+    .canvas-box {
+      width: calc(50vw - 50px);
+    }
+  }
+  @media not (min-width: 1100px) {
+    .canvas-box {
+      width: calc(100vw - 100px);
+    }
   }
 </style>

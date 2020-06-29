@@ -3,8 +3,8 @@
     "plugins": [{
       "name": "tslint-language-service"
     }],
-    "target": "es2018",
-    "module": "es2015",
+    "target": "es2020",
+    "module": "es2020",
     "moduleResolution": "node",
     "isolatedModules": false,
     "emitDecoratorMetadata": true,
@@ -24,11 +24,14 @@
     "sourceMap": true,
     "outDir": "dist",
     "baseUrl": "src",
-    "lib": ["es2017", "esnext.asynciterable", "dom", "dom.iterable"]
+    "lib": ["es2020", "esnext.asynciterable", "dom", "dom.iterable"],
+    "paths": {
+      "model": ["model"]
+    }
   },
   "exclude": ["node_modules"],
   "include": ["src/**/*", "tests/**/*"],
   "compileOnSave": true,
-  "buildOnSave": false
+  "buildOnSave": false,
 }
   

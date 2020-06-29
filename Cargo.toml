@@ -59,6 +59,7 @@ tempfile = "3"
 
 [profile.release]
 panic = "abort"
+lto = "fat"
 
 [profile.release.package.config-wasm]
 opt-level = 's'

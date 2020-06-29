@@ -1,13 +1,33 @@
 <div>
   {#if buckets.length > 0}
     <div>
-      <h1>Time Taken</h1>
-      <p>{startTime} to {endTime}</p>
-      <p>Total time: {deltaTime}</p>
-      <h1>Results</h1>
-      {#each buckets as [bucketId, dataPoints]}
-	      <Endpoint {bucketId} {dataPoints} />
-      {/each}
+      <h1>{testName || "Test"} Summary Data</h1>
+      <section>
+        <h3>Time Taken</h3>
+        <p>{startTime} to {endTime}</p>
+        <p>Total time: {deltaTime}</p>
+        <h3>Overview charts</h3>
+        <p>Filter which endpoints are included in the summary:</p>
+        <label>
+          <input type="text" multiple on:input={updateSummaryTagFilter} placeholder=""/>
+          <span>Tag name</span>
+        </label>
+        <label>
+          <input type="text" multiple on:input={updateSummaryTagValueFilter} placeholder=""/>
+          <span>Tag value contains</span>
+        </label>
+        {#if summaryData.dataPoints.length > 0}
+        <Endpoint tags={summaryData.tags} dataPoints={summaryData.dataPoints} />
+        {:else}
+        <p>No summary data to display</p>
+        {/if}
+      </section>
+      <h1>Endpoint Data</h1>
+      <section>
+        {#each buckets as [tags, dataPoints]}
+          <Endpoint {tags} {dataPoints} />
+        {/each}
+      </section>
     </div>
   {:else}
     <DropZone on:fileDataParsed={bucketReceive}/>
@@ -17,12 +37,51 @@
 <script>
   import DropZone from "./DropZone.svelte";
   import Endpoint from "./Endpoint/Endpoint.svelte";
+  import * as model from "../model.ts";
+
   let buckets = [];
 
-  let startTime, endTime, deltaTime;
+  let summaryTagFilter = "";
+  let summaryTagValueFilter = "";
+
+  let startTime, endTime, deltaTime, summaryData, testName;
+
+  $: {
+    const allDataPoints = [];
+    for (const [tags, dataPoints] of buckets) {
+      if (summaryTagFilter && tags[summaryTagFilter] && tags[summaryTagFilter].includes(summaryTagValueFilter) || !summaryTagFilter) {
+        allDataPoints.push(...dataPoints);
+      }
+    }
+    const dataPoints = model.mergeAllDataPoints(...allDataPoints);
+    let summary;
+    if (summaryTagFilter) {
+      summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
+      if (summaryTagValueFilter) {
+        summary += ` and a value containing "${summaryTagValueFilter}"`
+      }
+    } else {
+      summary = "Including all endpoints";
+    }
+    const tags = {};
+    summaryData = { tags, dataPoints };
+  }
+
+  let lastSummaryTagFilterUpdate;
+  function updateSummaryTagFilter(e) {
+    clearTimeout(lastSummaryTagFilterUpdate);
+    lastSummaryTagFilterUpdate = setTimeout(() => summaryTagFilter = e.target.value, 500);
+  }
+
+  let lastSummaryTagValueFilterUpdate;
+  function updateSummaryTagValueFilter(e) {
+    clearTimeout(lastSummaryTagValueFilterUpdate);
+    lastSummaryTagValueFilterUpdate = setTimeout(() => summaryTagValueFilter = e.target.value, 500);
+  }
 
   function bucketReceive(event) {
     buckets = event.detail.buckets;
+    testName = event.detail.testName;
     timeReceive();
   }
 
@@ -89,3 +148,55 @@
   }
 
 </script>
+
+<style>
+  :root {
+    --accent: #bcbcbc;
+    --accent2: rgb(0, 116, 232);
+    --background: #eee;
+    --text: #333;
+    background: var(--background);
+    color: var(--text);
+    font-family: sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #767676;
+      --accent2: #353b48;
+      --background: #333;
+      --text: #eee;
+    }
+  }
+  input {
+    background: var(--accent);
+    color: var(--text);
+    line-height: 1.75em;
+  }
+  section {
+    padding-left: 1em;
+  }
+  section:not(:last-child) {
+    border-bottom: 2px solid;
+  }
+  label {
+    position: relative;
+    display: inline-block;
+    margin: 1.5em 1em 0 0;
+    line-height: 1.75em;
+  }
+  label > span {
+    z-index: 1;
+    position: absolute;
+    top: 0;
+    left: 0.5ex;
+    transition: all 200ms;
+    user-select: none;
+  }
+  label > input:not(:placeholder-shown) + span, label > input:focus + span {
+    opacity: 1;
+    font-size: 75%;
+    font-weight: bold;
+    top: -100%;
+  }
+</style>

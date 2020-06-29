@@ -1,16 +1,20 @@
 <div class="drop-zone" on:dragover={dragOverHandler} on:drop={dropHandler} >
   <div>Drag Results File(s) Here</div>
   <div>
-      <input bind:this={inputFiles} type="file" multiple accept=".json" on:change={() => fileSelector(this.files)}/>
-      <button on:click={() => inputFiles.click()}>Or choose some files(s)...</button>
+      <label>
+        <input type="file" multiple accept=".json" on:change={inputFilesOnChange}/>
+        Or choose some files(s)...
+      </label>
   </div>
   <div bind:this={spinner} class="loader"></div>
   <div bind:this={errorMessage} class="fileParseError hide">{fileParseError}</div>
 </div>
 
 <script>
-  import * as model from "../model.ts";
+  import * as model from "../model";
   import { createEventDispatcher } from "svelte";
+  export let buckets = [];
+  export let testName;
   const wasmInit = import("hdr-histogram-wasm")
     .then((mod) => {
       return mod.default()
@@ -18,7 +22,15 @@
 
   const dispatch = createEventDispatcher();
 
-  let errorMessage, inputFiles, fileParseError, spinner;
+  function inputFilesOnChange() {
+    if (this.files) {
+      fileSelector(this.files);
+    }
+  }
+
+  let errorMessage;
+  let spinner;
+  let fileParseError;
 
   async function dropHandler(e) {
     e.preventDefault();
@@ -40,12 +52,31 @@
     try {
       const promises = [];
       for (const file of files) {
-        promises.push(model.parseStatsFile(file));
+        const promise = file.text()
+          .then((text) => {
+            const results = text.replace(/}{/g, "}\n{")
+              .split("\n")
+              .map((s) => JSON.parse(s));
+            if (results.length == 1) {
+              // old stats format
+              return [model.processJson(results[0]), undefined];
+            } else {
+              // new stats format
+              return model.processNewJson(results);
+            }
+            return processedJsonStats;
+          });
+        promises.push(promise);
       }
-      const promise = await wasmInit;
-      const buckets = (await Promise.all(promises)).reduce((a, b) => a.concat(b), []);
+      await wasmInit;
+      const [buckets2, testName2] = (await Promise.all(promises)).reduce(([allData, testName], [data, testName2]) => {
+        allData.push(...data);
+        return [allData, testName || testName2];
+      }, [[]]);
+      testName = testName2;
+      buckets.push(...buckets2);
       setTimeout(() => {
-        dispatch("fileDataParsed", { buckets });
+        dispatch("fileDataParsed", { buckets, testName });
       }, 15)
     } catch (e) {
       console.error(e);
@@ -58,6 +89,17 @@
 </script>
 
 <style>
+label {
+  cursor: pointer;
+  font-size: 24px;
+  border: 2px inset;
+  background: var(--accent);
+  padding: 1ex;
+  user-select: none;
+}
+label:active:hover {
+  border: 2px outset;
+}
 .drop-zone {
   display: none;
   flex-direction: column;

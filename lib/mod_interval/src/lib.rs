@@ -78,10 +78,52 @@ impl PerX {
 // `x_offset` helps to keep track of the progression within the entire ModInterval
 struct ModIntervalStreamState {
     end_time: Instant,
-    segment: LinearSegment,
+    current_segment: LinearSegment,
+    segments: VecDeque<LinearSegment>,
     start_time: Instant,
     x_offset: Duration,
     next_start: Instant,
+    following_start: Option<Instant>,
+}
+
+impl ModIntervalStreamState {
+    fn calculate_next_start(&mut self, time: Instant) -> Option<Instant> {
+        let mut wait_time = time - self.start_time - self.x_offset;
+
+        // when we've reached the end of the current segment, get the next one
+        if wait_time >= self.current_segment.duration {
+            let segment = match self.segments.pop_front() {
+                Some(s) => s,
+                None => return None,
+            };
+            wait_time -= self.current_segment.duration;
+            self.x_offset += self.current_segment.duration;
+            self.current_segment = segment;
+        }
+
+        let target_hits_per_second = self.current_segment.get_hps_at(wait_time);
+
+        // if there is no valid target hits per second
+        // (happens when scaling from 0 to 0)
+        wait_time = if target_hits_per_second == 0.0 {
+            if self.segments.is_empty() {
+                // no more segments
+                return None;
+            } else {
+                // there are more segments, return remaining time for this segment
+                self.current_segment.duration - wait_time
+            }
+        } else {
+            // convert from hits per second to the amount of time we should wait
+            Duration::from_secs_f64(target_hits_per_second.recip())
+        };
+        let ret = time + wait_time;
+        if ret <= self.end_time {
+            Some(ret)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
@@ -170,77 +212,62 @@ impl ModInterval {
         self.segments.push_back(segment);
     }
 
-    pub fn into_stream(mut self, start_at: Option<Duration>) -> impl Stream<Item = Instant> {
+    pub fn into_stream(
+        self,
+        start_at: Option<Duration>,
+    ) -> impl Stream<Item = (Instant, Option<Instant>)> {
         let mut state = None;
+        let mut segments = self.segments;
+        let duration = self.duration;
         stream::unfold((), move |_| {
             let now = time::now();
             if state.is_none() {
                 // first time through, setup the state
-                let segment = match self.segments.pop_front() {
+                let segment = match segments.pop_front() {
                     Some(s) => s,
                     None => {
                         return future::ready(None).a();
                     }
                 };
-                let s = ModIntervalStreamState {
-                    end_time: now + self.duration,
-                    segment,
+                let mut s = ModIntervalStreamState {
+                    end_time: now + duration,
+                    current_segment: segment,
+                    segments: std::mem::take(&mut segments),
                     start_time: now - start_at.unwrap_or_default(),
                     x_offset: Default::default(),
                     next_start: now,
+                    following_start: None,
                 };
+                s.following_start = s.calculate_next_start(now);
                 state = Some(s);
             }
             let state = state.as_mut().unwrap();
-            let mut time = now - state.start_time - state.x_offset;
 
-            // when we've reached the end of the current segment, get the next one
-            if time >= state.segment.duration {
-                let segment = match self.segments.pop_front() {
-                    Some(s) => s,
-                    None => {
-                        return future::ready(None).a();
-                    }
-                };
-                time -= state.segment.duration;
-                state.x_offset += state.segment.duration;
-                state.segment = segment;
-            }
-
-            let target_hits_per_second = state.segment.get_hps_at(time);
-
-            // if there is no valid target hits per second
-            // (happens when scaling from 0 to 0)
-            let y = if target_hits_per_second == 0.0 {
-                if self.segments.is_empty() {
-                    // no more segments, we can end
-                    return future::ready(None).a();
-                } else {
-                    // there are more segments, just sleep through the rest of this segment
-                    state.segment.duration - time
-                }
-            } else {
-                // convert from hits per second to the amount of time we should wait
-                Duration::from_secs_f64(target_hits_per_second.recip())
+            let trigger_time = match state.following_start {
+                Some(following_start) => following_start,
+                _ => return future::ready(None).a(),
             };
 
             let next_start = state.next_start;
-            let result = next_start + y;
-            state.next_start = result;
+            state.next_start = trigger_time;
 
+            let following_start = state.calculate_next_start(trigger_time);
+            state.following_start = following_start;
+
+            let sleep_time = now
+                .checked_duration_since(next_start)
+                .and_then(|y| trigger_time.checked_sub(y))
+                .and_then(|t| now.checked_duration_since(t));
             // adjust the wait time to account for extra latency between polls, sleeps, etc
-            let y = match y.checked_sub(now - next_start) {
-                Some(y) => y,
-                // we're past the time we should have fired, so fire now
-                None => return future::ready(Some((result, ()))).a(),
+            let sleep_time = match sleep_time {
+                Some(t) => t,
+                // we're past the time we should have fired, so skip sleeping
+                _ => return future::ready(Some(((trigger_time, following_start), ()))).a(),
             };
 
-            // if the sleep extends past the entire ModInterval's end time then end now
-            if result > state.end_time {
-                return future::ready(None).a();
-            }
-
-            time::sleep(y).map(move |_| Some((result, ()))).b()
+            time::sleep(sleep_time)
+                .map(move |_| Some(((trigger_time, following_start), ())))
+                .b()
         })
     }
 }
@@ -293,6 +320,69 @@ mod tests {
     use futures::executor::block_on_stream;
     use std::{fs, str::FromStr};
 
+    fn check_times<I: Iterator<Item = (Instant, Option<Instant>)>>(
+        iter: I,
+        file_name: &str,
+        index: Option<usize>,
+    ) {
+        let mut start = None;
+
+        let (elapsed_times, diffs) = iter.fold(
+            (Vec::new(), Vec::new()),
+            |(mut values, mut diffs), (instant, next_instant)| {
+                let start = start.get_or_insert(instant);
+                values.push((instant - *start).as_secs_f64());
+                if let Some(i) = next_instant {
+                    diffs.push((i - instant).as_micros());
+                };
+                (values, diffs)
+            },
+        );
+
+        let (expect_times, expect_diffs, _) = fs::read_to_string(file_name)
+            .unwrap()
+            .lines()
+            .map(FromStr::from_str)
+            .try_fold(
+                (Vec::new(), Vec::new(), None),
+                |(mut values, mut diffs, previous), current| {
+                    current.map(move |v| {
+                        values.push(v);
+                        if let Some(p) = previous {
+                            diffs.push((v * 1_000_000.0) as u128 - (p * 1_000_000.0) as u128);
+                        }
+                        (values, diffs, Some(v))
+                    })
+                },
+            )
+            .unwrap();
+
+        if let Some(index) = index {
+            assert_eq!(
+                elapsed_times, expect_times,
+                "elapsed times were not as expected for segment at index {}",
+                index
+            );
+        } else {
+            assert_eq!(
+                elapsed_times, expect_times,
+                "elapsed times were not as expected for segment"
+            );
+        }
+
+        assert_eq!(
+            diffs.len(),
+            expect_diffs.len(),
+            "diffs have the differing lengths\nleft: `{:?}`\nright: `{:?}`",
+            diffs,
+            expect_diffs
+        );
+        for (i, (l, r)) in diffs.into_iter().zip(expect_diffs).enumerate() {
+            let diff = l.max(r) - r.min(l);
+            assert!(diff <= 1, "diffs should be less than 1, saw a diff of {} at index {}\nleft value: `{}`\nright value: `{}`", diff, i, l, r);
+        }
+    }
+
     #[test]
     fn single_segment() {
         // start perx, duration, end perx
@@ -311,25 +401,10 @@ mod tests {
             );
             let stream = Box::pin(mod_interval.into_stream(None));
 
-            let mut start = None;
-            let elapsed_times: Vec<_> = block_on_stream(stream)
-                .map(|instant| {
-                    let start = start.get_or_insert(instant);
-                    (instant - *start).as_secs_f64()
-                })
-                .collect();
-
-            let expects = fs::read_to_string(format!("tests/single-segment{}.out", i))
-                .unwrap()
-                .lines()
-                .map(FromStr::from_str)
-                .collect::<Result<Vec<f64>, _>>()
-                .unwrap();
-
-            assert_eq!(
-                elapsed_times, expects,
-                "elapsed times were not as expected for segment at index {}",
-                i
+            check_times(
+                block_on_stream(stream),
+                &format!("tests/single-segment{}.out", i),
+                Some(i),
             );
         }
     }
@@ -347,26 +422,10 @@ mod tests {
             );
             let stream = Box::pin(mod_interval.into_stream(None));
 
-            let mut start = None;
-            let elapsed_times: Vec<_> = block_on_stream(stream)
-                .map(|instant| {
-                    let start = start.get_or_insert(instant);
-                    (instant - *start).as_secs_f64()
-                })
-                .collect();
-
-            let expects =
-                fs::read_to_string(format!("tests/single-segment-low-start-rate{}.out", i))
-                    .unwrap()
-                    .lines()
-                    .map(FromStr::from_str)
-                    .collect::<Result<Vec<f64>, _>>()
-                    .unwrap();
-
-            assert_eq!(
-                elapsed_times, expects,
-                "elapsed times were not as expected for segment at index {}",
-                i
+            check_times(
+                block_on_stream(stream),
+                &format!("tests/single-segment-low-start-rate{}.out", i),
+                Some(i),
             );
         }
     }
@@ -383,24 +442,10 @@ mod tests {
         );
         let stream = Box::pin(mod_interval.into_stream(Some(Duration::from_secs(15))));
 
-        let mut start = None;
-        let elapsed_times: Vec<_> = block_on_stream(stream)
-            .map(|instant| {
-                let start = start.get_or_insert(instant);
-                (instant - *start).as_secs_f64()
-            })
-            .collect();
-
-        let expects = fs::read_to_string("tests/single-segment-start-at.out")
-            .unwrap()
-            .lines()
-            .map(FromStr::from_str)
-            .collect::<Result<Vec<f64>, _>>()
-            .unwrap();
-
-        assert_eq!(
-            elapsed_times, expects,
-            "elapsed times were not as expected for segment",
+        check_times(
+            block_on_stream(stream),
+            "tests/single-segment-start-at.out",
+            None,
         );
     }
 
@@ -419,25 +464,7 @@ mod tests {
 
         let stream = Box::pin(mod_interval.into_stream(None));
 
-        let mut start = None;
-        let elapsed_times: Vec<_> = block_on_stream(stream)
-            .map(|instant| {
-                let start = start.get_or_insert(instant);
-                (instant - *start).as_secs_f64()
-            })
-            .collect();
-
-        let expects = fs::read_to_string("tests/multiple-segments.out")
-            .unwrap()
-            .lines()
-            .map(FromStr::from_str)
-            .collect::<Result<Vec<f64>, _>>()
-            .unwrap();
-
-        assert_eq!(
-            elapsed_times, expects,
-            "elapsed times were not as expected for multiple segments"
-        );
+        check_times(block_on_stream(stream), "tests/multiple-segments.out", None);
     }
 
     #[test]
@@ -455,24 +482,10 @@ mod tests {
 
         let stream = Box::pin(mod_interval.into_stream(Some(Duration::from_secs(75))));
 
-        let mut start = None;
-        let elapsed_times: Vec<_> = block_on_stream(stream)
-            .map(|instant| {
-                let start = start.get_or_insert(instant);
-                (instant - *start).as_secs_f64()
-            })
-            .collect();
-
-        let expects = fs::read_to_string("tests/multiple-segments-start-at.out")
-            .unwrap()
-            .lines()
-            .map(FromStr::from_str)
-            .collect::<Result<Vec<f64>, _>>()
-            .unwrap();
-
-        assert_eq!(
-            elapsed_times, expects,
-            "elapsed times were not as expected for multiple segments"
+        check_times(
+            block_on_stream(stream),
+            "tests/multiple-segments-start-at.out",
+            None,
         );
     }
 
@@ -491,24 +504,10 @@ mod tests {
 
         let stream = Box::pin(mod_interval.into_stream(None));
 
-        let mut start = None;
-        let elapsed_times: Vec<_> = block_on_stream(stream)
-            .map(|instant| {
-                let start = start.get_or_insert(instant);
-                (instant - *start).as_secs_f64()
-            })
-            .collect();
-
-        let expects = fs::read_to_string("tests/multiple-segments-with-zero.out")
-            .unwrap()
-            .lines()
-            .map(FromStr::from_str)
-            .collect::<Result<Vec<f64>, _>>()
-            .unwrap();
-
-        assert_eq!(
-            elapsed_times, expects,
-            "elapsed times were not as expected for multiple segments"
+        check_times(
+            block_on_stream(stream),
+            "tests/multiple-segments-with-zero.out",
+            None,
         );
     }
 

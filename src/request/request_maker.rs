@@ -92,7 +92,9 @@ impl RequestMaker {
         let mut provider_delays = ProviderDelays::new();
         for tv in values {
             match tv {
-                StreamItem::Instant(i) => target_instant = Some(i),
+                StreamItem::Instant(next_trigger) => {
+                    target_instant = next_trigger;
+                }
                 StreamItem::Declare(name, value, returns, instant) => {
                     match target_instant {
                         Some(target_instant) if instant > target_instant => {

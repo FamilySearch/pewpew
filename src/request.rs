@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 mod body_handler;
 mod request_maker;
 mod response_handler;
@@ -208,13 +209,13 @@ pub struct BuilderContext {
 
 pub struct Builder {
     endpoint: config::Endpoint,
-    start_stream: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>>,
+    start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
 }
 
 impl Builder {
     pub fn new(
         endpoint: config::Endpoint,
-        start_stream: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>>,
+        start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
     ) -> Self {
         Builder {
             endpoint,
@@ -274,7 +275,7 @@ impl Builder {
         if let Some(start_stream) = self.start_stream {
             streams.push((
                 true,
-                Box::new(start_stream.map(|v| Ok(StreamItem::Instant(v)))),
+                Box::new(start_stream.map(|(_, d)| Ok(StreamItem::Instant(d)))),
             ));
         } else if let Some(set) = provides_set {
             let stream = stream::poll_fn(move |_| {
@@ -355,7 +356,7 @@ impl Builder {
 }
 
 pub enum StreamItem {
-    Instant(Instant),
+    Instant(Option<Instant>),
     Declare(String, json::Value, Vec<AutoReturn>, Instant),
     None,
     TemplateValue(String, json::Value, Option<AutoReturn>, Instant),

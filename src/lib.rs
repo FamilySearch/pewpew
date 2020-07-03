@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![type_length_limit = "19550232"]
+#![allow(clippy::type_complexity)]
 
 mod error;
 mod line_writer;
@@ -817,7 +818,9 @@ fn create_load_test_future(
         .endpoints
         .into_iter()
         .map(|mut endpoint| {
-            let mut mod_interval: Option<Pin<Box<dyn Stream<Item = Instant> + Send>>> = None;
+            let mut mod_interval: Option<
+                Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>,
+            > = None;
 
             if let (Some(peak_load), Some(load_pattern)) =
                 (endpoint.peak_load.as_ref(), endpoint.load_pattern.take())

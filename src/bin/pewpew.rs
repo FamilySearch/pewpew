@@ -85,7 +85,7 @@ fn main() {
                 Arg::with_name("watch")
                     .short("w")
                     .long("watch")
-                    .help("Watch the config file for changes in load_patterns and peak_loads and update the test accordingly")
+                    .help("Watch the config file for changes and update the test accordingly")
             )
             .arg(
                 Arg::with_name("CONFIG")

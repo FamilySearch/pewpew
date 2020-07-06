@@ -18,17 +18,15 @@ To run the test server first download the latest test server binaries [here](htt
 Listening on port 2073
 ```
 
-To customize the port the test server uses, set the `PORT` environment variable. Here's an example run in bash:
+The port the test server uses can be configured by setting the `PORT` environment variable. Here's an example run in bash:
 
 ```bash
 $ PORT=8080 ./test-server
 Listening on port 8080
 ```
 
-The test server provides two HTTP endpoints:
+The test server provides a single HTTP endpoint:
 
-- `/` - this endpoint acts as an "echo server" and will return in the response body any data that was sent to it. This endpoint should only ever return a `200` or `204` status code. It accepts all HTTP methods though only `GET`, `POST` and `PUT` can echo data back in the response. For the `GET` method to echo data back, specify the echo data in the `echo` query parameter. For `POST` and `PUT` simply put the data to be echoed back in the request body. The response will use the same `Content-Type` header from the response when specified, otherwise it will use `text/plain`.
+- `/` - this endpoint acts as an "echo server" and will return within the response body any data that was sent to it. This endpoint should only ever return a `200` or `204` status code. It accepts all HTTP methods though only `GET`, `POST` and `PUT` can echo data back in the response. For the `GET` method to echo data back, specify the echo data in the `echo` query parameter. For `POST` and `PUT` simply put the data to be echoed back in the request body. The response will use the same `Content-Type` header from the response when specified, otherwise it will use `text/plain`.
 
-  There is also an optional `wait` query parameter which defines a delay (specified in milliseconds) for how long the server should wait before sending the response.
-
-- `/multipart` - this endpoint is mostly used to verify the multipart capability of Pewpew and has very limited usefulness. This endpoint expects a `POST` request with a multipart body. Every field in the multipart request is expected to have a `sha1` header which is the SHA1 hash of the current field's body. If all the previously mentioned expectations pass then a `204` status code is returned. If any of the expectations fail then a `400` status code is returned.
+  There is also an optional `wait` query parameter which defines a delay (specified in milliseconds) for how long the server should wait before responding.

@@ -33,8 +33,10 @@ OPTIONS:
     -t, --start-at <START_AT>              Specify the time the test should start at
     -o, --stats-file <STATS_FILE>          Specify the filename for the stats file
     -s, --stats-file-format <FORMAT>       Format for the stats file [default: json]  [possible values: json]
-    -w, --watch                            Watch the config file for changes in load_patterns and peak_loads and update
-                                           the test accordingly
+    -w, --watch                            Watch the config file for changes and update the test accordingly
+
+ARGS:
+    <CONFIG>    Load test config file to use
 
 ARGS:
     <CONFIG>    Load test config file to use
@@ -44,7 +46,9 @@ The `-f`, `--output-format` parameter allows changing the formatting of the stat
 
 The `-d`, `--results-directory` parameter will store the results file and any output logs in the specified directory. If the directory does not exist it is created.
 
-The `-w`, `--watch` parameter makes pewpew watch the config file for changes to `load_pattern`s and `peak_load`s. The `watch_transition_time` [general config option](./config/config-section.md#general) allows specifying a transition time for switching to the new `load_pattern`s and `peak_load`s.
+The `-w`, `--watch` parameter makes pewpew watch the config file for changes. The `watch_transition_time` [general config option](./config/config-section.md#general) allows specifying a transition time for switching to the new `load_pattern`s and `peak_load`s.
+
+While any part of a test can be updated, special care should be made when modifying or removing endpoints. This is because the aggregation of statistics happens based upon the numerical index of where it appears in the config file. If, for example, the first endpoint is no longer needed and it is simply removed from the test, that means what was the second endpoint is now the first and all of the statistics for that endpoint will begin aggregating in with the first endpoint's statistics. An alternative approach to removing the endpoint would be to set the `peak_load` on the first endpoint to `0hpm`.
 <br/><br/>
 Here's the output of `pewpew try --help`:
 <br/><br/>

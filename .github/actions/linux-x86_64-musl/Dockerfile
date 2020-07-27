@@ -2,8 +2,6 @@
 # Use Ubuntu 18.04 LTS as our base image.
 FROM ubuntu:18.04
 
-ARG TOOLCHAIN=nightly
-
 # for libressl
 # ARG OPENSSL_VERSION=3.0.2
 ARG OPENSSL_VERSION=1.1.1f
@@ -57,5 +55,5 @@ ENV OPENSSL_DIR=/usr/local/musl/ \
     RUSTUP_HOME="/root/.rustup"
 
 RUN curl https://sh.rustup.rs -sSf | \
-    sh -s -- -y --default-toolchain $TOOLCHAIN --profile minimal \
+    sh -s -- -y --profile minimal \
     && rustup target add x86_64-unknown-linux-musl

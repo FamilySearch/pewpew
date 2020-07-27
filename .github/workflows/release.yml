@@ -92,7 +92,7 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         with:
           profile: minimal
-          toolchain: nightly
+          toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
         if: matrix.os != 'ubuntu-latest'

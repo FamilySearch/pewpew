@@ -1,4 +1,3 @@
-#![feature(drain_filter)]
 use futures::{channel::oneshot, Future, FutureExt, Stream, StreamExt, TryFutureExt};
 
 use std::{
@@ -89,20 +88,18 @@ where
                 }
             }
 
-            let mut error = this.error.take();
-            this.futures.drain_filter(|fut| match fut.poll_unpin(cx) {
-                Poll::Pending => false,
-                Poll::Ready(Ok(e)) => {
-                    error = Some(e);
-                    made_progress_this_iter = true;
-                    true
+            let futures = std::mem::take(&mut this.futures);
+            for mut fut in futures {
+                match fut.poll_unpin(cx) {
+                    Poll::Pending => this.futures.push(fut),
+                    Poll::Ready(r) => {
+                        if let Ok(e) = r {
+                            this.error = Some(e);
+                        }
+                        made_progress_this_iter = true;
+                    }
                 }
-                _ => {
-                    made_progress_this_iter = true;
-                    true
-                }
-            });
-            this.error = error;
+            }
             if this.error.is_some() {
                 this.futures.clear();
                 this.stream = None;

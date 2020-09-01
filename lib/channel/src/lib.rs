@@ -508,7 +508,7 @@ mod tests {
     fn sender_errs_when_no_receivers() {
         let (mut tx, mut rx) = channel::<bool>(Limit::auto());
 
-        while let Some(_) = tx.send(true).now_or_never() {}
+        while tx.send(true).now_or_never().is_some() {}
 
         while rx.next().now_or_never().is_some() {}
 

@@ -1208,11 +1208,7 @@ impl Template {
     }
 
     pub fn is_simple(&self) -> bool {
-        if let [TemplatePiece::NotExpression(_)] = self.pieces.as_slice() {
-            true
-        } else {
-            false
-        }
+        matches!(self.pieces.as_slice(), [TemplatePiece::NotExpression(_)])
     }
 
     pub fn evaluate<'a>(

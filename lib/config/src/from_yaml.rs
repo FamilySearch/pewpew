@@ -178,24 +178,15 @@ pub enum YamlEvent {
 
 impl YamlEvent {
     fn is_scalar(&self) -> bool {
-        match self {
-            YamlEvent::Scalar(..) => true,
-            _ => false,
-        }
+        matches!(self, YamlEvent::Scalar(..))
     }
 
     fn is_nested_end(&self) -> bool {
-        match self {
-            YamlEvent::MappingEnd | YamlEvent::SequenceEnd => true,
-            _ => false,
-        }
+        matches!(self, YamlEvent::MappingEnd | YamlEvent::SequenceEnd)
     }
 
     fn is_nested_start(&self) -> bool {
-        match self {
-            YamlEvent::MappingStart | YamlEvent::SequenceStart => true,
-            _ => false,
-        }
+        matches!(self, YamlEvent::MappingStart | YamlEvent::SequenceStart)
     }
 
     pub fn into_string(self) -> Result<String, Self> {

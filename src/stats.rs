@@ -497,7 +497,7 @@ impl Stats {
             &self.tags,
             self.format,
             self.bucket_size,
-            remaining_seconds,
+            remaining_seconds.or(Some(0)),
         );
         print_string.push_str(&piece);
 

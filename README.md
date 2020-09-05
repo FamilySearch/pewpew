@@ -4,6 +4,10 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
 
 ## Changelog
+### v0.5.7
+Bugfix:
+- Fix regression in v0.5.6 where pewpew does not sleep properly between endpoint calls, effectively disregarding any load limits.
+
 ### v0.5.6
 Changes:
 - Add `headers_all` property to both `request` and `response` to allow the access of multiple header values which share the same header name.

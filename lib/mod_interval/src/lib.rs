@@ -243,31 +243,36 @@ impl ModInterval {
             }
             let state = state.as_mut().unwrap();
 
-            let trigger_time = match state.following_start {
+            // calculate the amount of latency between the time we expected to get to this
+            // point and the actual time
+            let latency = now
+                .checked_duration_since(state.next_start)
+                .unwrap_or_default();
+
+            // get the time (Instant) we expect it to be on the next iteration in the stream
+            let next_start = match state.following_start {
                 Some(following_start) => following_start,
                 _ => return future::ready(None).a(),
             };
+            state.next_start = next_start;
 
-            let next_start = state.next_start;
-            state.next_start = trigger_time;
-
-            let following_start = state.calculate_next_start(trigger_time);
+            // calculatae the time (Instant) we expect it to be in two iterations of the stream
+            let following_start = state.calculate_next_start(next_start);
             state.following_start = following_start;
 
-            let sleep_time = now
-                .checked_duration_since(next_start)
-                .and_then(|y| trigger_time.checked_sub(y))
-                .and_then(|t| now.checked_duration_since(t));
-            // adjust the wait time to account for extra latency between polls, sleeps, etc
-            let sleep_time = match sleep_time {
-                Some(t) => t,
-                // we're past the time we should have fired, so skip sleeping
-                _ => return future::ready(Some(((trigger_time, following_start), ()))).a(),
-            };
+            // calculate the sleep time, adjusting for extra latency
+            let sleep_time = next_start
+                .checked_sub(latency)
+                .and_then(|adjusted_trigger_time| {
+                    adjusted_trigger_time.checked_duration_since(now)
+                });
 
-            time::sleep(sleep_time)
-                .map(move |_| Some(((trigger_time, following_start), ())))
-                .b()
+            match sleep_time {
+                Some(t) => time::sleep(t)
+                    .map(move |_| Some(((next_start, following_start), ())))
+                    .b(),
+                None => future::ready(Some(((next_start, following_start), ()))).a(),
+            }
         })
     }
 }
@@ -331,6 +336,24 @@ mod tests {
             (Vec::new(), Vec::new()),
             |(mut values, mut diffs), (instant, next_instant)| {
                 let start = start.get_or_insert(instant);
+                let now = time::now();
+                match index {
+                    Some(i) => {
+                        assert!(
+                            now >= instant,
+                            "mod_interval stream didn't sleep at index {}. Returned instant was {}ms in the future",
+                            i,
+                            (instant - now).as_millis(),
+                        );
+                    }
+                    None => {
+                        assert!(
+                            now >= instant,
+                            "mod_interval stream didn't sleep. Returned instant was {}ms in the future",
+                            (instant - now).as_millis(),
+                        );
+                    }
+                }
                 values.push((instant - *start).as_secs_f64());
                 if let Some(i) = next_instant {
                     diffs.push((i - instant).as_micros());

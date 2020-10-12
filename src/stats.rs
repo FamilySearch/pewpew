@@ -456,13 +456,10 @@ impl Stats {
             let piece = if is_human_format {
                 format!(
                     "\n- {}:\n  length: {}\n  limit: {}\n  \
-                     tasks waiting to send: {}\n  tasks waiting to receive: {}\n  \
                      number of receivers: {}\n  number of senders: {}\n",
                     Paint::yellow(stats.provider).dimmed(),
                     stats.len,
                     stats.limit,
-                    stats.waiting_to_send,
-                    stats.waiting_to_receive,
                     stats.receiver_count,
                     stats.sender_count,
                 )

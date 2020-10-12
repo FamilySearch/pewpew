@@ -356,8 +356,7 @@ impl RequestMaker {
                             {
                                 let iter = iter.map(|v| v.map_err(Into::into));
                                 let tx = o.tx.clone();
-                                let cb = o.cb.clone();
-                                futures.push(BlockSender::new(iter, tx, cb).into_future());
+                                futures.push(BlockSender::new(iter, tx).into_future());
                             }
                         }
                     }
@@ -369,11 +368,6 @@ impl RequestMaker {
                         RecoverableError::Timeout(_) => Some(timeout_in_micros),
                         _ => None,
                     };
-                    for o in outgoing2.iter() {
-                        if let Some(cb) = &o.cb {
-                            cb(false);
-                        }
-                    }
                     let _ = stats_tx2.unbounded_send(
                         stats::ResponseStat {
                             kind: stats::StatKind::RecoverableError(r),

@@ -10,6 +10,7 @@ doctest = false
 
 [dependencies]
 config = { path = "../config" }
-crossbeam-queue = "0.2"
+concurrent-queue = "1"
+event-listener = "2"
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }

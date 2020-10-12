@@ -153,19 +153,13 @@ impl ProviderOrLogger {
 }
 
 struct Outgoing {
-    cb: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     select: Arc<Select>,
     tx: ProviderOrLogger,
 }
 
 impl Outgoing {
-    fn new(
-        select: Select,
-        tx: ProviderOrLogger,
-        cb: Option<Arc<dyn Fn(bool) + Send + Sync>>,
-    ) -> Self {
+    fn new(select: Select, tx: ProviderOrLogger) -> Self {
         Outgoing {
-            cb,
             select: select.into(),
             tx,
         }
@@ -261,14 +255,11 @@ impl Builder {
                 if let Some(set) = &mut provides_set {
                     set.insert(tx.clone());
                 }
-                let cb = if on_demand {
-                    let (stream, cb) = provider.on_demand.clone().into_stream();
+                if on_demand {
+                    let stream = provider.on_demand.clone().into_stream();
                     on_demand_streams.push(Box::new(stream));
-                    Some(cb)
-                } else {
-                    None
-                };
-                Outgoing::new(v, ProviderOrLogger::Provider(tx), cb)
+                }
+                Outgoing::new(v, ProviderOrLogger::Provider(tx))
             })
             .collect();
         let mut streams: StreamCollection = Vec::new();
@@ -293,7 +284,7 @@ impl Builder {
                 .loggers
                 .get(&k)
                 .expect("logs should reference a valid logger");
-            outgoing.push(Outgoing::new(v, ProviderOrLogger::Logger(tx.clone()), None));
+            outgoing.push(Outgoing::new(v, ProviderOrLogger::Logger(tx.clone())));
         }
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
@@ -669,11 +660,8 @@ impl Endpoint {
                     }
                 }
                 let p = zipped_streams.poll_next_unpin(cx);
-                match p {
-                    Poll::Pending => (),
-                    _ => {
-                        od_continue = false;
-                    }
+                if p.is_ready() {
+                    od_continue = false;
                 }
                 p
             })
@@ -804,7 +792,6 @@ impl Endpoint {
 }
 
 struct BlockSender<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> {
-    cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
     tx: ProviderOrLogger,
     values: V,
     value_added: bool,
@@ -812,13 +799,8 @@ struct BlockSender<V: Iterator<Item = Result<json::Value, RecoverableError>> + U
 }
 
 impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> BlockSender<V> {
-    fn new(
-        values: V,
-        tx: ProviderOrLogger,
-        cb: Option<std::sync::Arc<(dyn Fn(bool) + Send + Sync)>>,
-    ) -> Self {
+    fn new(values: V, tx: ProviderOrLogger) -> Self {
         BlockSender {
-            cb,
             tx,
             values,
             value_added: false,
@@ -889,9 +871,6 @@ impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Future f
 
 impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Drop for BlockSender<V> {
     fn drop(&mut self) {
-        let _ = self.now_or_never();
-        if let Some(cb) = &self.cb {
-            cb(self.value_added);
-        }
+        self.now_or_never();
     }
 }

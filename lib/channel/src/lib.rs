@@ -1,51 +1,37 @@
+use concurrent_queue::ConcurrentQueue;
 use config::Limit;
-use crossbeam_queue::SegQueue;
+use event_listener::{Event, EventListener};
 use futures::{sink::Sink, stream, Stream};
 use serde::Serialize;
 
 use std::{
     error::Error as StdError,
+    future::Future,
     pin::Pin,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
-struct ParkedTasks(SegQueue<Waker>);
-
-impl ParkedTasks {
-    fn new() -> Self {
-        ParkedTasks(SegQueue::new())
-    }
-
-    fn park(&self, waker: &Waker) {
-        self.0.push(waker.clone());
-    }
-
-    fn wake_all(&self) {
-        while let Ok(task) = self.0.pop() {
-            task.wake();
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
+struct Channel<T> {
+    has_maxed: AtomicBool,
+    limit: Limit,
+    receiver_events: Event,
+    sender_events: Event,
+    queue: ConcurrentQueue<T>,
+    receiver_count: AtomicUsize,
+    sender_count: AtomicUsize,
 }
 
 pub struct Sender<T> {
-    inner: Arc<SegQueue<T>>,
-    limit: Limit,
-    parked_receivers: Arc<ParkedTasks>,
-    parked_senders: Arc<ParkedTasks>,
-    receiver_count: Arc<AtomicUsize>,
-    sender_count: Arc<AtomicUsize>,
+    inner: Arc<Channel<T>>,
+    listener: Option<EventListener>,
 }
 
 pub enum SendState<T> {
-    Closed,
+    Closed(T),
     Full(T),
     Success,
 }
@@ -95,60 +81,54 @@ impl ChannelClosed {
 #[allow(clippy::len_without_is_empty)]
 impl<T> Sender<T> {
     pub fn len(&self) -> usize {
-        self.inner.len()
+        self.inner.queue.len()
     }
 
     pub fn limit(&self) -> Limit {
-        self.limit.clone()
+        self.inner.limit.clone()
     }
 
     pub fn no_receivers(&self) -> bool {
-        self.receiver_count.load(Ordering::Acquire) == 0
+        self.inner.receiver_count.load(Ordering::Acquire) == 0
     }
 
-    pub fn try_send(&self, item: T, waker: &Waker) -> SendState<T> {
-        let ret = if self.no_receivers() {
-            SendState::Closed
-        } else if self.inner.len() < self.limit.get() {
-            self.inner.push(item);
+    pub fn try_send(&self, item: T) -> SendState<T> {
+        if self.no_receivers() {
+            SendState::Closed(item)
+        } else if self.inner.queue.len() < self.inner.limit.get() {
+            self.force_send(item);
             SendState::Success
+        } else if self.no_receivers() {
+            SendState::Closed(item)
         } else {
-            self.parked_senders.park(waker);
-            if self.no_receivers() {
-                SendState::Closed
-            } else {
-                SendState::Full(item)
-            }
-        };
-        self.parked_receivers.wake_all();
-        ret
+            SendState::Full(item)
+        }
     }
 
     pub fn force_send(&self, item: T) {
-        self.inner.push(item);
-        self.parked_receivers.wake_all();
+        self.inner
+            .queue
+            .push(item)
+            .ok()
+            .expect("should never error because queue is unbounded");
+        self.inner.receiver_events.notify(1);
     }
 }
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
-        self.sender_count.fetch_add(1, Ordering::Release);
+        self.inner.sender_count.fetch_add(1, Ordering::Release);
         Sender {
             inner: self.inner.clone(),
-            limit: self.limit.clone(),
-            parked_receivers: self.parked_receivers.clone(),
-            parked_senders: self.parked_senders.clone(),
-            receiver_count: self.receiver_count.clone(),
-            sender_count: self.sender_count.clone(),
+            listener: None,
         }
     }
 }
 
 impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
-        if self.sender_count.fetch_sub(1, Ordering::Release) == 1 {
-            self.parked_receivers.wake_all();
-            self.parked_senders.wake_all();
+        if self.inner.sender_count.fetch_sub(1, Ordering::Release) == 1 {
+            self.inner.receiver_events.notify(std::usize::MAX);
         }
     }
 }
@@ -176,17 +156,25 @@ impl<T> Ord for Sender<T> {
 impl<T> Sink<T> for Sender<T> {
     type Error = ChannelClosed;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        if self.no_receivers() {
-            Poll::Ready(Err(ChannelClosed::new()))
-        } else if self.inner.len() < self.limit.get() {
-            Poll::Ready(Ok(()))
-        } else {
-            self.parked_senders.park(cx.waker());
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        loop {
             if self.no_receivers() {
-                Poll::Ready(Err(ChannelClosed::new()))
-            } else {
-                Poll::Pending
+                self.listener = None;
+                return Poll::Ready(Err(ChannelClosed::new()));
+            }
+
+            if let Some(listener) = self.listener.as_mut() {
+                match Pin::new(listener).poll(cx) {
+                    Poll::Ready(()) => self.listener = None,
+                    _ => return Poll::Pending,
+                }
+            }
+
+            if self.inner.queue.len() < self.inner.limit.get() {
+                self.listener = None;
+                return Poll::Ready(Ok(()));
+            } else if self.listener.is_none() {
+                self.listener = Some(self.inner.sender_events.listen());
             }
         }
     }
@@ -207,24 +195,14 @@ impl<T> Sink<T> for Sender<T> {
 
 pub struct ChannelStatsReader<T> {
     provider: String,
-    inner: Arc<SegQueue<T>>,
-    limit: Limit,
-    receiver_count: Arc<AtomicUsize>,
-    sender_count: Arc<AtomicUsize>,
-    waiting_to_receive: Arc<ParkedTasks>,
-    waiting_to_send: Arc<ParkedTasks>,
+    channel: Arc<Channel<T>>,
 }
 
 impl<T> ChannelStatsReader<T> {
     pub fn new(provider: String, receiver: &Receiver<T>) -> Self {
         ChannelStatsReader {
             provider,
-            inner: receiver.inner.clone(),
-            limit: receiver.limit.clone(),
-            receiver_count: receiver.receiver_count.clone(),
-            sender_count: receiver.sender_count.clone(),
-            waiting_to_receive: receiver.parked_receivers.clone(),
-            waiting_to_send: receiver.parked_senders.clone(),
+            channel: receiver.inner.clone(),
         }
     }
 
@@ -232,12 +210,10 @@ impl<T> ChannelStatsReader<T> {
         ChannelStats {
             provider: &self.provider,
             timestamp,
-            len: self.inner.len(),
-            limit: self.limit.get(),
-            receiver_count: self.receiver_count.load(Ordering::Acquire),
-            sender_count: self.sender_count.load(Ordering::Acquire),
-            waiting_to_receive: self.waiting_to_receive.len(),
-            waiting_to_send: self.waiting_to_send.len(),
+            len: self.channel.queue.len(),
+            limit: self.channel.limit.get(),
+            receiver_count: self.channel.receiver_count.load(Ordering::Acquire),
+            sender_count: self.channel.sender_count.load(Ordering::Acquire),
         }
     }
 }
@@ -251,40 +227,27 @@ pub struct ChannelStats<'a> {
     pub limit: usize,
     pub receiver_count: usize,
     pub sender_count: usize,
-    pub waiting_to_send: usize,
-    pub waiting_to_receive: usize,
 }
 
 pub struct Receiver<T> {
-    inner: Arc<SegQueue<T>>,
-    limit: Limit,
-    has_maxed: Arc<AtomicBool>,
-    parked_receivers: Arc<ParkedTasks>,
-    parked_senders: Arc<ParkedTasks>,
-    receiver_count: Arc<AtomicUsize>,
-    sender_count: Arc<AtomicUsize>,
+    inner: Arc<Channel<T>>,
+    listener: Option<EventListener>,
 }
 
 impl<T> Clone for Receiver<T> {
     fn clone(&self) -> Self {
-        self.receiver_count.fetch_add(1, Ordering::Release);
+        self.inner.receiver_count.fetch_add(1, Ordering::Release);
         Receiver {
             inner: self.inner.clone(),
-            limit: self.limit.clone(),
-            has_maxed: self.has_maxed.clone(),
-            parked_receivers: self.parked_receivers.clone(),
-            parked_senders: self.parked_senders.clone(),
-            receiver_count: self.receiver_count.clone(),
-            sender_count: self.sender_count.clone(),
+            listener: None,
         }
     }
 }
 
 impl<T> Drop for Receiver<T> {
     fn drop(&mut self) {
-        if self.receiver_count.fetch_sub(1, Ordering::Release) == 1 {
-            self.parked_senders.wake_all();
-            self.parked_receivers.wake_all();
+        if self.inner.receiver_count.fetch_sub(1, Ordering::Release) == 1 {
+            self.inner.sender_events.notify(std::usize::MAX);
         }
     }
 }
@@ -292,63 +255,76 @@ impl<T> Drop for Receiver<T> {
 impl<T> Stream for Receiver<T> {
     type Item = T;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let msg = self.inner.pop().ok();
-        if msg.is_some() {
-            let inner_len = self.inner.len();
-            if inner_len == 0 {
-                // if there's an "auto" limit and we've emptied the buffer
-                // after it was previously full increment the limit
-                if let Limit::Auto(a) = &self.limit {
-                    if self
-                        .has_maxed
-                        .compare_and_swap(true, false, Ordering::Release)
-                    {
-                        a.fetch_add(1, Ordering::Release);
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        loop {
+            if let Some(listener) = self.listener.as_mut() {
+                match Pin::new(listener).poll(cx) {
+                    Poll::Ready(()) => self.listener = None,
+                    _ => {
+                        // notify senders here for the sake of OnDemand
+                        self.inner.sender_events.notify(1);
+                        return Poll::Pending;
                     }
                 }
-            } else if self.limit.get() == inner_len + 1 {
-                // if the buffer was full, raise the has_maxed flag
-                self.has_maxed.store(true, Ordering::Release);
             }
-            self.parked_senders.wake_all();
-            Poll::Ready(msg)
-        } else if self.sender_count.load(Ordering::Acquire) == 0 {
-            Poll::Ready(None)
-        } else {
-            self.parked_receivers.park(cx.waker());
-            if self.sender_count.load(Ordering::Acquire) == 0 {
-                Poll::Ready(None)
-            } else {
-                self.parked_senders.wake_all();
-                Poll::Pending
+
+            loop {
+                let msg = self.inner.queue.pop().ok();
+                if msg.is_some() {
+                    let inner_len = self.inner.queue.len();
+                    let limit = self.inner.limit.get();
+                    if inner_len == 0 {
+                        // if there's an "auto" limit and we've emptied the buffer
+                        // after it was previously full increment the limit
+                        if let Limit::Auto(a) = &self.inner.limit {
+                            if self
+                                .inner
+                                .has_maxed
+                                .compare_and_swap(true, false, Ordering::Release)
+                            {
+                                a.fetch_add(1, Ordering::Release);
+                            }
+                        }
+                    } else if limit == inner_len + 1 {
+                        // if the buffer was full, raise the has_maxed flag
+                        self.inner.has_maxed.store(true, Ordering::Release);
+                    }
+                    if inner_len < limit {
+                        self.inner.sender_events.notify(1);
+                    }
+                    self.listener = None;
+                    return Poll::Ready(msg);
+                } else if self.inner.sender_count.load(Ordering::Acquire) == 0 {
+                    self.listener = None;
+                    return Poll::Ready(None);
+                } else if self.listener.is_none() {
+                    self.listener = Some(self.inner.receiver_events.listen());
+                } else {
+                    break;
+                }
             }
         }
     }
 }
 
 pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
-    let inner = Arc::new(SegQueue::new());
-    let parked_receivers = Arc::new(ParkedTasks::new());
-    let parked_senders = Arc::new(ParkedTasks::new());
-    let sender_count = Arc::new(AtomicUsize::new(1));
-    let receiver_count = Arc::new(AtomicUsize::new(1));
+    let channel = Channel {
+        has_maxed: AtomicBool::new(false),
+        limit,
+        receiver_events: Event::new(),
+        sender_events: Event::new(),
+        queue: ConcurrentQueue::unbounded(),
+        receiver_count: AtomicUsize::new(1),
+        sender_count: AtomicUsize::new(1),
+    };
+    let inner = Arc::new(channel);
     let receiver = Receiver {
         inner: inner.clone(),
-        limit: limit.clone(),
-        has_maxed: Arc::new(AtomicBool::new(false)),
-        parked_receivers: parked_receivers.clone(),
-        parked_senders: parked_senders.clone(),
-        receiver_count: receiver_count.clone(),
-        sender_count: sender_count.clone(),
+        listener: None,
     };
     let sender = Sender {
         inner,
-        limit,
-        parked_receivers,
-        parked_senders,
-        receiver_count,
-        sender_count,
+        listener: None,
     };
     (sender, receiver)
 }
@@ -360,84 +336,59 @@ pub fn channel<T>(limit: Limit) -> (Sender<T>, Receiver<T>) {
 // a value to provide).
 #[derive(Clone)]
 pub struct OnDemandReceiver<T> {
-    demander_inner: Arc<SegQueue<T>>,
-    demander_parked_receivers: Arc<ParkedTasks>,
-    demander_parked_senders: Arc<ParkedTasks>,
-    receiver_count: Arc<AtomicUsize>,
-    signal: Arc<AtomicUsize>,
+    channel: Arc<Channel<T>>,
 }
-
-// The states that the OnDemandReceiver can be in. There are two states before `SIGNAL_WILL_TRIGGER`
-// because when a value is pulled from the channel with a receiver, the receiver proactively triggers
-// any parked senders to send another (in effort to keep the queue full). OnDemandReceiver ignores
-// the first unpark, and will trigger on the subsequent unpark if the queue is empty in both cases.
-const SIGNAL_INIT: usize = 0;
-const SIGNAL_WAITING_FOR_RECEIVER: usize = 1;
-const SIGNAL_WILL_TRIGGER: usize = 2;
-const SIGNAL_WAITING_FOR_CALLBACK: usize = 3;
 
 impl<T: Send + 'static> OnDemandReceiver<T> {
     pub fn new(demander: &Receiver<T>) -> Self {
         OnDemandReceiver {
-            demander_inner: demander.inner.clone(),
-            demander_parked_receivers: demander.parked_receivers.clone(),
-            demander_parked_senders: demander.parked_senders.clone(),
-            receiver_count: demander.receiver_count.clone(),
-            signal: AtomicUsize::default().into(),
+            channel: demander.inner.clone(),
         }
     }
 
-    pub fn into_stream(self) -> (impl Stream<Item = ()>, Arc<dyn Fn(bool) + Send + Sync>) {
-        let signal = self.signal.clone();
-        let demander_inner = self.demander_inner.clone();
-        let demander_parked_senders = self.demander_parked_senders.clone();
-        // this callback is called after a task finishes
-        let cb = move |was_a_value_added: bool| {
-            if was_a_value_added || !demander_inner.is_empty() {
-                signal.store(SIGNAL_INIT, Ordering::Release);
-            } else {
-                signal.store(SIGNAL_WILL_TRIGGER, Ordering::Release);
-                demander_parked_senders.wake_all();
-            }
-        };
-        let stream = stream::poll_fn(move |cx| {
-            // end the on_demand stream if there are no more receivers
-            if self.receiver_count.load(Ordering::Acquire) == 0 {
-                return Poll::Ready(None);
-            }
-            if self.demander_inner.is_empty() {
-                let receivers_waiting = !self.demander_parked_receivers.0.is_empty();
-                let signal_state = self
-                    .signal
-                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
-                        match (receivers_waiting, prev) {
-                            (true, SIGNAL_INIT) | (_, SIGNAL_WILL_TRIGGER) => {
-                                Some(SIGNAL_WAITING_FOR_CALLBACK)
+    pub fn into_stream(self) -> impl Stream<Item = ()> {
+        let mut listener: Option<EventListener> = None;
+        let mut previous_len: Option<usize> = None;
+        stream::poll_fn(move |cx| {
+            loop {
+                // end the stream if there are no more receivers
+                if self.channel.receiver_count.load(Ordering::Acquire) == 0 {
+                    listener = None;
+                    return Poll::Ready(None);
+                }
+                match listener.as_mut() {
+                    Some(listener2) => {
+                        let ret = match Pin::new(listener2).poll(cx) {
+                            Poll::Ready(()) => {
+                                listener = None;
+                                let queue_len = self.channel.queue.len();
+                                match previous_len.take() {
+                                    Some(n) if n == queue_len => Poll::Ready(Some(())),
+                                    _ => {
+                                        previous_len = Some(queue_len);
+                                        listener = Some(self.channel.sender_events.listen());
+                                        self.channel.sender_events.notify(1);
+                                        Poll::Pending
+                                    }
+                                }
                             }
-                            (_, SIGNAL_WAITING_FOR_RECEIVER) => Some(SIGNAL_WILL_TRIGGER),
-                            _ => None,
-                        }
-                    })
-                    .unwrap_or_else(|e| e);
-
-                if (receivers_waiting && signal_state == SIGNAL_INIT)
-                    || signal_state == SIGNAL_WILL_TRIGGER
-                {
-                    return Poll::Ready(Some(()));
+                            Poll::Pending => Poll::Pending,
+                        };
+                        return ret;
+                    }
+                    None => {
+                        listener = Some(self.channel.sender_events.listen());
+                    }
                 }
             }
-            self.demander_parked_senders.park(cx.waker());
-            Poll::Pending
-        });
-
-        (stream, Arc::new(cb))
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{sink::SinkExt, task, FutureExt, StreamExt};
+    use futures::{sink::SinkExt, FutureExt, StreamExt};
 
     use std::collections::BTreeSet;
 
@@ -577,9 +528,7 @@ mod tests {
     fn on_demand_receiver_works() {
         let (tx, mut rx) = channel::<()>(Limit::auto());
 
-        let (mut on_demand, done_fn) = OnDemandReceiver::new(&rx).into_stream();
-
-        let waker = task::noop_waker();
+        let mut on_demand = OnDemandReceiver::new(&rx).into_stream();
 
         let left = on_demand.next().now_or_never();
         let right = None;
@@ -589,6 +538,7 @@ mod tests {
         let right = None;
         assert_eq!(left, right, "receiver should not be ready");
 
+        on_demand.next().now_or_never();
         let left = on_demand.next().now_or_never();
         let right = Some(Some(()));
         assert_eq!(left, right, "on_demand stream should be ready");
@@ -597,13 +547,11 @@ mod tests {
         let right = None;
         assert_eq!(left, right, "receiver should not be ready2");
 
-        tx.try_send((), &waker);
+        tx.try_send(());
 
         let left = on_demand.next().now_or_never();
         let right = None;
         assert_eq!(left, right, "on_demand stream should not be ready until the done_fn is called and receiver is polled");
-
-        done_fn(true);
 
         let left = on_demand.next().now_or_never();
         let right = None;
@@ -636,7 +584,7 @@ mod tests {
         let right = None;
         assert_eq!(left, right, "on_demand stream should not be ready3");
 
-        tx.try_send((), &waker);
+        tx.try_send(());
 
         let left = on_demand.next().now_or_never();
         let right = None;

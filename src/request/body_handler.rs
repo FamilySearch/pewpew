@@ -5,7 +5,6 @@ use config::{EndpointProvidesSendOptions, Template};
 use ether::EitherExt;
 use futures::{
     future::{select_all, try_join_all},
-    task::noop_waker,
     FutureExt, TryFutureExt,
 };
 use serde_json as json;
@@ -94,14 +93,9 @@ impl BodyHandler {
                         if let ProviderOrLogger::Logger(tx) = &o.tx {
                             if let Ok(iter) = select.iter(tv) {
                                 let iter = iter.map(|v| v.map_err(Into::into));
-                                let cb = o.cb.clone();
                                 futures.push(
-                                    BlockSender::new(
-                                        iter,
-                                        ProviderOrLogger::Logger(tx.clone()),
-                                        cb,
-                                    )
-                                    .into_future(),
+                                    BlockSender::new(iter, ProviderOrLogger::Logger(tx.clone()))
+                                        .into_future(),
                                 );
                             }
                         }
@@ -130,9 +124,6 @@ impl BodyHandler {
             let mut blocked = Vec::new();
             for (i, o) in self.outgoing.iter().enumerate() {
                 if !self.included_outgoing_indexes.contains(&i) {
-                    if let Some(cb) = &o.cb {
-                        cb(false);
-                    }
                     continue;
                 }
                 let select = o.select.clone();
@@ -149,8 +140,7 @@ impl BodyHandler {
                 match send_behavior {
                     EndpointProvidesSendOptions::Block => {
                         let tx = o.tx.clone();
-                        let cb = o.cb.clone();
-                        let f = BlockSender::new(iter, tx, cb).into_future().map(|_| Ok(()));
+                        let f = BlockSender::new(iter, tx).into_future().map(|_| Ok(()));
                         if o.tx.is_logger() {
                             futures.push(f.c3());
                         } else {
@@ -158,7 +148,6 @@ impl BodyHandler {
                         }
                     }
                     EndpointProvidesSendOptions::Force => {
-                        let mut value_added = false;
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,
@@ -170,15 +159,10 @@ impl BodyHandler {
                             };
                             if let ProviderOrLogger::Provider(tx) = &o.tx {
                                 tx.force_send(v);
-                                value_added = true;
                             }
-                        }
-                        if let Some(cb) = &o.cb {
-                            cb(value_added);
                         }
                     }
                     EndpointProvidesSendOptions::IfNotFull => {
-                        let mut value_added = false;
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,
@@ -189,14 +173,10 @@ impl BodyHandler {
                                 }
                             };
                             if let ProviderOrLogger::Provider(tx) = &o.tx {
-                                if !tx.try_send(v, &noop_waker()).is_success() {
+                                if !tx.try_send(v).is_success() {
                                     break;
                                 }
                             }
-                            value_added = true;
-                        }
-                        if let Some(cb) = &o.cb {
-                            cb(value_added);
                         }
                     }
                 }
@@ -224,25 +204,13 @@ mod tests {
     use futures::{channel::mpsc as futures_channel, executor::block_on, StreamExt};
     use maplit::{btreemap, btreeset};
 
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use config::{EndpointProvidesSendOptions::*, Limit, Select};
 
-    fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>, Arc<AtomicUsize>) {
-        // let static_vars = BTreeMap::new();
-        // let eppp = json::from_value(s).unwrap();
-        // let select = Select::new(eppp, &static_vars, &mut Default::default(), false).unwrap();
+    fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>) {
         let (tx, rx) = channel::channel(Limit::Integer(1));
-        let cb_called = Arc::new(AtomicUsize::new(0));
-        let cb_called2 = cb_called.clone();
-        let cb = move |b| {
-            cb_called.store(b as usize + 1, Ordering::Relaxed);
-        };
-        (
-            Outgoing::new(select, ProviderOrLogger::Provider(tx), Some(Arc::new(cb))),
-            rx,
-            cb_called2,
-        )
+        (Outgoing::new(select, ProviderOrLogger::Provider(tx)), rx)
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -253,10 +221,10 @@ mod tests {
         let included_outgoing_indexes = btreeset!(0, 1, 2);
 
         let select1 = Select::simple("1 + 1", Force, Some(vec!["repeat(3)"]), None, None);
-        let (outgoing1, mut rx1, cb_called1) = create_outgoing(select1);
+        let (outgoing1, mut rx1) = create_outgoing(select1);
 
         let select2 = Select::simple("1", Block, None, None, None);
-        let (outgoing2, mut rx2, cb_called2) = create_outgoing(select2);
+        let (outgoing2, mut rx2) = create_outgoing(select2);
 
         let select3 = Select::simple(
             "response.body.foo",
@@ -265,10 +233,10 @@ mod tests {
             None,
             None,
         );
-        let (outgoing3, mut rx3, cb_called3) = create_outgoing(select3);
+        let (outgoing3, mut rx3) = create_outgoing(select3);
 
         let select4 = Select::simple("1", Block, None, None, None);
-        let (outgoing4, mut rx4, cb_called4) = create_outgoing(select4);
+        let (outgoing4, mut rx4) = create_outgoing(select4);
 
         let outgoing = vec![outgoing1, outgoing2, outgoing3, outgoing4].into();
         let (stats_tx, mut stats_rx) = futures_channel::unbounded();
@@ -315,7 +283,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "forced receiver is closed, {:?}", r);
-        assert_eq!(cb_called1.load(Ordering::Relaxed), 2, "callback 1 called");
 
         let r = rx2.next().now_or_never();
         let b = match &r {
@@ -329,7 +296,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "block receier is closed, {:?}", r);
-        assert_eq!(cb_called2.load(Ordering::Relaxed), 2, "callback 2 called");
 
         let r = rx3.next().now_or_never();
         let b = match &r {
@@ -343,7 +309,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "if_not_full is closed, {:?}", r);
-        assert_eq!(cb_called3.load(Ordering::Relaxed), 2, "callback 3 called");
 
         let r = rx4.next().now_or_never();
         let b = match r {
@@ -351,7 +316,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "not included receier is closed, {:?}", r);
-        assert_eq!(cb_called4.load(Ordering::Relaxed), 1, "callback 4 called");
 
         // check that the stats_rx received the correct stats data
         let r = stats_rx.next().now_or_never();
@@ -379,10 +343,10 @@ mod tests {
         let included_outgoing_indexes = btreeset!(0, 1, 2);
 
         let select1 = Select::simple("1 + 1", Block, Some(vec!["repeat(3)"]), None, None);
-        let (outgoing1, mut rx1, cb_called1) = create_outgoing(select1);
+        let (outgoing1, mut rx1) = create_outgoing(select1);
 
         let select2 = Select::simple("1", Block, None, None, None);
-        let (outgoing2, mut rx2, cb_called2) = create_outgoing(select2);
+        let (outgoing2, mut rx2) = create_outgoing(select2);
 
         let select3 = Select::simple(
             "response.body.foo",
@@ -391,7 +355,7 @@ mod tests {
             None,
             None,
         );
-        let (outgoing3, mut rx3, cb_called3) = create_outgoing(select3);
+        let (outgoing3, mut rx3) = create_outgoing(select3);
 
         let outgoing = vec![outgoing1, outgoing2, outgoing3].into();
         let (stats_tx, _) = futures_channel::unbounded();
@@ -428,7 +392,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "receiver 1 is closed, {:?}", r);
-        assert_eq!(cb_called1.load(Ordering::Relaxed), 2, "callback 1 called");
 
         let r = rx2.next().now_or_never();
         let b = match &r {
@@ -442,7 +405,6 @@ mod tests {
             _ => false,
         };
         assert!(b, "receiver 2 is closed, {:?}", r);
-        assert_eq!(cb_called2.load(Ordering::Relaxed), 2, "callback 2 called");
 
         let r = rx3.next().now_or_never();
         let b = match &r {
@@ -456,6 +418,5 @@ mod tests {
             _ => false,
         };
         assert!(b, "receiver 3 is closed, {:?}", r);
-        assert_eq!(cb_called3.load(Ordering::Relaxed), 2, "callback 3 called");
     }
 }

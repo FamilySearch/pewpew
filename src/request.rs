@@ -13,7 +13,6 @@ use ether::{Either, Either3, EitherExt};
 use for_each_parallel::ForEachParallel;
 use futures::{
     channel::mpsc as futures_channel,
-    executor::block_on,
     future::{self, try_join_all},
     sink::SinkExt,
     stream, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
@@ -27,7 +26,7 @@ use hyper_tls::HttpsConnector;
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
-use tokio::task::spawn_blocking;
+use tokio::{fs::File as TokioFile, io::AsyncRead};
 use zip_all::zip_all;
 
 use crate::error::{RecoverableError, TestError};
@@ -41,9 +40,7 @@ use config::{
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    fs::File,
     future::Future,
-    io::{Error as IOError, ErrorKind as IOErrorKind, Read},
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -506,49 +503,28 @@ fn multipart_body_as_hyper_body<'a>(
     Ok(ret)
 }
 
-fn create_file_hyper_body(
-    filename: String,
-) -> impl Future<Output = Result<(u64, HyperBody), TestError>> {
-    let filename2 = filename.clone();
-    spawn_blocking(|| {
-        let mut file = match File::open(&filename) {
-            Ok(f) => f,
-            Err(e) => return Err(TestError::FileReading(filename, e.into())),
-        };
-        let metadata = match file.metadata() {
-            Ok(m) => m,
-            Err(e) => return Err(TestError::FileReading(filename, e.into())),
-        };
-        let bytes = metadata.len();
+async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), TestError> {
+    let mut file = match TokioFile::open(&filename).await {
+        Ok(f) => f,
+        Err(e) => return Err(TestError::FileReading(filename, e.into())),
+    };
+    let bytes = match file.metadata().await {
+        Ok(m) => m.len(),
+        Err(e) => return Err(TestError::FileReading(filename, e.into())),
+    };
 
-        let (mut tx, rx) = futures_channel::channel(5);
-        let mut buf = BytesMut::with_capacity(8 * (1 << 10));
+    let stream = stream::poll_fn(move |cx| {
+        let mut buffer = BytesMut::with_capacity(8192);
+        match Pin::new(&mut file).poll_read_buf(cx, &mut buffer) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
+            Poll::Ready(Ok(0)) => Poll::Ready(None),
+            Poll::Ready(Ok(_)) => Poll::Ready(Some(Ok(buffer))),
+        }
+    });
 
-        spawn_blocking(move || loop {
-            match file.read(&mut buf) {
-                Ok(n) if n == 0 => break,
-                Ok(n) => {
-                    let bytes_to_send = buf.split_off(n);
-                    if block_on(tx.send(Ok(bytes_to_send))).is_err() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    let _ = block_on(tx.send(Err(e)));
-                    break;
-                }
-            }
-        });
-
-        let body = HyperBody::wrap_stream(rx);
-        Ok((bytes, body))
-    })
-    .map(|r| {
-        r.map_err(|e| {
-            let e = IOError::new(IOErrorKind::Other, e);
-            TestError::FileReading(filename2, e.into())
-        })?
-    })
+    let body = HyperBody::wrap_stream(stream);
+    Ok((bytes, body))
 }
 
 fn body_template_as_hyper_body<'a>(
@@ -872,5 +848,29 @@ impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Future f
 impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Drop for BlockSender<V> {
     fn drop(&mut self) {
         self.now_or_never();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stream::StreamExt;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn file_bodies_work() {
+        let f = async {
+            let (_, body) = create_file_hyper_body("tests/test.jpg".to_string())
+                .await
+                .unwrap();
+            body.map(|b| stream::iter(b.unwrap()))
+                .flatten()
+                .collect::<Vec<_>>()
+                .await
+        };
+        let mut rt = Runtime::new().unwrap();
+        let streamed_bytes = rt.block_on(f);
+        let file_bytes = include_bytes!("../tests/test.jpg").to_vec();
+        assert_eq!(file_bytes, streamed_bytes);
     }
 }

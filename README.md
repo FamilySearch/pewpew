@@ -4,8 +4,13 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
 
 ## Changelog
+### v0.5.8
+Bug fixes:
+- Refactor providers to resolve issues where some tests would see memory leaks and extraneous CPU usage.
+- Fix regression from v0.5.6 where sending a file as part of a request's body did not work.
+
 ### v0.5.7
-Bugfix:
+Bug fixes:
 - Fix regression in v0.5.6 where pewpew does not sleep properly between endpoint calls, effectively disregarding any load limits.
 
 ### v0.5.6
@@ -16,7 +21,7 @@ Changes:
 - Make "endpoint was delayed waiting for provider" messages less noisy.
 - Allow the `--watch` CLI flag to modify the test for any change in a config file.
 
-Bugfix:
+Bug fixes:
 - Fix regression introduced in v0.5.5 where specifying a `provider` multiple times in a `provides` would only use the last specified one.
 - Fix bug where non-ascii characters could cause an error reading a file when using the `line` (default) `format`.
 - Fix bug where the `line` `format` of a file provider would incorrectly parse files with lines longer than 8KB.
@@ -31,7 +36,7 @@ Changes:
 - Add optional `request_timeout` option to `endpoints`.
 - Refactor config parser to provide more helpful messages when an error occurs.
 
-Bugfix:
+Bug fixes:
 - Fix regression where certain errors which should be handled during a test were causing the test to crash.
 - Fix bug where a load_pattern did not work when doing `from: 0%` and `to: 0%`.
 
@@ -39,7 +44,7 @@ Bugfix:
 Changes:
 - Add `stats-file` command-line flag to specify the name of the stats file.
 
-Bugfix:
+Bug fixes:
 - Fix bug where a `logs` expression would get `null` for `response` and `request` fields unless they were also references within a `provides`.
 - Fix bug where tests would crash if a response header was a not UTF8 encoded.
 
@@ -49,7 +54,7 @@ Changes:
 - Expand cases when an endpoint can have no `peak_load` to include the case when the endpoint depends upon a `response` provider.
 - Swap out the JSONPath library for one that supports more JSONPath expressions.
 
-Bugfix:
+Bug fixes:
 - Raise an error if `for_each` is referenced but not defined.
 - Fix bug where the config parser would erroneously say there was a recursive `for_each`.
 
@@ -59,7 +64,7 @@ Changes:
 - Change stats to go through stdout instead of stderr.
 - Print stats for an endpoint even if it only experienced errors.
 
-Bugfix:
+Bug fixes:
 - Fix issue where `request.body` would display the wrong file name when the request body was a file.
 - Fix message displayed as `request.body` when the request body is a file to be consistent with other similar messages and have double braces as delimiters.
 - Fix issue where the `config.client.request_timeout` and `config.client.keepalive` were not being parsed properly from the config file.
@@ -82,7 +87,7 @@ Breaking changes:
 - Rename the `static_list` provider type to `list`.
 - Allow the same header name to be used multiple times in a request (in compliance with HTTP specs). Headers which are set through `config.client.headers` can be unset in the `endpoints.headers` sub-section by setting the value to `null`.
 
-Bugfix:
+Bug fixes:
 - Fix an issue where loggers would not log for a request if a warning level error happened.
 - Fix performance regression introduced in v0.4.9.
 - Fix performance regression introduced in v0.4.10.

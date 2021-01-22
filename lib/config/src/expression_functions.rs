@@ -38,14 +38,14 @@ impl Collect {
     ) -> Result<Self, CreatingExpressionError> {
         match args.len() {
             2 | 3 => {
-                let second = as_u64(&args.remove(1)).ok_or_else(|| {
+                let second = as_u64(&args.remove(1)).ok_or({
                     ExecutingExpressionError::InvalidFunctionArguments("collect", marker)
                 })?;
                 let first = args.remove(0);
                 let third = args
                     .pop()
                     .map(|fa| {
-                        let max = as_u64(&fa).ok_or_else(|| {
+                        let max = as_u64(&fa).ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("collect", marker)
                         });
                         Ok::<_, CreatingExpressionError>(Uniform::new(second, max?))
@@ -579,8 +579,8 @@ impl Join {
     ) -> Result<Either<Self, json::Value>, CreatingExpressionError> {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(_)))] => {
-                let two = into_string(args.pop().expect("join should have two args")).ok_or_else(
-                    || ExecutingExpressionError::InvalidFunctionArguments("join", marker),
+                let two = into_string(args.pop().expect("join should have two args")).ok_or(
+                    ExecutingExpressionError::InvalidFunctionArguments("join", marker),
                 )?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
@@ -597,12 +597,11 @@ impl Join {
             }
             [_, ValueOrExpression::Value(Value::Json(json::Value::String(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
-                let three = into_string(args.pop().expect("join should have two args"))
-                    .ok_or_else(|| {
-                        ExecutingExpressionError::InvalidFunctionArguments("join", marker)
-                    })?;
-                let two = into_string(args.pop().expect("join should have two args")).ok_or_else(
-                    || ExecutingExpressionError::InvalidFunctionArguments("join", marker),
+                let three = into_string(args.pop().expect("join should have two args")).ok_or({
+                    ExecutingExpressionError::InvalidFunctionArguments("join", marker)
+                })?;
+                let two = into_string(args.pop().expect("join should have two args")).ok_or(
+                    ExecutingExpressionError::InvalidFunctionArguments("join", marker),
                 )?;
                 let one = args.pop().expect("join should have two args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &one {
@@ -708,7 +707,7 @@ impl JsonPath {
                     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
                     param_name_re
                         .captures(&*json_path)
-                        .ok_or_else(|| {
+                        .ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("json_path", marker)
                         })?
                         .get(1)
@@ -1016,10 +1015,11 @@ impl Pad {
         marker: Marker,
     ) -> Result<Either<Self, json::Value>, CreatingExpressionError> {
         let as_usize = |fa| match fa {
-            ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => n
-                .as_u64()
-                .map(|n| n as usize)
-                .ok_or_else(|| ExecutingExpressionError::InvalidFunctionArguments("pad", marker)),
+            ValueOrExpression::Value(Value::Json(json::Value::Number(ref n))) if n.is_u64() => {
+                n.as_u64().map(|n| n as usize).ok_or(
+                    ExecutingExpressionError::InvalidFunctionArguments("pad", marker),
+                )
+            }
             _ => Err(ExecutingExpressionError::InvalidFunctionArguments(
                 "pad", marker,
             )),
@@ -1027,10 +1027,9 @@ impl Pad {
         match args.as_slice() {
             [_, ValueOrExpression::Value(Value::Json(json::Value::Number(_))), ValueOrExpression::Value(Value::Json(json::Value::String(_)))] =>
             {
-                let third = into_string(args.pop().expect("pad should have three args"))
-                    .ok_or_else(|| {
-                        ExecutingExpressionError::InvalidFunctionArguments("pad", marker)
-                    })?;
+                let third = into_string(args.pop().expect("pad should have three args")).ok_or(
+                    ExecutingExpressionError::InvalidFunctionArguments("pad", marker),
+                )?;
                 let second = as_usize(args.pop().expect("pad should have three args"))?;
                 let first = args.pop().expect("pad should have three args");
                 if let ValueOrExpression::Value(Value::Json(json)) = &first {
@@ -1222,10 +1221,10 @@ impl Range {
                     ValueOrExpression::Value(Value::Json(_)),
                     ValueOrExpression::Value(Value::Json(_)),
                 ) => {
-                    let first = as_u64(&first).ok_or_else(|| {
+                    let first = as_u64(&first).ok_or({
                         ExecutingExpressionError::InvalidFunctionArguments("range", marker)
                     })?;
-                    let second = as_u64(&second).ok_or_else(|| {
+                    let second = as_u64(&second).ok_or({
                         ExecutingExpressionError::InvalidFunctionArguments("range", marker)
                     })?;
                     Ok(Range::Range(ReversibleRange::new(first, second)))
@@ -1296,10 +1295,10 @@ impl Range {
                     .map(move |(l, r)| {
                         let (first, mut returns) = l?;
                         let (second, returns2) = r?;
-                        let first = first.as_u64().ok_or_else(|| {
+                        let first = first.as_u64().ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("range", marker)
                         })?;
-                        let second = second.as_u64().ok_or_else(|| {
+                        let second = second.as_u64().ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("range", marker)
                         })?;
                         let v = json::Value::Array(
@@ -1336,13 +1335,13 @@ impl Repeat {
     ) -> Result<Self, CreatingExpressionError> {
         match args.len() {
             1 | 2 => {
-                let min = as_u64(&args.remove(0)).ok_or_else(|| {
+                let min = as_u64(&args.remove(0)).ok_or({
                     ExecutingExpressionError::InvalidFunctionArguments("repeat", marker)
                 })?;
                 let random = args
                     .pop()
                     .map(|fa| {
-                        let max = as_u64(&fa).ok_or_else(|| {
+                        let max = as_u64(&fa).ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("repeat", marker)
                         });
                         Ok::<_, CreatingExpressionError>(Uniform::new(min, max?))

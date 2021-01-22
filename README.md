@@ -5,6 +5,9 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 
 ## Changelog
 ### v0.5.8
+Changes:
+- Add in the ability for providers to be "unique"--meaning each item within the provider will be a unique JSON value without duplicates.
+
 Bug fixes:
 - Refactor providers to resolve issues where some tests would see memory leaks and extraneous CPU usage.
 - Fix regression from v0.5.6 where sending a file as part of a request's body did not work.

@@ -1,6 +1,3 @@
-// #[macro_use]
-// extern crate from_yaml_derive;
-
 mod error;
 mod expression_functions;
 mod from_yaml;
@@ -31,10 +28,6 @@ use std::{
     iter,
     num::{NonZeroU16, NonZeroUsize},
     path::PathBuf,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
     time::Duration,
 };
 
@@ -68,17 +61,17 @@ impl FromYaml for Method {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Limit {
-    Auto(Arc<AtomicUsize>),
-    Integer(usize),
+    AutoSized(usize),
+    Hard(usize),
 }
 
 impl PartialEq for Limit {
     fn eq(&self, right: &Self) -> bool {
         match (self, right) {
-            (Limit::Auto(_), Limit::Auto(_)) => true,
-            (Limit::Integer(n), Limit::Integer(n2)) => n == n2,
+            (Limit::AutoSized(_), Limit::AutoSized(_)) => true,
+            (Limit::Hard(n), Limit::Hard(n2)) => n == n2,
             _ => false,
         }
     }
@@ -88,7 +81,7 @@ impl FromYaml for Limit {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let (event, marker) = decoder.next()?;
         match event.as_x() {
-            Some(i) => return Ok((Limit::Integer(i), marker)),
+            Some(i) => return Ok((Limit::Hard(i), marker)),
             None => {
                 if let Some("auto") = event.as_str() {
                     return Ok((Limit::auto(), marker));
@@ -107,13 +100,13 @@ impl Default for Limit {
 
 impl Limit {
     pub fn auto() -> Limit {
-        Limit::Auto(Arc::new(AtomicUsize::new(5)))
+        Limit::AutoSized(5)
     }
 
     pub fn get(&self) -> usize {
         match self {
-            Limit::Auto(a) => a.load(Ordering::Acquire),
-            Limit::Integer(n) => *n,
+            Limit::AutoSized(n) => *n,
+            Limit::Hard(n) => *n,
         }
     }
 }
@@ -289,6 +282,7 @@ pub struct ExplicitStaticList {
     pub random: bool,
     pub repeat: bool,
     pub values: Vec<json::Value>,
+    pub unique: bool,
 }
 
 impl FromYaml for ExplicitStaticList {
@@ -297,6 +291,7 @@ impl FromYaml for ExplicitStaticList {
         let mut random = false;
         let mut repeat = true;
         let mut values = None;
+        let mut unique = false;
         let mut first_marker = None;
         loop {
             let (event, marker) = decoder.next()?;
@@ -336,6 +331,11 @@ impl FromYaml for ExplicitStaticList {
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
                         values = Some(v);
                     }
+                    "unique" => {
+                        let (u, _) =
+                            FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        unique = u;
+                    }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
             }
@@ -346,6 +346,7 @@ impl FromYaml for ExplicitStaticList {
             random,
             repeat,
             values,
+            unique,
         };
         Ok((ret, marker))
     }
@@ -356,6 +357,15 @@ impl FromYaml for ExplicitStaticList {
 pub enum StaticList {
     Explicit(ExplicitStaticList),
     Implicit(Vec<json::Value>),
+}
+
+impl StaticList {
+    pub fn unique(&self) -> bool {
+        match self {
+            StaticList::Explicit(l) if l.unique => true,
+            _ => false,
+        }
+    }
 }
 
 impl FromYaml for StaticList {
@@ -528,6 +538,12 @@ pub struct RangeProvider(
     RangeProviderPreProcessed,
 );
 
+impl RangeProvider {
+    pub fn unique(&self) -> bool {
+        self.1.unique
+    }
+}
+
 impl PartialEq for RangeProvider {
     fn eq(&self, rhs: &Self) -> bool {
         self.1 == rhs.1
@@ -556,6 +572,7 @@ pub struct RangeProviderPreProcessed {
     end: i64,
     step: NonZeroU16,
     repeat: bool,
+    unique: bool,
 }
 
 impl FromYaml for RangeProviderPreProcessed {
@@ -566,6 +583,7 @@ impl FromYaml for RangeProviderPreProcessed {
         let mut end = std::i64::MAX;
         let mut step = NonZeroU16::new(1).expect("1 is non-zero");
         let mut repeat = false;
+        let mut unique = false;
 
         let mut first_marker = None;
         loop {
@@ -611,6 +629,11 @@ impl FromYaml for RangeProviderPreProcessed {
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
                         repeat = r;
                     }
+                    "unique" => {
+                        let (u, _) =
+                            FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        unique = u;
+                    }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
             }
@@ -621,6 +644,7 @@ impl FromYaml for RangeProviderPreProcessed {
             end,
             step,
             repeat,
+            unique,
         };
         Ok((ret, marker))
     }
@@ -797,6 +821,7 @@ struct FileProviderPreProcessed {
     path: PreTemplate,
     random: bool,
     repeat: bool,
+    unique: bool,
 }
 
 impl FromYaml for FileProviderPreProcessed {
@@ -808,6 +833,7 @@ impl FromYaml for FileProviderPreProcessed {
         let mut path = None;
         let mut random = false;
         let mut repeat = false;
+        let mut unique = false;
 
         let mut first_marker = None;
         let mut saw_opening = false;
@@ -870,6 +896,11 @@ impl FromYaml for FileProviderPreProcessed {
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
                         repeat = r;
                     }
+                    "unique" => {
+                        let (u, _) =
+                            FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        unique = u;
+                    }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
             }
@@ -887,6 +918,7 @@ impl FromYaml for FileProviderPreProcessed {
             path,
             random,
             repeat,
+            unique,
         };
         Ok((ret, marker))
     }
@@ -897,12 +929,14 @@ impl FromYaml for FileProviderPreProcessed {
 pub struct ResponseProvider {
     pub auto_return: Option<EndpointProvidesSendOptions>,
     pub buffer: Limit,
+    pub unique: bool,
 }
 
 impl FromYaml for ResponseProvider {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut auto_return = None;
         let mut buffer = None;
+        let mut unique = false;
 
         let mut first_marker = None;
         let mut saw_opening = false;
@@ -939,6 +973,11 @@ impl FromYaml for ResponseProvider {
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
                         buffer = Some(a);
                     }
+                    "unique" => {
+                        let u =
+                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        unique = u;
+                    }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
             }
@@ -948,6 +987,7 @@ impl FromYaml for ResponseProvider {
         let ret = Self {
             auto_return,
             buffer,
+            unique,
         };
         Ok((ret, marker))
     }
@@ -2306,6 +2346,7 @@ pub struct FileProvider {
     pub path: String,
     pub random: bool,
     pub repeat: bool,
+    pub unique: bool,
 }
 
 pub struct Logger {
@@ -2734,6 +2775,7 @@ impl LoadTest {
                             path,
                             random,
                             repeat,
+                            unique,
                         } = f;
                         let path = path.evaluate(&vars, &mut RequiredProviders::new())?;
                         let f = FileProvider {
@@ -2744,6 +2786,7 @@ impl LoadTest {
                             path,
                             random,
                             repeat,
+                            unique,
                         };
                         Provider::File(f)
                     }
@@ -2893,7 +2936,7 @@ mod tests {
         let values = vec![
             ("asdf", None),
             ("auto", Some(Limit::auto())),
-            ("96", Some(Limit::Integer(96))),
+            ("96", Some(Limit::Hard(96))),
             ("-96", None),
         ];
         check_all(values);
@@ -2922,6 +2965,7 @@ mod tests {
                     random: false,
                     repeat: true,
                     values: vec![json::json!("foo"), json::json!("bar")],
+                    unique: false,
                 })),
             ),
             (
@@ -2935,6 +2979,22 @@ mod tests {
                     random: true,
                     repeat: false,
                     values: vec![json::json!("foo"), json::json!("bar")],
+                    unique: false,
+                })),
+            ),
+            (
+                "
+                repeat: false
+                random: true
+                unique: true
+                values:
+                    - foo
+                    - bar",
+                Some(StaticList::Explicit(ExplicitStaticList {
+                    random: true,
+                    repeat: false,
+                    values: vec![json::json!("foo"), json::json!("bar")],
+                    unique: true,
                 })),
             ),
             (
@@ -3020,6 +3080,7 @@ mod tests {
                     path: create_template("foo.bar"),
                     random: false,
                     repeat: false,
+                    unique: false,
                 })),
             ),
             (
@@ -3029,6 +3090,7 @@ mod tests {
                     end: std::i64::MAX,
                     step: NonZeroU16::new(1).expect("1 is non-zero"),
                     repeat: false,
+                    unique: false,
                 })),
             ),
             (
@@ -3036,6 +3098,7 @@ mod tests {
                 Some(ProviderPreProcessed::Response(ResponseProvider {
                     auto_return: None,
                     buffer: Default::default(),
+                    unique: false,
                 })),
             ),
             (

@@ -45,7 +45,7 @@ use std::{
     mem,
     path::PathBuf,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     task::Poll,
     time::{Duration, Instant},
 };
@@ -918,19 +918,19 @@ fn get_providers_from_config(
             config::Provider::File(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let config::Limit::Auto(limit) = &template.buffer {
-                        limit.store(auto_size, Ordering::Relaxed);
+                    if let config::Limit::AutoSized(_) = &template.buffer {
+                        template.buffer = config::Limit::AutoSized(auto_size);
                     }
                 }
                 util::tweak_path(&mut template.path, config_path);
                 providers::file(template, test_ended_tx.clone())?
             }
             config::Provider::Range(range) => providers::range(range),
-            config::Provider::Response(template) => {
+            config::Provider::Response(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let config::Limit::Auto(limit) = &template.buffer {
-                        limit.store(auto_size, Ordering::Relaxed);
+                    if let config::Limit::AutoSized(_) = &template.buffer {
+                        template.buffer = config::Limit::AutoSized(auto_size);
                     }
                 }
                 response_providers.insert(name.clone());

@@ -150,10 +150,7 @@ pub enum RunOutputFormat {
 
 impl RunOutputFormat {
     pub fn is_human(self) -> bool {
-        match self {
-            RunOutputFormat::Human => true,
-            _ => false,
-        }
+        matches!(self, RunOutputFormat::Human)
     }
 }
 

@@ -123,7 +123,7 @@ impl FromYaml for NonZeroU16 {
         event
             .as_x()
             .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
+            .ok_or(Error::YamlDeserialize(None, marker))
     }
 }
 
@@ -133,7 +133,7 @@ impl FromYaml for NonZeroUsize {
         event
             .as_x()
             .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
+            .ok_or(Error::YamlDeserialize(None, marker))
     }
 }
 
@@ -143,7 +143,7 @@ impl FromYaml for i64 {
         event
             .as_x()
             .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
+            .ok_or(Error::YamlDeserialize(None, marker))
     }
 }
 
@@ -153,7 +153,7 @@ impl FromYaml for usize {
         event
             .as_x()
             .map(|i| (i, marker))
-            .ok_or_else(|| Error::YamlDeserialize(None, marker))
+            .ok_or(Error::YamlDeserialize(None, marker))
     }
 }
 

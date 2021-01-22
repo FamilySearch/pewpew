@@ -359,6 +359,7 @@ fn multipart_body_as_hyper_body<'a>(
 ) -> Result<impl Future<Output = Result<(u64, HyperBody), TestError>>, TestError> {
     let boundary: String = Alphanumeric
         .sample_iter(&mut rand::thread_rng())
+        .map(char::from)
         .take(20)
         .collect();
 
@@ -830,12 +831,12 @@ impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Future f
         if self.value_added {
             match &mut self.tx {
                 ProviderOrLogger::Logger(tx) => {
-                    if let Poll::Pending = tx.poll_flush_unpin(cx) {
+                    if tx.poll_flush_unpin(cx).is_pending() {
                         return Poll::Pending;
                     }
                 }
                 ProviderOrLogger::Provider(tx) => {
-                    if let Poll::Pending = tx.poll_flush_unpin(cx) {
+                    if tx.poll_flush_unpin(cx).is_pending() {
                         return Poll::Pending;
                     }
                 }

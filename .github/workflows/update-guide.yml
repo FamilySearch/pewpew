@@ -27,7 +27,7 @@ jobs:
           # install mdbook and wasm-pack
           mkdir ~/bin
           PATH=$PATH:~/bin
-          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.0/mdbook-v0.4.0-x86_64-unknown-linux-gnu.tar.gz \
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.6/mdbook-v0.4.6-x86_64-unknown-linux-gnu.tar.gz \
             | tar -xz -C ~/bin
 
           curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.9.1/wasm-pack-v0.9.1-x86_64-unknown-linux-musl.tar.gz \

@@ -250,8 +250,8 @@ impl FromYaml for LinearBuilderPreProcessed {
             }
         }
         let marker = first_marker.expect("should have a marker");
-        let to = to.ok_or_else(|| Error::MissingYamlField("to", marker))?;
-        let over = over.ok_or_else(|| Error::MissingYamlField("over", marker))?;
+        let to = to.ok_or(Error::MissingYamlField("to", marker))?;
+        let over = over.ok_or(Error::MissingYamlField("over", marker))?;
         let ret = Self { from, to, over };
         Ok((ret, marker))
     }
@@ -341,7 +341,7 @@ impl FromYaml for ExplicitStaticList {
             }
         }
         let marker = first_marker.expect("should have a marker");
-        let values = values.ok_or_else(|| Error::MissingYamlField("values", marker))?;
+        let values = values.ok_or(Error::MissingYamlField("values", marker))?;
         let ret = Self {
             random,
             repeat,
@@ -361,10 +361,7 @@ pub enum StaticList {
 
 impl StaticList {
     pub fn unique(&self) -> bool {
-        match self {
-            StaticList::Explicit(l) if l.unique => true,
-            _ => false,
-        }
+        matches!(self, StaticList::Explicit(l) if l.unique)
     }
 }
 
@@ -522,11 +519,7 @@ impl FromYaml for ProviderPreProcessed {
 
 impl ProviderPreProcessed {
     fn is_response_provider(&self) -> bool {
-        if let ProviderPreProcessed::Response(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, ProviderPreProcessed::Response(_))
     }
 }
 
@@ -909,7 +902,7 @@ impl FromYaml for FileProviderPreProcessed {
         let csv = csv.unwrap_or_default();
         let buffer = buffer.unwrap_or_default();
         let format = format.unwrap_or_default();
-        let path = path.ok_or_else(|| Error::MissingYamlField("path", marker))?;
+        let path = path.ok_or(Error::MissingYamlField("path", marker))?;
         let ret = Self {
             csv,
             auto_return,
@@ -1097,7 +1090,7 @@ impl FromYaml for LoggerPreProcessed {
             }
         }
         let marker = first_marker.expect("should have a marker");
-        let to = to.ok_or_else(|| Error::MissingYamlField("to", marker))?;
+        let to = to.ok_or(Error::MissingYamlField("to", marker))?;
         let for_each = for_each.unwrap_or_default();
         let ret = Self {
             select,
@@ -1169,7 +1162,7 @@ impl FromYaml for LogsPreProcessed {
             }
         }
         let marker = first_marker.expect("should have a marker");
-        let select = select.ok_or_else(|| Error::MissingYamlField("select", marker))?;
+        let select = select.ok_or(Error::MissingYamlField("select", marker))?;
         let for_each = for_each.unwrap_or_default();
         let ret = Self {
             select,
@@ -1342,7 +1335,7 @@ impl FromYaml for EndpointPreProcessed {
         let method = method.unwrap_or_default();
         let on_demand = on_demand.unwrap_or_default();
         let tags = tags.unwrap_or_default();
-        let url = url.ok_or_else(|| Error::MissingYamlField("url", marker))?;
+        let url = url.ok_or(Error::MissingYamlField("url", marker))?;
         let provides = provides.unwrap_or_default();
         let logs = logs.unwrap_or_default();
         let no_auto_returns = no_auto_returns.unwrap_or_default();
@@ -1473,7 +1466,7 @@ impl FromYaml for BodyMultipartPiece {
         }
         let marker = first_marker.expect("should have a marker");
         let headers = headers.unwrap_or_default();
-        let body = body.ok_or_else(|| Error::MissingYamlField("body", marker))?;
+        let body = body.ok_or(Error::MissingYamlField("body", marker))?;
         let ret = Self { headers, body };
         Ok((ret, marker))
     }
@@ -1533,11 +1526,7 @@ pub enum EndpointProvidesSendOptions {
 
 impl EndpointProvidesSendOptions {
     pub fn is_block(self) -> bool {
-        if let EndpointProvidesSendOptions::Block = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, EndpointProvidesSendOptions::Block)
     }
 }
 
@@ -1628,7 +1617,7 @@ impl FromYaml for EndpointProvidesPreProcessed {
             }
         }
         let marker = first_marker.expect("should have a marker");
-        let select = select.ok_or_else(|| Error::MissingYamlField("select", marker))?;
+        let select = select.ok_or(Error::MissingYamlField("select", marker))?;
         let for_each = for_each.unwrap_or_default();
         let ret = Self {
             send,
@@ -1981,7 +1970,7 @@ impl FromYaml for LoadTestPreProcessed {
         }
         let marker = first_marker.expect("should have a marker");
         let config = config.unwrap_or_else(|| DefaultWithMarker::default(marker));
-        let endpoints = endpoints.ok_or_else(|| Error::MissingYamlField("endpoints", marker))?;
+        let endpoints = endpoints.ok_or(Error::MissingYamlField("endpoints", marker))?;
         let providers = providers.unwrap_or_default();
         let loggers = loggers.unwrap_or_default();
         let vars = vars.unwrap_or_default();
@@ -2130,7 +2119,7 @@ impl PreVar {
                         }
                         Err(e) => return Err(e.into()),
                     };
-                    *v = json::from_str(&s).unwrap_or_else(|_e| json::Value::String(s));
+                    *v = json::from_str(&s).unwrap_or(json::Value::String(s));
                 }
                 json::Value::Array(a) => {
                     for v in a.iter_mut() {
@@ -2283,7 +2272,7 @@ impl PreLoadPattern {
             }
         }
         builder
-            .ok_or_else(|| Error::InvalidLoadPattern(self.1))
+            .ok_or(Error::InvalidLoadPattern(self.1))
             .map(LoadPattern::Linear)
     }
 }

@@ -30,7 +30,7 @@ impl ResponseHandler {
         let response_provider = json::json!({ "status": status });
         let mut template_values = self.template_values;
         template_values.insert("response".into(), response_provider);
-        let mut response_fields_added = 0b000_111;
+        let mut response_fields_added = 0b00_0111;
         handle_response_requirements(
             self.precheck_rr_providers,
             &mut response_fields_added,
@@ -79,10 +79,7 @@ impl ResponseHandler {
             h.to_str()
                 .expect("content-encoding header should cast to str")
         });
-        let ce_header = match ce_header {
-            Some(s) => s,
-            None => "",
-        };
+        let ce_header = ce_header.unwrap_or("");
         let body_future = match (
             response_fields_added & RESPONSE_BODY != 0,
             body_reader::Compression::try_from(ce_header),

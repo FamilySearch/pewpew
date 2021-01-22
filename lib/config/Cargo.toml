@@ -9,16 +9,18 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-base64 = "0.12"
+base64 = "0.13"
 ether = { path = "../either" }
 futures = "0.3"
 http = "0.2"
-itertools = "0.9"
+itertools = "0.10"
+# pinned to 0.2.3 because newer versions made a semver incompatible change by making `Node` no longer
+# public, which we depend on https://github.com/freestrings/jsonpath/issues/36
 jsonpath_lib = "=0.2.3"
 percent-encoding = "1"
 pest = "2"
 pest_derive = "2"
-rand = "0.7"
+rand = "0.8"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

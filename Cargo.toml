@@ -19,7 +19,7 @@ path = "src/bin/test_server.rs"
 
 [dependencies]
 atty = "0.2"
-base64 = "0.12"
+base64 = "0.13"
 body_reader = { path = "./lib/body_reader" }
 bytes = "0.5"
 channel = { path = "./lib/channel" }
@@ -36,11 +36,10 @@ hdrhistogram = "7"
 http = "0.2"
 hyper = "0.13"
 hyper-tls = "0.4"
-itertools = "0.9"
+itertools = "0.10"
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
-parking_lot = "0.10"
-rand = "0.7"
+rand = "0.8"
 regex = "1"
 select_any = { path = "./lib/select_any" }
 serde = { version = "1.0", features = ["derive"] }

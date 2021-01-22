@@ -196,19 +196,10 @@ pub enum SendState<T> {
     Full(T),
     Success,
 }
-pub enum SendState2 {
-    Closed,
-    Full,
-    Ready,
-}
 
 impl<T> SendState<T> {
     pub fn is_success(&self) -> bool {
-        if let SendState::Success = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, SendState::Success)
     }
 }
 
@@ -312,6 +303,7 @@ impl<T: Serialize> Ord for Sender<T> {
     }
 }
 
+// Implementing the `Sink` trait on `Sender` allows enables `send: block` functionality
 impl<T: Serialize> Sink<T> for Sender<T> {
     type Error = ChannelClosed;
 

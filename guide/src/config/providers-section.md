@@ -30,6 +30,7 @@ The `file` *provider_type* reads data from a file. Every line in the file is rea
 
 - **`path`** - A [template](./common-types.md#templates) value indicating the path to the file on the file system. Unlike templates used elsewhere, only variables defined in the [vars section](./vars-section.md) can be interopolated. When a relative path is specified it is interpreted as relative to the config file. Absolute paths are supported though discouraged as they prevent the config file from being platform agnostic.
 - **`repeat`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` indicates when the provider `file` provider gets to the end of the file it should start back at the beginning. Defaults to `false`.
+- **`unique`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` makes the provider a "unique" provider--meaning each item within the provider will be a unique JSON value without duplicates. Defaults to `false`.
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used by a request, after a response is received the value is automatically returned to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that the soft limit can increase as needed. This happens after a provider is full then later becomes empty. Defaults to `auto`.
 - **`format`** <sub><sup>*Optional*</sup></sub> - Specifies the format for the file. The format can be one of `line` (the default), `json`, or `csv`.
@@ -170,6 +171,7 @@ Unlike other *provider_type*s `response` does not automatically receive data fro
 
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used and an individual endpoint call concludes, the value it got from this provider should be sent back to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that if the provider's buffer becomes empty it will automatically increase the buffer size to help prevent the provider from becoming empty again in the future. Defaults to `auto`.
+- **`unique`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` makes the provider a "unique" provider--meaning each item within the provider will be a unique JSON value without duplicates. Defaults to `false`.
 
 ## list
 The `list` *provider_type* creates a means of specifying an array of static values to be used as a provider.
@@ -178,6 +180,7 @@ A `list` provider can be specified in two forms, either implicitly or explicitly
 - **`random`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that entries in the values array should provided in random order. When combined with `repeat` there is no sense of "fairness" in the randomization. Defaults to *false*.
 - **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean indicating that the array should repeat infitely. Defaults to *true*.
 - **`values`** - An array of json values.
+- **`unique`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` makes the provider a "unique" provider--meaning each item within the provider will be a unique JSON value without duplicates. Defaults to `false`.
 
 **Example**, the following:
 ```yaml
@@ -212,6 +215,7 @@ The `range` *provider_type* provides an incrementing sequence of numbers in a gi
 - **`end`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [-9223372036854775808, 9223372036854775807]. This indicates what the end number should be for the range. This number is included in the range. Defaults to `9223372036854775807`.
 - **`step`** <sub><sup>*Optional*</sup></sub> - A whole number in the range of [1, 65535]. This indicates how big each "step" in the range will be. Defaults to `1`.
 - **`repeat`** <sub><sup>*Optional*</sup></sub> - A boolean which causes the range to repeat infinitely. Defaults to `false`.
+- **`unique`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` makes the provider a "unique" provider--meaning each item within the provider will be a unique JSON value without duplicates. Defaults to `false`.
 
 **Examples**:
 ```yaml

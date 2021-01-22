@@ -6,7 +6,7 @@ use self::{csv_reader::CsvReader, json_reader::JsonReader, line_reader::LineRead
 
 use crate::error::TestError;
 use crate::line_writer::MsgType;
-use crate::util::json_value_to_string;
+use crate::util::{config_limit_to_channel_limit, json_value_to_string};
 use crate::TestEndReason;
 
 use ether::Either3;
@@ -76,7 +76,8 @@ pub fn file(
                 .into_stream(),
         ),
     };
-    let (tx, rx) = channel::channel(template.buffer);
+    let limit = config_limit_to_channel_limit(template.buffer);
+    let (tx, rx) = channel::channel(limit, template.unique);
     let tx2 = tx.clone();
     let prime_tx = async move {
         let r = stream
@@ -98,13 +99,16 @@ pub fn file(
 }
 
 pub fn response(template: config::ResponseProvider) -> Provider {
-    let (tx, rx) = channel::channel(template.buffer);
+    let limit = config_limit_to_channel_limit(template.buffer);
+    let (tx, rx) = channel::channel(limit, template.unique);
     Provider::new(template.auto_return, rx, tx)
 }
 
 pub fn literals(list: config::StaticList) -> Provider {
+    let unique = list.unique();
     let rs = stream::iter(list.into_iter().map(Ok));
-    let (tx, rx) = channel::channel(config::Limit::auto());
+    let limit = channel::Limit::auto(5);
+    let (tx, rx) = channel::channel(limit, unique);
     let tx2 = tx.clone();
     let prime_tx = rs.forward(tx2);
     tokio::spawn(prime_tx);
@@ -112,7 +116,8 @@ pub fn literals(list: config::StaticList) -> Provider {
 }
 
 pub fn range(range: config::RangeProvider) -> Provider {
-    let (tx, rx) = channel::channel(config::Limit::auto());
+    let limit = channel::Limit::auto(5);
+    let (tx, rx) = channel::channel(limit, range.unique());
     let prime_tx = stream::iter(range.0.map(|v| Ok(v.into()))).forward(tx.clone());
     tokio::spawn(prime_tx);
     Provider::new(None, rx, tx)
@@ -227,7 +232,7 @@ mod tests {
     use futures_timer::Delay;
     use json::json;
     use test_common::TestWriter;
-    use tokio::runtime::Runtime;
+    use tokio::{runtime::Runtime, time};
 
     use std::time::Duration;
 
@@ -298,6 +303,7 @@ mod tests {
                 values: jsons.clone(),
                 repeat: false,
                 random: false,
+                unique: false,
             };
 
             let p = literals(esl.into());
@@ -314,6 +320,7 @@ mod tests {
                 values: jsons.clone(),
                 repeat: false,
                 random: true,
+                unique: false,
             };
 
             let p = literals(esl.into());
@@ -333,6 +340,7 @@ mod tests {
                 values: jsons.clone(),
                 repeat: true,
                 random: false,
+                unique: false,
             };
 
             let p = literals(esl.into());
@@ -346,6 +354,7 @@ mod tests {
                 values: jsons.clone(),
                 repeat: true,
                 random: true,
+                unique: false,
             };
 
             let p = literals(esl.into());
@@ -366,6 +375,30 @@ mod tests {
             values.dedup();
 
             assert_eq!(values, expect, "fifth");
+
+            let esl = config::ExplicitStaticList {
+                // be sure to keep the number of values <= the default buffer size used for a static list
+                // or this test will fail
+                values: vec![json!(1), json!(2), json!(1), json!(2), json!(1)],
+                repeat: false,
+                random: false,
+                unique: true,
+            };
+
+            let p = literals(esl.into());
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
+
+            let expect: Vec<_> = vec![json!(1), json!(2)];
+
+            // add a short delay to give the literals `prime_tx` enough time to complete
+            time::delay_for(Duration::from_millis(50)).await;
+
+            let values: Vec<_> = rx.collect().await;
+
+            // NOTE: if this test causes issues in CI, remove it as there are enough other tests covering
+            // unique providers
+            assert_eq!(values, expect, "sixth");
         });
     }
 
@@ -375,6 +408,7 @@ mod tests {
         let rp = config::ResponseProvider {
             auto_return: None,
             buffer: config::Limit::auto(),
+            unique: false,
         };
         let mut p = response(rp);
         for value in &jsons {
@@ -382,6 +416,39 @@ mod tests {
         }
 
         let expects = jsons;
+
+        let Provider { rx, tx, .. } = p;
+        drop(tx);
+
+        let values: Vec<_> = block_on_stream(rx).collect();
+
+        assert_eq!(values, expects);
+    }
+
+    #[test]
+    fn unique_response_provider_works() {
+        let jsons = vec![
+            json!(1),
+            json!(2),
+            json!(3),
+            json!(1),
+            json!(2),
+            json!(3),
+            json!(1),
+            json!(2),
+            json!(3),
+        ];
+        let rp = config::ResponseProvider {
+            auto_return: None,
+            buffer: config::Limit::Hard(jsons.len()),
+            unique: true,
+        };
+        let mut p = response(rp);
+        for value in &jsons {
+            let _ = block_on(p.tx.send(value.clone()));
+        }
+
+        let expects = vec![json!(1), json!(2), json!(3)];
 
         let Provider { rx, tx, .. } = p;
         drop(tx);

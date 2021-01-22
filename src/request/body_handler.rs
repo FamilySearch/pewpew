@@ -200,16 +200,16 @@ impl BodyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use channel::Receiver;
+    use channel::{Limit, Receiver};
     use futures::{channel::mpsc as futures_channel, executor::block_on, StreamExt};
     use maplit::{btreemap, btreeset};
 
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use config::{EndpointProvidesSendOptions::*, Limit, Select};
+    use config::{EndpointProvidesSendOptions::*, Select};
 
     fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>) {
-        let (tx, rx) = channel::channel(Limit::Integer(1));
+        let (tx, rx) = channel::channel(Limit::Hard(1), false);
         (Outgoing::new(select, ProviderOrLogger::Provider(tx)), rx)
     }
 

@@ -683,7 +683,7 @@ impl Endpoint {
                             (0usize, false, true),
                             |(empty_slots, has_empty, all_full), tx| {
                                 let count = tx.len();
-                                let limit = tx.limit().get();
+                                let limit = tx.limit();
                                 (
                                     empty_slots.max(limit.saturating_sub(count)),
                                     has_empty || count == 0,
@@ -725,7 +725,7 @@ impl Endpoint {
                             (0usize, false, true),
                             |(empty_slots, has_empty, all_full), tx| {
                                 let count = tx.len();
-                                let limit = tx.limit().get();
+                                let limit = tx.limit();
                                 (
                                     empty_slots.max(limit.saturating_sub(count)),
                                     has_empty || count == 0,

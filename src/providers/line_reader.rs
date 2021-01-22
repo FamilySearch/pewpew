@@ -84,7 +84,7 @@ impl LineReader {
                 .enumerate()
                 .find_map(|(i, b)| if *b == b'\n' { Some(i) } else { None });
             if new_line_index.is_some() || eof {
-                let i = new_line_index.unwrap_or_else(|| self.buf_data_len);
+                let i = new_line_index.unwrap_or(self.buf_data_len);
                 self.position += (i + 1) as u64;
                 let mut raw_value = &self.byte_buffer[..i];
                 let mut i2 = i;

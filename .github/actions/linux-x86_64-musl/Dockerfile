@@ -4,7 +4,7 @@ FROM ubuntu:18.04
 
 # for libressl
 # ARG OPENSSL_VERSION=3.0.2
-ARG OPENSSL_VERSION=1.1.1f
+ARG OPENSSL_VERSION=1.1.1h
 
 RUN apt-get -qq update && \
     apt-get -qq install -y \

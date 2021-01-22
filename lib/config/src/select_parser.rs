@@ -138,7 +138,7 @@ pub(super) enum FunctionCall {
     If(Box<If>),
     Join(Join),
     JsonPath(JsonPath),
-    Match(Match),
+    Match(Box<Match>),
     MinMax(MinMax),
     Pad(Pad),
     Random(Random),
@@ -166,7 +166,7 @@ impl FunctionCall {
             "json_path" => {
                 JsonPath::new(args, providers, static_vars, marker)?.map_a(FunctionCall::JsonPath)
             }
-            "match" => Match::new(args, marker)?.map_a(FunctionCall::Match),
+            "match" => Match::new(args, marker)?.map_a(|m| FunctionCall::Match(m.into())),
             "max" => MinMax::new(false, args)?.map_a(FunctionCall::MinMax),
             "min" => MinMax::new(true, args)?.map_a(FunctionCall::MinMax),
             "start_pad" => Pad::new(true, args, marker)?.map_a(FunctionCall::Pad),
@@ -349,7 +349,7 @@ fn index_json<'a>(
         }
         _ => None,
     };
-    let o = o.unwrap_or_else(|| Cow::Owned(json::Value::Null));
+    let o = o.unwrap_or(Cow::Owned(json::Value::Null));
     Ok(o)
 }
 
@@ -397,7 +397,7 @@ fn index_json2<'a>(
             }
             _ => None,
         };
-        json = o.unwrap_or_else(|| Cow::Owned(json::Value::Null))
+        json = o.unwrap_or(Cow::Owned(json::Value::Null))
     }
     Ok(json)
 }
@@ -426,10 +426,7 @@ impl Path {
                     let v = v.iter().map(|c| (**c).clone()).collect();
                     return Ok(Cow::Owned(json::Value::Array(v)));
                 } else if let PathSegment::Number(n) = self.rest[0] {
-                    let c = v
-                        .get(n)
-                        .cloned()
-                        .unwrap_or_else(|| Cow::Owned(json::Value::Null));
+                    let c = v.get(n).cloned().unwrap_or(Cow::Owned(json::Value::Null));
                     (c, &self.rest[1..])
                 } else {
                     (Cow::Owned(json::Value::Null), &self.rest[1..])
@@ -470,10 +467,7 @@ impl Path {
                         let b = iter::once(Ok(Cow::Owned(json::Value::Array(v))));
                         return Ok(Either::B(b));
                     } else if let PathSegment::Number(n) = self.rest[0] {
-                        let c = v
-                            .get(n)
-                            .cloned()
-                            .unwrap_or_else(|| Cow::Owned(json::Value::Null));
+                        let c = v.get(n).cloned().unwrap_or(Cow::Owned(json::Value::Null));
                         (c, &self.rest[1..])
                     } else {
                         (Cow::Owned(json::Value::Null), &self.rest[1..])
@@ -816,10 +810,10 @@ fn to_json_number(n: f64) -> json::Value {
 }
 
 impl InfixOperator {
-    fn evaluate<'a>(
+    fn evaluate(
         self,
         left: &json::Value,
-        right: Result<Cow<'a, json::Value>, ExecutingExpressionError>,
+        right: Result<Cow<'_, json::Value>, ExecutingExpressionError>,
     ) -> Result<json::Value, ExecutingExpressionError> {
         let value = match self {
             InfixOperator::Add => {
@@ -1083,28 +1077,28 @@ impl ParsedSelect {
     }
 }
 
-pub const REQUEST_STARTLINE: u16 = 0b0_000_000_100;
-pub const REQUEST_HEADERS: u16 = 0b0_000_000_010;
-pub const REQUEST_HEADERS_ALL: u16 = 0b100_000_000_000;
-pub const REQUEST_BODY: u16 = 0b0_000_000_001;
-pub const REQUEST_METHOD: u16 = 0b10_000_000_000;
+pub const REQUEST_STARTLINE: u16 = 0b00_0000_0100;
+pub const REQUEST_HEADERS: u16 = 0b00_0000_0010;
+pub const REQUEST_HEADERS_ALL: u16 = 0b1000_0000_0000;
+pub const REQUEST_BODY: u16 = 0b00_0000_0001;
+pub const REQUEST_METHOD: u16 = 0b100_0000_0000;
 const REQUEST_ALL: u16 = REQUEST_STARTLINE
     | REQUEST_HEADERS
     | REQUEST_HEADERS_ALL
     | REQUEST_BODY
     | REQUEST_URL
     | REQUEST_METHOD;
-pub const RESPONSE_STARTLINE: u16 = 0b0_000_100_000;
-pub const RESPONSE_HEADERS: u16 = 0b0_000_010_000;
-pub const RESPONSE_HEADERS_ALL: u16 = 0b1_000_000_000_000;
-pub const RESPONSE_BODY: u16 = 0b0_000_001_000;
-pub const RESPONSE_STATUS: u16 = 0b100_000_000;
+pub const RESPONSE_STARTLINE: u16 = 0b00_0010_0000;
+pub const RESPONSE_HEADERS: u16 = 0b00_0001_0000;
+pub const RESPONSE_HEADERS_ALL: u16 = 0b1_0000_0000_0000;
+pub const RESPONSE_BODY: u16 = 0b00_0000_1000;
+pub const RESPONSE_STATUS: u16 = 0b1_0000_0000;
 const RESPONSE_ALL: u16 =
     RESPONSE_STARTLINE | RESPONSE_HEADERS | RESPONSE_HEADERS_ALL | RESPONSE_BODY | RESPONSE_STATUS;
-const FOR_EACH: u16 = 0b0_001_000_000;
-pub const STATS: u16 = 0b0_010_000_000;
-pub const REQUEST_URL: u16 = 0b0_100_000_000;
-pub const ERROR: u16 = 0b1_000_000_000;
+const FOR_EACH: u16 = 0b00_0100_0000;
+pub const STATS: u16 = 0b00_1000_0000;
+pub const REQUEST_URL: u16 = 0b01_0000_0000;
+pub const ERROR: u16 = 0b10_0000_0000;
 
 #[grammar = "select.pest"]
 #[derive(Parser)]
@@ -1304,7 +1298,7 @@ impl Select {
             where_clause,
         };
         let mut rp_default = RequiredProviders::new();
-        let required_providers = required_providers.unwrap_or_else(|| &mut rp_default);
+        let required_providers = required_providers.unwrap_or(&mut rp_default);
         Select::new(eppp, &Default::default(), required_providers, false).unwrap()
     }
 

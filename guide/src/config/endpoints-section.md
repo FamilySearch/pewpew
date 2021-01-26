@@ -29,7 +29,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
   \* While `peak_load` is marked as *optional* that is only true if the current endpoint has a *provides_subsection*, and in that case this endpoint is called only as frequently as needed to keep the buffers of the providers it feeds full.
 
-  A valid `load_pattern` is an unsigned integer followed by an optional space and the string "hpm" (meaning "hits per minute") or "hps" (meaning "hits per second").
+  A valid `load_pattern` is a number--integer or decimal--followed by an optional space and the string "hpm" (meaning "hits per minute") or "hps" (meaning "hits per second").
 
   Examples:
 

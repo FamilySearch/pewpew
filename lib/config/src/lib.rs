@@ -111,7 +111,7 @@ impl Limit {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 pub enum HitsPer {
     Second(f32),
     Minute(f32),
@@ -2292,7 +2292,7 @@ impl PreHitsPer {
         let string = self
             .0
             .evaluate(static_vars, &mut RequiredProviders::new())?;
-        let re = Regex::new(r"^(?i)(\d+)\s*hp([ms])$").expect("should be a valid regex");
+        let re = Regex::new(r"^(?i)(\d+(?:\.\d+)?)\s*hp([ms])$").expect("should be a valid regex");
         let captures = re
             .captures(&string)
             .ok_or_else(|| Error::InvalidPeakLoad(string.clone(), (self.0).0.marker))?;
@@ -2311,6 +2311,7 @@ impl PreHitsPer {
         }
     }
 }
+
 pub struct Config {
     pub client: ClientConfig,
     pub general: GeneralConfig,
@@ -3119,6 +3120,25 @@ mod tests {
             max_parallel_requests: None,
             request_timeout: None,
             marker: create_marker(),
+        }
+    }
+
+    #[test]
+    fn pre_hits_per_to_hits_per() {
+        let values = vec![
+            ("50 hpm", HitsPer::Minute(50.0)),
+            ("50hpm", HitsPer::Minute(50.0)),
+            ("51.7 hpm", HitsPer::Minute(51.7)),
+            ("500     hps", HitsPer::Second(500.0)),
+            ("1.5hps", HitsPer::Second(1.5)),
+        ];
+
+        for (template, expect) in values {
+            let pre = PreTemplate::from_yaml_str(template).expect("should be valid yaml");
+            let value = PreHitsPer(pre)
+                .evaluate(&Default::default())
+                .expect("should be valid HitsPer template");
+            assert_eq!(value, expect);
         }
     }
 

@@ -627,6 +627,7 @@ fn create_try_run_future(
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
+    // create a logger for the try run
     let select = if let TryRunFormat::Human = try_config.format {
         r#""`\
          Request\n\
@@ -673,6 +674,7 @@ fn create_try_run_future(
         &try_config.config_file,
     )?;
 
+    // setup "filters" which decide which endpoints are included in this try run
     let filters: Vec<_> = try_config
         .filters
         .unwrap_or_default()
@@ -717,6 +719,7 @@ fn create_try_run_future(
 
     let mut endpoints = Endpoints::new();
 
+    // create the endpoints
     for mut endpoint in config.endpoints.into_iter() {
         let required_providers = mem::take(&mut endpoint.required_providers);
 
@@ -755,6 +758,7 @@ fn create_try_run_future(
 
     let client = create_http_client(config_config.client.keepalive)?;
 
+    // create the stats channel
     let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_tx.subscribe(), stderr);
     tokio::spawn(stats_rx);
 

@@ -1,26 +1,19 @@
-use std::{
-    env,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::env;
 
 use futures::FutureExt;
-use futures_timer::Delay;
+use test_common::{start_test_server, TestWriter};
 use tokio::runtime::Runtime;
 
-#[test]
-fn int1() {
+fn run_test(path: &str) -> (bool, String, String) {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async move {
-        let (port, kill_server, _) = test_common::start_test_server(None);
+        let (port, kill_server, _) = start_test_server(None);
         env::set_var("PORT", port.to_string());
 
         let (_, ctrlc_channel) = futures::channel::mpsc::unbounded();
 
         let run_config = pewpew::RunConfig {
-            config_file: "tests/integration.yaml".into(),
+            config_file: path.into(),
             output_format: pewpew::RunOutputFormat::Human,
             results_dir: Some("./".into()),
             stats_file: "integration.json".into(),
@@ -30,31 +23,50 @@ fn int1() {
         };
         let exec_config = pewpew::ExecConfig::Run(run_config);
 
-        let stdout = test_common::TestWriter::new();
-        let stderr = test_common::TestWriter::new();
+        let stdout = TestWriter::new();
+        let stderr = TestWriter::new();
 
+        let stdout2 = stdout.clone();
         let stderr2 = stderr.clone();
 
-        let did_succeed = Arc::new(AtomicBool::new(false));
-        let did_succeed2 = did_succeed.clone();
-
-        pewpew::create_run(exec_config, ctrlc_channel, stdout, stderr)
-            .map(move |_| did_succeed.store(true, Ordering::Relaxed))
+        let success = pewpew::create_run(exec_config, ctrlc_channel, stdout, stderr)
+            .map(|r| if r.is_ok() { true } else { false })
             .await;
 
         let _ = kill_server.send(());
-        Delay::new(std::time::Duration::from_secs(5)).await;
 
-        // let stdout = stdout2.get_string();
-        let stderr = stderr2.get_string();
-        assert!(
-            did_succeed2.load(Ordering::Relaxed),
-            "test run failed. {}",
+        (success, stdout2.get_string(), stderr2.get_string())
+    })
+}
+
+#[test]
+fn int1() {
+    let (success, _stdin, stderr) = run_test("tests/integration.yaml");
+
+    assert!(success, "test run failed. {}", stderr);
+
+    let left = stderr;
+    let right = include_str!("integration.stderr.out");
+    assert_eq!(left, right);
+}
+
+#[test]
+fn int_on_demand() {
+    let (success, _stdin, stderr) = run_test("tests/int_on_demand.yaml");
+
+    assert!(success, "test run failed. {}", stderr);
+
+    assert!(
+        stderr.len() > 0,
+        "expected stderr to be a bunch of '1'. Instead saw: {}",
+        stderr
+    );
+
+    for line in stderr.lines() {
+        assert_eq!(
+            line, "1",
+            "expected stderr to be a bunch of '1'. Instead saw: {}",
             stderr
         );
-
-        let left = stderr;
-        let right = include_str!("integration.stderr.out");
-        assert_eq!(left, right);
-    });
+    }
 }

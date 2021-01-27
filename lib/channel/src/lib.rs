@@ -2,7 +2,7 @@ mod hash_set;
 
 use concurrent_queue::ConcurrentQueue;
 use event_listener::{Event, EventListener};
-use futures::{sink::Sink, stream, Stream};
+use futures::{sink::Sink, Stream};
 use hash_set::HashSet;
 use serde::Serialize;
 
@@ -43,6 +43,7 @@ impl Limit {
 struct Channel<T: Serialize> {
     has_maxed: AtomicBool,
     limit: Limit,
+    on_demand_events: Event,
     receiver_events: Event,
     sender_events: Event,
     queue: ConcurrentQueue<T>,
@@ -60,6 +61,7 @@ impl<T: Serialize> Channel<T> {
         Self {
             has_maxed: AtomicBool::new(false),
             limit,
+            on_demand_events: Event::new(),
             receiver_events: Event::new(),
             sender_events: Event::new(),
             queue: ConcurrentQueue::unbounded(),
@@ -113,6 +115,9 @@ impl<T: Serialize> Channel<T> {
             if inner_len < limit {
                 self.notify_sender();
             }
+        } else {
+            // if there's no message in the queue, notify an OnDemand
+            self.notify_on_demand();
         }
         item
     }
@@ -123,6 +128,17 @@ impl<T: Serialize> Channel<T> {
 
     fn limit(&self) -> usize {
         self.limit.get()
+    }
+
+    // notify a single OnDemand with an event listener
+    fn notify_on_demand(&self) {
+        self.on_demand_events.notify(1);
+    }
+
+    // create a listener so an OnDemand can get notice when demand has been requested
+    // (a receiver tried to receive but the queue was empty)
+    fn on_demand_listen(&self) -> EventListener {
+        self.on_demand_events.listen()
     }
 
     // notify a single sender with an event listener
@@ -418,11 +434,7 @@ impl<T: Serialize> Stream for Receiver<T> {
             if let Some(listener) = self.listener.as_mut() {
                 match Pin::new(listener).poll(cx) {
                     Poll::Ready(()) => self.listener = None,
-                    _ => {
-                        // notify a sender here for the sake of OnDemand
-                        self.channel.notify_sender();
-                        return Poll::Pending;
-                    }
+                    Poll::Pending => return Poll::Pending,
                 }
             }
 
@@ -453,59 +465,45 @@ pub fn channel<T: Serialize>(limit: Limit, unique: bool) -> (Sender<T>, Receiver
     (sender, receiver)
 }
 
-// The OnDemandReceiver is a type of stream that triggers when a receiver for a channel polls, seeking
-// an item from the channel. The task receiving from OnDemandReceiver will do its work to provide a
-// value for the channel, then call a callback indicating it is done (signifying whether it actually
-// provided a value for the channel--because sometimes the task's work is done but it still doesn't have
-// a value to provide).
-#[derive(Clone)]
+// The OnDemandReceiver is a type of stream that triggers when a channel Receiver attempts to `recv` but
+// the queue is empty
 pub struct OnDemandReceiver<T: Serialize> {
     channel: Arc<Channel<T>>,
+    listener: EventListener,
+}
+
+impl<T: Serialize> Clone for OnDemandReceiver<T> {
+    fn clone(&self) -> Self {
+        Self {
+            channel: self.channel.clone(),
+            listener: self.channel.on_demand_listen(),
+        }
+    }
+}
+
+impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
+    type Item = ();
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        // end the stream if there are no more receivers
+        if self.channel.receiver_count() == 0 {
+            return Poll::Ready(None);
+        }
+
+        let ret = Pin::new(&mut self.listener).poll(cx).map(Some);
+        if ret.is_ready() {
+            self.listener = self.channel.on_demand_listen();
+        };
+        ret
+    }
 }
 
 impl<T: Serialize + Send + 'static> OnDemandReceiver<T> {
     pub fn new(demander: &Receiver<T>) -> Self {
         OnDemandReceiver {
             channel: demander.channel.clone(),
+            listener: demander.channel.on_demand_listen(),
         }
-    }
-
-    pub fn into_stream(self) -> impl Stream<Item = ()> {
-        let mut listener: Option<EventListener> = None;
-        let mut previous_len: Option<usize> = None;
-        stream::poll_fn(move |cx| {
-            loop {
-                // end the stream if there are no more receivers
-                if self.channel.receiver_count() == 0 {
-                    listener = None;
-                    return Poll::Ready(None);
-                }
-                match listener.as_mut() {
-                    Some(listener2) => {
-                        let ret = match Pin::new(listener2).poll(cx) {
-                            Poll::Ready(()) => {
-                                listener = None;
-                                let queue_len = self.channel.len();
-                                match previous_len.take() {
-                                    Some(n) if n == queue_len => Poll::Ready(Some(())),
-                                    _ => {
-                                        previous_len = Some(queue_len);
-                                        listener = Some(self.channel.sender_listen());
-                                        self.channel.notify_sender();
-                                        Poll::Pending
-                                    }
-                                }
-                            }
-                            Poll::Pending => Poll::Pending,
-                        };
-                        return ret;
-                    }
-                    None => {
-                        listener = Some(self.channel.sender_listen());
-                    }
-                }
-            }
-        })
     }
 }
 
@@ -667,7 +665,7 @@ mod tests {
     fn on_demand_receiver_works() {
         let (tx, mut rx) = channel::<()>(Limit::auto(5), false);
 
-        let mut on_demand = OnDemandReceiver::new(&rx).into_stream();
+        let mut on_demand = OnDemandReceiver::new(&rx);
 
         let left = on_demand.next().now_or_never();
         let right = None;
@@ -677,7 +675,6 @@ mod tests {
         let right = None;
         assert_eq!(left, right, "receiver should not be ready");
 
-        on_demand.next().now_or_never();
         let left = on_demand.next().now_or_never();
         let right = Some(Some(()));
         assert_eq!(left, right, "on_demand stream should be ready");

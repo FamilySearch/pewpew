@@ -253,7 +253,7 @@ impl Builder {
                     set.insert(tx.clone());
                 }
                 if on_demand {
-                    let stream = provider.on_demand.clone().into_stream();
+                    let stream = provider.on_demand.clone();
                     on_demand_streams.push(Box::new(stream));
                 }
                 Outgoing::new(v, ProviderOrLogger::Provider(tx))

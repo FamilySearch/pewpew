@@ -919,8 +919,8 @@ fn get_providers_from_config(
             config::Provider::File(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let config::Limit::AutoSized(_) = &template.buffer {
-                        template.buffer = config::Limit::AutoSized(auto_size);
+                    if let config::Limit::Dynamic(_) = &template.buffer {
+                        template.buffer = config::Limit::Dynamic(auto_size);
                     }
                 }
                 util::tweak_path(&mut template.path, config_path);
@@ -930,14 +930,14 @@ fn get_providers_from_config(
             config::Provider::Response(mut template) => {
                 // the auto_buffer_start_size is not the default
                 if auto_size != default_buffer_size {
-                    if let config::Limit::AutoSized(_) = &template.buffer {
-                        template.buffer = config::Limit::AutoSized(auto_size);
+                    if let config::Limit::Dynamic(_) = &template.buffer {
+                        template.buffer = config::Limit::Dynamic(auto_size);
                     }
                 }
                 response_providers.insert(name.clone());
                 providers::response(template)
             }
-            config::Provider::List(values) => providers::literals(values.clone()),
+            config::Provider::List(values) => providers::list(values.clone()),
         };
         providers.insert(name.clone(), provider);
     }

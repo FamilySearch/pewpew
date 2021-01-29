@@ -17,29 +17,35 @@ use std::{
     task::{Context, Poll},
 };
 
+// Represents the soft limit that a channel has. Can either be dynamic or static.
+// Dynamically sized channels will increase in size any time the internal queue is filled
+// and then emptied. Statically sized channels never increase in size
 #[derive(Debug)]
 pub enum Limit {
-    AutoSized(AtomicUsize),
-    Hard(usize),
+    Dynamic(AtomicUsize),
+    Static(usize),
 }
 
 impl Limit {
-    pub fn auto(n: usize) -> Self {
-        Limit::AutoSized(AtomicUsize::new(n))
+    pub fn dynamic(n: usize) -> Self {
+        Limit::Dynamic(AtomicUsize::new(n))
     }
 
-    pub fn hard(n: usize) -> Self {
-        Limit::Hard(n)
+    // all lower "static" is a reserved word
+    pub fn statik(n: usize) -> Self {
+        Limit::Static(n)
     }
 
     fn get(&self) -> usize {
         match self {
-            Limit::AutoSized(a) => a.load(Ordering::Acquire),
-            Limit::Hard(n) => *n,
+            Limit::Dynamic(a) => a.load(Ordering::Acquire),
+            Limit::Static(n) => *n,
         }
     }
 }
 
+// internal structure used by both `Sender`s and `Receiver`s to facilitate the behavior of
+// a channel
 struct Channel<T: Serialize> {
     has_maxed: AtomicBool,
     limit: Limit,
@@ -71,6 +77,8 @@ impl<T: Serialize> Channel<T> {
         }
     }
 
+    // push a value into the channel (for a unique channel, if the value already exists in the
+    // channel it is discarded)
     fn send(&self, item: T) {
         // if this is a unique channel check that the item is not in the set
         let should_send = self
@@ -87,6 +95,7 @@ impl<T: Serialize> Channel<T> {
         }
     }
 
+    // receive a value from the channel, if available
     fn recv(&self) -> Option<T> {
         let item = self.queue.pop().ok();
         if let Some(item) = &item {
@@ -97,9 +106,9 @@ impl<T: Serialize> Channel<T> {
             let inner_len = self.len();
             let limit = self.limit();
             if inner_len == 0 {
-                // if there's an "auto" limit and we've emptied the buffer
-                // after it was previously full increment the limit
-                if let Limit::AutoSized(a) = &self.limit {
+                // if there's a "dynamic" limit and we've emptied the buffer
+                // after it was previously full, increment the limit
+                if let Limit::Dynamic(a) = &self.limit {
                     if self
                         .has_maxed
                         .compare_and_swap(true, false, Ordering::Release)
@@ -122,10 +131,12 @@ impl<T: Serialize> Channel<T> {
         item
     }
 
+    // get how many items are currently stored in the channel (they've been sent in but not yet received)
     fn len(&self) -> usize {
         self.queue.len()
     }
 
+    // get the current limit for the channel
     fn limit(&self) -> usize {
         self.limit.get()
     }
@@ -207,6 +218,7 @@ pub struct Sender<T: Serialize> {
     listener: Option<EventListener>,
 }
 
+// represents the different states that can happen when doing a `try_send` on a `Sender`
 pub enum SendState<T> {
     Closed(T),
     Full(T),
@@ -219,47 +231,25 @@ impl<T> SendState<T> {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct ChannelClosed {
-    inner: Option<Box<dyn StdError + Send + Sync + 'static>>,
-}
-
-impl PartialEq<ChannelClosed> for ChannelClosed {
-    fn eq(&self, rhs: &ChannelClosed) -> bool {
-        self.inner.is_none() && rhs.inner.is_none()
-    }
-}
-
-impl ChannelClosed {
-    pub fn new() -> Self {
-        ChannelClosed::default()
-    }
-
-    pub fn wrapped<T: StdError + Send + Sync + 'static>(wrapped: T) -> Self {
-        ChannelClosed {
-            inner: Some(Box::new(wrapped)),
-        }
-    }
-
-    pub fn inner_cast<T: StdError + 'static>(self) -> Option<Box<T>> {
-        self.inner.and_then(|e| e.downcast().ok())
-    }
-}
-
 #[allow(clippy::len_without_is_empty)]
 impl<T: Serialize> Sender<T> {
+    // get how many items are in the underlying channel
     pub fn len(&self) -> usize {
         self.channel.len()
     }
 
+    // get the current limit from the underlying channel
     pub fn limit(&self) -> usize {
         self.channel.limit()
     }
 
+    // check if there are no `Receiver`s associated with this `Sender`
     pub fn no_receivers(&self) -> bool {
         self.channel.receiver_count() == 0
     }
 
+    // attempt to put data into the channel if 1) there are receivers and 2) the channel hasn't
+    // exceeded it's soft limit
     pub fn try_send(&self, item: T) -> SendState<T> {
         if self.no_receivers() {
             SendState::Closed(item)
@@ -273,11 +263,13 @@ impl<T: Serialize> Sender<T> {
         }
     }
 
+    // puts data into the channel regardless of whether there are receivers or it's "over" capacity
     pub fn force_send(&self, item: T) {
         self.channel.send(item)
     }
 }
 
+// whenever a `Sender` is cloned, be sure to increment the sender count
 impl<T: Serialize> Clone for Sender<T> {
     fn clone(&self) -> Self {
         self.channel.increment_sender_count();
@@ -288,6 +280,8 @@ impl<T: Serialize> Clone for Sender<T> {
     }
 }
 
+// whenever a `Sender` is dropped, be sure to decrement the sender count, and, if there are no more
+// `Sender`s, notify all `Receiver`s that are waiting for data.
 impl<T: Serialize> Drop for Sender<T> {
     fn drop(&mut self) {
         if self.channel.decrement_sender_count() == 0 {
@@ -296,6 +290,9 @@ impl<T: Serialize> Drop for Sender<T> {
     }
 }
 
+// TODO: the next 4 `impl`s were only implemented, *I think*, for some logic in `request.rs` which stores
+// `Sender`s in a `BTreeSet` (which requires these `impl`s) and keeps track of when they have ended. This could
+// likely be changed to only store the name of the providers rather than the `Sender` for the provider
 impl<T: Serialize> PartialEq for Sender<T> {
     fn eq(&self, other: &Sender<T>) -> bool {
         Arc::ptr_eq(&self.channel, &other.channel)
@@ -319,11 +316,42 @@ impl<T: Serialize> Ord for Sender<T> {
     }
 }
 
-// Implementing the `Sink` trait on `Sender` allows enables `send: block` functionality
+// a struct that is returned when utilizing a `Sender` as a `Sink` and no more data
+// can be sent. Can optionally contain a wrapped `Error` but that is only used
+// external from this crate
+#[derive(Debug, Default)]
+pub struct ChannelClosed {
+    inner: Option<Box<dyn StdError + Send + Sync + 'static>>,
+}
+
+impl PartialEq<ChannelClosed> for ChannelClosed {
+    fn eq(&self, rhs: &ChannelClosed) -> bool {
+        self.inner.is_none() && rhs.inner.is_none()
+    }
+}
+
+impl ChannelClosed {
+    pub fn new() -> Self {
+        ChannelClosed::default()
+    }
+
+    pub fn wrapped<T: StdError + Send + Sync + 'static>(wrapped: T) -> Self {
+        ChannelClosed {
+            inner: Some(Box::new(wrapped)),
+        }
+    }
+
+    // attempts to cast an internally wrapped `Error` to a specific type
+    pub fn inner_cast<T: StdError + 'static>(self) -> Option<Box<T>> {
+        self.inner.and_then(|e| e.downcast().ok())
+    }
+}
+
+// Implementing the `Sink` trait on `Sender` enables sending data in a "blocking" manner with a `Stream`
 impl<T: Serialize> Sink<T> for Sender<T> {
     type Error = ChannelClosed;
 
-    // Checks whether the channel is ready to have data pushed in.
+    // Method from `Sink` trait which checks whether this `Sink` (channel) is ready to have data pushed in.
     // If there are no receivers it returns with a channel closed error.
     // If there is room in the channel it will return an ok.
     // Otherwise it sets up a listener to be notified when there is room in
@@ -351,36 +379,41 @@ impl<T: Serialize> Sink<T> for Sender<T> {
         }
     }
 
+    // Method from `Sink` trait which pushes the data in after `poll_ready` indicates it's
+    // ready to receive
     fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         self.force_send(item);
         Ok(())
     }
 
+    // required by `Sink` trait, but not necessary for our implementation
     fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
+    // required by `Sink` trait, but not necessary for our implementation
     fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 }
 
+// used to get statistics about a channel
 pub struct ChannelStatsReader<T: Serialize> {
-    provider: String,
+    name: String,
     channel: Arc<Channel<T>>,
 }
 
 impl<T: Serialize> ChannelStatsReader<T> {
-    pub fn new(provider: String, receiver: &Receiver<T>) -> Self {
+    pub fn new(name: String, receiver: &Receiver<T>) -> Self {
         ChannelStatsReader {
-            provider,
+            name,
             channel: receiver.channel.clone(),
         }
     }
 
     pub fn get_stats(&self, timestamp: u64) -> ChannelStats {
         ChannelStats {
-            provider: &self.provider,
+            name: &self.name,
             timestamp,
             len: self.channel.len(),
             limit: self.channel.limit(),
@@ -390,11 +423,12 @@ impl<T: Serialize> ChannelStatsReader<T> {
     }
 }
 
+// struct representing the statistics about a channel at a given point
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChannelStats<'a> {
     pub timestamp: u64,
-    pub provider: &'a str,
+    pub name: &'a str,
     pub len: usize,
     pub limit: usize,
     pub receiver_count: usize,
@@ -406,6 +440,7 @@ pub struct Receiver<T: Serialize> {
     listener: Option<EventListener>,
 }
 
+// whenever a `Receiver` is cloned, be sure to increment the receiver count
 impl<T: Serialize> Clone for Receiver<T> {
     fn clone(&self) -> Self {
         self.channel.increment_receiver_count();
@@ -416,6 +451,8 @@ impl<T: Serialize> Clone for Receiver<T> {
     }
 }
 
+// whenever a `Receiver` is dropped, be sure to decrement the receiver count, and, if there are no more
+// `Sender`s, notify all `Senders`s that are waiting to send.
 impl<T: Serialize> Drop for Receiver<T> {
     fn drop(&mut self) {
         if self.channel.decrement_receiver_count() == 0 {
@@ -426,6 +463,7 @@ impl<T: Serialize> Drop for Receiver<T> {
     }
 }
 
+// the only means of getting data out of a receiver is through the `Stream` apis
 impl<T: Serialize> Stream for Receiver<T> {
     type Item = T;
 
@@ -452,6 +490,7 @@ impl<T: Serialize> Stream for Receiver<T> {
     }
 }
 
+// entry point for creating a channel
 pub fn channel<T: Serialize>(limit: Limit, unique: bool) -> (Sender<T>, Receiver<T>) {
     let channel = Arc::new(Channel::new(limit, unique));
     let receiver = Receiver {
@@ -465,8 +504,8 @@ pub fn channel<T: Serialize>(limit: Limit, unique: bool) -> (Sender<T>, Receiver
     (sender, receiver)
 }
 
-// The OnDemandReceiver is a type of stream that triggers when a channel Receiver attempts to `recv` but
-// the queue is empty
+// The OnDemandReceiver is a type of stream that triggers when a channel `Receiver` attempts
+// to `recv` but the queue is empty
 pub struct OnDemandReceiver<T: Serialize> {
     channel: Arc<Channel<T>>,
     listener: EventListener,
@@ -516,7 +555,7 @@ mod tests {
 
     #[test]
     fn channel_limit_works() {
-        let limit = Limit::Hard(1);
+        let limit = Limit::Static(1);
         let (mut tx, _rx) = channel::<bool>(limit, false);
 
         for _ in 0..tx.limit() {
@@ -533,7 +572,7 @@ mod tests {
     #[test]
     fn unique_channel_works() {
         let cap = 8; // how many unique values we'll put into the channel
-        let limit = Limit::Hard(100); // the size of the channel and how many times we will insert values
+        let limit = Limit::Static(100); // the size of the channel and how many times we will insert values
         let (tx, _rx) = channel::<usize>(limit, true);
 
         assert!(tx.limit() > cap);
@@ -546,8 +585,8 @@ mod tests {
     }
 
     #[test]
-    fn channel_auto_limit_expands() {
-        let limit = Limit::auto(5);
+    fn channel_dynamic_limit_expands() {
+        let limit = Limit::dynamic(5);
         let start_limit = limit.get();
         let (mut tx, mut rx) = channel::<bool>(limit, false);
 
@@ -594,7 +633,7 @@ mod tests {
 
     #[test]
     fn sender_errs_when_no_receivers() {
-        let (mut tx, mut rx) = channel::<bool>(Limit::auto(5), false);
+        let (mut tx, mut rx) = channel::<bool>(Limit::dynamic(5), false);
 
         while tx.send(true).now_or_never().is_some() {}
 
@@ -613,9 +652,9 @@ mod tests {
 
     #[test]
     fn sender_ord_works() {
-        let (tx_a, _) = channel::<bool>(Limit::auto(5), false);
-        let (tx_b, _) = channel::<bool>(Limit::auto(5), false);
-        let (tx_c, _) = channel::<bool>(Limit::auto(5), false);
+        let (tx_a, _) = channel::<bool>(Limit::dynamic(5), false);
+        let (tx_b, _) = channel::<bool>(Limit::dynamic(5), false);
+        let (tx_c, _) = channel::<bool>(Limit::dynamic(5), false);
         let tx_a2 = tx_a.clone();
         let tx_a3 = tx_a.clone();
         let tx_b2 = tx_b.clone();
@@ -635,7 +674,7 @@ mod tests {
 
     #[test]
     fn receiver_ends_when_no_senders() {
-        let limit = Limit::auto(5);
+        let limit = Limit::dynamic(5);
         let start_size = limit.get();
         let (mut tx, mut rx) = channel::<bool>(limit, false);
 
@@ -663,7 +702,7 @@ mod tests {
 
     #[test]
     fn on_demand_receiver_works() {
-        let (tx, mut rx) = channel::<()>(Limit::auto(5), false);
+        let (tx, mut rx) = channel::<()>(Limit::dynamic(5), false);
 
         let mut on_demand = OnDemandReceiver::new(&rx);
 

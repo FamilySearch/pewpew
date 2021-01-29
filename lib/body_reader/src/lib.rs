@@ -8,10 +8,11 @@ use std::{
     iter,
 };
 
+// a reader to help us in getting the bytes out of a response body
 #[derive(Debug)]
-struct VecDequeReader(BytesMut);
+struct BytesReader(BytesMut);
 
-impl Read for VecDequeReader {
+impl Read for BytesReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let amt = cmp::min(buf.len(), self.0.len());
         buf[..amt].copy_from_slice(&self.0[..amt]);
@@ -24,12 +25,13 @@ impl Read for VecDequeReader {
     }
 }
 
-impl VecDequeReader {
+impl BytesReader {
     fn new() -> Self {
-        VecDequeReader(BytesMut::with_capacity(8192))
+        BytesReader(BytesMut::with_capacity(8192))
     }
 }
 
+// the different types of compression ("Content-Encoding" header in a response) we support when parsing a body
 pub enum Compression {
     Brotli,
     Deflate,
@@ -38,6 +40,7 @@ pub enum Compression {
 }
 
 impl Compression {
+    // used to determine the typeof compression from the value specified in "Content-Encoding" header
     pub fn try_from(ce: &str) -> Option<Compression> {
         match ce {
             "br" => Compression::Brotli.into(),
@@ -50,9 +53,9 @@ impl Compression {
 }
 
 enum Inner {
-    Brotli(Box<brotli::Decompressor<VecDequeReader>>),
-    Deflate(Box<deflate::Decoder<VecDequeReader>>),
-    Gzip(Box<gzip::Decoder<VecDequeReader>>),
+    Brotli(Box<brotli::Decompressor<BytesReader>>),
+    Deflate(Box<deflate::Decoder<BytesReader>>),
+    Gzip(Box<gzip::Decoder<BytesReader>>),
     None,
 }
 
@@ -65,12 +68,12 @@ impl BodyReader {
     pub fn new(c: Compression) -> Self {
         let inner = match c {
             Compression::Brotli => {
-                Inner::Brotli(brotli::Decompressor::new(VecDequeReader::new(), 8192).into())
+                Inner::Brotli(brotli::Decompressor::new(BytesReader::new(), 8192).into())
             }
             Compression::Deflate => {
-                Inner::Deflate(deflate::Decoder::new(VecDequeReader::new()).into())
+                Inner::Deflate(deflate::Decoder::new(BytesReader::new()).into())
             }
-            Compression::Gzip => Inner::Gzip(gzip::Decoder::new(VecDequeReader::new()).into()),
+            Compression::Gzip => Inner::Gzip(gzip::Decoder::new(BytesReader::new()).into()),
             Compression::None => Inner::None,
         };
         let mut buffer = BytesMut::with_capacity(8192);
@@ -78,6 +81,7 @@ impl BodyReader {
         BodyReader { buffer, inner }
     }
 
+    // used to decompress incoming bytes. The bytes to decompress are passed in as `in_bytes` and the decompressed bytes are written to `out_bytes`
     pub fn decode(&mut self, in_bytes: Bytes, out_bytes: &mut BytesMut) -> Result<(), io::Error> {
         match &mut self.inner {
             Inner::Brotli(r) => {

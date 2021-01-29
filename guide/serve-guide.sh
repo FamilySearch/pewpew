@@ -1,9 +1,12 @@
 #!/bin/sh
+### To build, first install wasm-pack, then run this script
+# cargo install wasm-pack --version 0.8.1
+# cargo install mdbook
 set -e
 set -x
 
 # this function is called when Ctrl-C is sent
-function trap_ctrlc ()
+trap_ctrlc ()
 {
     # cleanup
     rm -rf book
@@ -14,7 +17,8 @@ function trap_ctrlc ()
  
 # initialise trap to call trap_ctrlc function
 # when signal 2 (SIGINT) is received
-trap "trap_ctrlc" SIGINT
+# https://unix.stackexchange.com/questions/314554/why-do-i-get-an-error-message-when-trying-to-trap-a-sigint-signal
+trap "trap_ctrlc" INT
 
 PROJECT_ROOT=$(realpath ../)
 GUIDE_DIR=$(realpath $PROJECT_ROOT/guide)

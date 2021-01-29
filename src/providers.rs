@@ -104,10 +104,10 @@ pub fn response(template: config::ResponseProvider) -> Provider {
     Provider::new(template.auto_return, rx, tx)
 }
 
-pub fn literals(list: config::StaticList) -> Provider {
+pub fn list(list: config::List) -> Provider {
     let unique = list.unique();
     let rs = stream::iter(list.into_iter().map(Ok));
-    let limit = channel::Limit::auto(5);
+    let limit = channel::Limit::dynamic(5);
     let (tx, rx) = channel::channel(limit, unique);
     let tx2 = tx.clone();
     let prime_tx = rs.forward(tx2);
@@ -116,7 +116,7 @@ pub fn literals(list: config::StaticList) -> Provider {
 }
 
 pub fn range(range: config::RangeProvider) -> Provider {
-    let limit = channel::Limit::auto(5);
+    let limit = channel::Limit::dynamic(5);
     let (tx, rx) = channel::channel(limit, range.unique());
     let prime_tx = stream::iter(range.0.map(|v| Ok(v.into()))).forward(tx.clone());
     tokio::spawn(prime_tx);
@@ -299,14 +299,14 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let jsons = vec![json!(1), json!(2), json!(3)];
-            let esl = config::ExplicitStaticList {
+            let lwo = config::ListWithOptions {
                 values: jsons.clone(),
                 repeat: false,
                 random: false,
                 unique: false,
             };
 
-            let p = literals(esl.into());
+            let p = list(lwo.into());
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -316,14 +316,14 @@ mod tests {
 
             assert_eq!(values, expect, "first");
 
-            let esl = config::ExplicitStaticList {
+            let lwo = config::ListWithOptions {
                 values: jsons.clone(),
                 repeat: false,
                 random: true,
                 unique: false,
             };
 
-            let p = literals(esl.into());
+            let p = list(lwo.into());
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -336,28 +336,28 @@ mod tests {
 
             assert_eq!(values, expect, "second");
 
-            let esl = config::ExplicitStaticList {
+            let lwo = config::ListWithOptions {
                 values: jsons.clone(),
                 repeat: true,
                 random: false,
                 unique: false,
             };
 
-            let p = literals(esl.into());
+            let p = list(lwo.into());
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
             let values: Vec<_> = p.rx.take(100).collect().await;
 
             assert_eq!(values, expect, "third");
 
-            let esl = config::ExplicitStaticList {
+            let lwo = config::ListWithOptions {
                 values: jsons.clone(),
                 repeat: true,
                 random: true,
                 unique: false,
             };
 
-            let p = literals(esl.into());
+            let p = list(lwo.into());
             let mut expect: Vec<_> = jsons
                 .iter()
                 .cycle()
@@ -376,7 +376,7 @@ mod tests {
 
             assert_eq!(values, expect, "fifth");
 
-            let esl = config::ExplicitStaticList {
+            let lwo = config::ListWithOptions {
                 // be sure to keep the number of values <= the default buffer size used for a static list
                 // or this test will fail
                 values: vec![json!(1), json!(2), json!(1), json!(2), json!(1)],
@@ -385,7 +385,7 @@ mod tests {
                 unique: true,
             };
 
-            let p = literals(esl.into());
+            let p = list(lwo.into());
             let Provider { rx, tx, .. } = p;
             drop(tx);
 
@@ -407,7 +407,7 @@ mod tests {
         let jsons = vec![json!(1), json!(2), json!(3)];
         let rp = config::ResponseProvider {
             auto_return: None,
-            buffer: config::Limit::auto(),
+            buffer: config::Limit::dynamic(),
             unique: false,
         };
         let mut p = response(rp);
@@ -440,7 +440,7 @@ mod tests {
         ];
         let rp = config::ResponseProvider {
             auto_return: None,
-            buffer: config::Limit::Hard(jsons.len()),
+            buffer: config::Limit::Static(jsons.len()),
             unique: true,
         };
         let mut p = response(rp);

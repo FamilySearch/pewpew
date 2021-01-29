@@ -2,6 +2,7 @@ use hyper::http::Error as HttpError;
 
 use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
 
+// An error that can happen in normal execution of an endpoint, but should not halt the test
 #[derive(Clone, Debug)]
 pub enum RecoverableError {
     ProviderDelay(String),
@@ -37,6 +38,7 @@ impl fmt::Display for RecoverableError {
     }
 }
 
+// The types of errors that we may encounter during a test
 #[derive(Clone, Debug)]
 pub enum TestError {
     CannotCreateLoggerFile(String, Arc<std::io::Error>),

@@ -1,4 +1,3 @@
-use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
@@ -8,6 +7,7 @@ use std::{
     iter::{self, Iterator},
 };
 
+// A type of file reader that reads json values from a file
 pub struct JsonReader {
     staging_buffer: Vec<u8>,
     buffer: Vec<u8>,
@@ -98,10 +98,6 @@ impl JsonReader {
                 }
             }
         }
-    }
-
-    pub fn into_stream(self) -> impl Stream<Item = Result<json::Value, io::Error>> {
-        super::into_stream(self)
     }
 }
 

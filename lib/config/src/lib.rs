@@ -354,29 +354,29 @@ impl FromYaml for ListWithOptions {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, PartialEq)]
-pub enum List {
+pub enum ListProvider {
     WithOptions(ListWithOptions),
     DefaultOptions(Vec<json::Value>),
 }
 
-impl List {
+impl ListProvider {
     pub fn unique(&self) -> bool {
-        matches!(self, List::WithOptions(l) if l.unique)
+        matches!(self, ListProvider::WithOptions(l) if l.unique)
     }
 }
 
-impl FromYaml for List {
+impl FromYaml for ListProvider {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let (event, marker) = decoder.peek()?;
         match event {
             YamlEvent::SequenceStart => {
                 let (e, marker) = FromYaml::parse(decoder)?;
-                let value = (List::DefaultOptions(e), marker);
+                let value = (ListProvider::DefaultOptions(e), marker);
                 Ok(value)
             }
             YamlEvent::MappingStart => {
                 let (i, marker) = FromYaml::parse(decoder)?;
-                let value = (List::WithOptions(i), marker);
+                let value = (ListProvider::WithOptions(i), marker);
                 Ok(value)
             }
             _ => Err(Error::YamlDeserialize(None, *marker)),
@@ -384,19 +384,19 @@ impl FromYaml for List {
     }
 }
 
-impl From<Vec<json::Value>> for List {
+impl From<Vec<json::Value>> for ListProvider {
     fn from(v: Vec<json::Value>) -> Self {
-        List::DefaultOptions(v)
+        ListProvider::DefaultOptions(v)
     }
 }
 
-impl From<ListWithOptions> for List {
+impl From<ListWithOptions> for ListProvider {
     fn from(e: ListWithOptions) -> Self {
-        List::WithOptions(e)
+        ListProvider::WithOptions(e)
     }
 }
 
-impl IntoIterator for List {
+impl IntoIterator for ListProvider {
     type Item = json::Value;
     type IntoIter = Either3<
         ListRepeatRandomIterator,
@@ -406,7 +406,7 @@ impl IntoIterator for List {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            List::WithOptions(mut e) => match (e.repeat, e.random) {
+            ListProvider::WithOptions(mut e) => match (e.repeat, e.random) {
                 (true, true) => {
                     let a = ListRepeatRandomIterator {
                         random: Uniform::new(0, e.values.len()),
@@ -422,7 +422,7 @@ impl IntoIterator for List {
                 }
                 (true, false) => Either3::C(e.values.into_iter().cycle()),
             },
-            List::DefaultOptions(v) => Either3::C(v.into_iter().cycle()),
+            ListProvider::DefaultOptions(v) => Either3::C(v.into_iter().cycle()),
         }
     }
 }
@@ -446,7 +446,7 @@ enum ProviderPreProcessed {
     File(FileProviderPreProcessed),
     Range(RangeProviderPreProcessed),
     Response(ResponseProvider),
-    List(List),
+    List(ListProvider),
 }
 
 #[derive(Clone, PartialEq)]
@@ -454,7 +454,7 @@ pub enum Provider {
     File(FileProvider),
     Range(RangeProvider),
     Response(ResponseProvider),
-    List(List),
+    List(ListProvider),
 }
 
 impl FromYaml for ProviderPreProcessed {
@@ -2951,7 +2951,7 @@ mod tests {
                 "values:
                     - foo
                     - bar",
-                Some(List::WithOptions(ListWithOptions {
+                Some(ListProvider::WithOptions(ListWithOptions {
                     random: false,
                     repeat: true,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2965,7 +2965,7 @@ mod tests {
                 values:
                     - foo
                     - bar",
-                Some(List::WithOptions(ListWithOptions {
+                Some(ListProvider::WithOptions(ListWithOptions {
                     random: true,
                     repeat: false,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2980,7 +2980,7 @@ mod tests {
                 values:
                     - foo
                     - bar",
-                Some(List::WithOptions(ListWithOptions {
+                Some(ListProvider::WithOptions(ListWithOptions {
                     random: true,
                     repeat: false,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2991,7 +2991,7 @@ mod tests {
                 "
                 - foo
                 - bar",
-                Some(List::DefaultOptions(vec![
+                Some(ListProvider::DefaultOptions(vec![
                     json::json!("foo"),
                     json::json!("bar"),
                 ])),
@@ -3095,9 +3095,9 @@ mod tests {
                 "
                 list:
                     - 1",
-                Some(ProviderPreProcessed::List(List::DefaultOptions(vec![
-                    json::json!(1),
-                ]))),
+                Some(ProviderPreProcessed::List(ListProvider::DefaultOptions(
+                    vec![json::json!(1)],
+                ))),
             ),
         ];
         check_all(values);

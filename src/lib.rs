@@ -52,7 +52,11 @@ use std::{
 
 struct Endpoints {
     // yaml index of the endpoint, (endpoint tags, builder)
-    inner: Vec<(BTreeMap<String, String>, request::Builder, BTreeSet<String>)>,
+    inner: Vec<(
+        BTreeMap<String, String>,
+        request::EndpointBuilder,
+        BTreeSet<String>,
+    )>,
     // provider name, yaml index of endpoints which provide the provider
     providers: BTreeMap<String, Vec<usize>>,
 }
@@ -68,7 +72,7 @@ impl Endpoints {
     fn append(
         &mut self,
         endpoint_tags: BTreeMap<String, String>,
-        builder: request::Builder,
+        builder: request::EndpointBuilder,
         provides: BTreeSet<String>,
         required_providers: config::RequiredProviders,
     ) {
@@ -314,14 +318,13 @@ async fn _create_run(
                 &r.config_file,
             )?;
 
-            let (stats_tx, stats_rx) = create_stats_channel(
+            let stats_tx = create_stats_channel(
                 test_ended_tx.clone(),
                 &config.config.general,
                 &providers,
                 stdout.clone(),
                 &r,
             )?;
-            tokio::spawn(stats_rx);
 
             let providers = Arc::new(providers);
 
@@ -713,8 +716,8 @@ fn create_try_run_future(
         config.loggers,
         try_config.results_dir.as_ref(),
         &test_ended_tx,
-        stdout,
-        stderr.clone(),
+        &stdout,
+        &stderr,
     )?;
 
     let mut endpoints = Endpoints::new();
@@ -752,15 +755,14 @@ fn create_try_run_future(
             })
             .collect::<Result<_, _>>()?;
 
-        let builder = request::Builder::new(endpoint, None);
+        let builder = request::EndpointBuilder::new(endpoint, None);
         endpoints.append(static_tags, builder, provides_set, required_providers);
     }
 
     let client = create_http_client(config_config.client.keepalive)?;
 
     // create the stats channel
-    let (stats_tx, stats_rx) = create_try_run_stats_channel(test_ended_tx.subscribe(), stderr);
-    tokio::spawn(stats_rx);
+    let stats_tx = create_try_run_stats_channel(test_ended_tx.subscribe(), stderr);
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
@@ -810,8 +812,8 @@ fn create_load_test_future(
         config.loggers,
         run_config.results_dir.as_ref(),
         &test_ended_tx,
-        stdout,
-        stderr,
+        &stdout,
+        &stderr,
     )?;
 
     // create the endpoints
@@ -846,7 +848,7 @@ fn create_load_test_future(
                 mod_interval = Some(Box::pin(mod_interval2.into_stream(run_config.start_at)));
             }
 
-            request::Builder::new(endpoint, mod_interval)
+            request::EndpointBuilder::new(endpoint, mod_interval)
         })
         .collect();
 
@@ -948,8 +950,8 @@ fn get_loggers_from_config(
     config_loggers: BTreeMap<String, config::Logger>,
     results_dir: Option<&PathBuf>,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
-    stdout: FCSender<MsgType>,
-    stderr: FCSender<MsgType>,
+    stdout: &FCSender<MsgType>,
+    stderr: &FCSender<MsgType>,
 ) -> Result<BTreeMap<String, providers::Logger>, TestError> {
     config_loggers
         .into_iter()

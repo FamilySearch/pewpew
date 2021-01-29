@@ -14,4 +14,7 @@ js-sys = "0.3"
 serde = "1"
 serde-wasm-bindgen = "0.1"
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"]  }
+# Not a direct dependency but get random as of 0.2.2 throws an error on "unsupported targets"
+# https://docs.rs/getrandom/0.2.2/getrandom/#unsupported-targets
+# The fix is to add it as a supported target and specify the target. As of 0.2.2 both browser and nodejs use "js"
 getrandom = { version = "0.2", features = ["js"] }

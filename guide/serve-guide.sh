@@ -17,6 +17,7 @@ trap_ctrlc ()
  
 # initialise trap to call trap_ctrlc function
 # when signal 2 (SIGINT) is received
+# https://unix.stackexchange.com/questions/314554/why-do-i-get-an-error-message-when-trying-to-trap-a-sigint-signal
 trap "trap_ctrlc" INT
 
 PROJECT_ROOT=$(realpath ../)

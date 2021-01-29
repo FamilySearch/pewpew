@@ -20,8 +20,8 @@ pub fn tweak_path(rest: &mut String, base: &PathBuf) {
 
 pub fn config_limit_to_channel_limit(limit: config::Limit) -> channel::Limit {
     match limit {
-        config::Limit::AutoSized(n) => channel::Limit::auto(n),
-        config::Limit::Hard(n) => channel::Limit::hard(n),
+        config::Limit::Dynamic(n) => channel::Limit::dynamic(n),
+        config::Limit::Static(n) => channel::Limit::statik(n),
     }
 }
 

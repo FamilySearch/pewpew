@@ -8,6 +8,9 @@ use std::{
     io::{Error as IOError, Write},
 };
 
+// a hasher that takes the bytes that are written to it and returns
+// them as the hash. This is used because our custom HashSet will
+// only have hashes stored within
 #[derive(Default)]
 struct PassThroughHasher(u64);
 
@@ -23,6 +26,8 @@ impl Hasher for PassThroughHasher {
     }
 }
 
+// builder for the `PassThroughHasher`. Necessary because DashSet requires
+// a `BuildHasher`
 #[derive(Default, Clone, Copy)]
 struct PassThroughHasherBuilder;
 
@@ -54,11 +59,15 @@ impl HashSet {
         }
     }
 
+    // insert a value into the hash set returning a boolean
+    // indicating whether the value was inserted into the set
+    // (it was not already in there)
     pub fn insert<H: Serialize>(&self, h: &H) -> bool {
         let hash = self.get_hash(h);
         self.inner.insert(hash)
     }
 
+    // removes a value from the hash set
     pub fn remove<H: Serialize>(&self, h: &H) {
         let hash = self.get_hash(h);
         self.inner.remove(&hash);
@@ -76,7 +85,8 @@ impl HashSet {
     }
 }
 
-// a helper struct to implment `Write` on top of a `Hasher`
+// a helper struct to implment `Write` on top of a `Hasher`, we use `Write` to bridge the
+// gap between `Serialize` and `Hash`
 struct HashHelper<H: Hasher>(H);
 
 impl<H: Hasher> Write for HashHelper<H> {

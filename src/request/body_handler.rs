@@ -209,7 +209,7 @@ mod tests {
     use config::{EndpointProvidesSendOptions::*, Select};
 
     fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>) {
-        let (tx, rx) = channel::channel(Limit::Hard(1), false);
+        let (tx, rx) = channel::channel(Limit::Static(1), false);
         (Outgoing::new(select, ProviderOrLogger::Provider(tx)), rx)
     }
 

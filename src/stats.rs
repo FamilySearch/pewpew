@@ -457,7 +457,7 @@ impl Stats {
                 format!(
                     "\n- {}:\n  length: {}\n  limit: {}\n  \
                      number of receivers: {}\n  number of senders: {}\n",
-                    Paint::yellow(stats.provider).dimmed(),
+                    Paint::yellow(stats.name).dimmed(),
                     stats.len,
                     stats.limit,
                     stats.receiver_count,

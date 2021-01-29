@@ -63,15 +63,15 @@ impl FromYaml for Method {
 
 #[derive(Copy, Clone, Debug)]
 pub enum Limit {
-    AutoSized(usize),
-    Hard(usize),
+    Dynamic(usize),
+    Static(usize),
 }
 
 impl PartialEq for Limit {
     fn eq(&self, right: &Self) -> bool {
         match (self, right) {
-            (Limit::AutoSized(_), Limit::AutoSized(_)) => true,
-            (Limit::Hard(n), Limit::Hard(n2)) => n == n2,
+            (Limit::Dynamic(_), Limit::Dynamic(_)) => true,
+            (Limit::Static(n), Limit::Static(n2)) => n == n2,
             _ => false,
         }
     }
@@ -81,10 +81,10 @@ impl FromYaml for Limit {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let (event, marker) = decoder.next()?;
         match event.as_x() {
-            Some(i) => return Ok((Limit::Hard(i), marker)),
+            Some(i) => return Ok((Limit::Static(i), marker)),
             None => {
                 if let Some("auto") = event.as_str() {
-                    return Ok((Limit::auto(), marker));
+                    return Ok((Limit::dynamic(), marker));
                 }
             }
         }
@@ -94,19 +94,19 @@ impl FromYaml for Limit {
 
 impl Default for Limit {
     fn default() -> Self {
-        Limit::auto()
+        Limit::dynamic()
     }
 }
 
 impl Limit {
-    pub fn auto() -> Limit {
-        Limit::AutoSized(5)
+    pub fn dynamic() -> Limit {
+        Limit::Dynamic(5)
     }
 
     pub fn get(&self) -> usize {
         match self {
-            Limit::AutoSized(n) => *n,
-            Limit::Hard(n) => *n,
+            Limit::Dynamic(n) => *n,
+            Limit::Static(n) => *n,
         }
     }
 }
@@ -278,14 +278,14 @@ impl LoadPattern {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, PartialEq)]
-pub struct ExplicitStaticList {
+pub struct ListWithOptions {
     pub random: bool,
     pub repeat: bool,
     pub values: Vec<json::Value>,
     pub unique: bool,
 }
 
-impl FromYaml for ExplicitStaticList {
+impl FromYaml for ListWithOptions {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut saw_opening = false;
         let mut random = false;
@@ -354,29 +354,29 @@ impl FromYaml for ExplicitStaticList {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, PartialEq)]
-pub enum StaticList {
-    Explicit(ExplicitStaticList),
-    Implicit(Vec<json::Value>),
+pub enum List {
+    WithOptions(ListWithOptions),
+    DefaultOptions(Vec<json::Value>),
 }
 
-impl StaticList {
+impl List {
     pub fn unique(&self) -> bool {
-        matches!(self, StaticList::Explicit(l) if l.unique)
+        matches!(self, List::WithOptions(l) if l.unique)
     }
 }
 
-impl FromYaml for StaticList {
+impl FromYaml for List {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let (event, marker) = decoder.peek()?;
         match event {
             YamlEvent::SequenceStart => {
                 let (e, marker) = FromYaml::parse(decoder)?;
-                let value = (StaticList::Implicit(e), marker);
+                let value = (List::DefaultOptions(e), marker);
                 Ok(value)
             }
             YamlEvent::MappingStart => {
                 let (i, marker) = FromYaml::parse(decoder)?;
-                let value = (StaticList::Explicit(i), marker);
+                let value = (List::WithOptions(i), marker);
                 Ok(value)
             }
             _ => Err(Error::YamlDeserialize(None, *marker)),
@@ -384,31 +384,31 @@ impl FromYaml for StaticList {
     }
 }
 
-impl From<Vec<json::Value>> for StaticList {
+impl From<Vec<json::Value>> for List {
     fn from(v: Vec<json::Value>) -> Self {
-        StaticList::Implicit(v)
+        List::DefaultOptions(v)
     }
 }
 
-impl From<ExplicitStaticList> for StaticList {
-    fn from(e: ExplicitStaticList) -> Self {
-        StaticList::Explicit(e)
+impl From<ListWithOptions> for List {
+    fn from(e: ListWithOptions) -> Self {
+        List::WithOptions(e)
     }
 }
 
-impl IntoIterator for StaticList {
+impl IntoIterator for List {
     type Item = json::Value;
     type IntoIter = Either3<
-        StaticListRepeatRandomIterator,
+        ListRepeatRandomIterator,
         std::vec::IntoIter<json::Value>,
         std::iter::Cycle<std::vec::IntoIter<json::Value>>,
     >;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            StaticList::Explicit(mut e) => match (e.repeat, e.random) {
+            List::WithOptions(mut e) => match (e.repeat, e.random) {
                 (true, true) => {
-                    let a = StaticListRepeatRandomIterator {
+                    let a = ListRepeatRandomIterator {
                         random: Uniform::new(0, e.values.len()),
                         values: e.values,
                     };
@@ -422,17 +422,17 @@ impl IntoIterator for StaticList {
                 }
                 (true, false) => Either3::C(e.values.into_iter().cycle()),
             },
-            StaticList::Implicit(v) => Either3::C(v.into_iter().cycle()),
+            List::DefaultOptions(v) => Either3::C(v.into_iter().cycle()),
         }
     }
 }
 
-pub struct StaticListRepeatRandomIterator {
+pub struct ListRepeatRandomIterator {
     values: Vec<json::Value>,
     random: Uniform<usize>,
 }
 
-impl Iterator for StaticListRepeatRandomIterator {
+impl Iterator for ListRepeatRandomIterator {
     type Item = json::Value;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -446,7 +446,7 @@ enum ProviderPreProcessed {
     File(FileProviderPreProcessed),
     Range(RangeProviderPreProcessed),
     Response(ResponseProvider),
-    List(StaticList),
+    List(List),
 }
 
 #[derive(Clone, PartialEq)]
@@ -454,7 +454,7 @@ pub enum Provider {
     File(FileProvider),
     Range(RangeProvider),
     Response(ResponseProvider),
-    List(StaticList),
+    List(List),
 }
 
 impl FromYaml for ProviderPreProcessed {
@@ -2925,8 +2925,8 @@ mod tests {
     fn from_yaml_limit() {
         let values = vec![
             ("asdf", None),
-            ("auto", Some(Limit::auto())),
-            ("96", Some(Limit::Hard(96))),
+            ("auto", Some(Limit::dynamic())),
+            ("96", Some(Limit::Static(96))),
             ("-96", None),
         ];
         check_all(values);
@@ -2945,13 +2945,13 @@ mod tests {
     }
 
     #[test]
-    fn from_yaml_static_list() {
+    fn from_yaml_list() {
         let values = vec![
             (
                 "values:
                     - foo
                     - bar",
-                Some(StaticList::Explicit(ExplicitStaticList {
+                Some(List::WithOptions(ListWithOptions {
                     random: false,
                     repeat: true,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2965,7 +2965,7 @@ mod tests {
                 values:
                     - foo
                     - bar",
-                Some(StaticList::Explicit(ExplicitStaticList {
+                Some(List::WithOptions(ListWithOptions {
                     random: true,
                     repeat: false,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2980,7 +2980,7 @@ mod tests {
                 values:
                     - foo
                     - bar",
-                Some(StaticList::Explicit(ExplicitStaticList {
+                Some(List::WithOptions(ListWithOptions {
                     random: true,
                     repeat: false,
                     values: vec![json::json!("foo"), json::json!("bar")],
@@ -2991,7 +2991,7 @@ mod tests {
                 "
                 - foo
                 - bar",
-                Some(StaticList::Implicit(vec![
+                Some(List::DefaultOptions(vec![
                     json::json!("foo"),
                     json::json!("bar"),
                 ])),
@@ -3095,7 +3095,7 @@ mod tests {
                 "
                 list:
                     - 1",
-                Some(ProviderPreProcessed::List(StaticList::Implicit(vec![
+                Some(ProviderPreProcessed::List(List::DefaultOptions(vec![
                     json::json!(1),
                 ]))),
             ),

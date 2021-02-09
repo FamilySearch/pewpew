@@ -33,6 +33,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+// A helper module which tells serde how to serialize (and deserialize, though that's not currently
+// used anywhere) an HDRHistogram
 mod histogram_serde {
     use hdrhistogram::{
         serialization::{
@@ -69,6 +71,7 @@ mod histogram_serde {
     }
 }
 
+// Represents the three types of messages that are written out to a stats file
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 enum FileMessage {
@@ -77,6 +80,8 @@ enum FileMessage {
     Buckets(TimeBucket),
 }
 
+// The header message written to a stats file contains the test name, pewpew
+// version and bucket size
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FileHeader {
@@ -85,16 +90,20 @@ struct FileHeader {
     bucket_size: u64,
 }
 
+// The tags message written to a stats file contains an index and corresponding
+// tags. Because each endpoint in a test can produce multiple bucket groups from
+// differing tags, a separate index is assigned to each bucket group
 #[derive(Deserialize, Serialize)]
 struct FileTags {
     index: usize,
     tags: Tags,
 }
 
+// A time bucket represents the statistics for all endpoints at a given point in time
 #[derive(Clone, Deserialize, Serialize)]
 struct TimeBucket {
     time: u64,
-    entries: BTreeMap<usize, Bucket>,
+    entries: BTreeMap<usize, BucketGroupStats>,
 }
 
 impl TimeBucket {
@@ -105,11 +114,13 @@ impl TimeBucket {
         }
     }
 
+    // Append some statistics to this `TimeBucket` for the bucket group with the given index
     fn append(&mut self, stat: ResponseStat, index: usize) {
         let entry = self.entries.entry(index).or_default();
         entry.append(stat);
     }
 
+    // Combine the statistics of two `TimeBucket`s
     fn combine(&mut self, rhs: &TimeBucket) {
         for (index, entry) in &rhs.entries {
             self.entries
@@ -119,6 +130,7 @@ impl TimeBucket {
         }
     }
 
+    // Create a string summary for this `TimeBucket`
     fn create_print_summary(
         &self,
         tags: &BTreeMap<Tags, usize>,
@@ -171,9 +183,10 @@ impl TimeBucket {
     }
 }
 
+// The aggregate statistics that are tracked for each bucket group in a given interval (bucket size)
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Bucket {
+struct BucketGroupStats {
     #[serde(skip_serializing_if = "is_zero")]
     request_timeouts: u64,
     #[serde(with = "histogram_serde", skip_serializing_if = "Histogram::is_empty")]
@@ -184,9 +197,9 @@ struct Bucket {
     test_errors: BTreeMap<String, u64>,
 }
 
-impl Default for Bucket {
+impl Default for BucketGroupStats {
     fn default() -> Self {
-        Bucket {
+        BucketGroupStats {
             request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             status_counts: Default::default(),
@@ -195,7 +208,8 @@ impl Default for Bucket {
     }
 }
 
-impl Bucket {
+impl BucketGroupStats {
+    // Append new stats into the aggregates
     fn append(&mut self, stat: ResponseStat) {
         match stat.kind {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
@@ -218,7 +232,8 @@ impl Bucket {
         }
     }
 
-    fn combine(&mut self, rhs: &Bucket) {
+    // Combine two `BucketGroupStats`
+    fn combine(&mut self, rhs: &BucketGroupStats) {
         self.request_timeouts += rhs.request_timeouts;
         let _ = self.rtt_histogram.add(&rhs.rtt_histogram);
         for (status, count) in &rhs.status_counts {
@@ -235,6 +250,7 @@ impl Bucket {
         }
     }
 
+    // create a string summary for this `BucketGroupStats`
     fn create_print_summary(
         &self,
         tags: &Tags,
@@ -262,6 +278,7 @@ impl Bucket {
         let stddev = self.rtt_histogram.stdev().round() / MICROS_TO_MS;
         match format {
             RunOutputFormat::Human => {
+                // human format
                 let piece = format!(
                     "\n{}\n  calls made: {}\n  status counts: {:?}\n",
                     Paint::yellow(format!("- {} {}:", method, url)).dimmed(),
@@ -285,6 +302,7 @@ impl Bucket {
                 print_string.push_str(&piece);
             }
             RunOutputFormat::Json => {
+                // json format
                 let summary_type = if test_complete { "test" } else { "bucket" };
                 let output = json::json!({
                     "type": "summary",
@@ -327,11 +345,13 @@ impl Bucket {
     }
 }
 
+// helper function used by serde
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_zero(n: &u64) -> bool {
     *n == 0
 }
 
+// A struct to manage different time buckets
 struct Stats {
     bucket_size: u64,
     current: TimeBucket,
@@ -345,10 +365,12 @@ struct Stats {
     totals: TimeBucket,
 }
 
+// round the current time to the nearest bucket
 fn rounded_epoch(bucket_size: u64) -> u64 {
     round_time(get_epoch(), bucket_size)
 }
 
+// round the given time to the nearest bucket
 fn round_time(time: u64, bucket_size: u64) -> u64 {
     time / bucket_size * bucket_size
 }
@@ -381,6 +403,7 @@ impl Stats {
         })
     }
 
+    // if the current bucket's time has elapsed replace it with a new bucket
     fn check_current_bucket(&mut self) {
         let current_bucket_time = rounded_epoch(self.bucket_size);
         if self.current.time < current_bucket_time {
@@ -397,6 +420,7 @@ impl Stats {
         }
     }
 
+    // get the last completed bucket
     fn get_previous_bucket(&mut self, test_complete: bool) -> Option<TimeBucket> {
         if test_complete {
             let new_bucket = TimeBucket::new(0);
@@ -410,8 +434,11 @@ impl Stats {
         })
     }
 
+    // append stats to the current bucket
     async fn append(&mut self, stat: ResponseStat) {
         let mut new_tag = None;
+        // check that the tags from the incoming stat exist in our tags map, if not create a new
+        // entry
         let index = match self.tags.get(&stat.tags) {
             Some(i) => *i,
             _ => {
@@ -430,6 +457,7 @@ impl Stats {
         }
     }
 
+    // Write to the stats file the given message
     // this fn returns an impl future instead of being async, so as not to capture a reference to `self`
     fn write_file_message(&self, msg: FileMessage) -> impl Future<Output = ()> {
         let mut file = self.file.clone();
@@ -444,6 +472,7 @@ impl Stats {
         }
     }
 
+    // Create the provider stats summary
     fn create_provider_stats_summary(&self, time: u64) -> String {
         let is_human_format = self.format.is_human();
         let mut string_to_print = if is_human_format && !self.providers.is_empty() {
@@ -474,6 +503,8 @@ impl Stats {
         string_to_print
     }
 
+    // Close out the bucket. This happens when the test has completed or when it's time for a new bucket
+    // When a bucket is closed out stats are written to the console and to the stats file
     async fn close_out_bucket(&mut self, remaining_seconds: Option<u64>) {
         let test_complete = remaining_seconds.is_none();
         let mut is_new_bucket = false;
@@ -525,6 +556,7 @@ impl Stats {
 
 type Tags = BTreeMap<String, String>;
 
+// get the current time as a unix epoch
 fn get_epoch() -> u64 {
     UNIX_EPOCH
         .elapsed()
@@ -532,6 +564,7 @@ fn get_epoch() -> u64 {
         .unwrap_or_default()
 }
 
+// create a pretty string representing the difference between two epochs
 fn create_date_diff(start: u64, end: u64) -> String {
     let start = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(start as i64, 0), Utc)
         .with_timezone(&Local);
@@ -562,10 +595,12 @@ pub struct ResponseStat {
     pub tags: Arc<Tags>,
 }
 
+// A `ResponseStat` is sent when a `RecoverableError` happens, or when an HTTP response is
+// received
 #[derive(Debug)]
 pub enum StatKind {
     RecoverableError(RecoverableError),
-    Response(u16),
+    Response(u16), // u16 represents the HTTP response status code
 }
 
 impl From<ResponseStat> for StatsMessage {
@@ -574,6 +609,7 @@ impl From<ResponseStat> for StatsMessage {
     }
 }
 
+// Create a pretty string which specifies when the test will end
 fn duration_till_end_to_pretty_string(duration: Duration) -> String {
     let long_form = duration_to_pretty_long_form(duration);
     let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
@@ -635,17 +671,15 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     format!("in approximately {}", long_time)
 }
 
+// create the stats channel for a try run
 pub fn create_try_run_stats_channel(
     mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
     mut console: FCSender<MsgType>,
-) -> (
-    futures_channel::UnboundedSender<StatsMessage>,
-    impl Future<Output = ()> + Send,
-) {
+) -> futures_channel::UnboundedSender<StatsMessage> {
     let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
 
-    let f = async move {
-        let mut stats = Bucket::default();
+    let stats_receiver_task = async move {
+        let mut stats = BucketGroupStats::default();
 
         // continue pulling values from the rx channel until it ends or the test_complete future fires
         let mut stream = stream::poll_fn(|cx| match rx.poll_next_unpin(cx) {
@@ -681,23 +715,19 @@ pub fn create_try_run_stats_channel(
         let _ = console.send(MsgType::Final(output)).await;
     };
 
-    (tx, f)
+    tokio::spawn(stats_receiver_task);
+
+    tx
 }
 
+// create the stats channel for a full test
 pub fn create_stats_channel(
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
-    // mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
     config: &config::GeneralConfig,
     providers: &BTreeMap<String, providers::Provider>,
     mut console: FCSender<MsgType>,
     run_config: &RunConfig,
-) -> Result<
-    (
-        futures_channel::UnboundedSender<StatsMessage>,
-        impl Future<Output = ()> + Send,
-    ),
-    TestError,
-> {
+) -> Result<futures_channel::UnboundedSender<StatsMessage>, TestError> {
     let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
@@ -713,6 +743,7 @@ pub fn create_stats_channel(
         .unwrap_or_default();
     let file_path = run_config.stats_file.clone();
     let output_format = run_config.output_format;
+
     let log_provider_stats = config.log_provider_stats.is_some();
     let providers: Vec<_> = if log_provider_stats {
         providers
@@ -739,7 +770,8 @@ pub fn create_stats_channel(
 
     let mut test_start_time: Option<Instant> = None;
 
-    let receiver = async move {
+    // create the task responsible for receiving incoming statistics
+    let stats_receiver_task = async move {
         let mut print_stats_interval = time::interval_at(now + next_bucket, bucket_size);
         // create a stream which combines getting incoming messages, printing stats on an interval
         // and checking if the test has ended
@@ -750,6 +782,11 @@ pub fn create_stats_channel(
             UpdateProviders(Vec<ChannelStatsReader<json::Value>>),
         }
 
+        // manually create a stream that polls between:
+        // 1) The `Receiver` which indicates when the test is complete (this also indicates when the
+        //      config file has been updated during a test)
+        // 2) The stream that triggers when new stats should be dumped out
+        // 3) The `Receiver` which receives incoming stats
         let mut stream = stream::poll_fn(move |cx| {
             match test_complete.poll_next_unpin(cx) {
                 // test is not complete
@@ -849,5 +886,7 @@ pub fn create_stats_channel(
         }
     };
 
-    Ok((tx, receiver))
+    tokio::spawn(stats_receiver_task);
+
+    Ok(tx)
 }

@@ -1,10 +1,17 @@
 use crate::util::str_to_json;
-use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
 use std::{fs::File, io, iter::Iterator};
 
+// A type of file reader which reads a csv file.
+// Each row in the csv is converted into a json value.
+// There are many configurable options when parsing a csv including whether the file
+// starts with a header row, or whether a custom header is specified.
+// If a header is provided each json value yielded will be an object with properties
+// matching the column names in the header.
+// If no header is provided each json value will be an array where each index corresponds
+// with a column
 pub struct CsvReader {
     positions: Vec<csv::Position>,
     headers: Option<csv::StringRecord>,
@@ -94,10 +101,6 @@ impl CsvReader {
             cr.positions.push(csv::Position::new());
         }
         Ok(cr)
-    }
-
-    pub fn into_stream(self) -> impl Stream<Item = Result<json::Value, io::Error>> {
-        super::into_stream(self)
     }
 }
 

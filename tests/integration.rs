@@ -19,7 +19,7 @@ fn run_test(path: &str) -> (bool, String, String) {
             stats_file: "integration.json".into(),
             stats_file_format: pewpew::StatsFileFormat::Json,
             start_at: None,
-            watch_config_file: false,
+            watch_config_file: true,
         };
         let exec_config = pewpew::ExecConfig::Run(run_config);
 

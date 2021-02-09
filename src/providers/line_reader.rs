@@ -1,5 +1,4 @@
 use crate::util::str_to_json;
-use futures::Stream;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 
@@ -11,6 +10,8 @@ use std::{
     iter::{self, Iterator},
 };
 
+// A type of file reader that reads the file line by line.
+// Each line is parsed as json and if invalid json, the string value for that line is used.
 pub struct LineReader {
     byte_buffer: Vec<u8>,
     buf_data_len: usize,
@@ -113,10 +114,6 @@ impl LineReader {
                 }
             }
         }
-    }
-
-    pub fn into_stream(self) -> impl Stream<Item = Result<json::Value, io::Error>> {
-        super::into_stream(self)
     }
 }
 

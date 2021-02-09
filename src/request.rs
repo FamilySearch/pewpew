@@ -198,17 +198,17 @@ pub struct BuilderContext {
     pub stats_tx: StatsTx,
 }
 
-pub struct Builder {
+pub struct EndpointBuilder {
     endpoint: config::Endpoint,
     start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
 }
 
-impl Builder {
+impl EndpointBuilder {
     pub fn new(
         endpoint: config::Endpoint,
         start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
     ) -> Self {
-        Builder {
+        EndpointBuilder {
             endpoint,
             start_stream,
         }
@@ -259,6 +259,7 @@ impl Builder {
                 Outgoing::new(v, ProviderOrLogger::Provider(tx))
             })
             .collect();
+
         let mut streams: StreamCollection = Vec::new();
         if let Some(start_stream) = self.start_stream {
             streams.push((
@@ -311,6 +312,7 @@ impl Builder {
             }));
             streams.push((false, provider_stream));
         }
+
         for (name, vce) in self.endpoint.declare {
             let stream = vce
                 .into_stream(&ctx.providers, false)

@@ -53,6 +53,7 @@ struct Channel<T: Serialize> {
     receiver_events: Event,
     sender_events: Event,
     queue: ConcurrentQueue<T>,
+    on_demand_count: AtomicUsize,
     receiver_count: AtomicUsize,
     sender_count: AtomicUsize,
     unique: Option<HashSet>,
@@ -71,6 +72,7 @@ impl<T: Serialize> Channel<T> {
             receiver_events: Event::new(),
             sender_events: Event::new(),
             queue: ConcurrentQueue::unbounded(),
+            on_demand_count: AtomicUsize::new(1),
             receiver_count: AtomicUsize::new(1),
             sender_count: AtomicUsize::new(1),
             unique,
@@ -167,7 +169,7 @@ impl<T: Serialize> Channel<T> {
         self.receiver_events.notify(1);
     }
 
-    // notify all senders with an event listener
+    // notify all receivers with an event listener
     fn notify_all_receivers(&self) {
         self.receiver_events.notify(std::usize::MAX);
     }
@@ -180,6 +182,21 @@ impl<T: Serialize> Channel<T> {
     // create a listener so a receiver can get notice when it can make progress
     fn receiver_listen(&self) -> EventListener {
         self.receiver_events.listen()
+    }
+
+    // get the number of senders
+    fn on_demand_count(&self) -> usize {
+        self.on_demand_count.load(Ordering::Acquire)
+    }
+
+    // increment the sender count and return the new count
+    fn increment_on_demand_count(&self) -> usize {
+      self.on_demand_count.fetch_add(1, Ordering::Release) + 1
+    }
+
+    // decrement the sender count and return the new count
+    fn decrement_on_demand_count(&self) -> usize {
+      self.on_demand_count.fetch_sub(1, Ordering::Release) - 1
     }
 
     // get the number of senders
@@ -419,6 +436,7 @@ impl<T: Serialize> ChannelStatsReader<T> {
             limit: self.channel.limit(),
             receiver_count: self.channel.receiver_count(),
             sender_count: self.channel.sender_count(),
+            on_demand_count: self.channel.on_demand_count(),
         }
     }
 }
@@ -433,6 +451,7 @@ pub struct ChannelStats<'a> {
     pub limit: usize,
     pub receiver_count: usize,
     pub sender_count: usize,
+    pub on_demand_count: usize,
 }
 
 pub struct Receiver<T: Serialize> {
@@ -508,32 +527,51 @@ pub fn channel<T: Serialize>(limit: Limit, unique: bool) -> (Sender<T>, Receiver
 // to `recv` but the queue is empty
 pub struct OnDemandReceiver<T: Serialize> {
     channel: Arc<Channel<T>>,
-    listener: EventListener,
+    listener: Option<EventListener>,
 }
 
 impl<T: Serialize> Clone for OnDemandReceiver<T> {
     fn clone(&self) -> Self {
+        self.channel.increment_on_demand_count();
         Self {
             channel: self.channel.clone(),
-            listener: self.channel.on_demand_listen(),
+            listener: None,
         }
     }
+}
+
+// whenever a `OnDemandReceiver` is dropped, be sure to decrement the on_demand sender count
+// an OnDemandReceiver is also a Sender, so Drop for Sender will notify `Receiver`s that are waiting for data.
+impl<T: Serialize> Drop for OnDemandReceiver<T> {
+  fn drop(&mut self) {
+    self.channel.decrement_on_demand_count();
+  }
 }
 
 impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
     type Item = ();
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+      loop {
         // end the stream if there are no more receivers
         if self.channel.receiver_count() == 0 {
+            self.listener = None;
             return Poll::Ready(None);
         }
 
-        let ret = Pin::new(&mut self.listener).poll(cx).map(Some);
-        if ret.is_ready() {
-            self.listener = self.channel.on_demand_listen();
-        };
-        ret
+        if let Some(listener) = self.listener.as_mut() {
+          let ret = Pin::new(listener).poll(cx).map(Some);
+          if ret.is_ready() {
+            self.listener = Some(self.channel.on_demand_listen());
+          };
+          return ret;
+        } else if self.channel.receiver_count() == 0 {
+          self.listener = None;
+          return Poll::Ready(None);
+        } else if self.listener.is_none() {
+          self.listener = Some(self.channel.on_demand_listen());
+        }
+      }
     }
 }
 
@@ -541,7 +579,7 @@ impl<T: Serialize + Send + 'static> OnDemandReceiver<T> {
     pub fn new(demander: &Receiver<T>) -> Self {
         OnDemandReceiver {
             channel: demander.channel.clone(),
-            listener: demander.channel.on_demand_listen(),
+            listener: None,
         }
     }
 }

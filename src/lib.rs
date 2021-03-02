@@ -84,6 +84,7 @@ impl Endpoints {
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn build<F>(
         self,
         filter_fn: F,
@@ -498,6 +499,7 @@ fn create_config_watcher(
                 Err(_) => continue,
             };
 
+            // Check the last modified. If we don't have one, or it hasn't changed, continue to the next loop
             match last_modified {
                 Some(lm) if modified == lm => continue,
                 None => {
@@ -507,6 +509,7 @@ fn create_config_watcher(
                 _ => last_modified = Some(modified),
             }
 
+            // Last modified has changed
             if file.seek(SeekFrom::Start(0)).is_err() {
                 continue;
             }

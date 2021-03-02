@@ -110,10 +110,13 @@ impl<T: Serialize> Channel<T> {
             if inner_len == 0 {
                 // if there's a "dynamic" limit and we've emptied the buffer
                 // after it was previously full, increment the limit
+                // https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html#migrating-to-compare_exchange-and-compare_exchange_weak
                 if let Limit::Dynamic(a) = &self.limit {
                     if self
                         .has_maxed
-                        .compare_and_swap(true, false, Ordering::Release)
+                        .compare_exchange(true, false, Ordering::Release, Ordering::Relaxed)
+                        .is_ok()
+                    // On success this value is guaranteed to be equal to current.
                     {
                         a.fetch_add(1, Ordering::Release);
                     }

@@ -410,6 +410,7 @@ impl Epoch {
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         let start = SystemTime::now();
         let since_the_epoch = start

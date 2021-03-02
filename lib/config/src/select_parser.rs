@@ -36,6 +36,7 @@ type ProviderStreamStream<Ar> = Box<
 >;
 
 pub trait ProviderStream<Ar: Clone + Send + Unpin + 'static> {
+    #[allow(clippy::unnecessary_wraps)]
     fn into_stream(&self) -> ProviderStreamStream<Ar>;
 }
 

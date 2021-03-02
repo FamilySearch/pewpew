@@ -184,17 +184,17 @@ impl<T: Serialize> Channel<T> {
         self.receiver_events.listen()
     }
 
-    // get the number of senders
+    // get the number of on_demand receivers
     fn on_demand_count(&self) -> usize {
         self.on_demand_count.load(Ordering::Acquire)
     }
 
-    // increment the sender count and return the new count
+    // increment the on_demand count and return the new count
     fn increment_on_demand_count(&self) -> usize {
       self.on_demand_count.fetch_add(1, Ordering::Release) + 1
     }
 
-    // decrement the sender count and return the new count
+    // decrement the on_demand count and return the new count
     fn decrement_on_demand_count(&self) -> usize {
       self.on_demand_count.fetch_sub(1, Ordering::Release) - 1
     }
@@ -527,6 +527,9 @@ pub fn channel<T: Serialize>(limit: Limit, unique: bool) -> (Sender<T>, Receiver
 // to `recv` but the queue is empty
 pub struct OnDemandReceiver<T: Serialize> {
     channel: Arc<Channel<T>>,
+    // Unlike normal receivers, All on_demand should have a listeners with one exception
+    // When we `--watch` the run, it creates a clone of everything wich creates an on_demand receiver
+    // which swallows/hides any events so we still only want listeners from actual receivers.
     listener: Option<EventListener>,
 }
 
@@ -559,16 +562,17 @@ impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
             return Poll::Ready(None);
         }
 
+        // See the `poll_next` in `Stream for Receiver`
         if let Some(listener) = self.listener.as_mut() {
           let ret = Pin::new(listener).poll(cx).map(Some);
           if ret.is_ready() {
+            // Create a new listener to wait for the next "need"
             self.listener = Some(self.channel.on_demand_listen());
           };
           return ret;
-        } else if self.channel.receiver_count() == 0 {
-          self.listener = None;
-          return Poll::Ready(None);
         } else if self.listener.is_none() {
+          // The first time we poll and don't have a listener add one
+          // The --watch clone won't every call poll_next
           self.listener = Some(self.channel.on_demand_listen());
         }
       }

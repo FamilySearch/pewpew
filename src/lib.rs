@@ -84,6 +84,7 @@ impl Endpoints {
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn build<F>(
         self,
         filter_fn: F,

@@ -191,12 +191,12 @@ impl<T: Serialize> Channel<T> {
 
     // increment the on_demand count and return the new count
     fn increment_on_demand_count(&self) -> usize {
-      self.on_demand_count.fetch_add(1, Ordering::Release) + 1
+        self.on_demand_count.fetch_add(1, Ordering::Release) + 1
     }
 
     // decrement the on_demand count and return the new count
     fn decrement_on_demand_count(&self) -> usize {
-      self.on_demand_count.fetch_sub(1, Ordering::Release) - 1
+        self.on_demand_count.fetch_sub(1, Ordering::Release) - 1
     }
 
     // get the number of senders
@@ -546,36 +546,36 @@ impl<T: Serialize> Clone for OnDemandReceiver<T> {
 // whenever a `OnDemandReceiver` is dropped, be sure to decrement the on_demand sender count
 // an OnDemandReceiver is also a Sender, so Drop for Sender will notify `Receiver`s that are waiting for data.
 impl<T: Serialize> Drop for OnDemandReceiver<T> {
-  fn drop(&mut self) {
-    self.channel.decrement_on_demand_count();
-  }
+    fn drop(&mut self) {
+        self.channel.decrement_on_demand_count();
+    }
 }
 
 impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
     type Item = ();
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-      loop {
-        // end the stream if there are no more receivers
-        if self.channel.receiver_count() == 0 {
-            self.listener = None;
-            return Poll::Ready(None);
-        }
+        loop {
+            // end the stream if there are no more receivers
+            if self.channel.receiver_count() == 0 {
+                self.listener = None;
+                return Poll::Ready(None);
+            }
 
-        // See the `poll_next` in `Stream for Receiver`
-        if let Some(listener) = self.listener.as_mut() {
-          let ret = Pin::new(listener).poll(cx).map(Some);
-          if ret.is_ready() {
-            // Create a new listener to wait for the next "need"
-            self.listener = Some(self.channel.on_demand_listen());
-          };
-          return ret;
-        } else if self.listener.is_none() {
-          // The first time we poll and don't have a listener add one
-          // The --watch clone won't every call poll_next
-          self.listener = Some(self.channel.on_demand_listen());
+            // See the `poll_next` in `Stream for Receiver`
+            if let Some(listener) = self.listener.as_mut() {
+                let ret = Pin::new(listener).poll(cx).map(Some);
+                if ret.is_ready() {
+                    // Create a new listener to wait for the next "need"
+                    self.listener = Some(self.channel.on_demand_listen());
+                };
+                return ret;
+            } else if self.listener.is_none() {
+                // The first time we poll and don't have a listener add one
+                // The --watch clone won't every call poll_next
+                self.listener = Some(self.channel.on_demand_listen());
+            }
         }
-      }
     }
 }
 

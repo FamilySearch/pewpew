@@ -417,23 +417,24 @@ impl<T: Serialize> Sink<T> for Sender<T> {
     }
 }
 
-// used to get statistics about a channel
+// used to get statistics about a channel (provider stats)
 pub struct ChannelStatsReader<T: Serialize> {
-    name: String,
+    // While a better description would be the channel "name" here, the Splunk dashboards rely on the keyword "provider"
+    provider: String,
     channel: Arc<Channel<T>>,
 }
 
 impl<T: Serialize> ChannelStatsReader<T> {
-    pub fn new(name: String, receiver: &Receiver<T>) -> Self {
+    pub fn new(provider: String, receiver: &Receiver<T>) -> Self {
         ChannelStatsReader {
-            name,
+            provider,
             channel: receiver.channel.clone(),
         }
     }
 
     pub fn get_stats(&self, timestamp: u64) -> ChannelStats {
         ChannelStats {
-            name: &self.name,
+            provider: &self.provider,
             timestamp,
             len: self.channel.len(),
             limit: self.channel.limit(),
@@ -449,7 +450,8 @@ impl<T: Serialize> ChannelStatsReader<T> {
 #[serde(rename_all = "camelCase")]
 pub struct ChannelStats<'a> {
     pub timestamp: u64,
-    pub name: &'a str,
+    // While a better description would be the channel "name" here, the Splunk dashboards rely on the keyword "provider"
+    pub provider: &'a str,
     pub len: usize,
     pub limit: usize,
     pub receiver_count: usize,

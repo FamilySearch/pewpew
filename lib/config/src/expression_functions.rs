@@ -6,25 +6,20 @@ use crate::select_parser::ProviderStream;
 
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
+#[cfg(target_arch = "wasm32")]
+use js_sys;
 use jsonpath_lib as json_path;
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
 use unicode_segmentation::UnicodeSegmentation;
 use yaml_rust::scanner::Marker;
 use zip_all::zip_all;
-#[cfg(target_arch = "wasm32")]
-use js_sys;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::{
-    borrow::Cow,
-    cmp::Ordering,
-    collections::BTreeMap,
-    fmt, iter,
-    sync::Arc,
-    task::Poll,
+    borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt, iter, sync::Arc, task::Poll,
     time::Duration,
 };
 

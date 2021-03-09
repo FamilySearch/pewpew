@@ -416,6 +416,8 @@ impl Epoch {
 
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        // https://github.com/rustwasm/wasm-pack/issues/724#issuecomment-776892489
+        // SystemTime is not supported by wasm-pack. So for wasm-pack builds, we'll use js_sys::Date
         #[cfg(not(target_arch = "wasm32"))]
         let start = SystemTime::now();
         #[cfg(not(target_arch = "wasm32"))]

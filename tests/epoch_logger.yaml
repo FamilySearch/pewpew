@@ -1,0 +1,12 @@
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+loggers:
+  timeLogger:
+    to: 'test-${epoch("ms")}.csv'
+endpoints:
+  - method: GET
+    url: http://localhost:8082
+    peak_load: 1hps

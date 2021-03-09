@@ -13,6 +13,10 @@ use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
 use yaml_rust::scanner::Marker;
 use zip_all::zip_all;
+#[cfg(target_arch = "wasm32")]
+use js_sys;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::{
     borrow::Cow,
@@ -21,7 +25,7 @@ use std::{
     fmt, iter,
     sync::Arc,
     task::Poll,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 #[derive(Clone, Debug)]
@@ -412,10 +416,14 @@ impl Epoch {
 
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        #[cfg(not(target_arch = "wasm32"))]
         let start = SystemTime::now();
+        #[cfg(not(target_arch = "wasm32"))]
         let since_the_epoch = start
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|_| Duration::from_secs(0));
+        #[cfg(target_arch = "wasm32")]
+        let since_the_epoch = Duration::from_millis(js_sys::Date::now() as u64);
         let n = match self {
             Epoch::Seconds => u128::from(since_the_epoch.as_secs()),
             Epoch::Milliseconds => since_the_epoch.as_millis(),

@@ -12,10 +12,11 @@ const filepath = process.argv[2];
 console.log(`filepath: "${filepath}"`);
 
 (async () => {
+  let config;
   try {
     const fileBuffer = await readFile(filepath);
     const varMap = new Map();
-    const config = new Config(fileBuffer, varMap);
+    config = new Config(fileBuffer, varMap);
     console.log("config loaded");
     config.checkOk();
     console.log("config.checkOk()");
@@ -27,5 +28,9 @@ console.log(`filepath: "${filepath}"`);
   } catch (error) {
     console.error("Error loading config", error);
     process.exit(1);
+  } finally {
+    if (config) {
+      config.free();
+    }
   }
 })().catch((error) => console.error("Global Catch", error));

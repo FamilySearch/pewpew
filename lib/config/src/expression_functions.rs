@@ -414,9 +414,7 @@ impl Epoch {
         // https://github.com/rustwasm/wasm-pack/issues/724#issuecomment-776892489
         // SystemTime is not supported by wasm-pack. So for wasm-pack builds, we'll use js_sys::Date
         #[cfg(not(target_arch = "wasm32"))]
-        let start = SystemTime::now();
-        #[cfg(not(target_arch = "wasm32"))]
-        let since_the_epoch = start
+        let since_the_epoch = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|_| Duration::from_secs(0));
         #[cfg(target_arch = "wasm32")]

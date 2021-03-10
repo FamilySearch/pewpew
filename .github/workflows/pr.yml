@@ -75,12 +75,12 @@ jobs:
           command: deny
           args: check --hide-inclusion-graph license sources advisories
 
-  wasm:
-    name: Wasm Pack
+
+  wasm-pack:
+    name: Wasm Build
     runs-on: ubuntu-latest
     env:
-        working-directory: ./lib/config_wasm
-        test-directory: ./lib/config_wasm/tests
+      working-directory: ./lib/config_wasm
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -92,6 +92,7 @@ jobs:
         with:
           command: install
           args: --version 0.8.1 wasm-pack
+
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
@@ -100,9 +101,31 @@ jobs:
         working-directory: ${{env.working-directory}}
         shell: bash
 
-      # TODO: Move this to a separate job
+      - name: Upload release assets
+        uses: actions/upload-artifact@v2
+        # Upload to share with the Acceptance Test
+        with:
+          name: config_wasm
+          path: ${{env.working-directory}}/pkg/
+
+
+  wasm-test:
+    name: Wasm Acceptance Tests
+    needs: ['wasm-pack']
+    runs-on: ubuntu-latest
+    env:
+      working-directory: ./lib/config_wasm
+      test-directory: ./lib/config_wasm/tests
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download release assets
+        uses: actions/download-artifact@v2
+        with:
+          name: config_wasm
+          path: ${{env.working-directory}}/pkg/
+
       - name: Use Node.js 12.x
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
           node-version: 12.x
       - name: Install Dependencies

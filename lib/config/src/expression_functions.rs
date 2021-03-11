@@ -6,7 +6,6 @@ use crate::select_parser::ProviderStream;
 
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
-use js_sys;
 use jsonpath_lib as json_path;
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;

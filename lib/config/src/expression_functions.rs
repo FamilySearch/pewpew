@@ -412,10 +412,15 @@ impl Epoch {
 
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
-        let start = SystemTime::now();
-        let since_the_epoch = start
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0));
+        // https://github.com/rustwasm/wasm-pack/issues/724#issuecomment-776892489
+        // SystemTime is not supported by wasm-pack. So for wasm-pack builds, we'll use js_sys::Date
+        let since_the_epoch = if cfg!(target_arch = "wasm32") {
+            Duration::from_millis(js_sys::Date::now() as u64)
+        } else {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_else(|_| Duration::from_secs(0))
+        };
         let n = match self {
             Epoch::Seconds => u128::from(since_the_epoch.as_secs()),
             Epoch::Milliseconds => since_the_epoch.as_millis(),

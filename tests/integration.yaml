@@ -10,6 +10,8 @@ loggers:
   l:
     limit: 2
     to: stderr
+  timeLogger:
+    to: 'test-epoch-${epoch("ms")}.json'
 vars:
   b: "foo"
   e2: ["foo", "foo", "foo"]
@@ -33,7 +35,7 @@ endpoints:
       e: collect(b, 3)
     url: http://localhost:${port}/
     body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
-    peak_load: 1hps
+    peak_load: 1.1hps
     headers:
       Content-Type: application/json
     logs:

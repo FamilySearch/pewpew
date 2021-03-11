@@ -286,6 +286,7 @@ dependencies = [
  "futures",
  "http",
  "itertools",
+ "js-sys",
  "jsonpath_lib",
  "maplit",
  "percent-encoding 1.0.1",

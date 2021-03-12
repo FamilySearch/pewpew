@@ -12,6 +12,7 @@ Changes:
 Bug fixes:
 - Refactor providers to resolve issues where some tests would see memory leaks and extraneous CPU usage.
 - Fix regression from v0.5.6 where sending a file as part of a request's body did not work.
+- Fix the config parser web assembly issue with using `epoch` in logger file names.
 
 ### v0.5.7
 Bug fixes:

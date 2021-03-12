@@ -49,7 +49,7 @@ jobs:
 
           # build the results viewer (which includes putting the output into the book's src)
           cd $RESULTS_VIEWER_DIR
-          npm install
+          npm ci
           npm run build
 
           # build the book

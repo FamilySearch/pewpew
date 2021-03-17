@@ -69,7 +69,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.8.5 cargo-deny
+          args: --version 0.9.0 cargo-deny
       - uses: actions-rs/cargo@v1
         with:
           command: deny

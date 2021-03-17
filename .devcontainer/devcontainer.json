@@ -1,0 +1,13 @@
+{
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"extensions": [
+		"github.vscode-pull-request-github",
+		"hediet.vscode-drawio",
+		"matklad.rust-analyzer",
+		"serayuzgur.crates",
+		"svelte.svelte-vscode"
+	],
+	"settings": { "rust-analyzer.updates.askBeforeDownload": false }
+}

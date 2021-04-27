@@ -472,9 +472,9 @@ impl<T> Default for Nullable<T> {
     }
 }
 
-impl<T> Into<Option<T>> for Nullable<T> {
-    fn into(self) -> Option<T> {
-        match self {
+impl<T> From<Nullable<T>> for Option<T> {
+    fn from(n: Nullable<T>) -> Option<T> {
+        match n {
             Nullable::Some(t) => Some(t),
             Nullable::Null => None,
         }

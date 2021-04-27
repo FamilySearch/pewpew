@@ -20,14 +20,14 @@ use std::{
 use super::{BlockSender, Outgoing, ProviderDelays, ProviderOrLogger, StatsTx, TemplateValues};
 
 pub(super) struct BodyHandler {
-    pub(super) now: Instant,
-    pub(super) provider_delays: ProviderDelays,
-    pub(super) template_values: TemplateValues,
     pub(super) included_outgoing_indexes: BTreeSet<usize>,
+    pub(super) now: Instant,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
+    pub(super) provider_delays: ProviderDelays,
     pub(super) stats_tx: StatsTx,
     pub(super) status: u16,
     pub(super) tags: Arc<BTreeMap<String, Template>>,
+    pub(super) template_values: TemplateValues,
 }
 
 impl BodyHandler {

@@ -8,7 +8,7 @@
     "@babel/preset-env": "7.10.3",
     "@types/chart.js": "^2.9.24",
     "@types/node": "^12.12.54",
-    "chart.js": "^2.9.3",
+    "chart.js": "^2.9.4",
     "hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
     "parcel-bundler": "^1.12.4",
     "parcel-plugin-svelte": "^4.0.6",

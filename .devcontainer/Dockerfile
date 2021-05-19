@@ -1,4 +1,4 @@
-FROM rust:1.51
+FROM rust:1.52
 
 # versions (according to their git tag) of different tools to download
 # https://github.com/EmbarkStudios/cargo-deny/releases
@@ -47,4 +47,11 @@ RUN mkdir .node \
         -not -wholename '.node/lib*' -delete
 
 ENV PATH=$PATH:/home/$USER/.node/bin
-ENV EDITOR=code
+# ENV GIT_EDITOR="code --wait"
+# ENV GIT_EXTERNAL_DIFF='code --wait --diff $LOCAL $REMOTE'
+
+RUN git config --global core.editor "code --wait" \
+    && git config --global diff.tool vscode \
+    && git config --global difftool.vscode.cmd 'code --wait --diff $LOCAL $REMOTE' \
+    && git config --global merge.tool vscode \
+    && git config --global mergetool.vscode.cmd 'code --wait $MERGED'

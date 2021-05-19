@@ -126,14 +126,14 @@ impl ResponseHandler {
         body_future
             .then(move |body_value| {
                 let bh = BodyHandler {
-                    provider_delays,
-                    now,
-                    template_values,
                     included_outgoing_indexes,
+                    now,
                     outgoing,
+                    provider_delays,
                     stats_tx,
                     status,
                     tags,
+                    template_values,
                 };
                 bh.handle(body_value, auto_returns)
             })

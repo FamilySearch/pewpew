@@ -1293,9 +1293,9 @@ impl Select {
         let where_clause = where_clause.map(|w| WithMarker::new(w.into(), marker));
         let send = Some(send);
         let eppp = EndpointProvidesPreProcessed {
+            for_each,
             select,
             send,
-            for_each,
             where_clause,
         };
         let mut rp_default = RequiredProviders::new();

@@ -257,11 +257,11 @@ fn main() {
             .unwrap_or_default();
         let file = matches.value_of("file").map(Into::into);
         let try_config = TryConfig {
-            loggers_on,
+            config_file,
             file,
             filters,
             format,
-            config_file,
+            loggers_on,
             results_dir,
         };
         ExecConfig::Try(try_config)
@@ -271,8 +271,7 @@ fn main() {
 
     let f = create_run(cli_config, ctrlc_channel, io::stdout(), io::stderr());
 
-    let mut rt = runtime::Builder::new()
-        .threaded_scheduler()
+    let rt = runtime::Builder::new_multi_thread()
         .enable_time()
         .enable_io()
         .thread_name("pewpew-worker")

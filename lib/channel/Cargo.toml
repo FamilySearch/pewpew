@@ -9,7 +9,7 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-ahash = "0.6"
+ahash = "0.7"
 concurrent-queue = "1"
 dashmap = "4"
 event-listener = "2"

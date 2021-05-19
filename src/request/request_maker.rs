@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn sends_request() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let (port, ..) = test_common::start_test_server(None);
             let url = Template::simple(&format!("https://127.0.0.1:{}", port));

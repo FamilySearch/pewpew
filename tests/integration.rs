@@ -5,7 +5,7 @@ use test_common::{start_test_server, TestWriter};
 use tokio::runtime::Runtime;
 
 fn run_test(path: &str) -> (bool, String, String) {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(async move {
         let (port, kill_server, _) = start_test_server(None);
         env::set_var("PORT", port.to_string());

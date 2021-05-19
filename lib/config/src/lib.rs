@@ -1,3 +1,5 @@
+// This is temporary until a new version of pest is released which no longer requires this
+#![allow(legacy_derive_helpers, clippy::upper_case_acronyms)]
 mod error;
 mod expression_functions;
 mod from_yaml;
@@ -27,7 +29,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     iter,
     num::{NonZeroU16, NonZeroUsize},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -1555,9 +1557,9 @@ impl FromYaml for EndpointProvidesSendOptions {
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 pub(crate) struct EndpointProvidesPreProcessed {
-    send: Option<EndpointProvidesSendOptions>,
-    select: WithMarker<json::Value>,
     for_each: Vec<WithMarker<String>>,
+    select: WithMarker<json::Value>,
+    send: Option<EndpointProvidesSendOptions>,
     where_clause: Option<WithMarker<String>>,
 }
 
@@ -1620,9 +1622,9 @@ impl FromYaml for EndpointProvidesPreProcessed {
         let select = select.ok_or(Error::MissingYamlField("select", marker))?;
         let for_each = for_each.unwrap_or_default();
         let ret = Self {
-            send,
-            select,
             for_each,
+            select,
+            send,
             where_clause,
         };
         Ok((ret, marker))
@@ -1647,9 +1649,9 @@ pub fn default_auto_buffer_start_size() -> usize {
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 struct ClientConfigPreProcessed {
-    request_timeout: PreDuration,
     headers: TupleVec<String, PreTemplate>,
     keepalive: PreDuration,
+    request_timeout: PreDuration,
 }
 
 impl FromYaml for ClientConfigPreProcessed {
@@ -1707,9 +1709,9 @@ impl FromYaml for ClientConfigPreProcessed {
         let keepalive = keepalive.unwrap_or_else(|| default_keepalive(marker));
         let headers = headers.unwrap_or_default();
         let ret = Self {
-            request_timeout,
-            keepalive,
             headers,
+            keepalive,
+            request_timeout,
         };
         Ok((ret, marker))
     }
@@ -2429,7 +2431,7 @@ impl Endpoint {
         static_vars: &BTreeMap<String, json::Value>,
         global_load_pattern: &Option<LoadPattern>,
         global_headers: &[(String, (Template, RequiredProviders))],
-        config_path: &PathBuf,
+        config_path: &Path,
     ) -> Result<Self, Error> {
         let EndpointPreProcessed {
             declare,
@@ -2523,7 +2525,7 @@ impl Endpoint {
                 let value = match body {
                     Body::File(body) => {
                         let template = body.as_template(static_vars, &mut required_providers)?;
-                        BodyTemplate::File(config_path.clone(), template)
+                        BodyTemplate::File(config_path.into(), template)
                     }
                     Body::String(body) => {
                         let template = body.as_template(static_vars, &mut required_providers)?;
@@ -2567,7 +2569,7 @@ impl Endpoint {
                             })
                             .collect::<Result<_, _>>()?;
                         let multipart = MultipartBody {
-                            path: config_path.clone(),
+                            path: config_path.into(),
                             pieces,
                         };
                         BodyTemplate::Multipart(multipart)
@@ -2654,7 +2656,7 @@ impl Endpoint {
 impl LoadTest {
     pub fn from_config(
         bytes: &[u8],
-        config_path: &PathBuf,
+        config_path: &Path,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, Error> {
         let iter = std::str::from_utf8(bytes).unwrap().chars();

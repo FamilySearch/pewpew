@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn range_provider_works() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let range_params = r#"
                 start: 0
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn literals_provider_works() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let jsons = vec![json!(1), json!(2), json!(3)];
             let lwo = config::ListWithOptions {
@@ -416,7 +416,7 @@ mod tests {
             let expect: Vec<_> = vec![json!(1), json!(2)];
 
             // add a short delay to give the literals `prime_tx` enough time to complete
-            time::delay_for(Duration::from_millis(50)).await;
+            time::sleep(Duration::from_millis(50)).await;
 
             let values: Vec<_> = rx.collect().await;
 
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn basic_logger_works() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
                 to: ""
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn basic_logger_works_with_large_data() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
                 to: ""
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn basic_logger_works_with_would_block() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
                 to: ""
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn logger_limit_works() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
                 to: ""
@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn logger_pretty_works() {
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
                 to: ""

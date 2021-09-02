@@ -1101,8 +1101,8 @@ pub const STATS: u16 = 0b00_1000_0000;
 pub const REQUEST_URL: u16 = 0b01_0000_0000;
 pub const ERROR: u16 = 0b10_0000_0000;
 
-#[grammar = "select.pest"]
 #[derive(Parser)]
+#[grammar = "select.pest"]
 struct Parser;
 
 #[derive(Clone, Debug)]

@@ -7,10 +7,10 @@ on:
       - '**/package.json'
       - '**/package-lock.json'
 
-name: Release
+name: Pull Request Javascript
 jobs:
   create-release:
-    name: Update guide
+    name: Build guide
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

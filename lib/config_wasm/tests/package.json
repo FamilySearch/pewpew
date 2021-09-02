@@ -19,7 +19,7 @@
   "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config_wasm#readme",
   "dependencies": {},
   "devDependencies": {
-    "chai": "^4.3.3",
-    "mocha": "^8.3.1"
+    "chai": "^4.3.4",
+    "mocha": "^9.1.1"
   }
 }

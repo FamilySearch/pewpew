@@ -1,6 +1,6 @@
 #!/bin/sh
 ### To build, first install wasm-pack, then run this script
-# cargo install wasm-pack --version 0.8.1
+# cargo install wasm-pack --version 0.10.0
 # cargo install mdbook
 set -e
 set -x
@@ -14,7 +14,7 @@ trap_ctrlc ()
     rm -rf results-viewer/lib/hdr-histogram-wasm
     exit 2
 }
- 
+
 # initialise trap to call trap_ctrlc function
 # when signal 2 (SIGINT) is received
 # https://unix.stackexchange.com/questions/314554/why-do-i-get-an-error-message-when-trying-to-trap-a-sigint-signal

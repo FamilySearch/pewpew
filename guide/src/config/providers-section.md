@@ -34,7 +34,7 @@ The `file` *provider_type* reads data from a file. Every line in the file is rea
 - **`auto_return`** <sub><sup>*Optional*</sup></sub> - This parameter specifies that when this provider is used by a request, after a response is received the value is automatically returned to the provider. Valid options for this parameter are `block`, `force`, and `if_not_full`. See the `send` parameter under the [endpoints.provides subsection](./endpoints-section.md#provides-subsection) for details on the effect of these options.
 - **`buffer`** <sub><sup>*Optional*</sup></sub> - Specifies the soft limit for a provider's buffer. This can be indicated with an integer greater than zero or the value `auto`. The value `auto` indicates that the soft limit can increase as needed. This happens after a provider is full then later becomes empty. Defaults to `auto`.
 - **`format`** <sub><sup>*Optional*</sup></sub> - Specifies the format for the file. The format can be one of `line` (the default), `json`, or `csv`.
-  
+
   The `line` format will read the file one line at a time with each line ending in a newline (`\n`) or a carriage return and a newline (`\r\n`). Every line will attempt to be parsed as JSON, but if it is not valid JSON it will be a string. Note that a JSON object which spans multiple lines in the file, for example, will not parse into a single object.
 
   The `json` format will read the file as a stream of JSON values. Every JSON value must be self-delineating (an object, array or string), or must be separated by whitespace or a self-delineating value. For example, the following:
@@ -151,12 +151,12 @@ The `file` *provider_type* reads data from a file. Every line in the file is rea
   <td>
 
   quote <sub><sup>*Optional*</sup></sub>
-  
+
   </td>
   <td>
 
   Specifies a single-byte character that will be used to quote CSV columns. Defaults to the double-quote character (`"`).
-  
+
   </td>
   </tr>
   </tbody>

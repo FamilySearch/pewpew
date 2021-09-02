@@ -24,13 +24,14 @@ jobs:
 
       - name: Build Results Viewer and Book
         run: |
+          set -x
           # install mdbook and wasm-pack
           mkdir ~/bin
           PATH=$PATH:~/bin
           curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.12/mdbook-v0.4.12-x86_64-unknown-linux-gnu.tar.gz \
             | tar -xz -C ~/bin
 
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.8.1/wasm-pack-v0.8.1-x86_64-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.10.0/wasm-pack-v0.10.0-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
           # setup some envs to various paths for convenience

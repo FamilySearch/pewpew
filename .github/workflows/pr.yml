@@ -78,10 +78,13 @@ jobs:
 
   wasm-pack:
     name: Wasm Build
+    strategy:
+      matrix:
+        wasm-dirctory: [config-wasm, hdr-histogram-wasm]
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/config_wasm
-      test-directory: ./lib/config_wasm/tests
+      wasm-directory: ./lib/${{ matrix.wasm-dirctory }}
+      test-directory: ./lib/${{ matrix.wasm-dirctory }}/tests
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -92,14 +95,14 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.8.1 wasm-pack
+          args: --version 0.10.0 wasm-pack
 
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
           set -x
           wasm-pack build --release -t nodejs
-        working-directory: ${{env.working-directory}}
+        working-directory: ${{env.wasm-directory}}
         shell: bash
 
       - name: Use Node.js 12.x

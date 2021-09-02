@@ -1,7 +1,11 @@
 on:
-  push:
-    tags:
-      - guide-latest
+  pull_request:
+    paths:
+      - '**.js'
+      - '**.ts'
+      - '**.html'
+      - '**/package.json'
+      - '**/package-lock.json'
 
 name: Release
 jobs:
@@ -54,25 +58,3 @@ jobs:
           # build the book
           cd $GUIDE_DIR
           mdbook build
-
-      - name: Update gh-pages branch and push to Github
-        run: |
-          git fetch --no-tags origin gh-pages
-          cd guide
-          # create a git worktree of the gh-pages branch and clear it out
-          git worktree add -B gh-pages gh-pages origin/gh-pages
-          find gh-pages -not -name '.git' -not -name 'gh-pages' -delete
-
-          # copy the source to the gh-pages worktree
-          cp -r book/. gh-pages/
-
-          # commit amend all the changes into the gh-pages branch and force push to github
-          git remote add github "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
-          cd gh-pages
-          git add --all
-
-          git config --global user.name ${GITHUB_ACTOR}
-          git config --global user.email ${GITHUB_ACTOR}@users.noreply.github.com
-
-          git commit --amend --no-edit
-          git push --force github gh-pages

@@ -1,6 +1,6 @@
 const _fs = require("fs");
 const { promisify } = require("util");
-const { Config } = require("../lib/config_wasm/pkg/config_wasm.js");
+const { Config } = require("../lib/config-wasm/pkg/config_wasm.js");
 
 const  readFile = promisify(_fs.readFile);
 

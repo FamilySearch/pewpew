@@ -16,7 +16,7 @@
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },
-  "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config_wasm#readme",
+  "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config-wasm#readme",
   "dependencies": {},
   "devDependencies": {
     "chai": "^4.3.4",

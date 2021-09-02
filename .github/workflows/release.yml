@@ -139,16 +139,12 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  wasm-release:
-    name: Wasm Pack and Upload
+  wasm-release-config:
+    name: Wasm Pack and Upload Config Parser
     needs: ['create-release']
-    strategy:
-      matrix:
-        wasm-dirctory: [config-wasm, hdr-histogram-wasm]
     runs-on: ubuntu-latest
     env:
-      ASSET_NAME: ${{ matrix.wasm-dirctory }}
-      working-directory: ./lib/${{ matrix.wasm-dirctory }}
+      working-directory: ./lib/config-wasm
     steps:
       - uses: actions/checkout@v2
       - name: Download artifacts
@@ -190,13 +186,13 @@ jobs:
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t nodejs
+          wasm-pack build --release -t nodejs --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 
       - name: Compress for Linux
         run: |
-          asset_name="pewpew-$VERSION-$ASSET_NAME.tar.xz"
+          asset_name="pewpew-$VERSION-config-wasm.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
         working-directory: ${{env.working-directory}}/pkg/
@@ -212,6 +208,7 @@ jobs:
           asset_content_type: application/octet-stream
 
 
+  # The hdr-histogram-wasm needs to be build with web rather than nodejs
   wasm-release-histogram:
     name: Wasm Pack and Upload Histogram
     needs: ['create-release']
@@ -259,7 +256,7 @@ jobs:
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t nodejs
+          wasm-pack build --release -t web --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 

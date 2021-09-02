@@ -101,7 +101,7 @@ jobs:
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t nodejs
+          wasm-pack build --release -t nodejs --scope fs
         working-directory: ${{env.wasm-directory}}
         shell: bash
 

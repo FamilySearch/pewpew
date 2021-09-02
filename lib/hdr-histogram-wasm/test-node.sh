@@ -4,4 +4,8 @@
 set -e
 set -x
 
-wasm-pack build --release -t web --scope fs
+wasm-pack build --release -t nodejs --scope fs
+cd tests/
+npm install
+npm test
+cd ..

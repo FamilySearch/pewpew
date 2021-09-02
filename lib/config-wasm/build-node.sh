@@ -4,4 +4,4 @@
 set -e
 set -x
 
-wasm-pack build --release -t nodejs
+wasm-pack build --release -t nodejs --scope fs

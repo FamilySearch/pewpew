@@ -139,12 +139,12 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  wasm-release:
-    name: Wasm Pack and Upload
+  wasm-release-config:
+    name: Wasm Pack and Upload Config Parser
     needs: ['create-release']
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/config_wasm
+      working-directory: ./lib/config-wasm
     steps:
       - uses: actions/checkout@v2
       - name: Download artifacts
@@ -181,18 +181,88 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.8.1 wasm-pack
+          args: --version 0.10.0 wasm-pack
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t nodejs
+          wasm-pack build --release -t nodejs --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 
       - name: Compress for Linux
         run: |
           asset_name="pewpew-$VERSION-config-wasm.tar.xz"
+          echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
+          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
+        working-directory: ${{env.working-directory}}/pkg/
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+          asset_path: ${{env.working-directory}}/pkg/${{ env.ASSET_NAME }}
+          asset_name: ${{ env.ASSET_NAME }}
+          asset_content_type: application/octet-stream
+
+
+  # The hdr-histogram-wasm needs to be build with web rather than nodejs
+  wasm-release-histogram:
+    name: Wasm Pack and Upload Histogram
+    needs: ['create-release']
+    runs-on: ubuntu-latest
+    env:
+      working-directory: ./lib/hdr-histogram-wasm
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: artifacts
+          path: artifacts
+
+      - name: Get upload data
+        id: upload_data
+        shell: bash
+        run: |
+          release_upload_url="$(cat artifacts/release-upload-url)"
+          echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
+          release_version="$(cat artifacts/release-version)"
+          echo "VERSION=$release_version" >> $GITHUB_ENV
+
+      - name: Set Cargo.toml version
+        id: set_cargo_version
+        shell: bash
+        run: |
+          # remove the leading "v" for subsequent usage
+          version=${VERSION/v/}
+          # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
+          cp Cargo.toml Cargo2.toml
+          sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+        working-directory: ${{env.working-directory}}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: --version 0.10.0 wasm-pack
+      - name: Create the Web Assembly
+        id: wasm_pack
+        run: |
+          set -x
+          wasm-pack build --release -t web --scope fs
+        working-directory: ${{env.working-directory}}
+        shell: bash
+
+      - name: Compress for Linux
+        run: |
+          asset_name="pewpew-$VERSION-hdr-histogram-wasm.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
         working-directory: ${{env.working-directory}}/pkg/

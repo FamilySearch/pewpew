@@ -2515,7 +2515,7 @@ impl Endpoint {
             .into_iter()
             .map(|(key, mut value)| {
                 value.no_fail();
-                let value = value.as_template(&static_vars, &mut required_providers)?;
+                let value = value.as_template(static_vars, &mut required_providers)?;
                 Ok((key, value))
             })
             .collect::<Result<_, Error>>()?;

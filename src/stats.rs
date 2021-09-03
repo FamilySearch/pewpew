@@ -52,7 +52,7 @@ mod histogram_serde {
         let mut buf = Vec::new();
         let mut v2_serializer = V2Serializer::new();
         v2_serializer
-            .serialize(&histogram, &mut buf)
+            .serialize(histogram, &mut buf)
             .map_err(|_e| serde::ser::Error::custom("could not serialize HDRHistogram"))?;
         serializer.serialize_str(&base64::encode_config(&buf, base64::STANDARD_NO_PAD))
     }

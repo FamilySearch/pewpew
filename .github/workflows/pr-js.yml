@@ -1,12 +1,16 @@
 on:
-  push:
-    tags:
-      - guide-latest
+  pull_request:
+    paths:
+      - '**.js'
+      - '**.ts'
+      - '**.html'
+      - '**/package.json'
+      - '**/package-lock.json'
 
-name: Release
+name: Pull Request Javascript
 jobs:
   create-release:
-    name: Update guide
+    name: Build guide
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -43,7 +47,7 @@ jobs:
 
           # build the hdr-histogram-wasm for the results viewer
           cd $WASM_LIB_DIR
-          wasm-pack build --release -t web -d $WASM_OUTPUT_DIR --scope fs
+          wasm-pack build --release -t web -d $WASM_OUTPUT_DIR
           cd $WASM_OUTPUT_DIR
           sed -i 's/input = .*import\.meta\.url.*/import(".\/hdr_histogram_wasm_bg.wasm");\ninput = require.resolve(".\/hdr_histogram_wasm_bg.wasm")[0][0];/' hdr_histogram_wasm.js
 
@@ -55,25 +59,3 @@ jobs:
           # build the book
           cd $GUIDE_DIR
           mdbook build
-
-      - name: Update gh-pages branch and push to Github
-        run: |
-          git fetch --no-tags origin gh-pages
-          cd guide
-          # create a git worktree of the gh-pages branch and clear it out
-          git worktree add -B gh-pages gh-pages origin/gh-pages
-          find gh-pages -not -name '.git' -not -name 'gh-pages' -delete
-
-          # copy the source to the gh-pages worktree
-          cp -r book/. gh-pages/
-
-          # commit amend all the changes into the gh-pages branch and force push to github
-          git remote add github "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
-          cd gh-pages
-          git add --all
-
-          git config --global user.name ${GITHUB_ACTOR}
-          git config --global user.email ${GITHUB_ACTOR}@users.noreply.github.com
-
-          git commit --amend --no-edit
-          git push --force github gh-pages

@@ -15,7 +15,7 @@
   import { createEventDispatcher } from "svelte";
   export let buckets = [];
   export let testName;
-  const wasmInit = import("hdr-histogram-wasm")
+  const wasmInit = import("@fs/hdr-histogram-wasm")
     .then((mod) => {
       return mod.default()
     });

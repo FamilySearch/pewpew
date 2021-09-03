@@ -43,7 +43,7 @@ use std::{
     future::Future,
     io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, SeekFrom, Write},
     mem,
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
     task::Poll,
@@ -664,7 +664,7 @@ fn create_try_run_future(
         })"#
     };
     let to = try_config.file.unwrap_or_else(|| "stderr".into());
-    let logger = config::LoggerPreProcessed::from_str(&select, &to).unwrap();
+    let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
     if !try_config.loggers_on {
         config.clear_loggers();
     }
@@ -820,6 +820,7 @@ fn create_load_test_future(
     )?;
 
     // create the endpoints
+    #[allow(clippy::needless_collect)]
     let builders: Vec<_> = config
         .endpoints
         .into_iter()
@@ -914,7 +915,7 @@ fn get_providers_from_config(
     config_providers: &BTreeMap<String, config::Provider>,
     auto_size: usize,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
-    config_path: &PathBuf,
+    config_path: &Path,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();
@@ -981,7 +982,7 @@ fn get_loggers_from_config(
                     .0
                 }
             };
-            let sender = providers::logger(template, &test_ended_tx, writer);
+            let sender = providers::logger(template, test_ended_tx, writer);
             Ok((name, sender))
         })
         .collect()

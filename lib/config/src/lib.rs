@@ -27,7 +27,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     iter,
     num::{NonZeroU16, NonZeroUsize},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -2429,7 +2429,7 @@ impl Endpoint {
         static_vars: &BTreeMap<String, json::Value>,
         global_load_pattern: &Option<LoadPattern>,
         global_headers: &[(String, (Template, RequiredProviders))],
-        config_path: &PathBuf,
+        config_path: &Path,
     ) -> Result<Self, Error> {
         let EndpointPreProcessed {
             declare,
@@ -2513,7 +2513,7 @@ impl Endpoint {
             .into_iter()
             .map(|(key, mut value)| {
                 value.no_fail();
-                let value = value.as_template(&static_vars, &mut required_providers)?;
+                let value = value.as_template(static_vars, &mut required_providers)?;
                 Ok((key, value))
             })
             .collect::<Result<_, Error>>()?;
@@ -2523,7 +2523,7 @@ impl Endpoint {
                 let value = match body {
                     Body::File(body) => {
                         let template = body.as_template(static_vars, &mut required_providers)?;
-                        BodyTemplate::File(config_path.clone(), template)
+                        BodyTemplate::File(config_path.to_path_buf(), template)
                     }
                     Body::String(body) => {
                         let template = body.as_template(static_vars, &mut required_providers)?;
@@ -2567,7 +2567,7 @@ impl Endpoint {
                             })
                             .collect::<Result<_, _>>()?;
                         let multipart = MultipartBody {
-                            path: config_path.clone(),
+                            path: config_path.to_path_buf(),
                             pieces,
                         };
                         BodyTemplate::Multipart(multipart)
@@ -2654,6 +2654,7 @@ impl Endpoint {
 impl LoadTest {
     pub fn from_config(
         bytes: &[u8],
+        #[allow(clippy::ptr_arg)]
         config_path: &PathBuf,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, Error> {

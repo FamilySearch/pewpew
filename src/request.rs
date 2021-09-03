@@ -8,7 +8,7 @@ use self::request_maker::RequestMaker;
 
 use request_maker::ProviderDelays;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use ether::{Either, Either3, EitherExt};
 use for_each_parallel::ForEachParallel;
 use futures::{
@@ -26,7 +26,10 @@ use hyper_tls::HttpsConnector;
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
-use tokio::{fs::File as TokioFile, io::AsyncRead};
+use tokio::{
+    fs::File as TokioFile,
+    io::{AsyncRead, ReadBuf},
+};
 use zip_all::zip_all;
 
 use crate::error::{RecoverableError, TestError};
@@ -517,12 +520,17 @@ async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), Te
     };
 
     let stream = stream::poll_fn(move |cx| {
-        let mut buffer = BytesMut::with_capacity(8192);
-        match Pin::new(&mut file).poll_read_buf(cx, &mut buffer) {
+        let mut buffer = vec![0; 8192];
+        let mut buf = ReadBuf::new(&mut buffer);
+        match Pin::new(&mut file).poll_read(cx, &mut buf) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
-            Poll::Ready(Ok(0)) => Poll::Ready(None),
-            Poll::Ready(Ok(_)) => Poll::Ready(Some(Ok(buffer))),
+            Poll::Ready(Ok(_)) if buf.filled().is_empty() => Poll::Ready(None),
+            Poll::Ready(Ok(_)) => {
+                let len = buf.filled().len();
+                buffer.truncate(len);
+                Poll::Ready(Some(Ok(buffer)))
+            }
         }
     });
 
@@ -871,7 +879,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .await
         };
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         let streamed_bytes = rt.block_on(f);
         let file_bytes = include_bytes!("../tests/test.jpg").to_vec();
         assert_eq!(file_bytes, streamed_bytes);

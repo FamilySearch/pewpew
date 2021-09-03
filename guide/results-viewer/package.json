@@ -5,7 +5,7 @@
   "main": "index.js",
   "devDependencies": {
     "@fs/hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
-    "@babel/core": "^7.15.0",
+    "@babel/core": "^7.15.4",
     "@babel/plugin-syntax-import-meta": "^7.10.4",
     "@babel/preset-env": "7.13.8",
     "@types/chart.js": "^2.9.34",

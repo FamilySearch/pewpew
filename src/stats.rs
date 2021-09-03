@@ -20,6 +20,7 @@ use tokio::{
     sync::broadcast,
     time::{self, Duration, Instant},
 };
+use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use yansi::Paint;
 
 use std::{
@@ -673,7 +674,7 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
 
 // create the stats channel for a try run
 pub fn create_try_run_stats_channel(
-    mut test_complete: broadcast::Receiver<Result<TestEndReason, TestError>>,
+    mut test_complete: BroadcastStream<Result<TestEndReason, TestError>>,
     mut console: FCSender<MsgType>,
 ) -> futures_channel::UnboundedSender<StatsMessage> {
     let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
@@ -754,7 +755,7 @@ pub fn create_stats_channel(
         Vec::new()
     };
 
-    let mut test_complete = test_killer.subscribe();
+    let mut test_complete = BroadcastStream::new(test_killer.subscribe());
 
     let mut stats = Stats::new(
         &file_path,
@@ -772,7 +773,8 @@ pub fn create_stats_channel(
 
     // create the task responsible for receiving incoming statistics
     let stats_receiver_task = async move {
-        let mut print_stats_interval = time::interval_at(now + next_bucket, bucket_size);
+        let mut print_stats_interval =
+            IntervalStream::new(time::interval_at(now + next_bucket, bucket_size));
         // create a stream which combines getting incoming messages, printing stats on an interval
         // and checking if the test has ended
         enum StreamItem {

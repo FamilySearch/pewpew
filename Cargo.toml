@@ -21,7 +21,7 @@ path = "src/bin/test_server.rs"
 atty = "0.2"
 base64 = "0.13"
 body_reader = { path = "./lib/body_reader" }
-bytes = "0.5"
+bytes = "1"
 channel = { path = "./lib/channel" }
 clap = "2"
 config = { path = "./lib/config" }
@@ -34,8 +34,8 @@ futures = "0.3"
 futures-timer = "3"
 hdrhistogram = "7"
 http = "0.2"
-hyper = "0.13"
-hyper-tls = "0.4"
+hyper = { version = "0.14", features = ["client", "http1", "http2", "stream"] }
+hyper-tls = "0.5"
 itertools = "0.10"
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
@@ -45,8 +45,8 @@ select_any = { path = "./lib/select_any" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 test_common = { path = "./lib/test_common" }
-tokio = "0.2"
-tokio-tls = "0.3"
+tokio = "1"
+tokio-stream = { version = "0.1", features = ["sync", "time"] }
 url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }

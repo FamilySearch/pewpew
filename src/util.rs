@@ -1,6 +1,6 @@
 use serde_json as json;
 
-use std::{borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, path::Path};
 
 pub fn str_to_json(s: &str) -> json::Value {
     json::from_str(s).unwrap_or_else(|_| json::Value::String(s.into()))
@@ -14,7 +14,7 @@ pub fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
     }
 }
 
-pub fn tweak_path(rest: &mut String, base: &PathBuf) {
+pub fn tweak_path(rest: &mut String, base: &Path) {
     *rest = base.with_file_name(&rest).to_string_lossy().into();
 }
 

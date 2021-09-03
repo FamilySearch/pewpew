@@ -32,6 +32,7 @@ use mod_interval::{ModInterval, PerX};
 use native_tls::TlsConnector;
 use serde_json as json;
 use tokio::{sync::broadcast, task::spawn_blocking};
+use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use yansi::Paint;
 
 use std::{
@@ -43,7 +44,7 @@ use std::{
     future::Future,
     io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, SeekFrom, Write},
     mem,
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
     task::Poll,
@@ -207,10 +208,10 @@ pub struct RunConfig {
     pub config_file: PathBuf,
     pub output_format: RunOutputFormat,
     pub results_dir: Option<PathBuf>,
+    pub start_at: Option<Duration>,
     pub stats_file: PathBuf,
     pub stats_file_format: StatsFileFormat,
     pub watch_config_file: bool,
-    pub start_at: Option<Duration>,
 }
 
 #[derive(Clone)]
@@ -222,10 +223,10 @@ pub enum TryFilter {
 #[derive(Clone)]
 pub struct TryConfig {
     pub config_file: PathBuf,
-    pub loggers_on: bool,
     pub file: Option<String>,
     pub filters: Option<Vec<TryFilter>>,
     pub format: TryRunFormat,
+    pub loggers_on: bool,
     pub results_dir: Option<PathBuf>,
 }
 
@@ -265,7 +266,7 @@ async fn _create_run(
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
-    mut test_ended_rx: broadcast::Receiver<Result<TestEndReason, TestError>>,
+    mut test_ended_rx: BroadcastStream<Result<TestEndReason, TestError>>,
 ) -> Result<TestEndReason, TestError> {
     let config_file = exec_config.get_config_file().clone();
     let config_file2 = config_file.clone();
@@ -285,7 +286,7 @@ async fn _create_run(
 
     // watch for ctrl-c and kill the test
     let test_ended_tx2 = test_ended_tx.clone();
-    let mut test_ended_rx2 = test_ended_tx.subscribe();
+    let mut test_ended_rx2 = BroadcastStream::new(test_ended_tx.subscribe());
     tokio::spawn(future::poll_fn(move |cx| {
         match ctrlc_channel.poll_next_unpin(cx) {
             Poll::Ready(r) => {
@@ -388,6 +389,7 @@ where
     Se: Write + Send + 'static,
 {
     let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
+    let test_ended_rx = BroadcastStream::new(test_ended_rx);
     let output_format = exec_config.get_output_format();
     let (stdout, stdout_done) = blocking_writer(stdout, test_ended_tx.clone(), "stdout".into());
     let (mut stderr, stderr_done) = blocking_writer(stderr, test_ended_tx.clone(), "stderr".into());
@@ -477,9 +479,9 @@ fn create_config_watcher(
     mut previous_providers: Arc<BTreeMap<String, providers::Provider>>,
 ) {
     let start_time = Instant::now();
-    let mut interval = tokio::time::interval(Duration::from_millis(1000));
+    let mut interval = IntervalStream::new(tokio::time::interval(Duration::from_millis(1000)));
     let mut last_modified = None;
-    let mut test_end_rx = test_ended_tx.subscribe();
+    let mut test_end_rx = BroadcastStream::new(test_ended_tx.subscribe());
     let stream = stream::poll_fn(move |cx| match interval.poll_next_unpin(cx) {
         Poll::Ready(_) => Poll::Ready(Some(())),
         Poll::Pending => match test_end_rx.poll_next_unpin(cx) {
@@ -765,7 +767,8 @@ fn create_try_run_future(
     let client = create_http_client(config_config.client.keepalive)?;
 
     // create the stats channel
-    let stats_tx = create_try_run_stats_channel(test_ended_tx.subscribe(), stderr);
+    let test_complete = BroadcastStream::new(test_ended_tx.subscribe());
+    let stats_tx = create_try_run_stats_channel(test_complete, stderr);
 
     let mut builder_ctx = request::BuilderContext {
         config: config_config,
@@ -778,7 +781,7 @@ fn create_try_run_future(
 
     let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
 
-    let mut test_ended_rx = test_ended_tx.subscribe();
+    let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
     let mut left = try_join_all(endpoint_calls).map(move |r| {
         let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
     });
@@ -873,7 +876,7 @@ fn create_load_test_future(
     let _ = stats_tx.unbounded_send(StatsMessage::Start(duration));
     let mut f = try_join_all(endpoint_calls);
     let mut test_timeout = Delay::new(duration);
-    let mut test_ended_rx = test_ended_tx.subscribe();
+    let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
     let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
         Poll::Ready(r) => {
             let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
@@ -914,7 +917,7 @@ fn get_providers_from_config(
     config_providers: &BTreeMap<String, config::Provider>,
     auto_size: usize,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
-    config_path: &PathBuf,
+    config_path: &Path,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();

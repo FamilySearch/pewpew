@@ -153,7 +153,7 @@ mod tests {
             }
         });
         let start = Instant::now();
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(fep).unwrap();
         let elapsed = start.elapsed();
         // check that the function ran n times
@@ -185,7 +185,7 @@ mod tests {
             }
         });
         let start = Instant::now();
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(fep).unwrap();
         let elapsed = start.elapsed();
         // check that the function ran n times
@@ -218,7 +218,7 @@ mod tests {
             }
         });
         // let start = Instant::now();
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(fep).unwrap();
         // let elapsed = start.elapsed();
         // check that the function ran n times

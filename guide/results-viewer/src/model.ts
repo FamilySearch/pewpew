@@ -1,4 +1,4 @@
-import { HDRHistogram } from "hdr-histogram-wasm";
+import { HDRHistogram } from "@fs/hdr-histogram-wasm";
 type CheckType = string | ((x: unknown) => boolean);
 type Check = [string, CheckType];
 

@@ -1,0 +1,25 @@
+{
+  "name": "hdr-histogram-wasm-tests",
+  "version": "0.0.0",
+  "description": "Integration tests for the hdr-histogram-wasm web assembly",
+  "main": "test.js",
+  "scripts": {
+    "test": "mocha test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FamilySearch/pewpew.git"
+  },
+  "engines": {
+    "node": "^12.20.0"
+  },
+  "bugs": {
+    "url": "https://github.com/FamilySearch/pewpew/issues"
+  },
+  "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/hdr-histogram-wasm#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "chai": "^4.3.4",
+    "mocha": "^9.1.1"
+  }
+}

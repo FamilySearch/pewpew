@@ -88,7 +88,7 @@
 <script>
   import { RTTChart, StatusCountsChart } from "./charts.ts";
   import { onMount } from "svelte";
-  
+
   let rttCanvas, totalCallsCanvas;
 
   export let tags, dataPoints;
@@ -106,9 +106,9 @@
     logarithmic: "log(n)",
     linear: "n"
   };
-  
+
   $: initializeData(dataPoints);
-  
+
   let mounted = false;
   onMount(() => {
     mounted = true;

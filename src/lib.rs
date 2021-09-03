@@ -666,7 +666,7 @@ fn create_try_run_future(
         })"#
     };
     let to = try_config.file.unwrap_or_else(|| "stderr".into());
-    let logger = config::LoggerPreProcessed::from_str(&select, &to).unwrap();
+    let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
     if !try_config.loggers_on {
         config.clear_loggers();
     }
@@ -823,6 +823,7 @@ fn create_load_test_future(
     )?;
 
     // create the endpoints
+    #[allow(clippy::needless_collect)]
     let builders: Vec<_> = config
         .endpoints
         .into_iter()
@@ -984,7 +985,7 @@ fn get_loggers_from_config(
                     .0
                 }
             };
-            let sender = providers::logger(template, &test_ended_tx, writer);
+            let sender = providers::logger(template, test_ended_tx, writer);
             Ok((name, sender))
         })
         .collect()

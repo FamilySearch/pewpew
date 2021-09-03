@@ -71,7 +71,7 @@ members = [
     "lib/body_reader",
     "lib/channel",
     "lib/config",
-    "lib/config_wasm",
+    "lib/config-wasm",
     "lib/either",
     "lib/hdr-histogram-wasm",
     "lib/for_each_parallel",

@@ -206,7 +206,7 @@ impl YamlEvent {
 
     pub fn as_x<F: FromStr>(&self) -> Option<F> {
         if let YamlEvent::Scalar(s, TScalarStyle::Plain, _) = self {
-            F::from_str(&s).ok()
+            F::from_str(s).ok()
         } else {
             None
         }

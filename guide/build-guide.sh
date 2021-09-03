@@ -39,4 +39,4 @@ npm run build
 
 # build the book
 cd $GUIDE_DIR
-mdbook serve
+mdbook build

@@ -264,7 +264,7 @@ jobs:
         run: |
           asset_name="pewpew-$VERSION-hdr-histogram-wasm.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
+          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json hdr*
         working-directory: ${{env.working-directory}}/pkg/
 
       - name: Upload release asset

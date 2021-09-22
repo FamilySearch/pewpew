@@ -4,6 +4,10 @@ os:
   - linux
   - osx
   - windows
+dist: focal
+
+env:
+  - NODE_VERSION="12"
 
 rust:
   - stable
@@ -11,20 +15,42 @@ branches:
   only:
     - master
 before_install:
-  - echo -e "machine github.com\n  login $CI_USER_TOKEN" > ~/.netrc
-  - echo "//familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-  - echo "@fs:registry=https://familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/" >> ~/.npmrc
   - cargo install rustfmt
   - cargo install clippy
   - cargo install --version 0.9.0 cargo-deny
+  - cargo install --version 0.10.0 wasm-pack
+  - nvm install $NODE_VERSION
+  - node --version
 
 script:
   - cargo build
   - cargo test --all
-  - cargo fmt --all -- --check
-  - cargo clippy --all -- -D warnings
-  - cargo deny check --hide-inclusion-graph license sources advisories
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      cargo fmt --all -- --check
+    fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      cargo clippy --all -- -D warnings
+    fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      cargo deny check --hide-inclusion-graph license sources advisories
+    fi
   # - Wasm build
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      cd ./lib/config-wasm
+      wasm-pack build --release -t nodejs --scope fs
+      cd tests/
+      npm ci
+      npm test
+      cd ../../..
+    fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      cd ./lib/hdr-histogram-wasm
+      wasm-pack build --release -t nodejs --scope fs
+      cd tests/
+      npm ci
+      npm test
+      cd ../../..
+    fi
 
 # deploy:
 #   - provider: script

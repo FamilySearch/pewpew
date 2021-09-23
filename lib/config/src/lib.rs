@@ -24,12 +24,14 @@ pub use select_parser::{
 use serde_json as json;
 use yaml_rust::scanner::{Marker, Scanner};
 
+use log::{debug, error, LevelFilter};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     iter,
     num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
+    str::FromStr,
     time::Duration,
 };
 
@@ -1737,6 +1739,7 @@ pub struct GeneralConfig {
     pub bucket_size: Duration,
     pub log_provider_stats: Option<bool>,
     pub watch_transition_time: Option<Duration>,
+    pub log_level: Option<LevelFilter>,
 }
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
@@ -1745,6 +1748,7 @@ struct GeneralConfigPreProcessed {
     bucket_size: PreDuration,
     log_provider_stats: Option<bool>,
     watch_transition_time: Option<PreDuration>,
+    pub log_level: Option<LevelFilter>,
 }
 
 impl DefaultWithMarker for GeneralConfigPreProcessed {
@@ -1754,6 +1758,7 @@ impl DefaultWithMarker for GeneralConfigPreProcessed {
             bucket_size: default_bucket_size(marker),
             log_provider_stats: Some(true),
             watch_transition_time: None,
+            log_level: None,
         }
     }
 }
@@ -1764,6 +1769,7 @@ impl FromYaml for GeneralConfigPreProcessed {
         let mut bucket_size = None;
         let mut log_provider_stats = None;
         let mut watch_transition_time = None;
+        let mut log_level = None;
 
         let mut first_marker = None;
         let mut saw_opening = false;
@@ -1804,6 +1810,7 @@ impl FromYaml for GeneralConfigPreProcessed {
                         // Check for 'false' and change to None
                         let d: String = FromYaml::parse_into(decoder)
                             .map_err(map_yaml_deserialize_err(s.clone()))?;
+                        debug!("log_provider_stats: {}", d);
                         if d.eq_ignore_ascii_case("false") {
                             log_provider_stats = None;
                         } else if d.eq_ignore_ascii_case("true") {
@@ -1813,7 +1820,8 @@ impl FromYaml for GeneralConfigPreProcessed {
                             // was a duration of when provider stats were logged, it actually output at the rate of bucket_size regardless.
                             // Going forward it is on by default, we only want to allow turning it off via "false".
                             // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
-                            duration_from_string(d).map_err(move |_err| {
+                            duration_from_string(d.clone()).map_err(|err| {
+                                debug!("duration_from_string error {}/{}: {}", s, d, err);
                                 // We don't want to return a duration error, we want to just say there was a problem with the "name"
                                 Error::YamlDeserialize(Some(s), marker)
                             })?;
@@ -1824,6 +1832,17 @@ impl FromYaml for GeneralConfigPreProcessed {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
                         watch_transition_time = Some(b);
+                    }
+                    "log_level" => {
+                        let d: String = FromYaml::parse_into(decoder)
+                            .map_err(map_yaml_deserialize_err(s.clone()))?;
+                        debug!("log_level string: {}", d);
+                        let level = LevelFilter::from_str(&d).map_err(|err| {
+                            error!("Could not parse LevelFilter from {}/{}: {}", s, d, err);
+                            Error::YamlDeserialize(Some(s), marker)
+                        })?;
+                        debug!("log_level: {}", level);
+                        log_level = Some(level);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                 },
@@ -1836,6 +1855,7 @@ impl FromYaml for GeneralConfigPreProcessed {
             bucket_size,
             log_provider_stats,
             watch_transition_time,
+            log_level,
         };
         Ok((ret, marker))
     }
@@ -2301,6 +2321,13 @@ impl FromYaml for PreLoadPattern {
     }
 }
 
+// impl FromYaml for LevelFilter {
+//   fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
+//       let (p, marker) = FromYaml::parse(decoder)?;
+//       Ok((Self(p), marker))
+//   }
+// }
+
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 struct PreHitsPer(PreTemplate);
 
@@ -2720,6 +2747,7 @@ impl LoadTest {
                     .watch_transition_time
                     .map(|b| b.evaluate(&vars))
                     .transpose()?,
+                log_level: c.config.general.log_level,
             },
         };
         let mut load_test_errors = Vec::new();

@@ -174,12 +174,8 @@ fn main() {
         )
         .expect("output_format cli arg unrecognized");
         match output_format {
-            RunOutputFormat::Json => {
-                json_env_logger::init();
-            }
-            _ => {
-                env_logger::init();
-            }
+            RunOutputFormat::Json => json_env_logger::init(),
+            _ => env_logger::init(),
         }
         let stats_file = matches
             .value_of_os("stats-file")
@@ -264,6 +260,10 @@ fn main() {
             .value_of("format")
             .and_then(|f| f.try_into().ok())
             .unwrap_or_default();
+        match format {
+            TryRunFormat::Json => json_env_logger::init(),
+            _ => env_logger::init(),
+        }
         let file = matches.value_of("file").map(Into::into);
         let try_config = TryConfig {
             config_file,

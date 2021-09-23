@@ -4,7 +4,8 @@ use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use pewpew::{
-    create_run, ExecConfig, RunConfig, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,
+    create_run, ExecConfig, RunConfig, RunOutputFormat, StatsFileFormat, TryConfig, TryFilter,
+    TryRunFormat,
 };
 use regex::Regex;
 use tokio::runtime;
@@ -172,6 +173,14 @@ fn main() {
                 .expect("should have output_format cli arg"),
         )
         .expect("output_format cli arg unrecognized");
+        match output_format {
+            RunOutputFormat::Json => {
+                json_env_logger::init();
+            }
+            _ => {
+                env_logger::init();
+            }
+        }
         let stats_file = matches
             .value_of_os("stats-file")
             .map(PathBuf::from)

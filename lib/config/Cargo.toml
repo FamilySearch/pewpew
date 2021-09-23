@@ -28,6 +28,7 @@ unicode-segmentation = "1"
 yaml-rust = "0.4"
 zip_all = { path = "../zip_all" }
 js-sys = "0.3"
+log = "=0.4.13"
 
 [dev-dependencies]
 maplit = "1"

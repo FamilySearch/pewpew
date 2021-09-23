@@ -1645,6 +1645,10 @@ fn default_bucket_size(marker: Marker) -> PreDuration {
     PreDuration(PreTemplate::new(WithMarker::new("60s".into(), marker)))
 }
 
+fn default_log_provider_stats() -> bool {
+    true
+}
+
 pub fn default_auto_buffer_start_size() -> usize {
     5
 }
@@ -1737,7 +1741,7 @@ impl DefaultWithMarker for ClientConfigPreProcessed {
 pub struct GeneralConfig {
     pub auto_buffer_start_size: usize,
     pub bucket_size: Duration,
-    pub log_provider_stats: Option<bool>,
+    pub log_provider_stats: bool,
     pub watch_transition_time: Option<Duration>,
     pub log_level: Option<LevelFilter>,
 }
@@ -1746,7 +1750,7 @@ pub struct GeneralConfig {
 struct GeneralConfigPreProcessed {
     auto_buffer_start_size: usize,
     bucket_size: PreDuration,
-    log_provider_stats: Option<bool>,
+    log_provider_stats: bool,
     watch_transition_time: Option<PreDuration>,
     pub log_level: Option<LevelFilter>,
 }
@@ -1756,7 +1760,7 @@ impl DefaultWithMarker for GeneralConfigPreProcessed {
         GeneralConfigPreProcessed {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(marker),
-            log_provider_stats: Some(true),
+            log_provider_stats: default_log_provider_stats(),
             watch_transition_time: None,
             log_level: None,
         }
@@ -1767,7 +1771,7 @@ impl FromYaml for GeneralConfigPreProcessed {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut auto_buffer_start_size = default_auto_buffer_start_size();
         let mut bucket_size = None;
-        let mut log_provider_stats = None;
+        let mut log_provider_stats = default_log_provider_stats();
         let mut watch_transition_time = None;
         let mut log_level = None;
 
@@ -1812,9 +1816,9 @@ impl FromYaml for GeneralConfigPreProcessed {
                             .map_err(map_yaml_deserialize_err(s.clone()))?;
                         debug!("log_provider_stats: {}", d);
                         if d.eq_ignore_ascii_case("false") {
-                            log_provider_stats = None;
+                            log_provider_stats = false;
                         } else if d.eq_ignore_ascii_case("true") {
-                            log_provider_stats = Some(true);
+                            log_provider_stats = true;
                         } else {
                             // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
                             // was a duration of when provider stats were logged, it actually output at the rate of bucket_size regardless.
@@ -1825,7 +1829,7 @@ impl FromYaml for GeneralConfigPreProcessed {
                                 // We don't want to return a duration error, we want to just say there was a problem with the "name"
                                 Error::YamlDeserialize(Some(s), marker)
                             })?;
-                            log_provider_stats = Some(true);
+                            log_provider_stats = true;
                         }
                     }
                     "watch_transition_time" => {

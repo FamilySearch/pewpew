@@ -177,6 +177,7 @@ fn main() {
             RunOutputFormat::Json => json_env_logger::init(),
             _ => env_logger::init(),
         }
+        log::warn!("log::max_level() = {}", log::max_level());
         let stats_file = matches
             .value_of_os("stats-file")
             .map(PathBuf::from)
@@ -264,6 +265,7 @@ fn main() {
             TryRunFormat::Json => json_env_logger::init(),
             _ => env_logger::init(),
         }
+        log::warn!("log::max_level() = {}", log::max_level());
         let file = matches.value_of("file").map(Into::into);
         let try_config = TryConfig {
             config_file,

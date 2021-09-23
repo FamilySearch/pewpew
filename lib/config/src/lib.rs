@@ -1735,7 +1735,7 @@ impl DefaultWithMarker for ClientConfigPreProcessed {
 pub struct GeneralConfig {
     pub auto_buffer_start_size: usize,
     pub bucket_size: Duration,
-    pub log_provider_stats: Option<Duration>,
+    pub log_provider_stats: Option<bool>,
     pub watch_transition_time: Option<Duration>,
 }
 
@@ -1743,7 +1743,7 @@ pub struct GeneralConfig {
 struct GeneralConfigPreProcessed {
     auto_buffer_start_size: usize,
     bucket_size: PreDuration,
-    log_provider_stats: Option<PreDuration>,
+    log_provider_stats: Option<bool>,
     watch_transition_time: Option<PreDuration>,
 }
 
@@ -1752,7 +1752,7 @@ impl DefaultWithMarker for GeneralConfigPreProcessed {
         GeneralConfigPreProcessed {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(marker),
-            log_provider_stats: None,
+            log_provider_stats: Some(true),
             watch_transition_time: None,
         }
     }
@@ -1801,9 +1801,24 @@ impl FromYaml for GeneralConfigPreProcessed {
                         bucket_size = Some(a);
                     }
                     "log_provider_stats" => {
-                        let b =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        log_provider_stats = Some(b);
+                        // Check for 'false' and change to None
+                        let d: String = FromYaml::parse_into(decoder)
+                            .map_err(map_yaml_deserialize_err(s.clone()))?;
+                        if d.eq_ignore_ascii_case("false") {
+                            log_provider_stats = None;
+                        } else if d.eq_ignore_ascii_case("true") {
+                            log_provider_stats = Some(true);
+                        } else {
+                            // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
+                            // was a duration of when provider stats were logged, it actually output at the rate of bucket_size regardless.
+                            // Going forward it is on by default, we only want to allow turning it off via "false".
+                            // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
+                            duration_from_string(d).map_err(move |_err| {
+                                // We don't want to return a duration error, we want to just say there was a problem with the "name"
+                                Error::YamlDeserialize(Some(s), marker)
+                            })?;
+                            log_provider_stats = Some(true);
+                        }
                     }
                     "watch_transition_time" => {
                         let b =
@@ -2698,12 +2713,7 @@ impl LoadTest {
             general: GeneralConfig {
                 auto_buffer_start_size: c.config.general.auto_buffer_start_size,
                 bucket_size: c.config.general.bucket_size.evaluate(&vars)?,
-                log_provider_stats: c
-                    .config
-                    .general
-                    .log_provider_stats
-                    .map(|b| b.evaluate(&vars))
-                    .transpose()?,
+                log_provider_stats: c.config.general.log_provider_stats,
                 watch_transition_time: c
                     .config
                     .general

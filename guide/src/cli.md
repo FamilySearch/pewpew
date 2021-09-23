@@ -82,3 +82,9 @@ The `-d`, `--results-directory` parameter will store any log files (if the `--lo
 <br/><br/>
 
 In both the `run` and `try` subcommands a [config file](./config.md) is required.
+
+## environment variables
+While most environment variables are passed on to the [vars](./config/vars-section.md) section of the [config](./config.md) file, there are a few that affect the pewpew executable.
+
+- **`RUST_BACKTRACE`** <sub><sup>*Optional*</sup></sub> - Enable display of the stack backtrace on errors. Providing any parameter (other than falsey/0) will enable this. Examples. `RUST_BACKTRACE=1` or `RUST_BACKTRACE=full`.
+- **`RUST_LOG`** <sub><sup>*Optional*</sup></sub> - A [LevelFilter](https://github.com/rust-lang/log/blob/master/src/lib.rs#L575) specifying what level for pewpew to log at. Allowed values are `Off`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`. Default is `Error`. See [Enable Logging](https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging) for more complex options for `RUST_LOG`.

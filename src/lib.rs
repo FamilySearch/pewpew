@@ -306,24 +306,6 @@ async fn _create_run(
     let config_file_path = exec_config.get_config_file().clone();
     let mut config =
         config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
-    // The original design was to have the log level be set (or updated) from the
-    // config -> general section of the yaml file. After much pain and debugging,
-    // I found that you can't modify the log level after the fact. While there is a
-    // log::set_max_level https://docs.rs/log/0.4.14/log/fn.set_max_level.html, it's docs say
-    // "Generally, this should only be called by the active logging implementation" and when used,
-    // doesn't actually lead to the correct levels being logged. If we can get it working later, add these docs
-    // Docs for later
-    // - **`log_level`** <sub><sup>*Optional*</sup></sub> - A [LevelFilter](https://github.com/rust-lang/log/blob/master/src/lib.rs#L575) specifying what level for pewpew to log at. This option overrides the `RUST_LOG` environment variable which can also be used to specify logging levels. Allowed values are `Off`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`. Default is `Error`.
-    // Code for later
-    // match config.config.general.log_level {
-    //   Some(level) => {
-    //     log::error!("set_max_level - old: {}, new: {}", log::max_level(), level);
-    //     log::set_max_level(level);
-    //     log::error!("log_level set in config to {}", log::max_level());
-    //   }
-    //   None => { log::debug!("log_level not set in config"); }
-    // }
-
     let test_runner = match exec_config {
         ExecConfig::Try(t) => {
             create_try_run_future(config, t, test_ended_tx.clone(), stdout, stderr).map(Either::A)

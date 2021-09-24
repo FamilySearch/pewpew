@@ -23,7 +23,7 @@ fn get_logging_initialized() -> bool {
 }
 
 fn init_logging(log_level: JsValue) {
-    if get_logging_initialized() == false {
+    if !get_logging_initialized() {
         // Use a LevelFilter instead of Level so we can set it to "off"
         let mut level_filter = default_log_level();
         if !log_level.is_undefined() {

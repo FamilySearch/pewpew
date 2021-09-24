@@ -1799,59 +1799,61 @@ impl FromYaml for GeneralConfigPreProcessed {
                 YamlEvent::SequenceEnd => {
                     unreachable!("shouldn't see sequence end");
                 }
-                YamlEvent::Scalar(s, ..) => match s.as_str() {
-                    "auto_buffer_start_size" => {
-                        let c =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        auto_buffer_start_size = c;
-                    }
-                    "bucket_size" => {
-                        let a =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        bucket_size = Some(a);
-                    }
-                    "log_provider_stats" => {
-                        // We can't parse directly to a bool to allow for backwards compitibility with the old duration
-                        let d: String = FromYaml::parse_into(decoder)
-                        .map_err(map_yaml_deserialize_err(s.clone()))?;
-                        debug!("log_provider_stats: {}", d);
-                        // Check for 'true' or 'false' and change to false
-                        log_provider_stats = match d.parse::<bool>() {
-                            Ok(value) => value,
-                            Err(bool_err) => {
-                                debug!("log_provider_stats error {}/{}: {}", s, d, bool_err);
-                                // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
-                                // was used to determine when provider stats were logged, it actually output at the rate of bucket_size regardless.
-                                // Going forward it is on by default, we only want to allow turning it off via "false".
-                                // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
-                                duration_from_string(d.clone()).map_err(|err| {
+                YamlEvent::Scalar(s, ..) => {
+                    match s.as_str() {
+                        "auto_buffer_start_size" => {
+                            let c = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            auto_buffer_start_size = c;
+                        }
+                        "bucket_size" => {
+                            let a = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            bucket_size = Some(a);
+                        }
+                        "log_provider_stats" => {
+                            // We can't parse directly to a bool to allow for backwards compitibility with the old duration
+                            let d: String = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s.clone()))?;
+                            debug!("log_provider_stats: {}", d);
+                            // Check for 'true' or 'false' and change to false
+                            log_provider_stats = match d.parse::<bool>() {
+                                Ok(value) => value,
+                                Err(bool_err) => {
+                                    debug!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                    // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
+                                    // was used to determine when provider stats were logged, it actually output at the rate of bucket_size regardless.
+                                    // Going forward it is on by default, we only want to allow turning it off via "false".
+                                    // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
+                                    duration_from_string(d.clone()).map_err(|err| {
                                     error!("log_provider_stats error {}/{}: {}", s, d, bool_err);
                                     debug!("log_provider_stats duration_from_string error {}/{}: {}", s, d, err);
                                     // We don't want to return a duration error, we want to just say there was a problem with the "name"
                                     Error::YamlDeserialize(Some(s), marker)
                                 })?;
-                                true
-                            }
-                        };
+                                    true
+                                }
+                            };
+                        }
+                        "watch_transition_time" => {
+                            let b = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            watch_transition_time = Some(b);
+                        }
+                        "log_level" => {
+                            let d: String = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s.clone()))?;
+                            debug!("log_level string: {}", d);
+                            let level = LevelFilter::from_str(&d).map_err(|err| {
+                                error!("Could not parse LevelFilter from {}/{}: {}", s, d, err);
+                                Error::YamlDeserialize(Some(s), marker)
+                            })?;
+                            debug!("log_level: {}", level);
+                            log_level = Some(level);
+                        }
+                        _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                     }
-                    "watch_transition_time" => {
-                        let b =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        watch_transition_time = Some(b);
-                    }
-                    "log_level" => {
-                        let d: String = FromYaml::parse_into(decoder)
-                            .map_err(map_yaml_deserialize_err(s.clone()))?;
-                        debug!("log_level string: {}", d);
-                        let level = LevelFilter::from_str(&d).map_err(|err| {
-                            error!("Could not parse LevelFilter from {}/{}: {}", s, d, err);
-                            Error::YamlDeserialize(Some(s), marker)
-                        })?;
-                        debug!("log_level: {}", level);
-                        log_level = Some(level);
-                    }
-                    _ => return Err(Error::UnrecognizedKey(s, None, marker)),
-                },
+                }
             }
         }
         let marker = first_marker.expect("should have a marker");
@@ -2326,13 +2328,6 @@ impl FromYaml for PreLoadPattern {
         Ok((Self(patterns, marker), marker))
     }
 }
-
-// impl FromYaml for LevelFilter {
-//   fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
-//       let (p, marker) = FromYaml::parse(decoder)?;
-//       Ok((Self(p), marker))
-//   }
-// }
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 struct PreHitsPer(PreTemplate);

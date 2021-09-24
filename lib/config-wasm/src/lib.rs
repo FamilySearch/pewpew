@@ -1,8 +1,47 @@
 use config::{LoadTest, Provider};
 use js_sys::Map;
-use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
+use log::LevelFilter;
+use wasm_bindgen::{JsValue, UnwrapThrowExt, prelude::wasm_bindgen, throw_str};
+use std::{path::PathBuf, str::FromStr};
 
-use std::path::PathBuf;
+// Only valid because we are using this in a WebAssembly context without threads.
+// We can only initialize the logger once or it will spit out error logs every time we init the constructor
+static mut LOGGING_INITIALIZED: bool = false;
+
+fn default_log_level() -> LevelFilter {
+    LevelFilter::Info
+}
+
+#[no_mangle]
+fn set_logging_initialized() {
+    unsafe { LOGGING_INITIALIZED = true };
+}
+
+#[no_mangle]
+fn get_logging_initialized() -> bool {
+    unsafe { LOGGING_INITIALIZED }
+}
+
+fn init_logging(log_level: JsValue) {
+    if get_logging_initialized() == false {
+        // Use a LevelFilter instead of Level so we can set it to "off"
+        let mut level_filter = default_log_level();
+        if !log_level.is_undefined() {
+            let level_string = log_level.as_string().expect_throw("Only strings are supported for log_level");
+            level_filter = match LevelFilter::from_str(&level_string) {
+              Ok(val) => val,
+              Err(err) => throw_str(&err.to_string())
+            }
+        }
+        let level = level_filter.to_level();
+        // May be off
+        if level.is_some() {
+            wasm_logger::init(wasm_logger::Config::new(level.unwrap_throw()));
+        }
+        // If it's off, we still don't want to set again, once it's on, it's on
+        set_logging_initialized();
+    }
+}
 
 #[wasm_bindgen]
 pub struct Config(LoadTest);
@@ -11,7 +50,8 @@ pub struct Config(LoadTest);
 impl Config {
     // build a config object from raw bytes (in javascript this is passing in a Uint8Array)
     #[wasm_bindgen(constructor)]
-    pub fn from_bytes(bytes: &[u8], env_vars: Map) -> Result<Config, JsValue> {
+    pub fn from_bytes(bytes: &[u8], env_vars: Map, log_level: JsValue) -> Result<Config, JsValue> {
+        init_logging(log_level);
         let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
         let load_test = LoadTest::from_config(bytes, &PathBuf::default(), &env_vars)
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;

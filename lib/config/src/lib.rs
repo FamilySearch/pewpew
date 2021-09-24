@@ -1811,26 +1811,28 @@ impl FromYaml for GeneralConfigPreProcessed {
                         bucket_size = Some(a);
                     }
                     "log_provider_stats" => {
-                        // Check for 'false' and change to None
+                        // We can't parse directly to a bool to allow for backwards compitibility with the old duration
                         let d: String = FromYaml::parse_into(decoder)
-                            .map_err(map_yaml_deserialize_err(s.clone()))?;
+                        .map_err(map_yaml_deserialize_err(s.clone()))?;
                         debug!("log_provider_stats: {}", d);
-                        if d.eq_ignore_ascii_case("false") {
-                            log_provider_stats = false;
-                        } else if d.eq_ignore_ascii_case("true") {
-                            log_provider_stats = true;
-                        } else {
-                            // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
-                            // was a duration of when provider stats were logged, it actually output at the rate of bucket_size regardless.
-                            // Going forward it is on by default, we only want to allow turning it off via "false".
-                            // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
-                            duration_from_string(d.clone()).map_err(|err| {
-                                debug!("duration_from_string error {}/{}: {}", s, d, err);
-                                // We don't want to return a duration error, we want to just say there was a problem with the "name"
-                                Error::YamlDeserialize(Some(s), marker)
-                            })?;
-                            log_provider_stats = true;
-                        }
+                        // Check for 'true' or 'false' and change to false
+                        log_provider_stats = match d.parse::<bool>() {
+                            Ok(value) => value,
+                            Err(bool_err) => {
+                                debug!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
+                                // was used to determine when provider stats were logged, it actually output at the rate of bucket_size regardless.
+                                // Going forward it is on by default, we only want to allow turning it off via "false".
+                                // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
+                                duration_from_string(d.clone()).map_err(|err| {
+                                    error!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                    debug!("log_provider_stats duration_from_string error {}/{}: {}", s, d, err);
+                                    // We don't want to return a duration error, we want to just say there was a problem with the "name"
+                                    Error::YamlDeserialize(Some(s), marker)
+                                })?;
+                                true
+                            }
+                        };
                     }
                     "watch_transition_time" => {
                         let b =

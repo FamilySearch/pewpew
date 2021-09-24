@@ -1,6 +1,49 @@
 #![allow(clippy::all)]
 use hdrhistogram::{serialization::Deserializer, Histogram};
-use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
+use log::LevelFilter;
+use std::str::FromStr;
+use wasm_bindgen::{prelude::wasm_bindgen, throw_str, JsValue, UnwrapThrowExt};
+
+// Only valid because we are using this in a WebAssembly context without threads.
+// We can only initialize the logger once or it will spit out error logs every time we init the constructor
+static mut LOGGING_INITIALIZED: bool = false;
+
+fn default_log_level() -> LevelFilter {
+    LevelFilter::Error
+}
+
+#[no_mangle]
+fn set_logging_initialized() {
+    unsafe { LOGGING_INITIALIZED = true };
+}
+
+#[no_mangle]
+fn get_logging_initialized() -> bool {
+    unsafe { LOGGING_INITIALIZED }
+}
+
+fn init_logging(log_level: JsValue) {
+    if get_logging_initialized() == false {
+        // Use a LevelFilter instead of Level so we can set it to "off"
+        let mut level_filter = default_log_level();
+        if !log_level.is_undefined() {
+            let level_string = log_level
+                .as_string()
+                .expect_throw("Only strings are supported for log_level");
+            level_filter = match LevelFilter::from_str(&level_string) {
+                Ok(val) => val,
+                Err(err) => throw_str(&err.to_string()),
+            }
+        }
+        let level = level_filter.to_level();
+        // May be off
+        if level.is_some() {
+            wasm_logger::init(wasm_logger::Config::new(level.unwrap_throw()));
+        }
+        // If it's off, we still don't want to set again, once it's on, it's on
+        set_logging_initialized();
+    }
+}
 
 #[wasm_bindgen]
 pub struct HDRHistogram(Histogram<u64>);
@@ -8,7 +51,8 @@ pub struct HDRHistogram(Histogram<u64>);
 #[wasm_bindgen]
 impl HDRHistogram {
     #[wasm_bindgen(constructor)]
-    pub fn from_base64(base64: String) -> Result<HDRHistogram, JsValue> {
+    pub fn from_base64(base64: String, log_level: JsValue) -> Result<HDRHistogram, JsValue> {
+        init_logging(log_level);
         let bytes = base64::decode(&base64)
             .map_err(|_| JsValue::from_str("could not parse as a bas64 string"))?;
         let mut deserializer = Deserializer::new();

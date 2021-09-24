@@ -9,7 +9,7 @@ use wasm_bindgen::{prelude::wasm_bindgen, throw_str, JsValue, UnwrapThrowExt};
 static mut LOGGING_INITIALIZED: bool = false;
 
 fn default_log_level() -> LevelFilter {
-    LevelFilter::Info
+    LevelFilter::Error
 }
 
 #[no_mangle]

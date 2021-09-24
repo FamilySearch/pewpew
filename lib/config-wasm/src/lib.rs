@@ -1,8 +1,8 @@
 use config::{LoadTest, Provider};
 use js_sys::Map;
 use log::LevelFilter;
-use wasm_bindgen::{JsValue, UnwrapThrowExt, prelude::wasm_bindgen, throw_str};
 use std::{path::PathBuf, str::FromStr};
+use wasm_bindgen::{prelude::wasm_bindgen, throw_str, JsValue, UnwrapThrowExt};
 
 // Only valid because we are using this in a WebAssembly context without threads.
 // We can only initialize the logger once or it will spit out error logs every time we init the constructor
@@ -27,10 +27,12 @@ fn init_logging(log_level: JsValue) {
         // Use a LevelFilter instead of Level so we can set it to "off"
         let mut level_filter = default_log_level();
         if !log_level.is_undefined() {
-            let level_string = log_level.as_string().expect_throw("Only strings are supported for log_level");
+            let level_string = log_level
+                .as_string()
+                .expect_throw("Only strings are supported for log_level");
             level_filter = match LevelFilter::from_str(&level_string) {
-              Ok(val) => val,
-              Err(err) => throw_str(&err.to_string())
+                Ok(val) => val,
+                Err(err) => throw_str(&err.to_string()),
             }
         }
         let level = level_filter.to_level();

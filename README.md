@@ -4,6 +4,11 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
 
 ## Changelog
+### v0.5.9
+Bug fixes:
+- Upgrade tokio and other dependencies
+- Added a link to the Har to Yaml converter in the docs.
+
 ### v0.5.8
 Changes:
 - Add in the ability for providers to be "unique"--meaning each item within the provider will be a unique JSON value without duplicates.

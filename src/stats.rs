@@ -745,7 +745,7 @@ pub fn create_stats_channel(
     let file_path = run_config.stats_file.clone();
     let output_format = run_config.output_format;
 
-    let log_provider_stats = config.log_provider_stats.is_some();
+    let log_provider_stats = config.log_provider_stats;
     let providers: Vec<_> = if log_provider_stats {
         providers
             .iter()

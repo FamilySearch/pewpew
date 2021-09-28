@@ -12,3 +12,5 @@ crate-type = ["cdylib"]
 base64 = "0.13"
 hdrhistogram = "7"
 wasm-bindgen = "0.2"
+log = "0.4"
+wasm-logger = "0.2"

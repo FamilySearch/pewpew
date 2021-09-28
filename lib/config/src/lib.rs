@@ -24,12 +24,14 @@ pub use select_parser::{
 use serde_json as json;
 use yaml_rust::scanner::{Marker, Scanner};
 
+use log::{debug, error, LevelFilter};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     iter,
     num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
+    str::FromStr,
     time::Duration,
 };
 
@@ -1643,6 +1645,10 @@ fn default_bucket_size(marker: Marker) -> PreDuration {
     PreDuration(PreTemplate::new(WithMarker::new("60s".into(), marker)))
 }
 
+fn default_log_provider_stats() -> bool {
+    true
+}
+
 pub fn default_auto_buffer_start_size() -> usize {
     5
 }
@@ -1735,16 +1741,18 @@ impl DefaultWithMarker for ClientConfigPreProcessed {
 pub struct GeneralConfig {
     pub auto_buffer_start_size: usize,
     pub bucket_size: Duration,
-    pub log_provider_stats: Option<Duration>,
+    pub log_provider_stats: bool,
     pub watch_transition_time: Option<Duration>,
+    pub log_level: Option<LevelFilter>,
 }
 
 #[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
 struct GeneralConfigPreProcessed {
     auto_buffer_start_size: usize,
     bucket_size: PreDuration,
-    log_provider_stats: Option<PreDuration>,
+    log_provider_stats: bool,
     watch_transition_time: Option<PreDuration>,
+    pub log_level: Option<LevelFilter>,
 }
 
 impl DefaultWithMarker for GeneralConfigPreProcessed {
@@ -1752,8 +1760,9 @@ impl DefaultWithMarker for GeneralConfigPreProcessed {
         GeneralConfigPreProcessed {
             auto_buffer_start_size: default_auto_buffer_start_size(),
             bucket_size: default_bucket_size(marker),
-            log_provider_stats: None,
+            log_provider_stats: default_log_provider_stats(),
             watch_transition_time: None,
+            log_level: None,
         }
     }
 }
@@ -1762,8 +1771,9 @@ impl FromYaml for GeneralConfigPreProcessed {
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut auto_buffer_start_size = default_auto_buffer_start_size();
         let mut bucket_size = None;
-        let mut log_provider_stats = None;
+        let mut log_provider_stats = default_log_provider_stats();
         let mut watch_transition_time = None;
+        let mut log_level = None;
 
         let mut first_marker = None;
         let mut saw_opening = false;
@@ -1789,29 +1799,61 @@ impl FromYaml for GeneralConfigPreProcessed {
                 YamlEvent::SequenceEnd => {
                     unreachable!("shouldn't see sequence end");
                 }
-                YamlEvent::Scalar(s, ..) => match s.as_str() {
-                    "auto_buffer_start_size" => {
-                        let c =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        auto_buffer_start_size = c;
+                YamlEvent::Scalar(s, ..) => {
+                    match s.as_str() {
+                        "auto_buffer_start_size" => {
+                            let c = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            auto_buffer_start_size = c;
+                        }
+                        "bucket_size" => {
+                            let a = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            bucket_size = Some(a);
+                        }
+                        "log_provider_stats" => {
+                            // We can't parse directly to a bool to allow for backwards compitibility with the old duration
+                            let d: String = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s.clone()))?;
+                            debug!("log_provider_stats: {}", d);
+                            // Check for 'true' or 'false' and change to false
+                            log_provider_stats = match d.parse::<bool>() {
+                                Ok(value) => value,
+                                Err(bool_err) => {
+                                    debug!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                    // Historically, log_provider_stats was an optional duration. However, even though the docs said that it
+                                    // was used to determine when provider stats were logged, it actually output at the rate of bucket_size regardless.
+                                    // Going forward it is on by default, we only want to allow turning it off via "false".
+                                    // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
+                                    duration_from_string(d.clone()).map_err(|err| {
+                                    error!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                    debug!("log_provider_stats duration_from_string error {}/{}: {}", s, d, err);
+                                    // We don't want to return a duration error, we want to just say there was a problem with the "name"
+                                    Error::YamlDeserialize(Some(s), marker)
+                                })?;
+                                    true
+                                }
+                            };
+                        }
+                        "watch_transition_time" => {
+                            let b = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s))?;
+                            watch_transition_time = Some(b);
+                        }
+                        "log_level" => {
+                            let d: String = FromYaml::parse_into(decoder)
+                                .map_err(map_yaml_deserialize_err(s.clone()))?;
+                            debug!("log_level string: {}", d);
+                            let level = LevelFilter::from_str(&d).map_err(|err| {
+                                error!("Could not parse LevelFilter from {}/{}: {}", s, d, err);
+                                Error::YamlDeserialize(Some(s), marker)
+                            })?;
+                            debug!("log_level: {}", level);
+                            log_level = Some(level);
+                        }
+                        _ => return Err(Error::UnrecognizedKey(s, None, marker)),
                     }
-                    "bucket_size" => {
-                        let a =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        bucket_size = Some(a);
-                    }
-                    "log_provider_stats" => {
-                        let b =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        log_provider_stats = Some(b);
-                    }
-                    "watch_transition_time" => {
-                        let b =
-                            FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
-                        watch_transition_time = Some(b);
-                    }
-                    _ => return Err(Error::UnrecognizedKey(s, None, marker)),
-                },
+                }
             }
         }
         let marker = first_marker.expect("should have a marker");
@@ -1821,6 +1863,7 @@ impl FromYaml for GeneralConfigPreProcessed {
             bucket_size,
             log_provider_stats,
             watch_transition_time,
+            log_level,
         };
         Ok((ret, marker))
     }
@@ -2698,18 +2741,14 @@ impl LoadTest {
             general: GeneralConfig {
                 auto_buffer_start_size: c.config.general.auto_buffer_start_size,
                 bucket_size: c.config.general.bucket_size.evaluate(&vars)?,
-                log_provider_stats: c
-                    .config
-                    .general
-                    .log_provider_stats
-                    .map(|b| b.evaluate(&vars))
-                    .transpose()?,
+                log_provider_stats: c.config.general.log_provider_stats,
                 watch_transition_time: c
                     .config
                     .general
                     .watch_transition_time
                     .map(|b| b.evaluate(&vars))
                     .transpose()?,
+                log_level: c.config.general.log_level,
             },
         };
         let mut load_test_errors = Vec::new();

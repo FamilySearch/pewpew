@@ -636,28 +636,29 @@ fn create_try_run_future(
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
     // create a logger for the try run
+    // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
     let select = if let TryRunFormat::Human = try_config.format {
         r#""`\
          Request\n\
          ========================================\n\
          ${request['start-line']}\n\
-         ${join(request.headers, '\n', ': ')}\n\
+         ${join(request.headers_all, '\n', ': ')}\n\
          ${if(request.body != '', '\n${request.body}\n', '')}\n\
          Response (RTT: ${stats.rtt}ms)\n\
          ========================================\n\
          ${response['start-line']}\n\
-         ${join(response.headers, '\n', ': ')}\n\
+         ${join(response.headers_all, '\n', ': ')}\n\
          ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
     } else {
         r#"{
             "request": {
                 "start-line": "request['start-line']",
-                "headers": "request.headers",
+                "headers": "request.headers_all",
                 "body": "request.body"
             },
             "response": {
                 "start-line": "response['start-line']",
-                "headers": "response.headers",
+                "headers": "response.headers_all",
                 "body": "response.body"
             },
             "stats": {

@@ -1,6 +1,6 @@
-use config::{LoadTest, Provider};
+use config::{BodyTemplate, LoadTest, Provider};
 use js_sys::Map;
-use log::LevelFilter;
+use log::{LevelFilter, debug};
 use std::{path::PathBuf, str::FromStr};
 use wasm_bindgen::{prelude::wasm_bindgen, throw_str, JsValue, UnwrapThrowExt};
 
@@ -86,7 +86,23 @@ impl Config {
     // return a string array of files used to feed providers
     #[wasm_bindgen(js_name = getInputFiles)]
     pub fn get_input_files(&self) -> Box<[JsValue]> {
-        self.0
+        // We also need to include file bodies so we can validate that we have those as well.
+        // Endpoint file bodies - BodyTemplate(File)
+        let mut body_files: Vec<JsValue> = self.0
+            .endpoints
+            .iter()
+            .filter_map(| endpoint| {
+                if let BodyTemplate::File(_, template) = &endpoint.body {
+                  // The path is the base path, the template.pieces has the real path
+                  debug!("endpoint::body::file.template={:?}", template);
+                  Some(template.evaluate_with_star().into())
+                } else {
+                  None
+                }
+            })
+            .collect::<Vec<_>>();
+        // file providers
+        let mut provider_files = self.0
             .providers
             .iter()
             .filter_map(|(_, v)| {
@@ -96,8 +112,9 @@ impl Config {
                     None
                 }
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
+            .collect::<Vec<_>>();
+        provider_files.append(&mut body_files);
+        provider_files.into_boxed_slice()
     }
 
     // returns nothing if the config file has no errors, throws an error containing a string description, if the config file has errors

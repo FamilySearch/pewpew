@@ -107,7 +107,7 @@ fn main() {
                 Arg::with_name("file")
                     .short("o")
                     .long("file")
-                    .help("Send results to the specified file instead of stderr")
+                    .help("Send results to the specified file instead of stdout")
                     .value_name("FILE")
             )
             .arg(

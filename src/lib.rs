@@ -666,7 +666,7 @@ fn create_try_run_future(
             }
         })"#
     };
-    let to = try_config.file.unwrap_or_else(|| "stderr".into());
+    let to = try_config.file.unwrap_or_else(|| "stdout".into());
     let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
     if !try_config.loggers_on {
         config.clear_loggers();

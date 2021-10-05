@@ -296,18 +296,24 @@ async fn _create_run(
     let config_file2 = config_file.clone();
     debug!("{{\"_create_run spawn_blocking start");
     let (file, config_bytes) = spawn_blocking(|| {
-            debug!("{{\"_create_run spawn_blocking enter");
-            let mut file = File::open(config_file.clone())
-            .map_err(|err| {
-                error!("File::open({}) error: {}", config_file.clone().to_str().unwrap_or_default(), err);
-                TestError::InvalidConfigFilePath(config_file.clone())
-            })?;
+        debug!("{{\"_create_run spawn_blocking enter");
+        let mut file = File::open(config_file.clone()).map_err(|err| {
+            error!(
+                "File::open({}) error: {}",
+                config_file.clone().to_str().unwrap_or_default(),
+                err
+            );
+            TestError::InvalidConfigFilePath(config_file.clone())
+        })?;
         let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_err(|e| {
-                error!("File::read_to_end({}) error: {}", config_file.clone().to_str().unwrap_or_default(), e);
-                TestError::CannotOpenFile(config_file, e.into())
-            })?;
+        file.read_to_end(&mut bytes).map_err(|e| {
+            error!(
+                "File::read_to_end({}) error: {}",
+                config_file.to_str().unwrap_or_default(),
+                e
+            );
+            TestError::CannotOpenFile(config_file, e.into())
+        })?;
         debug!("{{\"_create_run spawn_blocking exit");
         Ok::<_, TestError>((file, bytes))
     })
@@ -334,7 +340,7 @@ async fn _create_run(
         }
     }));
 
-    let env_vars:BTreeMap<String, String> = std::env::vars_os()
+    let env_vars: BTreeMap<String, String> = std::env::vars_os()
         .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
         .collect();
     // Don't log the values in case there are passwords
@@ -428,7 +434,10 @@ where
     So: Write + Send + 'static,
     Se: Write + Send + 'static,
 {
-    debug!("{{\"method\":\"create_run enter\",\"exec_config\":{}}}", exec_config);
+    debug!(
+        "{{\"method\":\"create_run enter\",\"exec_config\":{}}}",
+        exec_config
+    );
     let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
     let test_ended_rx = BroadcastStream::new(test_ended_rx);
     let output_format = exec_config.get_output_format();
@@ -540,7 +549,10 @@ fn create_config_watcher(
         debug!("{{\"create_config_watcher spawn_blocking enter");
         let mut stream_counter = 1;
         for _ in block_on_stream(stream) {
-            debug!("{{\"create_config_watcher block_on_stream: {}", stream_counter);
+            debug!(
+                "{{\"create_config_watcher block_on_stream: {}",
+                stream_counter
+            );
             stream_counter += 1;
             let modified = match file.metadata() {
                 Ok(m) => match m.modified() {

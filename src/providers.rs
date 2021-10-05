@@ -247,7 +247,7 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>> + Send + 'stat
     let (mut tx, rx) = channel(5);
     log::trace!("{{\"into_stream spawn_blocking start");
     spawn_blocking(move || {
-      log::trace!("{{\"into_stream spawn_blocking enter");
+        log::trace!("{{\"into_stream spawn_blocking enter");
         for value in iter {
             let value = value.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
             // this should only error when the receiver is dropped, and in that case we can stop sending

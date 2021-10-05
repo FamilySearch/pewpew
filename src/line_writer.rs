@@ -32,7 +32,7 @@ pub fn blocking_writer<W: Write + Send + 'static>(
     // start up the blocking task
     log::trace!("{{\"blocking_writer spawn_blocking start");
     spawn_blocking(move || {
-      log::trace!("{{\"blocking_writer spawn_blocking enter");
+        log::trace!("{{\"blocking_writer spawn_blocking enter");
         let mut final_msg = None;
 
         // read messages from the `Receiver`

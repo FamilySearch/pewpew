@@ -87,19 +87,13 @@ impl AutoReturn {
             EndpointProvidesSendOptions::Force => {
                 while let Some(json) = self.jsons.pop() {
                     log::trace!("AutoReturn::into_future::Force json={}", json);
-                    self
-                    .channel
-                    .force_send(json);
+                    self.channel.force_send(json);
                 }
             }
             EndpointProvidesSendOptions::IfNotFull => {
                 while let Some(json) = self.jsons.pop() {
                     log::trace!("AutoReturn::into_future::IfNotFull json={}", json);
-                    if self
-                    .channel
-                    .send(json)
-                    .now_or_never()
-                    .is_none() {
+                    if self.channel.send(json).now_or_never().is_none() {
                         break;
                     }
                 }
@@ -216,8 +210,8 @@ pub struct EndpointBuilder {
     start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
 }
 
-fn convert_to_debug<T>(value: &Vec<(String, T)>) -> Vec<String> {
-  value.iter().map(|(key, _)| key.clone().to_string()).collect()
+fn convert_to_debug<T>(value: &[(String, T)]) -> Vec<String> {
+    value.iter().map(|(key, _)| key.to_string()).collect()
 }
 
 impl EndpointBuilder {
@@ -691,7 +685,10 @@ impl Endpoint {
                 _ => None,
             })
             .collect();
-        debug!("into_future method=\"{}\" url=\"{:?}\" request_headers={:?} tags={:?}", method, url, headers, tags);
+        debug!(
+            "into_future method=\"{}\" url=\"{:?}\" request_headers={:?} tags={:?}",
+            method, url, headers, tags
+        );
         let rm = RequestMaker {
             url,
             method,

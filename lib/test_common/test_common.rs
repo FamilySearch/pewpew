@@ -82,8 +82,14 @@ pub fn start_test_server(
                     .unwrap(),
             };
             debug!("{:?}", response);
-            info!("method=\"{}\" uri=\"{}\" status=\"{}\" request_headers={:?} response_headers={:?}",
-                method, uri, response.status(), headers, response.headers());
+            info!(
+                "method=\"{}\" uri=\"{}\" status=\"{}\" request_headers={:?} response_headers={:?}",
+                method,
+                uri,
+                response.status(),
+                headers,
+                response.headers()
+            );
             Ok::<_, Error>(response)
         });
         Ok::<_, Error>(service)

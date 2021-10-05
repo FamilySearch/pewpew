@@ -176,9 +176,9 @@ fn main() {
         .expect("output_format cli arg unrecognized");
         match output_format {
             RunOutputFormat::Json => {
-              json_env_logger::init();
-              json_env_logger::panic_hook();
-            },
+                json_env_logger::init();
+                json_env_logger::panic_hook();
+            }
             _ => env_logger::init(),
         }
         info!("log::max_level() = {}", log::max_level());
@@ -268,9 +268,9 @@ fn main() {
             .unwrap_or_default();
         match format {
             TryRunFormat::Json => {
-              json_env_logger::init();
-              json_env_logger::panic_hook();
-            },
+                json_env_logger::init();
+                json_env_logger::panic_hook();
+            }
             _ => env_logger::init(),
         }
         info!("log::max_level()={}", log::max_level());
@@ -297,12 +297,12 @@ fn main() {
         .thread_name("pewpew-worker")
         .build()
         .unwrap();
-    debug!("rt.block_on start",);
+    debug!("rt.block_on start");
     let result = rt.block_on(f);
-    debug!("rt.block_on finished",);
+    debug!("rt.block_on finished. result: {:?}", result);
     // shutdown the runtime in case there are any hanging threads/tasks
     rt.shutdown_timeout(Default::default());
-    debug!("rt.shutdown_timeout finished",);
+    debug!("rt.shutdown_timeout finished");
 
     if result.is_err() {
         std::process::exit(1)

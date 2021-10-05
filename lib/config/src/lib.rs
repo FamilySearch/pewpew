@@ -29,8 +29,7 @@ use log::{debug, error, LevelFilter};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    fmt,
-    iter,
+    fmt, iter,
     num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
     str::FromStr,
@@ -565,9 +564,9 @@ impl From<RangeProviderPreProcessed> for RangeProvider {
 }
 
 impl fmt::Display for RangeProvider {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "{}", serde_json::to_string(&self.1).unwrap_or_default())
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self.1).unwrap_or_default())
+    }
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -2401,9 +2400,9 @@ pub struct Logger {
 }
 
 impl fmt::Display for Logger {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "{}", serde_json::to_string(&self).unwrap_or_default())
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap_or_default())
+    }
 }
 
 impl Logger {
@@ -2483,14 +2482,14 @@ pub enum BodyTemplate {
 }
 
 impl fmt::Display for BodyTemplate {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      match &self {
-          BodyTemplate::File(_, _) => write!(f, "BodyTemplate::File"),
-          BodyTemplate::Multipart(_) => write!(f, "BodyTemplate::Multipart"),
-          BodyTemplate::None => write!(f, "BodyTemplate::None"),
-          BodyTemplate::String(_) => write!(f, "BodyTemplate::String"),
-      }
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            BodyTemplate::File(_, _) => write!(f, "BodyTemplate::File"),
+            BodyTemplate::Multipart(_) => write!(f, "BodyTemplate::Multipart"),
+            BodyTemplate::None => write!(f, "BodyTemplate::None"),
+            BodyTemplate::String(_) => write!(f, "BodyTemplate::String"),
+        }
+    }
 }
 
 impl Endpoint {
@@ -2728,7 +2727,10 @@ impl LoadTest {
         config_path: &Path,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, Error> {
-        debug!("config::LoadTest::from_config: {}", config_path.to_str().unwrap_or_default());
+        debug!(
+            "config::LoadTest::from_config: {}",
+            config_path.to_str().unwrap_or_default()
+        );
         let iter = std::str::from_utf8(bytes).unwrap().chars();
 
         let mut decoder = YamlDecoder::new(iter);

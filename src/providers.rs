@@ -16,6 +16,7 @@ use futures::{
     sink::{Sink, SinkExt},
     stream, Stream, StreamExt, TryStreamExt,
 };
+use log::debug;
 use serde_json as json;
 use tokio::{sync::broadcast, task::spawn_blocking};
 
@@ -60,6 +61,7 @@ pub fn file(
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
 ) -> Result<Provider, TestError> {
     let file = std::mem::take(&mut fp.path);
+    debug!("providers::file={}", file);
     let file2 = file.clone();
     // create a stream from the file that yields values
     let stream = match fp.format {
@@ -97,6 +99,7 @@ pub fn file(
             }
         }
     };
+    debug!("Provider::file tokio::spawn primer_task");
     tokio::spawn(primer_task);
 
     Ok(Provider::new(fp.auto_return, rx, tx))
@@ -104,6 +107,7 @@ pub fn file(
 
 // create a response provider
 pub fn response(rp: config::ResponseProvider) -> Provider {
+    debug!("providers::response={:?}", rp);
     // create the channel for the provider
     let limit = config_limit_to_channel_limit(rp.buffer);
     let (tx, rx) = channel::channel(limit, rp.unique);
@@ -113,6 +117,7 @@ pub fn response(rp: config::ResponseProvider) -> Provider {
 
 // create a list provider
 pub fn list(lp: config::ListProvider) -> Provider {
+    debug!("providers::list={:?}", lp);
     // create the channel for the provider
     let unique = lp.unique();
     let rs = stream::iter(lp.into_iter().map(Ok));
@@ -122,6 +127,7 @@ pub fn list(lp: config::ListProvider) -> Provider {
     // create a new task that pushes data from the list into the channel
     let tx2 = tx.clone();
     let primer_task = rs.forward(tx2);
+    debug!("Provider::list tokio::spawn primer_task");
     tokio::spawn(primer_task);
 
     Provider::new(None, rx, tx)
@@ -129,12 +135,14 @@ pub fn list(lp: config::ListProvider) -> Provider {
 
 // create a range provider
 pub fn range(rp: config::RangeProvider) -> Provider {
+    debug!("providers::range={}", rp);
     // create the channel for the provider
     let limit = channel::Limit::dynamic(5);
     let (tx, rx) = channel::channel(limit, rp.unique());
 
     // create a new task that pushes data from the range into the channel
     let prime_tx = stream::iter(rp.0.map(|v| Ok(v.into()))).forward(tx.clone());
+    debug!("Provider::range tokio::spawn prime_tx");
     tokio::spawn(prime_tx);
 
     Provider::new(None, rx, tx)
@@ -171,12 +179,14 @@ impl Sink<json::Value> for Logger {
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: json::Value) -> Result<(), Self::Error> {
+        log::trace!("Logger.start_send={}", item);
         let msg = self.json_to_msg_type(item);
 
         // if the logger has a limit we decrement the `limit` property until it reaches zero
         // then we kill the test
         if let Some(limit) = &self.limit {
             let i = limit.fetch_sub(1, Ordering::Release);
+            debug!("Logger.start_send.limit={}", i);
             if i <= 0 {
                 if let Some(killer) = &self.test_killer {
                     let _ = killer.send(Ok(TestEndReason::KilledByLogger));
@@ -204,6 +214,7 @@ pub fn logger(
     test_killer: &broadcast::Sender<Result<TestEndReason, TestError>>,
     writer: FCSender<MsgType>,
 ) -> Logger {
+    debug!("provideres::logger={}", logger);
     let pretty = logger.pretty;
     let kill = logger.kill;
 
@@ -234,7 +245,9 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>> + Send + 'stat
     iter: I,
 ) -> impl Stream<Item = Result<json::Value, io::Error>> {
     let (mut tx, rx) = channel(5);
+    log::trace!("{{\"into_stream spawn_blocking start");
     spawn_blocking(move || {
+      log::trace!("{{\"into_stream spawn_blocking enter");
         for value in iter {
             let value = value.map_err(|e| io::Error::new(io::ErrorKind::Other, e));
             // this should only error when the receiver is dropped, and in that case we can stop sending
@@ -242,6 +255,7 @@ fn into_stream<I: Iterator<Item = Result<json::Value, io::Error>> + Send + 'stat
                 break;
             }
         }
+        log::trace!("{{\"into_stream spawn_blocking exit");
     });
     rx
 }

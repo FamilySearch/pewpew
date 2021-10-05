@@ -30,7 +30,9 @@ pub fn blocking_writer<W: Write + Send + 'static>(
     let (done_tx, done_rx) = oneshot::channel();
 
     // start up the blocking task
+    log::trace!("{{\"blocking_writer spawn_blocking start");
     spawn_blocking(move || {
+      log::trace!("{{\"blocking_writer spawn_blocking enter");
         let mut final_msg = None;
 
         // read messages from the `Receiver`
@@ -54,6 +56,7 @@ pub fn blocking_writer<W: Write + Send + 'static>(
             }
         }
         let _ = done_tx.send(());
+        log::trace!("{{\"blocking_writer spawn_blocking exit");
     });
     (tx, done_rx)
 }

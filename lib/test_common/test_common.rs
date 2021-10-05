@@ -97,6 +97,7 @@ pub fn start_test_server(
 
     let future = select(server, rx);
 
+    debug!("start_test_server tokio::spawn future");
     let handle = tokio::spawn(future).map(|_| ());
 
     (port, tx, handle)

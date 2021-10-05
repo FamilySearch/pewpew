@@ -17,6 +17,7 @@ use hyper::{
     Client, Method, Request,
 };
 use hyper_tls::HttpsConnector;
+use log::{debug, info};
 use serde_json as json;
 
 use super::{
@@ -199,6 +200,8 @@ impl RequestMaker {
             if content_length > 0 {
                 headers.insert(CONTENT_LENGTH, content_length.into());
             }
+            debug!("final headers={:?}", headers);
+            info!("RequestMaker method=\"{}\" url=\"{}\" request_headers={:?} tags={:?}", method, url.as_str(), headers, tags);
             let mut request_provider = json::json!({});
             let request_obj = request_provider
                 .as_object_mut()

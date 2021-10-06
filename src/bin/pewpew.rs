@@ -3,6 +3,7 @@ use std::{convert::TryInto, fs::create_dir_all, io, path::PathBuf, time::UNIX_EP
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
+use log::{debug, info};
 use pewpew::{
     create_run, ExecConfig, RunConfig, RunOutputFormat, StatsFileFormat, TryConfig, TryFilter,
     TryRunFormat,
@@ -107,7 +108,7 @@ fn main() {
                 Arg::with_name("file")
                     .short("o")
                     .long("file")
-                    .help("Send results to the specified file instead of stderr")
+                    .help("Send results to the specified file instead of stdout")
                     .value_name("FILE")
             )
             .arg(
@@ -174,10 +175,13 @@ fn main() {
         )
         .expect("output_format cli arg unrecognized");
         match output_format {
-            RunOutputFormat::Json => json_env_logger::init(),
+            RunOutputFormat::Json => {
+                json_env_logger::init();
+                json_env_logger::panic_hook();
+            }
             _ => env_logger::init(),
         }
-        log::warn!("log::max_level() = {}", log::max_level());
+        info!("log::max_level() = {}", log::max_level());
         let stats_file = matches
             .value_of_os("stats-file")
             .map(PathBuf::from)
@@ -215,6 +219,7 @@ fn main() {
             stats_file_format,
             watch_config_file,
         };
+        debug!("{{\"run_config\":{}}}", run_config);
         ExecConfig::Run(run_config)
     } else if let Some(matches) = matches.subcommand_matches("try") {
         let config_file: PathBuf = matches
@@ -262,10 +267,13 @@ fn main() {
             .and_then(|f| f.try_into().ok())
             .unwrap_or_default();
         match format {
-            TryRunFormat::Json => json_env_logger::init(),
+            TryRunFormat::Json => {
+                json_env_logger::init();
+                json_env_logger::panic_hook();
+            }
             _ => env_logger::init(),
         }
-        log::warn!("log::max_level() = {}", log::max_level());
+        info!("log::max_level()={}", log::max_level());
         let file = matches.value_of("file").map(Into::into);
         let try_config = TryConfig {
             config_file,
@@ -275,6 +283,7 @@ fn main() {
             loggers_on,
             results_dir,
         };
+        debug!("{{\"try_config\":{}}}", try_config);
         ExecConfig::Try(try_config)
     } else {
         unreachable!();
@@ -288,9 +297,12 @@ fn main() {
         .thread_name("pewpew-worker")
         .build()
         .unwrap();
+    debug!("rt.block_on start");
     let result = rt.block_on(f);
+    debug!("rt.block_on finished. result: {:?}", result);
     // shutdown the runtime in case there are any hanging threads/tasks
     rt.shutdown_timeout(Default::default());
+    debug!("rt.shutdown_timeout finished");
 
     if result.is_err() {
         std::process::exit(1)

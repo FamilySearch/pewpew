@@ -14,6 +14,7 @@ use futures::{
     stream, FutureExt, StreamExt,
 };
 use hdrhistogram::Histogram;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tokio::{
@@ -716,6 +717,7 @@ pub fn create_try_run_stats_channel(
         let _ = console.send(MsgType::Final(output)).await;
     };
 
+    debug!("create_try_run_stats_channel tokio::spawn stats_receiver_task");
     tokio::spawn(stats_receiver_task);
 
     tx
@@ -888,6 +890,7 @@ pub fn create_stats_channel(
         }
     };
 
+    debug!("create_stats_channel tokio::spawn stats_receiver_task");
     tokio::spawn(stats_receiver_task);
 
     Ok(tx)

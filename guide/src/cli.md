@@ -27,7 +27,7 @@ USAGE:
 
 OPTIONS:
     -h, --help                             Prints help information
-    -f, --output-format <FORMAT>           Formatting for stats printed to stderr [default: human]  [possible values:
+    -f, --output-format <FORMAT>           Formatting for stats printed to stdout [default: human]  [possible values:
                                            human, json]
     -d, --results-directory <DIRECTORY>    Directory to store results and logs
     -t, --start-at <START_AT>              Specify the time the test should start at
@@ -42,7 +42,7 @@ ARGS:
     <CONFIG>    Load test config file to use
 ```
 
-The `-f`, `--output-format` parameter allows changing the formatting of the stats which are printed to stderr.
+The `-f`, `--output-format` parameter allows changing the formatting of the stats which are printed to stdout.
 
 The `-d`, `--results-directory` parameter will store the results file and any output logs in the specified directory. If the directory does not exist it is created.
 
@@ -58,7 +58,7 @@ USAGE:
     pewpew try [OPTIONS] <CONFIG>
 
 OPTIONS:
-    -o, --file <FILE>                      Send results to the specified file instead of stderr
+    -o, --file <FILE>                      Send results to the specified file instead of stdout
     -f, --format <FORMAT>                  Specify the format for the try run output [default: human]  [possible values:
                                            human, json]
     -h, --help                             Prints help information

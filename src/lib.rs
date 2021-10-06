@@ -1,4 +1,5 @@
 #![warn(rust_2018_idioms)]
+#![allow(unused_attributes)]
 #![type_length_limit = "19550232"]
 #![allow(clippy::type_complexity)]
 
@@ -28,8 +29,10 @@ use hyper::{client::HttpConnector, Body, Client};
 use hyper_tls::HttpsConnector;
 use itertools::Itertools;
 use line_writer::{blocking_writer, MsgType};
+use log::{debug, error, info, warn};
 use mod_interval::{ModInterval, PerX};
 use native_tls::TlsConnector;
+use serde::Serialize;
 use serde_json as json;
 use tokio::{sync::broadcast, task::spawn_blocking};
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
@@ -40,6 +43,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
+    fmt,
     fs::File,
     future::Future,
     io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, SeekFrom, Write},
@@ -148,7 +152,7 @@ impl Endpoints {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize)]
 pub enum RunOutputFormat {
     Human,
     Json,
@@ -172,14 +176,14 @@ impl TryFrom<&str> for RunOutputFormat {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum StatsFileFormat {
     // Html,
     Json,
     // None,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum TryRunFormat {
     Human,
     Json,
@@ -203,7 +207,7 @@ impl TryFrom<&str> for TryRunFormat {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct RunConfig {
     pub config_file: PathBuf,
     pub output_format: RunOutputFormat,
@@ -214,13 +218,19 @@ pub struct RunConfig {
     pub watch_config_file: bool,
 }
 
-#[derive(Clone)]
+impl fmt::Display for RunConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap_or_default())
+    }
+}
+
+#[derive(Clone, Serialize)]
 pub enum TryFilter {
     Eq(String, String),
     Ne(String, String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct TryConfig {
     pub config_file: PathBuf,
     pub file: Option<String>,
@@ -230,9 +240,22 @@ pub struct TryConfig {
     pub results_dir: Option<PathBuf>,
 }
 
+impl fmt::Display for TryConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap_or_default())
+    }
+}
+
+#[derive(Serialize)]
 pub enum ExecConfig {
     Run(RunConfig),
     Try(TryConfig),
+}
+
+impl fmt::Display for ExecConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap_or_default())
+    }
 }
 
 impl ExecConfig {
@@ -268,18 +291,35 @@ async fn _create_run(
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     mut test_ended_rx: BroadcastStream<Result<TestEndReason, TestError>>,
 ) -> Result<TestEndReason, TestError> {
+    debug!("{{\"_create_run enter");
     let config_file = exec_config.get_config_file().clone();
     let config_file2 = config_file.clone();
+    debug!("{{\"_create_run spawn_blocking start");
     let (file, config_bytes) = spawn_blocking(|| {
-        let mut file = File::open(config_file.clone())
-            .map_err(|_| TestError::InvalidConfigFilePath(config_file.clone()))?;
+        debug!("{{\"_create_run spawn_blocking enter");
+        let mut file = File::open(config_file.clone()).map_err(|err| {
+            error!(
+                "File::open({}) error: {}",
+                config_file.clone().to_str().unwrap_or_default(),
+                err
+            );
+            TestError::InvalidConfigFilePath(config_file.clone())
+        })?;
         let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_err(|e| TestError::CannotOpenFile(config_file, e.into()))?;
+        file.read_to_end(&mut bytes).map_err(|e| {
+            error!(
+                "File::read_to_end({}) error: {}",
+                config_file.to_str().unwrap_or_default(),
+                e
+            );
+            TestError::CannotOpenFile(config_file, e.into())
+        })?;
+        debug!("{{\"_create_run spawn_blocking exit");
         Ok::<_, TestError>((file, bytes))
     })
     .await
     .map_err(move |e| {
+        warn!("config file error: {}", e);
         let e = IOError::new(IOErrorKind::Other, e);
         TestError::CannotOpenFile(config_file2, e.into())
     })??;
@@ -287,6 +327,7 @@ async fn _create_run(
     // watch for ctrl-c and kill the test
     let test_ended_tx2 = test_ended_tx.clone();
     let mut test_ended_rx2 = BroadcastStream::new(test_ended_tx.subscribe());
+    debug!("_create_run tokio::spawn future::poll_fn ctrl-c");
     tokio::spawn(future::poll_fn(move |cx| {
         match ctrlc_channel.poll_next_unpin(cx) {
             Poll::Ready(r) => {
@@ -299,13 +340,17 @@ async fn _create_run(
         }
     }));
 
-    let env_vars = std::env::vars_os()
+    let env_vars: BTreeMap<String, String> = std::env::vars_os()
         .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
         .collect();
+    // Don't log the values in case there are passwords
+    debug!("env_vars={:?}", env_vars.clone().keys());
+    log::trace!("env_vars={:?}", env_vars.clone());
     let output_format = exec_config.get_output_format();
     let config_file_path = exec_config.get_config_file().clone();
     let mut config =
         config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
+    debug!("config::LoadTest::from_config finished");
     let test_runner = match exec_config {
         ExecConfig::Try(t) => {
             create_try_run_future(config, t, test_ended_tx.clone(), stdout, stderr).map(Either::A)
@@ -360,6 +405,7 @@ async fn _create_run(
     };
     match test_runner {
         Ok(f) => {
+            debug!("_create_run tokio::spawn test_runner");
             tokio::spawn(f);
             let mut test_result = Ok(TestEndReason::Completed);
             while let Some(v) = test_ended_rx.next().await {
@@ -388,6 +434,10 @@ where
     So: Write + Send + 'static,
     Se: Write + Send + 'static,
 {
+    debug!(
+        "{{\"method\":\"create_run enter\",\"exec_config\":{}}}",
+        exec_config
+    );
     let (test_ended_tx, test_ended_rx) = broadcast::channel(1);
     let test_ended_rx = BroadcastStream::new(test_ended_rx);
     let output_format = exec_config.get_output_format();
@@ -406,6 +456,7 @@ where
     match test_result {
         Err(e) => {
             // send the test end message to ensure the stats channel closes
+            error!("{}", e);
             let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
             let msg = match output_format {
                 RunOutputFormat::Human => format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),
@@ -455,7 +506,9 @@ where
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
         }
-        _ => (),
+        // Instead of implementing Display for TestEndReason, just log these other two
+        Ok(TestEndReason::Completed) => info!("Test Ended with: Completed"),
+        Ok(TestEndReason::ConfigUpdate(_)) => info!("Test Ended with: ConfigUpdate"),
     };
     drop(stderr);
     // wait for all stderr and stdout output to be written
@@ -491,8 +544,16 @@ fn create_config_watcher(
             Poll::Ready(_) => Poll::Ready(None),
         },
     });
+    debug!("{{\"create_config_watcher spawn_blocking start");
     spawn_blocking(move || {
+        debug!("{{\"create_config_watcher spawn_blocking enter");
+        let mut stream_counter = 1;
         for _ in block_on_stream(stream) {
+            debug!(
+                "{{\"create_config_watcher block_on_stream: {}",
+                stream_counter
+            );
+            stream_counter += 1;
             let modified = match file.metadata() {
                 Ok(m) => match m.modified() {
                     Ok(m) => m,
@@ -623,8 +684,10 @@ fn create_config_watcher(
                 }
             };
 
+            debug!("create_config_watcher tokio::spawn create_load_test_future");
             tokio::spawn(f);
         }
+        debug!("{{\"create_config_watcher spawn_blocking exit");
     });
 }
 
@@ -635,29 +698,31 @@ fn create_try_run_future(
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
+    debug!("create_try_run_future start");
     // create a logger for the try run
+    // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
     let select = if let TryRunFormat::Human = try_config.format {
         r#""`\
          Request\n\
          ========================================\n\
          ${request['start-line']}\n\
-         ${join(request.headers, '\n', ': ')}\n\
+         ${join(request.headers_all, '\n', ': ')}\n\
          ${if(request.body != '', '\n${request.body}\n', '')}\n\
          Response (RTT: ${stats.rtt}ms)\n\
          ========================================\n\
          ${response['start-line']}\n\
-         ${join(response.headers, '\n', ': ')}\n\
+         ${join(response.headers_all, '\n', ': ')}\n\
          ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
     } else {
         r#"{
             "request": {
                 "start-line": "request['start-line']",
-                "headers": "request.headers",
+                "headers": "request.headers_all",
                 "body": "request.body"
             },
             "response": {
                 "start-line": "response['start-line']",
-                "headers": "response.headers",
+                "headers": "response.headers_all",
                 "body": "response.body"
             },
             "stats": {
@@ -665,11 +730,13 @@ fn create_try_run_future(
             }
         })"#
     };
-    let to = try_config.file.unwrap_or_else(|| "stderr".into());
+    let to = try_config.file.unwrap_or_else(|| "stdout".into());
     let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
     if !try_config.loggers_on {
+        debug!("loggers_on: {}. Clearing Loggers", try_config.loggers_on);
         config.clear_loggers();
     }
+    debug!("try logger: {:?}", logger);
     config.add_logger("try_run".into(), logger)?;
 
     let config_config = config.config;
@@ -792,6 +859,7 @@ fn create_try_run_future(
             _ => Poll::Pending,
         },
     });
+    debug!("create_try_run_future finish");
     Ok(f)
 }
 
@@ -804,6 +872,7 @@ fn create_load_test_future(
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
 ) -> Result<impl Future<Output = ()>, TestError> {
+    debug!("create_load_test_future start");
     config.ok_for_loadtest()?;
 
     let mut duration = config.get_duration();
@@ -895,6 +964,7 @@ fn create_load_test_future(
         },
     });
 
+    debug!("create_load_test_future finish");
     Ok(f)
 }
 

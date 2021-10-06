@@ -6,6 +6,7 @@ mod response_handler;
 use self::body_handler::BodyHandler;
 use self::request_maker::RequestMaker;
 
+use log::debug;
 use request_maker::ProviderDelays;
 
 use bytes::Bytes;
@@ -75,6 +76,7 @@ impl AutoReturn {
     }
 
     pub async fn into_future(mut self) {
+        debug!("AutoReturn::into_future.send_option={:?}", self.send_option);
         match self.send_option {
             EndpointProvidesSendOptions::Block => {
                 let _ = self
@@ -84,11 +86,13 @@ impl AutoReturn {
             }
             EndpointProvidesSendOptions::Force => {
                 while let Some(json) = self.jsons.pop() {
+                    log::trace!("AutoReturn::into_future::Force json={}", json);
                     self.channel.force_send(json);
                 }
             }
             EndpointProvidesSendOptions::IfNotFull => {
                 while let Some(json) = self.jsons.pop() {
+                    log::trace!("AutoReturn::into_future::IfNotFull json={}", json);
                     if self.channel.send(json).now_or_never().is_none() {
                         break;
                     }
@@ -206,6 +210,10 @@ pub struct EndpointBuilder {
     start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
 }
 
+fn convert_to_debug<T>(value: &[(String, T)]) -> Vec<String> {
+    value.iter().map(|(key, _)| key.to_string()).collect()
+}
+
 impl EndpointBuilder {
     pub fn new(
         endpoint: config::Endpoint,
@@ -236,6 +244,10 @@ impl EndpointBuilder {
             request_timeout,
             ..
         } = self.endpoint;
+        debug!("EndpointBuilder.build method=\"{}\" url=\"{}\" body=\"{}\" headers=\"{:?}\" no_auto_returns=\"{}\" \
+            max_parallel_requests=\"{:?}\" provides=\"{:?}\" logs=\"{:?}\" on_demand=\"{}\" request_timeout=\"{:?}\"",
+            method.as_str(), url.evaluate_with_star(), body, convert_to_debug(&headers), no_auto_returns,
+            max_parallel_requests, convert_to_debug(&provides), convert_to_debug(&logs), on_demand, request_timeout);
 
         let timeout = request_timeout.unwrap_or(ctx.config.client.request_timeout);
 
@@ -244,6 +256,7 @@ impl EndpointBuilder {
         } else {
             None
         };
+        // Build the actual provider set "outgoing"
         let provides = provides
             .into_iter()
             .map(|(k, v)| {
@@ -280,6 +293,7 @@ impl EndpointBuilder {
             });
             streams.push((true, Box::new(stream)));
         }
+        // Add any loggers to the outgoing providers/loggers
         for (k, v) in logs {
             let tx = ctx
                 .loggers
@@ -614,6 +628,7 @@ impl Endpoint {
         S: Stream<Item = Result<StreamItem, TestError>> + Send + Unpin + 'static,
     {
         let stream = Box::new(stream);
+        // If we have one, replace it, otherwise add (set as 0) it
         match self.stream_collection.get_mut(0) {
             Some((true, s)) => {
                 *s = stream;
@@ -670,6 +685,10 @@ impl Endpoint {
                 _ => None,
             })
             .collect();
+        debug!(
+            "into_future method=\"{}\" url=\"{:?}\" request_headers={:?} tags={:?}",
+            method, url, headers, tags
+        );
         let rm = RequestMaker {
             url,
             method,

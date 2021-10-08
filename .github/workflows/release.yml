@@ -256,7 +256,7 @@ jobs:
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t web --scope fs
+          wasm-pack build --release -t bundler --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 

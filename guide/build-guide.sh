@@ -30,7 +30,7 @@ WASM_OUTPUT_DIR=$(realpath $RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm)
 cd $WASM_LIB_DIR
 wasm-pack build --release -t web -d $WASM_OUTPUT_DIR --scope fs
 cd $WASM_OUTPUT_DIR
-sed -i 's/input = .*import\.meta\.url.*/import(".\/hdr_histogram_wasm_bg.wasm");\ninput = require.resolve(".\/hdr_histogram_wasm_bg.wasm")[0][0];/' hdr_histogram_wasm.js
+sed -i 's/input = .*import\.meta\.url.*/import(".\/hdr_histogram_wasm_bg.wasm");\n        input = require.resolve(".\/hdr_histogram_wasm_bg.wasm")[0][0];/' hdr_histogram_wasm.js
 
 # build the results viewer (which includes putting the output into the book's src)
 cd $RESULTS_VIEWER_DIR

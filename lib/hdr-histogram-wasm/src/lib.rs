@@ -22,14 +22,13 @@ fn get_logging_initialized() -> bool {
     unsafe { LOGGING_INITIALIZED }
 }
 
-fn init_logging(log_level: JsValue) {
+fn init_logging(log_level: Option<String>) {
     if !get_logging_initialized() {
         // Use a LevelFilter instead of Level so we can set it to "off"
         let mut level_filter = default_log_level();
-        if !log_level.is_undefined() {
+        if log_level.is_some() {
             let level_string = log_level
-                .as_string()
-                .expect_throw("Only strings are supported for log_level");
+                .unwrap();
             level_filter = match LevelFilter::from_str(&level_string) {
                 Ok(val) => val,
                 Err(err) => throw_str(&err.to_string()),
@@ -51,7 +50,7 @@ pub struct HDRHistogram(Histogram<u64>);
 #[wasm_bindgen]
 impl HDRHistogram {
     #[wasm_bindgen(constructor)]
-    pub fn from_base64(base64: String, log_level: JsValue) -> Result<HDRHistogram, JsValue> {
+    pub fn from_base64(base64: String, log_level: Option<String>) -> Result<HDRHistogram, JsValue> {
         init_logging(log_level);
         let bytes = base64::decode(&base64)
             .map_err(|_| JsValue::from_str("could not parse as a bas64 string"))?;

@@ -95,7 +95,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.10.0 wasm-pack
+          args: --version 0.10.1 wasm-pack
 
       - name: Create the Web Assembly
         id: wasm_pack

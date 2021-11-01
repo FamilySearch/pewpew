@@ -181,7 +181,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.10.0 wasm-pack
+          args: --version 0.10.1 wasm-pack
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
@@ -208,7 +208,7 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  # The hdr-histogram-wasm needs to be build with web rather than nodejs
+  # The hdr-histogram-wasm needs to be build with bundler rather than nodejs
   wasm-release-histogram:
     name: Wasm Pack and Upload Histogram
     needs: ['create-release']
@@ -251,12 +251,12 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.10.0 wasm-pack
+          args: --version 0.10.1 wasm-pack
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t web --scope fs
+          wasm-pack build --release -t bundler --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 

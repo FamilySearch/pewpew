@@ -50,6 +50,7 @@ tokio-stream = { version = "0.1", features = ["sync", "time"] }
 url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
+# https://github.com/softprops/json-env-logger/issues/6
 log = ">=0.4.13, <0.4.14"
 env_logger = "0.9"
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }

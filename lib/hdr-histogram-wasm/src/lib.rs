@@ -26,9 +26,7 @@ fn init_logging(log_level: Option<String>) {
     if !get_logging_initialized() {
         // Use a LevelFilter instead of Level so we can set it to "off"
         let mut level_filter = default_log_level();
-        if log_level.is_some() {
-            let level_string = log_level
-                .unwrap();
+        if let Some(level_string) = log_level {
             level_filter = match LevelFilter::from_str(&level_string) {
                 Ok(val) => val,
                 Err(err) => throw_str(&err.to_string()),

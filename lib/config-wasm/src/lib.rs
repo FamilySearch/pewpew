@@ -26,9 +26,7 @@ fn init_logging(log_level: Option<String>) {
     if !get_logging_initialized() {
         // Use a LevelFilter instead of Level so we can set it to "off"
         let mut level_filter = default_log_level();
-        if log_level.is_some() {
-            let level_string = log_level
-                .unwrap();
+        if let Some(level_string) = log_level {
             level_filter = match LevelFilter::from_str(&level_string) {
                 Ok(val) => val,
                 Err(err) => throw_str(&err.to_string()),
@@ -51,7 +49,11 @@ pub struct Config(LoadTest);
 impl Config {
     // build a config object from raw bytes (in javascript this is passing in a Uint8Array)
     #[wasm_bindgen(constructor)]
-    pub fn from_bytes(bytes: &[u8], env_vars: Map, log_level: Option<String>) -> Result<Config, JsValue> {
+    pub fn from_bytes(
+        bytes: &[u8],
+        env_vars: Map,
+        log_level: Option<String>,
+    ) -> Result<Config, JsValue> {
         init_logging(log_level);
         let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
         let load_test = LoadTest::from_config(bytes, &PathBuf::default(), &env_vars)

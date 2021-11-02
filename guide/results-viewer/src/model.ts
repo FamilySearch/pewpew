@@ -6,42 +6,65 @@ function isObject (o: unknown): o is object {
   return typeof o == "object" && !!o;
 }
 
-function valueChecker (value: any, unknown: any, k: string, v: any) {
+function valueChecker (value: CheckType | undefined, unknown: CheckType | undefined, k: string, v: any) {
 
   if (typeof value == "string") {
     const type = typeof v;
     if (type != value) {
       return `expected property "${k}" to be a "${value}" but it was a "${type}"`;
+    } else {
+      return undefined;
     }
   } else if (value !== undefined) {
     if (!value(v)) {
       return `property "${k}" did not pass check`;
+    } else {
+      return undefined;
     }
   } else if (typeof unknown == "string") {
     const type = typeof v;
     if (type != unknown) {
       return `expected property "${k}" to be a "${unknown}" but it was a "${type}"`;
+    } else {
+      return undefined;
     }
   } else if (unknown !== undefined) {
     if (!unknown(v)) {
       return `property "${k}" did not pass check`;
+    } else {
+      return undefined;
     }
   }
-  return undefined;
+  return `unknown property ${k}`;
 }
 
+/**
+ * Checks an object for expected properties. If the properties are missing or not of the type
+ * in checks (or unknown), returns the failure.
+ * @param o Object to check
+ * @param checks required fields
+ * @param unknown verification to run on fields that are not in checks or optionalChecks
+ * @param optionalChecks optional fields
+ * @returns failed check or undefined
+ */
 function propertyChecker (
   o: object,
   checks: Check[],
-  unknown?: CheckType
+  unknown?: CheckType,
+  optionalChecks?: Check[]
 ): undefined | string {
   const checkMap = new Map(checks);
+  const optionalMap = new Map(optionalChecks || []);
 
+  // console.log(`propertyChecker checks: ${JSON.stringify(checks)}, o: ${JSON.stringify(o)}`);
   for (const [k, v] of Object.entries(o)) {
-    const value = checkMap.get(k);
+    const value = checkMap.get(k) || optionalMap.get(k);
     checkMap.delete(k);
     const checked = valueChecker(value, unknown, k, v);
-    return checked;
+    // console.log(`propertyChecker k: ${k}, v: ${JSON.stringify(v)}, value: ${JSON.stringify(value)}, unknown: ${JSON.stringify(unknown)}, checked: ${JSON.stringify(checked)}`);
+    if (checked) {
+      return checked;
+    }
   }
 
   if (checkMap.size > 0) {
@@ -93,7 +116,7 @@ export class DataPoint {
     if (preProcessed.endTime != 0) {
       this.endTime = new Date(preProcessed.endTime * 1000);
     }
-    this.requestTimeouts = 0;
+    this.requestTimeouts = preProcessed.requestTimeouts || 0;
     this.rttHistogram = new HDRHistogram(preProcessed.rttHistogram);
     if (preProcessed.startTime != 0) {
       this.startTime = new Date(preProcessed.startTime * 1000);
@@ -175,6 +198,7 @@ export interface DataPointPreProcessed {
   readonly startTime: number;
   readonly statusCounts: StatusCounts;
   readonly testErrors: TestErrors;
+  readonly requestTimeouts?: number;
 }
 
 function asDataPointPreProcessed (dp: unknown): DataPointPreProcessed | Error {
@@ -185,14 +209,16 @@ function asDataPointPreProcessed (dp: unknown): DataPointPreProcessed | Error {
   const checks: Check[] = [
     ["duration", "number"],
     ["endTime", "number"],
-    ["requestTimeouts", "number"],
     ["rttHistogram", "string"],
     ["startTime", "number"],
     ["statusCounts", isStatusCounts],
     ["testErrors", isTestErrors],
     ["time", "number"]
   ];
-  const result = propertyChecker(dp, checks);
+  const optionalChecks: Check[] = [
+    ["requestTimeouts", "number"]
+  ];
+  const result = propertyChecker(dp, checks, undefined, optionalChecks);
   if (result) {
     return new Error("failed property check for data point. " + result);
   } else {
@@ -328,10 +354,10 @@ function isTimeBucketEntry (tbe: unknown): tbe is TimeBucketEntry {
 
   const tbe2: any = tbe;
 
-  const fails = tbe2.hasOwnProperty("rttHistogram") && typeof tbe2.rttHistogram != "string"
-    || tbe2.hasOwnProperty("statusCounts") && isStatusCounts(tbe2.statusCounts)
-    || tbe2.hasOwnProperty("requestTimeouts") && typeof tbe2.requestTimeouts != "number"
-    || tbe2.hasOwnProperty("testErrors") && isTestErrors(tbe2.testErrors);
+  const fails = (tbe2.hasOwnProperty("rttHistogram") && typeof tbe2.rttHistogram != "string")
+    || (tbe2.hasOwnProperty("statusCounts") && !isStatusCounts(tbe2.statusCounts))
+    || (tbe2.hasOwnProperty("requestTimeouts") && typeof tbe2.requestTimeouts != "number")
+    || ((tbe2.hasOwnProperty("testErrors") && !isTestErrors(tbe2.testErrors)));
 
   return !fails;
 }

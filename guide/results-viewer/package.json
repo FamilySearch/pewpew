@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "devDependencies": {
-    "@fs/hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
     "@babel/core": "^7.16.0",
     "@babel/plugin-syntax-import-meta": "^7.10.4",
     "@babel/preset-env": "7.16.0",
+    "@fs/hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
     "@types/chart.js": "^2.9.34",
     "@types/node": "^12.20.36",
     "chart.js": "^2.9.4",

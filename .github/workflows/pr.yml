@@ -96,6 +96,11 @@ jobs:
         with:
           command: install
           args: --version 0.10.1 wasm-pack
+      # https://github.com/rustwasm/wasm-pack/issues/864
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: wasm-bindgen-cli
 
       - name: Create the Web Assembly
         id: wasm_pack

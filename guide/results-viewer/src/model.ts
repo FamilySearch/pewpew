@@ -47,9 +47,9 @@ function valueChecker (check: CheckType | undefined, unknownCheck: CheckType | u
  * in checks (or unknown), returns the failure. Will error if any requiredChecks are missing
  * @param o Object to check
  * @param requiredChecks required fields
- * @param unknownCheck verification to run on fields that are not in checks or optionalChecks
- * @param optionalChecks optional fields
- * @returns failed check or undefined
+ * @param unknownCheck (Optional) verification to run on fields that are not in requiredChecks or optionalChecks
+ * @param optionalChecks (Optional) optional fields to verify if they exist, but are not required
+ * @returns string if failures or undefined on success
  */
 function propertyChecker (
   o: object,
@@ -57,15 +57,13 @@ function propertyChecker (
   unknownCheck?: CheckType,
   optionalChecks?: Check[]
 ): undefined | string {
-  const checkMap = new Map(requiredChecks);
+  const requiredMap = new Map(requiredChecks);
   const optionalMap = new Map(optionalChecks || []);
 
-  // console.log(`propertyChecker checks: ${JSON.stringify(checks)}, o: ${JSON.stringify(o)}`);
   for (const [key, value] of Object.entries(o)) {
-    const check = checkMap.get(key) || optionalMap.get(key);
-    checkMap.delete(key);
+    const check = requiredMap.get(key) || optionalMap.get(key);
+    requiredMap.delete(key);
     const checkedResult = valueChecker(check, unknownCheck, key, value);
-    // console.log(`propertyChecker k: ${k}, v: ${JSON.stringify(v)}, value: ${JSON.stringify(value)}, unknown: ${JSON.stringify(unknown)}, checked: ${JSON.stringify(checked)}`);
     // Extra properties will still be undefined if unknownCheck is undefined
     if (checkedResult) {
       return checkedResult;
@@ -73,8 +71,8 @@ function propertyChecker (
   }
 
   // Check for missing properties that means this isn't the type we expected
-  if (checkMap.size > 0) {
-    const missingProperties = [...checkMap.keys()]
+  if (requiredMap.size > 0) {
+    const missingProperties = [...requiredMap.keys()]
       .map((k) => `"${k}"`)
       .join(", ");
     return "missing properties: " + missingProperties;

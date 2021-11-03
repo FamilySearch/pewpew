@@ -181,7 +181,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.10.0 wasm-pack
+          args: --version 0.10.1 wasm-pack
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
@@ -192,6 +192,9 @@ jobs:
 
       - name: Compress for Linux
         run: |
+          wget -O /tmp/binaryen-version_90-x86-linux.tar.gz  https://github.com/WebAssembly/binaryen/releases/download/version_90/binaryen-version_90-x86-linux.tar.gz
+          tar -xvf /tmp/binaryen-version_90-x86-linux.tar.gz -C /tmp
+          /tmp/binaryen-version_90/wasm-opt config_wasm_bg.wasm -o config_wasm_bg.wasm -Oz
           asset_name="pewpew-$VERSION-config-wasm.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
@@ -208,7 +211,7 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  # The hdr-histogram-wasm needs to be build with web rather than nodejs
+  # The hdr-histogram-wasm needs to be build with bundler rather than nodejs
   wasm-release-histogram:
     name: Wasm Pack and Upload Histogram
     needs: ['create-release']
@@ -251,17 +254,20 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: install
-          args: --version 0.10.0 wasm-pack
+          args: --version 0.10.1 wasm-pack
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
           set -x
-          wasm-pack build --release -t web --scope fs
+          wasm-pack build --release -t bundler --scope fs
         working-directory: ${{env.working-directory}}
         shell: bash
 
       - name: Compress for Linux
         run: |
+          wget -O /tmp/binaryen-version_90-x86-linux.tar.gz  https://github.com/WebAssembly/binaryen/releases/download/version_90/binaryen-version_90-x86-linux.tar.gz
+          tar -xvf /tmp/binaryen-version_90-x86-linux.tar.gz -C /tmp
+          /tmp/binaryen-version_90/wasm-opt hdr_histogram_wasm_bg.wasm -o hdr_histogram_wasm_bg.wasm -Oz
           asset_name="pewpew-$VERSION-hdr-histogram-wasm.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json hdr*

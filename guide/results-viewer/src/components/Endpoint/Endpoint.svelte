@@ -252,14 +252,13 @@
     position: absolute;
     transform: translateY(50px);
   }
+  /* Default for narrower browsers */
+  .canvas-box {
+    width: calc(100vw - 100px);
+  }
   @media (min-width: 1100px) {
     .canvas-box {
       width: calc(50vw - 50px);
-    }
-  }
-  @media not (min-width: 1100px) {
-    .canvas-box {
-      width: calc(100vw - 100px);
     }
   }
 </style>

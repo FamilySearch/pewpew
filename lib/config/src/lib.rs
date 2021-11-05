@@ -186,6 +186,7 @@ impl FromYaml for LoadPatternPreProcessed {
         let ret = match event.into_string() {
             Ok(s) if s.as_str() == "linear" => {
                 let (linear, marker) = FromYaml::parse(decoder)?;
+                log::debug!("LoadPatternPreProcessed.parse linear: {:?}", linear);
                 (LoadPatternPreProcessed::Linear(linear), marker)
             }
             Ok(s) => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -240,14 +241,17 @@ impl FromYaml for LinearBuilderPreProcessed {
                 YamlEvent::Scalar(s, ..) => match s.as_str() {
                     "from" => {
                         let c = FromYaml::parse_into(decoder)?;
+                        log::debug!("LinearBuilderPreProcessed.parse from: {:?}", c);
                         from = Some(c);
                     }
                     "to" => {
                         let a = FromYaml::parse_into(decoder)?;
+                        log::debug!("LinearBuilderPreProcessed.parse to: {:?}", a);
                         to = Some(a);
                     }
                     "over" => {
                         let b = FromYaml::parse_into(decoder)?;
+                        log::debug!("LinearBuilderPreProcessed.parse over: {:?}", b);
                         over = Some(b);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -324,21 +328,25 @@ impl FromYaml for ListWithOptions {
                     "random" => {
                         let (r, _): (bool, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ListWithOptions.parse random: {:?}", r);
                         random = r;
                     }
                     "repeat" => {
                         let (r, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ListWithOptions.parse repeat: {:?}", r);
                         repeat = r;
                     }
                     "values" => {
                         let (v, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ListWithOptions.parse values: {:?}", v);
                         values = Some(v);
                     }
                     "unique" => {
                         let (u, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ListWithOptions.parse unique: {:?}", u);
                         unique = u;
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -376,11 +384,13 @@ impl FromYaml for ListProvider {
         match event {
             YamlEvent::SequenceStart => {
                 let (e, marker) = FromYaml::parse(decoder)?;
+                log::debug!("ListProvider.parse SequenceStart: {:?}", e);
                 let value = (ListProvider::DefaultOptions(e), marker);
                 Ok(value)
             }
             YamlEvent::MappingStart => {
                 let (i, marker) = FromYaml::parse(decoder)?;
+                log::debug!("ListProvider.parse MappingStart: {:?}", i);
                 let value = (ListProvider::WithOptions(i), marker);
                 Ok(value)
             }
@@ -492,21 +502,25 @@ impl FromYaml for ProviderPreProcessed {
                     "file" => {
                         let (c, marker) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ProviderPreProcessed.parse file: {:?}", c);
                         break (ProviderPreProcessed::File(c), marker);
                     }
                     "range" => {
                         let (c, marker) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ProviderPreProcessed.parse range: {:?}", c);
                         break (ProviderPreProcessed::Range(c), marker);
                     }
                     "response" => {
                         let (c, marker) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ProviderPreProcessed.parse response: {:?}", c);
                         break (ProviderPreProcessed::Response(c), marker);
                     }
                     "list" => {
                         let (c, marker) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ProviderPreProcessed.parse list: {:?}", c);
                         break (ProviderPreProcessed::List(c), marker);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -1064,36 +1078,43 @@ impl FromYaml for LoggerPreProcessed {
                     "select" => {
                         let c =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse select: {:?}", c);
                         select = Some(c);
                     }
                     "for_each" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse for_each: {:?}", a);
                         for_each = Some(a);
                     }
                     "where" => {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse where: {:?}", b);
                         where_clause = Some(b);
                     }
                     "to" => {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse to: {:?}", b);
                         to = Some(b);
                     }
                     "pretty" => {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse pretty: {:?}", b);
                         pretty = b;
                     }
                     "limit" => {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse limit: {:?}", b);
                         limit = Some(b);
                     }
                     "kill" => {
                         let b =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoggerPreProcessed.parse kill: {:?}", b);
                         kill = b;
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -1268,72 +1289,86 @@ impl FromYaml for EndpointPreProcessed {
                     "declare" => {
                         let c =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse declare: {:?}", c);
                         declare = Some(c);
                     }
                     "headers" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse headers: {:?}", a);
                         headers = Some(a);
                     }
                     "body" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse body: {:?}", a);
                         body = Some(a);
                     }
                     "load_pattern" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse load_pattern: {:?}", a);
                         load_pattern = Some(a);
                     }
                     "method" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse method: {:?}", a);
                         method = Some(a);
                     }
                     "on_demand" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse on_demand: {:?}", a);
                         on_demand = Some(a);
                     }
                     "peak_load" => {
                         let p =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse peak_load: {:?}", p);
                         let p = PreHitsPer(p);
                         peak_load = Some(p);
                     }
                     "tags" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse tags: {:?}", a);
                         tags = Some(a);
                     }
                     "url" => {
                         let v =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse url: {:?}", v);
                         url = Some(v);
                     }
                     "provides" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse provides: {:?}", a);
                         provides = Some(a);
                     }
                     "logs" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse logs: {:?}", a);
                         logs = Some(a);
                     }
                     "max_parallel_requests" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse max_parallel_requests: {:?}", a);
                         max_parallel_requests = Some(a);
                     }
                     "no_auto_returns" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse no_auto_returns: {:?}", a);
                         no_auto_returns = Some(a);
                     }
                     "request_timeout" => {
                         let a =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("EndpointPreProcessed.parse request_timeout: {:?}", a);
                         request_timeout = Some(a);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -1833,11 +1868,11 @@ impl FromYaml for GeneralConfigPreProcessed {
                                     // Going forward it is on by default, we only want to allow turning it off via "false".
                                     // 'durations' are the equivalent of "true" and the duration is ignored. Anything else should error.
                                     duration_from_string(d.clone()).map_err(|err| {
-                                    error!("log_provider_stats error {}/{}: {}", s, d, bool_err);
-                                    debug!("log_provider_stats duration_from_string error {}/{}: {}", s, d, err);
-                                    // We don't want to return a duration error, we want to just say there was a problem with the "name"
-                                    Error::YamlDeserialize(Some(s), marker)
-                                })?;
+                                        error!("log_provider_stats error {}/{}: {}", s, d, bool_err);
+                                        debug!("log_provider_stats duration_from_string error {}/{}: {}", s, d, err);
+                                        // We don't want to return a duration error, we want to just say there was a problem with the "name"
+                                        Error::YamlDeserialize(Some(s), marker)
+                                    })?;
                                     true
                                 }
                             };
@@ -1924,11 +1959,13 @@ impl FromYaml for ConfigPreProcessed {
                     "client" => {
                         let (c, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ConfigPreProcessed.parse client: {:?}", c);
                         client = Some(c);
                     }
                     "general" => {
                         let (a, _) =
                             FromYaml::parse(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("ConfigPreProcessed.parse general: {:?}", a);
                         general = Some(a);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),
@@ -1954,6 +1991,7 @@ struct LoadTestPreProcessed {
 }
 
 impl FromYaml for LoadTestPreProcessed {
+    // Entry point for parsing the yaml file
     fn parse<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> ParseResult<Self> {
         let mut config = None;
         let mut endpoints = None;
@@ -1989,31 +2027,37 @@ impl FromYaml for LoadTestPreProcessed {
                     "config" => {
                         let r =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse config: {:?}", r);
                         config = Some(r);
                     }
                     "endpoints" => {
                         let r =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse endpoints: {:?}", r);
                         endpoints = Some(r);
                     }
                     "load_pattern" => {
                         let v =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse load_pattern: {:?}", v);
                         load_pattern = Some(v);
                     }
                     "providers" => {
                         let v =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse providers: {:?}", v);
                         providers = Some(v);
                     }
                     "loggers" => {
                         let v =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse loggers: {:?}", v);
                         loggers = Some(v);
                     }
                     "vars" => {
                         let v =
                             FromYaml::parse_into(decoder).map_err(map_yaml_deserialize_err(s))?;
+                        log::debug!("LoadTestPreProcessed.parse vars: {:?}", v);
                         vars = Some(v);
                     }
                     _ => return Err(Error::UnrecognizedKey(s, None, marker)),

@@ -17,7 +17,7 @@ itertools = "0.10"
 # pinned to 0.2.3 because newer versions made a semver incompatible change by making `Node` no longer
 # public, which we depend on https://github.com/freestrings/jsonpath/issues/36
 jsonpath_lib = "=0.2.3"
-percent-encoding = "1"
+percent-encoding = "2"
 pest = "2"
 pest_derive = "2"
 rand = "0.8"

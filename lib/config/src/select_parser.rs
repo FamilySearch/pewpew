@@ -307,6 +307,14 @@ fn index_json<'a>(
     for_each: Option<&[Cow<'a, json::Value>]>,
     marker: Marker,
 ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+    log::trace!(
+        "index_json json: {}, index: {:?}, no_err: {}, for_each: {:?}, marker: {:?}",
+        json,
+        index,
+        no_err,
+        for_each,
+        marker
+    );
     #[allow(unused_assignments)]
     let mut holder = None;
     let str_or_number = match index {
@@ -361,6 +369,14 @@ fn index_json2<'a>(
     for_each: Option<&[Cow<'a, json::Value>]>,
     marker: Marker,
 ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+    log::trace!(
+        "index_json2 json: {}, indexes: {:?}, no_err: {}, for_each: {:?}, marker: {:?}",
+        json,
+        indexes,
+        no_err,
+        for_each,
+        marker
+    );
     for index in indexes.iter() {
         let r = index.evaluate(Cow::Borrowed(&*json), for_each)?;
         let o = match (json, r) {
@@ -417,6 +433,13 @@ impl Path {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        log::trace!(
+            "Path::evaluate self: {:?}, d: {:?}, no_recoverable_error: {}, for_each: {:?}",
+            self,
+            d,
+            no_recoverable_error,
+            for_each
+        );
         let (v, rest) = match (&self.start, for_each) {
             (PathStart::FunctionCall(f), _) => (
                 f.evaluate(d, no_recoverable_error, for_each)?,
@@ -451,6 +474,13 @@ impl Path {
         impl Iterator<Item = Result<Cow<'a, json::Value>, ExecutingExpressionError>> + Clone,
         ExecutingExpressionError,
     > {
+        log::trace!(
+            "Path::evaluate_as_iter self: {:?}, d: {:?}, no_recoverable_error: {}, for_each: {:?}",
+            self,
+            d,
+            no_recoverable_error,
+            for_each
+        );
         let r = match &self.start {
             PathStart::FunctionCall(fnc) => {
                 let rest = self.rest.clone();
@@ -500,6 +530,12 @@ impl Path {
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
     ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> {
+        log::trace!(
+            "Path::into_stream self: {:?}, providers: {:?}, no_recoverable_error: {}",
+            self,
+            providers.keys(),
+            no_recoverable_error
+        );
         // TODO: don't we need providers when evaluating `rest`?
         let rest = self.rest;
         let marker = self.marker;
@@ -577,6 +613,7 @@ impl ValueOrExpression {
         let pairs = Parser::parse(Rule::entry_point, expr)
             .map_err(|e| CreatingExpressionError::InvalidExpression(e, marker))?;
         let e = parse_expression(pairs, providers, static_vars, no_recoverable_error, marker)?;
+        log::debug!("ValueOrExpression parse_expression: {:?}", e);
         ValueOrExpression::from_expression(e)
     }
 
@@ -1144,6 +1181,7 @@ impl Template {
                         no_recoverable_error,
                         marker,
                     )?;
+                    log::debug!("Template parse_expression: {:?}", e);
                     match e.simplify_to_string()? {
                         Either::A(s2) => {
                             if let Some(TemplatePiece::NotExpression(s)) = pieces.last_mut() {
@@ -1328,6 +1366,7 @@ impl Select {
                     no_recoverable_error,
                     v.marker(),
                 )?;
+                log::debug!("Select for_each parse_expression: {:?}", e);
                 if providers2.get_special() & FOR_EACH != 0 {
                     Err(error::Error::RecursiveForEachReference(v.marker()))
                 } else {
@@ -1356,6 +1395,7 @@ impl Select {
                     no_recoverable_error,
                     v.marker(),
                 )?;
+                log::debug!("Select where parse_expression: {:?}", e);
                 where_references_for_each = providers2.get_special() & FOR_EACH != 0;
                 if where_references_for_each && join.is_empty() {
                     return Err(error::Error::MissingForEach(v.marker()));
@@ -1568,6 +1608,13 @@ fn parse_select(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<ParsedSelect, CreatingExpressionError> {
+    log::trace!(
+        "parse_select select: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        select,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let r = match select {
         json::Value::Null => ParsedSelect::Null,
         json::Value::Bool(b) => ParsedSelect::Bool(b),
@@ -1607,6 +1654,13 @@ fn parse_function_call(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<Either<FunctionCall, json::Value>, CreatingExpressionError> {
+    log::trace!(
+        "parse_function_call pair: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pair,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let mut ident = None;
     let mut args = Vec::new();
     for pair in pair.into_inner() {
@@ -1647,6 +1701,13 @@ fn parse_indexed_property(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<PathSegment, CreatingExpressionError> {
+    log::trace!(
+        "parse_function_call pair: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pair,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let pair = pair
         .into_inner()
         .next()
@@ -1673,6 +1734,13 @@ fn parse_path(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<Either<json::Value, Path>, CreatingExpressionError> {
+    log::trace!(
+        "parse_path pair: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pair,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let mut start = None;
     let mut rest = Vec::new();
     let mut providers2 = RequiredProviders::new();
@@ -1747,6 +1815,7 @@ fn parse_path(
         rest,
         marker,
     };
+    log::trace!("parse_path path: {:?}", p);
     let r = match p.start {
         PathStart::Value(_) if providers2.is_empty() => {
             let a = p
@@ -1769,6 +1838,13 @@ fn parse_value(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<Value, CreatingExpressionError> {
+    log::trace!(
+        "parse_value pairs: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pairs,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let pair = pairs
         .next()
         .expect("Expected 1 rule while parsing indexed property");
@@ -1826,6 +1902,7 @@ fn expression_helper(
     mut items: Vec<ExpressionOrOperator>,
     level: u8,
 ) -> Result<Expression, CreatingExpressionError> {
+    log::trace!("expression_helper items: {:?}, level: {}", items, level);
     let i = items.iter().rposition(|eoo| {
         if let ExpressionOrOperator::Operator(o) = eoo {
             INFIX_OPERATOR_PRECEDENCE[*o as usize] == level
@@ -1892,6 +1969,14 @@ fn parse_expression_pieces(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<(), CreatingExpressionError> {
+    log::trace!(
+        "parse_expression_pieces pairs: {}, providers: {:?}, pieces: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pairs,
+        providers,
+        pieces,
+        no_recoverable_error,
+        marker
+    );
     let mut not_count = 0;
     let start_len = pieces.len();
     for pair in pairs {
@@ -1995,6 +2080,13 @@ fn parse_expression(
     no_recoverable_error: bool,
     marker: Marker,
 ) -> Result<Expression, CreatingExpressionError> {
+    log::trace!(
+        "parse_expression pairs: {}, providers: {:?}, no_recoverable_error: {}, marker: {:?}",
+        pairs,
+        providers,
+        no_recoverable_error,
+        marker
+    );
     let mut pieces = Vec::new();
     parse_expression_pieces(
         pairs,

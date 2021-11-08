@@ -10,6 +10,10 @@ Changes:
 - Changed the default try script output to log `headers_all` rather than `headers`. There were complaints about not seeing duplicate headers causing confusion over what was being sent.
 - Change try script output to go through stdout instead of stderr.
 - Modified the Config WebAssembly (config-wasm) to also return file body paths from the `getInputFiles()` method.
+- Added a new `encode()` option. `encode(value, "non-alphanumeric")` will encode all characters that are not an ASCII letter or digit.
+
+Bug fixes:
+- Upgrade percent-encoding and other dependencies
 
 ### v0.5.9
 Bug fixes:

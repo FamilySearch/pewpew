@@ -116,7 +116,8 @@ impl Limit {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub enum HitsPer {
     Second(f32),
     Minute(f32),
@@ -170,7 +171,8 @@ trait DefaultWithMarker {
     fn default(marker: Marker) -> Self;
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 enum LoadPatternPreProcessed {
     Linear(LinearBuilderPreProcessed),
 }
@@ -201,7 +203,8 @@ impl FromYaml for LoadPatternPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct LinearBuilderPreProcessed {
     from: Option<PrePercent>,
     to: PrePercent,
@@ -285,8 +288,7 @@ impl LoadPattern {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListWithOptions {
     pub random: bool,
     pub repeat: bool,
@@ -365,8 +367,7 @@ impl FromYaml for ListWithOptions {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ListProvider {
     WithOptions(ListWithOptions),
     DefaultOptions(Vec<json::Value>),
@@ -456,7 +457,8 @@ impl Iterator for ListRepeatRandomIterator {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 enum ProviderPreProcessed {
     File(FileProviderPreProcessed),
     Range(RangeProviderPreProcessed),
@@ -583,8 +585,7 @@ impl fmt::Display for RangeProvider {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RangeProviderPreProcessed {
     start: i64,
     end: i64,
@@ -668,8 +669,7 @@ impl FromYaml for RangeProviderPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FileFormat {
     Csv,
     Json,
@@ -695,8 +695,7 @@ impl Default for FileFormat {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CsvHeader {
     Bool(bool),
     String(String),
@@ -733,8 +732,7 @@ fn from_yaml_char_u8<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> 
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct CsvSettings {
     pub comment: Option<u8>,
     pub delimiter: Option<u8>,
@@ -829,7 +827,8 @@ impl FromYaml for CsvSettings {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct FileProviderPreProcessed {
     csv: CsvSettings,
     auto_return: Option<EndpointProvidesSendOptions>,
@@ -942,8 +941,7 @@ impl FromYaml for FileProviderPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResponseProvider {
     pub auto_return: Option<EndpointProvidesSendOptions>,
     pub buffer: Limit,
@@ -1011,7 +1009,8 @@ impl FromYaml for ResponseProvider {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub struct LoggerPreProcessed {
     select: Option<WithMarker<json::Value>>,
     for_each: Vec<WithMarker<String>>,
@@ -1137,7 +1136,8 @@ impl FromYaml for LoggerPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct LogsPreProcessed {
     select: WithMarker<json::Value>,
     for_each: Vec<WithMarker<String>>,
@@ -1205,7 +1205,7 @@ impl FromYaml for LogsPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 struct EndpointPreProcessed {
     declare: BTreeMap<String, PreValueOrExpression>,
     headers: TupleVec<String, Nullable<PreTemplate>>,
@@ -1406,7 +1406,8 @@ impl FromYaml for EndpointPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 enum Body {
     String(PreTemplate),
     File(PreTemplate),
@@ -1460,7 +1461,8 @@ impl FromYaml for Body {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct BodyMultipartPiece {
     pub headers: TupleVec<String, PreTemplate>,
     pub body: BodyMultipartPieceBody,
@@ -1518,7 +1520,8 @@ impl FromYaml for BodyMultipartPiece {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 enum BodyMultipartPieceBody {
     String(PreTemplate),
     File(PreTemplate),
@@ -1562,8 +1565,7 @@ impl FromYaml for BodyMultipartPieceBody {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum EndpointProvidesSendOptions {
     Block,
     Force,
@@ -1599,7 +1601,8 @@ impl FromYaml for EndpointProvidesSendOptions {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub(crate) struct EndpointProvidesPreProcessed {
     for_each: Vec<WithMarker<String>>,
     select: WithMarker<json::Value>,
@@ -1695,7 +1698,8 @@ pub fn default_auto_buffer_start_size() -> usize {
     5
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct ClientConfigPreProcessed {
     headers: TupleVec<String, PreTemplate>,
     keepalive: PreDuration,
@@ -1788,7 +1792,8 @@ pub struct GeneralConfig {
     pub log_level: Option<LevelFilter>,
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct GeneralConfigPreProcessed {
     auto_buffer_start_size: usize,
     bucket_size: PreDuration,
@@ -1911,7 +1916,8 @@ impl FromYaml for GeneralConfigPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub struct ConfigPreProcessed {
     client: ClientConfigPreProcessed,
     general: GeneralConfigPreProcessed,
@@ -1980,7 +1986,8 @@ impl FromYaml for ConfigPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct LoadTestPreProcessed {
     config: ConfigPreProcessed,
     endpoints: Vec<EndpointPreProcessed>,
@@ -2082,7 +2089,7 @@ impl FromYaml for LoadTestPreProcessed {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 struct WithMarker<T> {
     inner: T,
     marker: Marker,
@@ -2120,7 +2127,8 @@ impl<T: FromYaml> FromYaml for WithMarker<T> {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct PreValueOrExpression(WithMarker<String>);
 
 impl PreValueOrExpression {
@@ -2147,7 +2155,8 @@ impl FromYaml for PreValueOrExpression {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct PreTemplate(WithMarker<String>, bool);
 
 impl PreTemplate {
@@ -2194,7 +2203,8 @@ impl FromYaml for PreTemplate {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub struct PreVar(WithMarker<json::Value>);
 
 impl PreVar {
@@ -2284,7 +2294,8 @@ fn duration_from_string2(dur: String, marker: Marker) -> Result<Duration, Error>
     Ok(Duration::from_secs(total_secs))
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub struct PreDuration(PreTemplate);
 
 impl PreDuration {
@@ -2303,7 +2314,8 @@ impl FromYaml for PreDuration {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct PrePercent(PreTemplate);
 
 impl PrePercent {
@@ -2333,7 +2345,7 @@ impl FromYaml for PrePercent {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 struct PreLoadPattern(Vec<LoadPatternPreProcessed>, Marker);
 
 #[cfg(debug_assertions)]
@@ -2380,7 +2392,8 @@ impl FromYaml for PreLoadPattern {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 struct PreHitsPer(PreTemplate);
 
 impl PreHitsPer {

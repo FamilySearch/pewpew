@@ -340,7 +340,8 @@ impl<V> Insert for Vec<V> {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug, PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[derive(Debug)]
 pub struct TupleVec<K, V>(pub Vec<(K, V)>);
 
 impl<K, V> Default for TupleVec<K, V> {

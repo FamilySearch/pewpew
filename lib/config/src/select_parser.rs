@@ -1902,11 +1902,7 @@ fn expression_helper(
     mut items: Vec<ExpressionOrOperator>,
     level: u8,
 ) -> Result<Expression, CreatingExpressionError> {
-    log::trace!(
-        "expression_helper items: {:?}, level: {}",
-        items,
-        level
-    );
+    log::trace!("expression_helper items: {:?}, level: {}", items, level);
     let i = items.iter().rposition(|eoo| {
         if let ExpressionOrOperator::Operator(o) = eoo {
             INFIX_OPERATOR_PRECEDENCE[*o as usize] == level

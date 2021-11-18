@@ -59,6 +59,7 @@ impl Provider {
 pub fn file(
     mut fp: config::FileProvider,
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
+    name: &String,
 ) -> Result<Provider, TestError> {
     let file = std::mem::take(&mut fp.path);
     debug!("providers::file={}", file);
@@ -81,7 +82,7 @@ pub fn file(
 
     // create the channel for the provider
     let limit = config_limit_to_channel_limit(fp.buffer);
-    let (tx, rx) = channel::channel(limit, fp.unique);
+    let (tx, rx) = channel::channel(limit, fp.unique, name);
     let tx2 = tx.clone();
 
     // create a new task that pushes data from the file into the channel
@@ -106,23 +107,23 @@ pub fn file(
 }
 
 // create a response provider
-pub fn response(rp: config::ResponseProvider) -> Provider {
+pub fn response(rp: config::ResponseProvider, name: &String) -> Provider {
     debug!("providers::response={:?}", rp);
     // create the channel for the provider
     let limit = config_limit_to_channel_limit(rp.buffer);
-    let (tx, rx) = channel::channel(limit, rp.unique);
+    let (tx, rx) = channel::channel(limit, rp.unique, name);
 
     Provider::new(rp.auto_return, rx, tx)
 }
 
 // create a list provider
-pub fn list(lp: config::ListProvider) -> Provider {
+pub fn list(lp: config::ListProvider, name: &String) -> Provider {
     debug!("providers::list={:?}", lp);
     // create the channel for the provider
     let unique = lp.unique();
     let rs = stream::iter(lp.into_iter().map(Ok));
     let limit = channel::Limit::dynamic(5);
-    let (tx, rx) = channel::channel(limit, unique);
+    let (tx, rx) = channel::channel(limit, unique, name);
 
     // create a new task that pushes data from the list into the channel
     let tx2 = tx.clone();
@@ -134,11 +135,11 @@ pub fn list(lp: config::ListProvider) -> Provider {
 }
 
 // create a range provider
-pub fn range(rp: config::RangeProvider) -> Provider {
+pub fn range(rp: config::RangeProvider, name: &String) -> Provider {
     debug!("providers::range={}", rp);
     // create the channel for the provider
     let limit = channel::Limit::dynamic(5);
-    let (tx, rx) = channel::channel(limit, rp.unique());
+    let (tx, rx) = channel::channel(limit, rp.unique(), name);
 
     // create a new task that pushes data from the range into the channel
     let prime_tx = stream::iter(rp.0.map(|v| Ok(v.into()))).forward(tx.clone());
@@ -284,7 +285,7 @@ mod tests {
             "#;
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
+            let p = range(range_params.into(), &"range_provider_works1".to_string());
             let expect: Vec<_> = (0..=20).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -301,7 +302,7 @@ mod tests {
             "#;
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
+            let p = range(range_params.into(), &"range_provider_works2".to_string());
 
             let expect: Vec<_> = (0..=20).step_by(2).collect();
 
@@ -319,7 +320,7 @@ mod tests {
                 "#;
             let range_params =
                 config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(range_params.into());
+            let p = range(range_params.into(), &"range_provider_works3".to_string());
 
             let expect: Vec<_> = (0..=20).cycle().take(100).collect();
 
@@ -344,7 +345,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into());
+            let p = list(lwo.into(), &"literals_provider_works1".to_string());
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -361,7 +362,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into());
+            let p = list(lwo.into(), &"literals_provider_works2".to_string());
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -381,7 +382,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into());
+            let p = list(lwo.into(), &"literals_provider_works3".to_string());
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
             let values: Vec<_> = p.rx.take(100).collect().await;
@@ -395,7 +396,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into());
+            let p = list(lwo.into(), &"literals_provider_works4".to_string());
             let mut expect: Vec<_> = jsons
                 .iter()
                 .cycle()
@@ -423,7 +424,7 @@ mod tests {
                 unique: true,
             };
 
-            let p = list(lwo.into());
+            let p = list(lwo.into(), &"literals_provider_works5".to_string());
             let Provider { rx, tx, .. } = p;
             drop(tx);
 
@@ -448,7 +449,7 @@ mod tests {
             buffer: config::Limit::dynamic(),
             unique: false,
         };
-        let mut p = response(rp);
+        let mut p = response(rp, &"response_provider_works".to_string());
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }
@@ -481,7 +482,7 @@ mod tests {
             buffer: config::Limit::Static(jsons.len()),
             unique: true,
         };
-        let mut p = response(rp);
+        let mut p = response(rp, &"unique_response_provider_works".to_string());
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }

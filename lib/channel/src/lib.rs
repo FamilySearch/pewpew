@@ -519,7 +519,11 @@ impl<T: Serialize> Stream for Receiver<T> {
 }
 
 /// entry point for creating a channel
-pub fn channel<T: Serialize>(limit: Limit, unique: bool, name: &String) -> (Sender<T>, Receiver<T>) {
+pub fn channel<T: Serialize>(
+    limit: Limit,
+    unique: bool,
+    name: &String,
+) -> (Sender<T>, Receiver<T>) {
     let channel = Arc::new(Channel::new(limit, unique, name));
     let receiver = Receiver {
         channel: channel.clone(),
@@ -639,7 +643,8 @@ mod tests {
     fn channel_dynamic_limit_expands() {
         let limit = Limit::dynamic(5);
         let start_limit = limit.get();
-        let (mut tx, mut rx) = channel::<bool>(limit, false, &"channel_dynamic_limit_expands".to_string());
+        let (mut tx, mut rx) =
+            channel::<bool>(limit, false, &"channel_dynamic_limit_expands".to_string());
 
         for _ in 0..start_limit {
             let left = tx.send(true).now_or_never();
@@ -684,7 +689,11 @@ mod tests {
 
     #[test]
     fn sender_errs_when_no_receivers() {
-        let (mut tx, mut rx) = channel::<bool>(Limit::dynamic(5), false, &"sender_errs_when_no_receivers".to_string());
+        let (mut tx, mut rx) = channel::<bool>(
+            Limit::dynamic(5),
+            false,
+            &"sender_errs_when_no_receivers".to_string(),
+        );
 
         while tx.send(true).now_or_never().is_some() {}
 
@@ -727,7 +736,8 @@ mod tests {
     fn receiver_ends_when_no_senders() {
         let limit = Limit::dynamic(5);
         let start_size = limit.get();
-        let (mut tx, mut rx) = channel::<bool>(limit, false, &"receiver_ends_when_no_senders".to_string());
+        let (mut tx, mut rx) =
+            channel::<bool>(limit, false, &"receiver_ends_when_no_senders".to_string());
 
         while tx.send(true).now_or_never().is_some() {}
 
@@ -753,7 +763,11 @@ mod tests {
 
     #[test]
     fn on_demand_receiver_works() {
-        let (tx, mut rx) = channel::<()>(Limit::dynamic(5), false, &"on_demand_receiver_works".to_string());
+        let (tx, mut rx) = channel::<()>(
+            Limit::dynamic(5),
+            false,
+            &"on_demand_receiver_works".to_string(),
+        );
 
         let mut on_demand = OnDemandReceiver::new(&rx);
 

@@ -456,7 +456,7 @@ where
     match test_result {
         Err(e) => {
             // send the test end message to ensure the stats channel closes
-            error!("{}", e);
+            error!("TestError: {}", e);
             let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
             let msg = match output_format {
                 RunOutputFormat::Human => format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),

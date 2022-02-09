@@ -11,6 +11,7 @@ use std::io::Write;
 // The `Sender` returned from `blocking_writer` accepts two types of messages `Final` and `Other`
 // `Other` messages are written out to the writer as soon as they are received
 // `Final` are written after the internal `futures::mpsc::Receiver` closes
+#[derive(Debug)]
 pub enum MsgType {
     Final(String),
     Other(String),

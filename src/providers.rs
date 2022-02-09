@@ -149,7 +149,7 @@ pub fn range(rp: config::RangeProvider, name: &String) -> Provider {
     Provider::new(None, rx, tx)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Logger {
     limit: Option<Arc<AtomicIsize>>,
     pretty: bool,
@@ -215,7 +215,7 @@ pub fn logger(
     test_killer: &broadcast::Sender<Result<TestEndReason, TestError>>,
     writer: FCSender<MsgType>,
 ) -> Logger {
-    debug!("provideres::logger={}", logger);
+    debug!("providers::logger={}", logger);
     let pretty = logger.pretty;
     let kill = logger.kill;
 

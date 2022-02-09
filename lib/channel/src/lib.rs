@@ -64,7 +64,7 @@ struct Channel<T: Serialize> {
 
 impl<T: Serialize> Channel<T> {
     // TODO: Make unique an enum with false, true, and forever/always (doesn't remove from hashset)
-    fn new(limit: Limit, unique: bool, name: &String) -> Self {
+    fn new(limit: Limit, unique: bool, name: &str) -> Self {
         let unique = match unique {
             true => Some(HashSet::new()),
             false => None,
@@ -607,11 +607,7 @@ impl<T: Serialize> Stream for Receiver<T> {
 }
 
 /// entry point for creating a channel
-pub fn channel<T: Serialize>(
-    limit: Limit,
-    unique: bool,
-    name: &String,
-) -> (Sender<T>, Receiver<T>) {
+pub fn channel<T: Serialize>(limit: Limit, unique: bool, name: &str) -> (Sender<T>, Receiver<T>) {
     info!(
         "Creating channel {}, limit: {:?}, unique: {}",
         name, limit, unique

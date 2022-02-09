@@ -59,7 +59,7 @@ impl Provider {
 pub fn file(
     mut fp: config::FileProvider,
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
-    name: &String,
+    name: &str,
 ) -> Result<Provider, TestError> {
     let file = std::mem::take(&mut fp.path);
     debug!("providers::file={}", file);
@@ -107,7 +107,7 @@ pub fn file(
 }
 
 // create a response provider
-pub fn response(rp: config::ResponseProvider, name: &String) -> Provider {
+pub fn response(rp: config::ResponseProvider, name: &str) -> Provider {
     debug!("providers::response={:?}", rp);
     // create the channel for the provider
     let limit = config_limit_to_channel_limit(rp.buffer);
@@ -117,7 +117,7 @@ pub fn response(rp: config::ResponseProvider, name: &String) -> Provider {
 }
 
 // create a list provider
-pub fn list(lp: config::ListProvider, name: &String) -> Provider {
+pub fn list(lp: config::ListProvider, name: &str) -> Provider {
     debug!("providers::list={:?}", lp);
     // create the channel for the provider
     let unique = lp.unique();
@@ -135,7 +135,7 @@ pub fn list(lp: config::ListProvider, name: &String) -> Provider {
 }
 
 // create a range provider
-pub fn range(rp: config::RangeProvider, name: &String) -> Provider {
+pub fn range(rp: config::RangeProvider, name: &str) -> Provider {
     debug!("providers::range={}", rp);
     // create the channel for the provider
     let limit = channel::Limit::dynamic(5);

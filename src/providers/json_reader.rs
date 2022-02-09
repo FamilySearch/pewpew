@@ -87,8 +87,8 @@ impl JsonReader {
                     return Some(Err(e.into()));
                 }
             }
-            let mut buf = &mut self.staging_buffer[..8 * (1 << 10)];
-            match self.reader.read(&mut buf) {
+            let buf = &mut self.staging_buffer[..8 * (1 << 10)];
+            match self.reader.read(buf) {
                 Err(e) => return Some(Err(e)),
                 Ok(n) => {
                     if n == 0 {

@@ -45,6 +45,7 @@ fn init_logging(log_level: Option<String>) {
 #[wasm_bindgen]
 pub struct Config(LoadTest);
 
+#[allow(clippy::unused_unit)]
 #[wasm_bindgen]
 impl Config {
     // build a config object from raw bytes (in javascript this is passing in a Uint8Array)

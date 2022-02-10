@@ -154,6 +154,13 @@ impl ProviderOrLogger {
             Self::Logger(_) => true,
         }
     }
+
+    fn name(&self) -> String {
+        match &self {
+            Self::Provider(provider) => format!("Provider: {}", provider.name()),
+            Self::Logger(logger) => format!("Logger: {:?}", logger),
+        }
+    }
 }
 
 struct Outgoing {

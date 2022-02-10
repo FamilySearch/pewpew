@@ -7,6 +7,7 @@ use futures::{
     future::{select_all, try_join_all},
     FutureExt, TryFutureExt,
 };
+use log::debug;
 use serde_json as json;
 
 use std::{
@@ -138,7 +139,12 @@ impl BodyHandler {
                     }
                 };
                 match send_behavior {
+                    // This is where we actually send or block from a request
                     EndpointProvidesSendOptions::Block => {
+                        debug!(
+                            "BodyHandler:handle EndpointProvidesSendOptions::Block {}",
+                            o.tx.name()
+                        );
                         let tx = o.tx.clone();
                         let f = BlockSender::new(iter, tx).into_future().map(|_| Ok(()));
                         if o.tx.is_logger() {
@@ -148,6 +154,10 @@ impl BodyHandler {
                         }
                     }
                     EndpointProvidesSendOptions::Force => {
+                        debug!(
+                            "BodyHandler:handle EndpointProvidesSendOptions::Force {}",
+                            o.tx.name()
+                        );
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,
@@ -163,6 +173,10 @@ impl BodyHandler {
                         }
                     }
                     EndpointProvidesSendOptions::IfNotFull => {
+                        debug!(
+                            "BodyHandler:handle EndpointProvidesSendOptions::IfNotFull {}",
+                            o.tx.name()
+                        );
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,

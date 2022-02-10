@@ -1,6 +1,6 @@
 use std::{convert::TryInto, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
 
-use clap::{crate_version, App, AppSettings, Arg, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -28,15 +28,15 @@ fn main() {
         .about("The HTTP load test tool https://familysearch.github.io/pewpew")
         .version(crate_version!())
         .setting(AppSettings::DisableHelpSubcommand)
-        // .setting(AppSettings::InferSubcommands) // disabled until https://github.com/clap-rs/clap/issues/1463 is fixed
+        .setting(AppSettings::InferSubcommands) // disabled until https://github.com/clap-rs/clap/issues/1463 is fixed
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::VersionlessSubcommands)
-        .subcommand(SubCommand::with_name("run")
+        // .setting(AppSettings::VersionlessSubcommands)
+        .subcommand(App::new("run")
             .about("Runs a full load test")
-            .setting(AppSettings::UnifiedHelpMessage)
+            // .setting(AppSettings::UnifiedHelpMessage) // Now the default
             .arg(
-                Arg::with_name("output-format")
-                    .short("f")
+                Arg::new("output-format")
+                    .short('f')
                     .long("output-format")
                     .help("Formatting for stats printed to stderr")
                     .value_name("FORMAT")
@@ -45,36 +45,36 @@ fn main() {
                     .default_value("human")
             )
             .arg(
-                Arg::with_name("stats-file")
-                    .short("o")
+                Arg::new("stats-file")
+                    .short('o')
                     .long("stats-file")
                     .help("Specify the filename for the stats file")
                     .value_name("STATS_FILE")
             )
             .arg(
-                Arg::with_name("start-at")
-                    .short("t")
+                Arg::new("start-at")
+                    .short('t')
                     .long("start-at")
                     .help("Specify the time the test should start at")
                     .value_name("START_AT")
                     .validator(|s| {
-                        match duration_from_string(s) {
+                        match duration_from_string(s.into()) {
                             Ok(_) => Ok(()),
-                            Err(_) => Err("".into()),
+                            Err(_) => Err("".to_string()),
                         }
                     })
             )
             .arg(
-                Arg::with_name("results-directory")
-                    .short("d")
+                Arg::new("results-directory")
+                    .short('d')
                     .long("results-directory")
                     .number_of_values(1)
                     .help("Directory to store results and logs")
                     .value_name("DIRECTORY")
             )
             .arg(
-                Arg::with_name("stats-file-format")
-                    .short("s")
+                Arg::new("stats-file-format")
+                    .short('s')
                     .long("stats-file-format")
                     .help("Format for the stats file")
                     .value_name("FORMAT")
@@ -84,36 +84,36 @@ fn main() {
                     .default_value("json")
             )
             .arg(
-                Arg::with_name("watch")
-                    .short("w")
+                Arg::new("watch")
+                    .short('w')
                     .long("watch")
                     .help("Watch the config file for changes and update the test accordingly")
             )
             .arg(
-                Arg::with_name("CONFIG")
+                Arg::new("CONFIG")
                     .help("Load test config file to use")
                     .required(true),
             )
         )
-        .subcommand(SubCommand::with_name("try")
+        .subcommand(App::new("try")
             .about("Runs the specified endpoint(s) a single time for testing purposes")
-            .setting(AppSettings::UnifiedHelpMessage)
+            // .setting(AppSettings::UnifiedHelpMessage) // Now the default
             .arg(
-                Arg::with_name("loggers")
-                    .short("l")
+                Arg::new("loggers")
+                    .short('l')
                     .long("loggers")
                     .help("Enable loggers defined in the config file")
             )
             .arg(
-                Arg::with_name("file")
-                    .short("o")
+                Arg::new("file")
+                    .short('o')
                     .long("file")
                     .help("Send results to the specified file instead of stdout")
                     .value_name("FILE")
             )
             .arg(
-                Arg::with_name("format")
-                    .short("f")
+                Arg::new("format")
+                    .short('f')
                     .long("format")
                     .help("Specify the format for the try run output")
                     .value_name("FORMAT")
@@ -122,11 +122,11 @@ fn main() {
                     .default_value("human")
             )
             .arg(
-                Arg::with_name("include")
-                    .short("i")
+                Arg::new("include")
+                    .short('i')
                     .long("include")
                     .long_help(r#"Filter which endpoints are included in the try run. Filters work based on an endpoint's tags. Filters are specified in the format "key=value" where "*" is a wildcard. Any endpoint matching the filter is included in the test"#)
-                    .multiple(true)
+                    .multiple_occurrences(true)
                     .number_of_values(1)
                     .validator(move |s| {
                         if filter_reg2.is_match(&s) {
@@ -138,15 +138,15 @@ fn main() {
                     .value_name("INCLUDE")
             )
             .arg(
-                Arg::with_name("results-directory")
-                    .short("d")
+                Arg::new("results-directory")
+                    .short('d')
                     .long("results-directory")
                     .number_of_values(1)
                     .help("Directory to store logs (if enabled with --loggers)")
                     .value_name("DIRECTORY")
             )
             .arg(
-                Arg::with_name("CONFIG")
+                Arg::new("CONFIG")
                     .help("Load test config file to use")
                     .required(true),
             )

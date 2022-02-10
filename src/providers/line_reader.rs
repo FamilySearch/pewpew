@@ -102,8 +102,8 @@ impl LineReader {
                 let start_length = self.buf_data_len;
                 let new_length = KB8 + start_length;
                 self.byte_buffer.resize(new_length, 0);
-                let mut buf = &mut self.byte_buffer[start_length..new_length];
-                match self.reader.read(&mut buf) {
+                let buf = &mut self.byte_buffer[start_length..new_length];
+                match self.reader.read(buf) {
                     Err(e) => return Some(Err(e)),
                     Ok(n) => {
                         if n == 0 {

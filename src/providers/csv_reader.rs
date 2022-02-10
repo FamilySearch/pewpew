@@ -150,7 +150,7 @@ impl Iterator for CsvReader {
                     .collect(),
             )
         } else {
-            json::Value::Array(record.into_iter().map(|s| str_to_json(s)).collect())
+            json::Value::Array(record.into_iter().map(str_to_json).collect())
         };
         Some(Ok(json))
     }

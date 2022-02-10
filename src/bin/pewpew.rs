@@ -129,7 +129,7 @@ fn main() {
                     .multiple_occurrences(true)
                     .number_of_values(1)
                     .validator(move |s| {
-                        if filter_reg2.is_match(&s) {
+                        if filter_reg2.is_match(s) {
                             Ok(())
                         } else {
                             Err("include filters must be in the format `tag=value` or `tag!=value`".to_string())

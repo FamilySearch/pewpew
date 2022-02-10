@@ -745,7 +745,13 @@ pub(super) struct JsonPath {
 
 impl fmt::Debug for JsonPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "JsonPath {{ provider: {} }}", self.provider)
+        write!(
+            f,
+            "JsonPath {{ provider: {}, line: {}, column: {} }}",
+            self.provider,
+            self.marker.line(),
+            self.marker.col()
+        )
     }
 }
 

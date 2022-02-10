@@ -214,6 +214,7 @@ dependencies = [
  "dashmap",
  "event-listener",
  "futures",
+ "log",
  "serde",
  "serde_json",
 ]

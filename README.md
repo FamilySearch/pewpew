@@ -13,7 +13,7 @@ Changes:
 - Added a new `encode()` option. `encode(value, "non-alphanumeric")` will encode all characters that are not an ASCII letter or digit.
 
 Bug fixes:
-- Upgrade percent-encoding and other dependencies
+- Upgrade percent-encoding, clap, and other dependencies
 
 ### v0.5.9
 Bug fixes:

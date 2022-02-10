@@ -23,7 +23,7 @@ base64 = "0.13"
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"
 channel = { path = "./lib/channel" }
-clap = "2"
+clap = { version = "3", features = ["cargo"] }
 config = { path = "./lib/config" }
 csv = "1"
 ctrlc = "3"
@@ -51,7 +51,7 @@ url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
 # https://github.com/softprops/json-env-logger/issues/6
-log = ">=0.4.13, <0.4.14"
+log = { version = "0.4.14", features = ["kv_unstable_std"] }
 env_logger = "0.9"
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }
 

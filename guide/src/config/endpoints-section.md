@@ -39,7 +39,7 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 
 - **`tags`** <sub><sup>*Optional*</sup></sub> - Key/value string/[template](./common-types.md#templates) pairs.
 
-  Tags are a series of key/value pairs used to distinguish each endpoint. Tags can be used to include certain endpoints in a [`try` run](../cli.md#Command-line-options), and also make it possible for a single endpoint to have its results statistics aggregated in multiple groups. Because tag values are [templates](./common-types.md#templates) only tags which can be resolved statically at the beginning of a test can be used with the `include` flag of a `try` run. A reference to a provider can cause a single endpoint to have multiple groups of tags. Each one of these groups will have its own statistics in the results. For example if an endpoint had the following tags:
+  Tags are a series of key/value pairs used to distinguish each endpoint. Tags can be used to include certain endpoints in a [`try`] run(../cli.md#Command-line-options), and also make it possible for a single endpoint to have its results statistics aggregated in multiple groups. Because tag values are [templates](./common-types.md#templates) only tags which can be resolved statically at the beginning of a test can be used with the `include` flag of a `try` run. A reference to a provider can cause a single endpoint to have multiple groups of tags. Each one of these groups will have its own statistics in the results. For example if an endpoint had the following tags:
 
   ```
     tags:

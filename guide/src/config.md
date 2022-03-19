@@ -1,5 +1,5 @@
 # Config file
-A config file is a [YAML file](https://yaml.org/start.html) which defines everything needed for Pewpew to execute a load test. This includes which HTTP endpoints are part of the test, how load should fluctuate over the duration of a test, how data "flows" in a test and more.
+A config file is a [YAML file](https://yaml.org/) which defines everything needed for Pewpew to execute a load test. This includes which HTTP endpoints are part of the test, how load should fluctuate over the duration of a test, how data "flows" in a test and more.
 
 ## Key concepts
 Before creating a config file there are a few key concepts which are helpful to understand.

@@ -12,6 +12,7 @@ use crate::error::{self, CreatingExpressionError, ExecutingExpressionError};
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use itertools::Itertools;
+use log::debug;
 use pest::{
     iterators::{Pair, Pairs},
     Parser as PestParser,
@@ -42,8 +43,11 @@ pub trait ProviderStream<Ar: Clone + Send + Unpin + 'static> {
 
 #[derive(Clone, Debug, Default)]
 pub struct RequiredProviders {
+    /// Used to store more complex select statements
     inner: BTreeMap<String, Marker>,
+    /// Bitwise map of what standard request/response/stats are included
     special: u16,
+    /// Bitwise map of what standard request/response/stats are included
     where_special: u16,
     is_where: bool,
 }
@@ -68,6 +72,11 @@ impl RequiredProviders {
         } else {
             &mut self.special
         };
+        debug!(
+            "RequiredProviders insert is_where=\"{}\" s=\"{}\" marker=\"{:?}\"",
+            self.is_where, s, marker
+        );
+        // First match the standard request/response/stats lines
         match &*s {
             "request.start-line" => *special |= REQUEST_STARTLINE,
             "request.headers" => *special |= REQUEST_HEADERS,
@@ -86,6 +95,7 @@ impl RequiredProviders {
             "for_each" => *special |= FOR_EACH,
             "error" => *special |= ERROR,
             _ => {
+                // Anything else we need to store the more complex select statement
                 self.inner.insert(s, marker);
             }
         }
@@ -101,6 +111,7 @@ impl RequiredProviders {
         self.inner.extend(other.inner);
     }
 
+    /// Returns the inner complex select options
     pub fn into_inner(self) -> BTreeMap<String, Marker> {
         self.inner
     }
@@ -146,6 +157,7 @@ pub(super) enum FunctionCall {
     Range(Box<Range>),
     Repeat(Repeat),
     Replace(Box<Replace>),
+    // TODO: Add parseInt
 }
 
 impl FunctionCall {
@@ -156,6 +168,8 @@ impl FunctionCall {
         static_vars: &BTreeMap<String, json::Value>,
         marker: Marker,
     ) -> Result<Either<Self, json::Value>, CreatingExpressionError> {
+        debug!("FunctionCall::new ident=\"{}\" args=\"{:?}\" providers=\"{:?}\" static_vars=\"{:?}\" marker=\"{:?}\"",
+            ident, args, providers, static_vars, marker);
         let r = match ident {
             "collect" => Either::A(FunctionCall::Collect(Collect::new(args, marker)?)),
             "encode" => Encode::new(args, marker)?.map_a(FunctionCall::Encode),
@@ -175,6 +189,7 @@ impl FunctionCall {
             "range" => Either::A(FunctionCall::Range(Range::new(args, marker)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args, marker)?)),
             "replace" => Replace::new(args, marker)?.map_a(|r| FunctionCall::Replace(r.into())),
+            // TODO: Add parseInt
             _ => {
                 return Err(CreatingExpressionError::UnknownFunction(
                     ident.into(),
@@ -206,6 +221,7 @@ impl FunctionCall {
             FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
             FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error, for_each),
+            // TODO: Add parseInt
         }
     }
 
@@ -269,6 +285,7 @@ impl FunctionCall {
                     no_recoverable_error,
                     for_each,
                 )?))),
+                // TODO: Add parseInt
             };
         Ok(r)
     }
@@ -296,6 +313,7 @@ impl FunctionCall {
             FunctionCall::Range(r) => r.into_stream(providers, no_recoverable_error).boxed(),
             FunctionCall::Repeat(r) => r.into_stream().boxed(),
             FunctionCall::Replace(r) => r.into_stream(providers, no_recoverable_error).boxed(),
+            // TODO: Add parseInt
         }
     }
 }
@@ -1066,7 +1084,7 @@ impl Expression {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ParsedSelect {
     Null,
     Bool(bool),
@@ -1301,7 +1319,7 @@ impl Template {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Select {
     join: Vec<ValueOrExpression>,
     references_for_each: bool,

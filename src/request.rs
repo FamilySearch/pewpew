@@ -154,6 +154,13 @@ impl ProviderOrLogger {
             Self::Logger(_) => true,
         }
     }
+
+    fn name(&self) -> String {
+        match &self {
+            Self::Provider(provider) => format!("Provider: {}", provider.name()),
+            Self::Logger(logger) => format!("Logger: {:?}", logger),
+        }
+    }
 }
 
 struct Outgoing {
@@ -260,6 +267,8 @@ impl EndpointBuilder {
         let provides = provides
             .into_iter()
             .map(|(k, v)| {
+                debug!("EndpointBuilder.build provide method=\"{}\" url=\"{}\" provide=\"{:?}\" provides=\"{:?}\"",
+                    method.as_str(), url.evaluate_with_star(), k, v);
                 let provider = ctx
                     .providers
                     .get(&k)
@@ -295,12 +304,18 @@ impl EndpointBuilder {
         }
         // Add any loggers to the outgoing providers/loggers
         for (k, v) in logs {
+            debug!(
+                "EndpointBuilder.build logs key=\"{}\" Select=\"{:?}\"",
+                k, v
+            );
             let tx = ctx
                 .loggers
                 .get(&k)
                 .expect("logs should reference a valid logger");
             outgoing.push(Outgoing::new(v, ProviderOrLogger::Logger(tx.clone())));
         }
+        // Required providers
+        // these u16s are bitwise maps of what standard select request/response/stats are selected
         let rr_providers = providers_to_stream.get_special();
         let precheck_rr_providers = providers_to_stream.get_where_special();
         // go through the list of required providers and make sure we have them all
@@ -309,6 +324,7 @@ impl EndpointBuilder {
                 Some(p) => p,
                 None => continue,
             };
+            debug!("EndpointBuilder.build unique_providers name=\"{}\"", name);
             let receiver = provider.rx.clone();
             let ar = provider
                 .auto_return
@@ -331,6 +347,10 @@ impl EndpointBuilder {
         }
 
         for (name, vce) in self.endpoint.declare {
+            debug!(
+                "EndpointBuilder.build declare name=\"{}\" valueOrExpression=\"{:?}\"",
+                name, vce
+            );
             let stream = vce
                 .into_stream(&ctx.providers, false)
                 .map_ok(move |(v, returns)| {
@@ -349,9 +369,9 @@ impl EndpointBuilder {
             method,
             no_auto_returns,
             on_demand_streams,
-            outgoing,
+            outgoing, // loggers
             precheck_rr_providers,
-            provides,
+            provides, // providers
             rr_providers,
             tags: Arc::new(tags),
             stats_tx,
@@ -820,37 +840,42 @@ impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> Future f
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            let v = match self.next_value.take() {
-                Some(v) => v,
+            // Check if there's a self.next_value
+            let value_to_add = match self.next_value.take() {
+                Some(next_value) => next_value,
+                // Check the values list if there isn't one already in self.next_value
                 None => match self.values.next() {
-                    Some(Ok(v)) => v,
+                    Some(Ok(v)) => v, // Got a value from self.values
                     Some(Err(e)) => return Poll::Ready(Err(e)),
-                    None => break,
+                    None => break, // self.values is empty
                 },
             };
+            // We've got a value. Check the tx status
             match &mut self.tx {
                 ProviderOrLogger::Logger(tx) => match tx.poll_ready_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        if tx.start_send_unpin(v).is_err() {
+                        if tx.start_send_unpin(value_to_add).is_err() {
                             break;
                         }
                         self.value_added = true;
                     }
                     Poll::Pending => {
-                        self.next_value = Some(v);
+                        // tx not ready, put it (back) in next_value
+                        self.next_value = Some(value_to_add);
                         return Poll::Pending;
                     }
                     Poll::Ready(Err(_)) => break,
                 },
                 ProviderOrLogger::Provider(tx) => match tx.poll_ready_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        if tx.start_send_unpin(v).is_err() {
+                        if tx.start_send_unpin(value_to_add).is_err() {
                             break;
                         }
                         self.value_added = true;
                     }
                     Poll::Pending => {
-                        self.next_value = Some(v);
+                        // tx not ready, put it (back) in next_value
+                        self.next_value = Some(value_to_add);
                         return Poll::Pending;
                     }
                     Poll::Ready(Err(_)) => break,

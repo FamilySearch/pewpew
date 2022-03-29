@@ -2,13 +2,13 @@ FROM rust:1.52
 
 # versions (according to their git tag) of different tools to download
 # https://github.com/EmbarkStudios/cargo-deny/releases
-ARG CARGO_DENY_VER=0.9.1
+ARG CARGO_DENY_VER=0.11.3
 # https://github.com/rust-lang/mdBook/releases
-ARG MDBOOK_VER=v0.4.12
+ARG MDBOOK_VER=v0.4.15
 # https://github.com/rustwasm/wasm-pack/releases
-ARG WASM_PACK_VER=v0.10.0
+ARG WASM_PACK_VER=v0.10.2
 # https://nodejs.org/
-ARG NODE_MAJOR_VER=12
+ARG NODE_MAJOR_VER=14
 
 ARG USER=pewpew
 

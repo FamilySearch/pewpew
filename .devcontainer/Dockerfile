@@ -2,7 +2,7 @@ FROM rust:1.52
 
 # versions (according to their git tag) of different tools to download
 # https://github.com/EmbarkStudios/cargo-deny/releases
-ARG CARGO_DENY_VER=0.9.1
+ARG CARGO_DENY_VER=0.11.3
 # https://github.com/rust-lang/mdBook/releases
 ARG MDBOOK_VER=v0.4.15
 # https://github.com/rustwasm/wasm-pack/releases

@@ -1056,7 +1056,7 @@ impl MinMax {
             let values = values?;
             let iter = values.iter().map(|v| Ok(Cow::Borrowed(&v.0)));
             let v = MinMax::eval_iter(min, iter)?.0.into_owned();
-            let returns = values.into_iter().map(|v| v.1).flatten().collect();
+            let returns = values.into_iter().flat_map(|v| v.1).collect();
             Ok((v, returns))
         })
     }
@@ -1324,15 +1324,15 @@ impl Range {
                 let first = first
                     .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                     .as_u64()
-                    .ok_or_else(|| {
-                        ExecutingExpressionError::InvalidFunctionArguments("range", *marker)
-                    })?;
+                    .ok_or(ExecutingExpressionError::InvalidFunctionArguments(
+                        "range", *marker,
+                    ))?;
                 let second = second
                     .evaluate(d, no_recoverable_error, for_each)?
                     .as_u64()
-                    .ok_or_else(|| {
-                        ExecutingExpressionError::InvalidFunctionArguments("range", *marker)
-                    })?;
+                    .ok_or(ExecutingExpressionError::InvalidFunctionArguments(
+                        "range", *marker,
+                    ))?;
                 ReversibleRange::new(first, second)
             }
             Range::Range(r) => r.clone(),

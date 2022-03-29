@@ -729,7 +729,7 @@ impl Value {
         let r = match self {
             Value::Path(path) => Either3::A(
                 path.evaluate_as_iter(d, no_recoverable_error, for_each)?
-                    .map(|v| match v {
+                    .flat_map(|v| match v {
                         Ok(Cow::Borrowed(json::Value::Array(v))) => {
                             Either3::A(v.iter().map(|v| Ok(Cow::Borrowed(v))))
                         }
@@ -737,8 +737,7 @@ impl Value {
                             Either3::B(v.into_iter().map(|v| Ok(Cow::Owned(v))))
                         }
                         _ => Either3::C(iter::once(v)),
-                    })
-                    .flatten(),
+                    }),
             ),
             _ => {
                 let value = self.evaluate(d, no_recoverable_error, for_each)?;

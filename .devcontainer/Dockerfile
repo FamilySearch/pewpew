@@ -6,7 +6,7 @@ ARG CARGO_DENY_VER=0.9.1
 # https://github.com/rust-lang/mdBook/releases
 ARG MDBOOK_VER=v0.4.12
 # https://github.com/rustwasm/wasm-pack/releases
-ARG WASM_PACK_VER=v0.10.0
+ARG WASM_PACK_VER=v0.10.1
 # https://nodejs.org/
 ARG NODE_MAJOR_VER=12
 

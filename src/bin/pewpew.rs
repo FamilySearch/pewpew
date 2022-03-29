@@ -1,6 +1,6 @@
 use std::{convert::TryInto, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -24,14 +24,15 @@ fn main() {
     }
     let filter_reg = Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex");
     let filter_reg2 = filter_reg.clone();
-    let matches = App::new("pewpew")
+    let matches = Command::new("pewpew")
         .about("The HTTP load test tool https://familysearch.github.io/pewpew")
         .version(crate_version!())
-        .setting(AppSettings::DisableHelpSubcommand)
-        .setting(AppSettings::InferSubcommands) // disabled until https://github.com/clap-rs/clap/issues/1463 is fixed
-        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .disable_help_subcommand(true)
+        .infer_subcommands(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         // .setting(AppSettings::VersionlessSubcommands)
-        .subcommand(App::new("run")
+        .subcommand(Command::new("run")
             .about("Runs a full load test")
             // .setting(AppSettings::UnifiedHelpMessage) // Now the default
             .arg(
@@ -95,7 +96,7 @@ fn main() {
                     .required(true),
             )
         )
-        .subcommand(App::new("try")
+        .subcommand(Command::new("try")
             .about("Runs the specified endpoint(s) a single time for testing purposes")
             // .setting(AppSettings::UnifiedHelpMessage) // Now the default
             .arg(

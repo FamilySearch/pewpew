@@ -352,5 +352,29 @@ Replaces any instance of a string (*needle*) within a JSON value (*haystack*) wi
 
 </td>
 </tr>
+<tr>
+<td>
+<code>parseInt(<i>value</i>)</code>
+</td>
+<td>
+
+Converts a string or other value into an integer (`i64`). If the value cannot be converted to a number, then `null` will be returned.
+
+*value* - any expression. The result of the expression will be coerced to a string if needed and then converted.
+
+</td>
+</tr>
+<tr>
+<td>
+<code>parseFloat(<i>value</i>)</code>
+</td>
+<td>
+
+Converts a string or other value into an floating point number (`f64`). If the value cannot be converted to a number, then `null` will be returned.
+
+*value* - any expression. The result of the expression will be coerced to a string if needed and then converted.
+
+</td>
+</tr>
 </tbody>
 </table>

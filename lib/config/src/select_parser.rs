@@ -207,6 +207,7 @@ impl FunctionCall {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        debug!("FunctionCall::evaluate function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => c.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::Encode(e) => e.evaluate(d, no_recoverable_error, for_each),
@@ -232,6 +233,8 @@ impl FunctionCall {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, ExecutingExpressionError> {
+        debug!("FunctionCall::evaluate_as_iter function=\"{:?}\"", self);
+        // Create a unique set of Either3 options to be able to create one large Either that we can call shared methods
         let r =
             match self {
                 FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(
@@ -297,6 +300,7 @@ impl FunctionCall {
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
     ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> + Send {
+        debug!("FunctionCall::into_stream function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => c.into_stream(providers, no_recoverable_error).boxed(),
             FunctionCall::Encode(e) => e.into_stream(providers, no_recoverable_error).boxed(),

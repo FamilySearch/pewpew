@@ -11,6 +11,7 @@ Changes:
 - Change try script output to go through stdout instead of stderr.
 - Modified the Config WebAssembly (config-wasm) to also return file body paths from the `getInputFiles()` method.
 - Added a new `encode()` option. `encode(value, "non-alphanumeric")` will encode all characters that are not an ASCII letter or digit.
+- Added new expressions `parseInt()` and `parseFloat()` which will attempt to convert a string to an integer or float (respectively). Returns `null` if unable to convert.
 
 Bug fixes:
 - Upgrade percent-encoding, clap, and other dependencies

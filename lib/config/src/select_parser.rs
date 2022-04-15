@@ -1,6 +1,6 @@
 use crate::expression_functions::{
-    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
-    Replace,
+    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
+    Range, Repeat, Replace,
 };
 use crate::{
     create_marker, json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions,
@@ -62,7 +62,7 @@ impl RequiredProviders {
         }
     }
 
-    fn is_where(&mut self) {
+    fn set_is_where(&mut self) {
         self.is_where = true;
     }
 
@@ -157,7 +157,7 @@ pub(super) enum FunctionCall {
     Range(Box<Range>),
     Repeat(Repeat),
     Replace(Box<Replace>),
-    // TODO: Add parseInt
+    ParseNum(ParseNum),
 }
 
 impl FunctionCall {
@@ -189,7 +189,8 @@ impl FunctionCall {
             "range" => Either::A(FunctionCall::Range(Range::new(args, marker)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args, marker)?)),
             "replace" => Replace::new(args, marker)?.map_a(|r| FunctionCall::Replace(r.into())),
-            // TODO: Add parseInt
+            "parseInt" => Either::A(FunctionCall::ParseNum(ParseNum::new(false, args, marker)?)),
+            "parseFloat" => Either::A(FunctionCall::ParseNum(ParseNum::new(true, args, marker)?)),
             _ => {
                 return Err(CreatingExpressionError::UnknownFunction(
                     ident.into(),
@@ -206,6 +207,7 @@ impl FunctionCall {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        debug!("FunctionCall::evaluate function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => c.evaluate(d, no_recoverable_error, for_each),
             FunctionCall::Encode(e) => e.evaluate(d, no_recoverable_error, for_each),
@@ -221,7 +223,7 @@ impl FunctionCall {
             FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
             FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error, for_each),
-            // TODO: Add parseInt
+            FunctionCall::ParseNum(p) => p.evaluate(d, no_recoverable_error, for_each),
         }
     }
 
@@ -231,6 +233,8 @@ impl FunctionCall {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, ExecutingExpressionError> {
+        debug!("FunctionCall::evaluate_as_iter function=\"{:?}\"", self);
+        // Create a unique set of Either3 options to be able to create one large Either that we can call shared methods
         let r =
             match self {
                 FunctionCall::Collect(c) => Either3::A(Either3::A(c.evaluate_as_iter(
@@ -247,45 +251,43 @@ impl FunctionCall {
                     e.evaluate_as_iter(d, no_recoverable_error, for_each)?,
                 ))),
                 FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.evaluate_as_iter()?))),
-                FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(i.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?)),
-                FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
-                FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(
+                FunctionCall::If(box_if) => Either3::A(Either3::C(Either3::C(
+                    box_if.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Join(join) => Either3::B(Either3::A(join.evaluate_as_iter(
                     d,
                     no_recoverable_error,
                     for_each,
                 )?)),
-                FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(m.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(p.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_iter()))),
-                FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(
+                FunctionCall::JsonPath(json_path) => {
+                    Either3::B(Either3::B(json_path.evaluate_as_iter(d)))
+                }
+                FunctionCall::Match(box_match) => Either3::B(Either3::C(
+                    box_match.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                )),
+                FunctionCall::MinMax(min_max) => Either3::C(Either3::A(Either3::A(
+                    min_max.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Pad(pad) => Either3::C(Either3::A(Either3::B(
+                    pad.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Random(random) => {
+                    Either3::C(Either3::A(Either3::C(random.evaluate_as_iter())))
+                }
+                FunctionCall::Range(range) => Either3::C(Either3::B(range.evaluate_as_iter(
                     d,
                     no_recoverable_error,
                     for_each,
                 )?)),
-                FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.evaluate_as_iter()))),
-                FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(r.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                // TODO: Add parseInt
+                FunctionCall::Repeat(repeat) => {
+                    Either3::C(Either3::C(Either3::A(repeat.evaluate_as_iter())))
+                }
+                FunctionCall::Replace(replace) => Either3::C(Either3::C(Either3::B(
+                    replace.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::ParseNum(parse_num) => Either3::C(Either3::C(Either3::C(
+                    parse_num.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
             };
         Ok(r)
     }
@@ -298,6 +300,7 @@ impl FunctionCall {
         providers: &BTreeMap<String, P>,
         no_recoverable_error: bool,
     ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> + Send {
+        debug!("FunctionCall::into_stream function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => c.into_stream(providers, no_recoverable_error).boxed(),
             FunctionCall::Encode(e) => e.into_stream(providers, no_recoverable_error).boxed(),
@@ -313,7 +316,7 @@ impl FunctionCall {
             FunctionCall::Range(r) => r.into_stream(providers, no_recoverable_error).boxed(),
             FunctionCall::Repeat(r) => r.into_stream().boxed(),
             FunctionCall::Replace(r) => r.into_stream(providers, no_recoverable_error).boxed(),
-            // TODO: Add parseInt
+            FunctionCall::ParseNum(p) => p.into_stream(providers, no_recoverable_error).boxed(),
         }
     }
 }
@@ -1398,7 +1401,7 @@ impl Select {
             .as_ref()
             .map(|v| {
                 let mut providers2 = RequiredProviders::new();
-                providers2.is_where();
+                providers2.set_is_where();
                 let pairs = Parser::parse(Rule::entry_point, v.inner()).map_err(|e| {
                     error::Error::ExpressionErr(CreatingExpressionError::InvalidExpression(
                         e,

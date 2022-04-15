@@ -7,6 +7,7 @@ use crate::select_parser::ProviderStream;
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use jsonpath_lib as json_path;
+use log::warn;
 use percent_encoding::AsciiSet;
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
@@ -1582,6 +1583,105 @@ impl Replace {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct ParseNum {
+    arg: ValueOrExpression,
+    is_float: bool,
+}
+
+impl ParseNum {
+    pub(super) fn new(
+        float: bool,
+        mut args: Vec<ValueOrExpression>,
+        marker: Marker,
+    ) -> Result<Self, CreatingExpressionError> {
+        let function_name = if float { "parseFloat" } else { "parseInt" };
+        match args.len() {
+            1 => {
+                let first = args.remove(0);
+                Ok(ParseNum {
+                    arg: first,
+                    is_float: float,
+                })
+            }
+            _ => Err(
+                ExecutingExpressionError::InvalidFunctionArguments(function_name, marker).into(),
+            ),
+        }
+    }
+
+    /// Converts a json value into either a float or an integer.
+    /// Returns json::Value::Null on ParseFloatError
+    fn evaluate_with_arg(is_float: bool, d: &json::Value) -> json::Value {
+        // Attempt to turn a JSON value into a string
+        let string_to_pad = json_value_to_string(Cow::Borrowed(d)).to_string();
+        let string_to_pad = string_to_pad.trim();
+        // Parse it into a float f64 (we can turn it into an i64 later)
+        let parsed = string_to_pad.parse::<f64>();
+        match parsed {
+            Ok(value) => {
+                if is_float {
+                    value.into()
+                } else {
+                    (value as i64).into()
+                }
+            }
+            Err(error) => {
+                let function_name = if is_float { "parseFloat" } else { "parseInt" };
+                warn!(
+                    "{} failed on \"{}\" with {}",
+                    function_name, string_to_pad, error
+                );
+                json::Value::Null
+            }
+        }
+    }
+
+    pub(super) fn evaluate<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
+        no_recoverable_error: bool,
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
+        let is_float = self.is_float;
+        self.arg
+            .evaluate(d, no_recoverable_error, for_each)
+            .map(|d| {
+                let v = ParseNum::evaluate_with_arg(is_float, &*d);
+                Cow::Owned(v)
+            })
+    }
+
+    pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
+        &'b self,
+        d: Cow<'a, json::Value>,
+        no_recoverable_error: bool,
+        for_each: Option<&[Cow<'a, json::Value>]>,
+    ) -> Result<impl Iterator<Item = Cow<'a, json::Value>> + Clone, ExecutingExpressionError> {
+        // self.evaluate(d, no_recoverable_error, for_each)
+        //     .map(iter::once)
+        Ok(iter::once(self.evaluate(
+            d,
+            no_recoverable_error,
+            for_each,
+        )?))
+    }
+
+    pub(super) fn into_stream<
+        Ar: Clone + Send + Unpin + 'static,
+        P: ProviderStream<Ar> + Send + Unpin + 'static,
+    >(
+        self,
+        providers: &BTreeMap<String, P>,
+        no_recoverable_error: bool,
+    ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> {
+        let is_float = self.is_float;
+        self.arg
+            .into_stream(providers, no_recoverable_error)
+            .map_ok(move |(d, returns)| (ParseNum::evaluate_with_arg(is_float, &d), returns))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{
@@ -2867,6 +2967,7 @@ mod tests {
             }
         }
     }
+
     #[test]
     fn range_eval() {
         let data = j!({
@@ -3118,6 +3219,124 @@ mod tests {
                 .unwrap();
 
             assert_eq!(left, right);
+        }
+    }
+
+    #[test]
+    fn parse_num_eval() {
+        // JSON object to use for test
+        let data = j!({
+            "a": "9",
+            "b": "9.1",
+            "c": "foo"
+        });
+        // is_float, constructor args, expect
+        let checks = vec![
+            (true, vec![j!(9.1 as f64).into()], j!(9.1 as f64)),
+            (false, vec![j!(9.1 as f64).into()], j!(9 as i64)),
+            (true, vec![j!("9.1").into()], j!(9.1 as f64)),
+            (false, vec![j!("9.1").into()], j!(9 as i64)),
+            (true, vec![j!("0.0").into()], j!(0.0 as f64)),
+            (false, vec![j!("0.0").into()], j!(0 as i64)),
+            (true, vec![j!("-9.1").into()], j!(-9.1 as f64)),
+            (false, vec![j!("-9.1").into()], j!(-9 as i64)),
+            (true, vec![j!("foo").into()], j!(null)),
+            (false, vec![j!("foo").into()], j!(null)),
+            (true, vec!["a".into()], j!(9.0 as f64)),
+            (false, vec!["a".into()], j!(9 as i64)),
+            (true, vec!["b".into()], j!(9.1 as f64)),
+            (false, vec!["b".into()], j!(9 as i64)),
+            (true, vec!["c".into()], j!(null)),
+            (false, vec!["c".into()], j!(null)),
+            (true, vec![j!("foo").into()], j!(null)),
+            (false, vec![j!("foo").into()], j!(null)),
+        ];
+        for (i, (is_float, args, expect)) in checks.into_iter().enumerate() {
+            let r = ParseNum::new(is_float, args.clone(), create_marker()).unwrap();
+            let actual = r.evaluate(Cow::Borrowed(&data), false, None).unwrap();
+            assert_eq!(
+                *actual, expect,
+                "index: {}, is_float: {}, args: {:?}",
+                i, is_float, args
+            );
+        }
+    }
+
+    #[test]
+    fn parse_num_eval_iter() {
+        let data = j!({
+            "a": "9.1",
+            "b": "foo",
+        });
+        // is_float, constructor args, expect
+        let checks = vec![
+            (true, vec!["a".into()], j!(9.1 as f64)),
+            (false, vec!["a".into()], j!(9 as i64)),
+            (true, vec!["b".into()], j!(null)),
+            (false, vec!["b".into()], j!(null)),
+        ];
+
+        for (i, (is_float, args, expect)) in checks.into_iter().enumerate() {
+            let parse_num = ParseNum::new(is_float, args, create_marker()).unwrap();
+            let actual: Vec<_> = parse_num
+                .evaluate_as_iter(Cow::Borrowed(&data), false, None)
+                .unwrap()
+                .map(Cow::into_owned)
+                .collect();
+            assert_eq!(actual, vec!(expect), "index: {}", i);
+        }
+    }
+
+    #[test]
+    fn parse_num_into_stream() {
+        // is_float, constructor args, expect
+        let checks = vec![
+            (true, vec!["a".into()], j!(9.1 as f64)),
+            (false, vec!["a".into()], j!(9.1 as i64)),
+            (true, vec!["b".into()], j!(null)),
+            (false, vec!["b".into()], j!(null)),
+        ];
+
+        let providers = btreemap!(
+            "a".to_string() => literals(vec!(j!("9.1"))),
+            "b".to_string() => literals(vec!(j!("foo"))),
+        );
+
+        let providers = Arc::new(providers);
+
+        for (i, (is_float, args, expect)) in checks.into_iter().enumerate() {
+            let parse_num = ParseNum::new(is_float, args, create_marker()).unwrap();
+            let actual = block_on_stream(parse_num.into_stream(&providers, false))
+                .map(|r| r.map(|(v, _)| v))
+                .next()
+                .unwrap()
+                .unwrap();
+            assert_eq!(actual, expect, "index: {}", i);
+        }
+    }
+
+    #[test]
+    fn random_into_stream2() {
+        let args = vec![(j!(1), j!(5)), (j!(-8), j!(25)), (j!(-8.5), j!(25))];
+
+        for (first, second) in args {
+            let r = Random::new(
+                vec![first.clone().into(), second.clone().into()],
+                create_marker(),
+            )
+            .unwrap();
+
+            let left = block_on_stream(r.into_stream::<Literals>())
+                .map(|r| r.map(|(v, _)| v))
+                .next()
+                .unwrap()
+                .unwrap();
+
+            if first.is_u64() && second.is_u64() {
+                let left = left.as_u64().unwrap();
+                let check = left >= first.as_u64().unwrap() && left < second.as_u64().unwrap();
+                assert!(check);
+            }
         }
     }
 }

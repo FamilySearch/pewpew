@@ -62,7 +62,7 @@ impl RequiredProviders {
         }
     }
 
-    fn is_where(&mut self) {
+    fn set_is_where(&mut self) {
         self.is_where = true;
     }
 
@@ -1401,7 +1401,7 @@ impl Select {
             .as_ref()
             .map(|v| {
                 let mut providers2 = RequiredProviders::new();
-                providers2.is_where();
+                providers2.set_is_where();
                 let pairs = Parser::parse(Rule::entry_point, v.inner()).map_err(|e| {
                     error::Error::ExpressionErr(CreatingExpressionError::InvalidExpression(
                         e,

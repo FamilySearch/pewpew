@@ -1,6 +1,6 @@
 use crate::expression_functions::{
-    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, Random, Range, Repeat,
-    Replace,
+    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
+    Range, Repeat, Replace,
 };
 use crate::{
     create_marker, json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions,
@@ -157,7 +157,7 @@ pub(super) enum FunctionCall {
     Range(Box<Range>),
     Repeat(Repeat),
     Replace(Box<Replace>),
-    // TODO: Add parseInt
+    ParseNum(ParseNum),
 }
 
 impl FunctionCall {
@@ -189,7 +189,8 @@ impl FunctionCall {
             "range" => Either::A(FunctionCall::Range(Range::new(args, marker)?.into())),
             "repeat" => Either::A(FunctionCall::Repeat(Repeat::new(args, marker)?)),
             "replace" => Replace::new(args, marker)?.map_a(|r| FunctionCall::Replace(r.into())),
-            // TODO: Add parseInt
+            "parseInt" => Either::A(FunctionCall::ParseNum(ParseNum::new(false, args, marker)?)),
+            "parseFloat" => Either::A(FunctionCall::ParseNum(ParseNum::new(true, args, marker)?)),
             _ => {
                 return Err(CreatingExpressionError::UnknownFunction(
                     ident.into(),
@@ -221,7 +222,7 @@ impl FunctionCall {
             FunctionCall::Random(r) => Ok(r.evaluate()),
             FunctionCall::Repeat(r) => Ok(r.evaluate()),
             FunctionCall::Replace(r) => r.evaluate(d, no_recoverable_error, for_each),
-            // TODO: Add parseInt
+            FunctionCall::ParseNum(p) => p.evaluate(d, no_recoverable_error, for_each),
         }
     }
 
@@ -247,45 +248,43 @@ impl FunctionCall {
                     e.evaluate_as_iter(d, no_recoverable_error, for_each)?,
                 ))),
                 FunctionCall::Epoch(e) => Either3::A(Either3::C(Either3::B(e.evaluate_as_iter()?))),
-                FunctionCall::If(i) => Either3::A(Either3::C(Either3::C(i.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Join(j) => Either3::B(Either3::A(j.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?)),
-                FunctionCall::JsonPath(j) => Either3::B(Either3::B(j.evaluate_as_iter(d))),
-                FunctionCall::Match(m) => Either3::B(Either3::C(m.evaluate_as_iter(
+                FunctionCall::If(box_if) => Either3::A(Either3::C(Either3::C(
+                    box_if.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Join(join) => Either3::B(Either3::A(join.evaluate_as_iter(
                     d,
                     no_recoverable_error,
                     for_each,
                 )?)),
-                FunctionCall::MinMax(m) => Either3::C(Either3::A(Either3::A(m.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Pad(p) => Either3::C(Either3::A(Either3::B(p.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                FunctionCall::Random(r) => Either3::C(Either3::A(Either3::C(r.evaluate_as_iter()))),
-                FunctionCall::Range(r) => Either3::C(Either3::B(r.evaluate_as_iter(
+                FunctionCall::JsonPath(json_path) => {
+                    Either3::B(Either3::B(json_path.evaluate_as_iter(d)))
+                }
+                FunctionCall::Match(box_match) => Either3::B(Either3::C(
+                    box_match.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                )),
+                FunctionCall::MinMax(min_max) => Either3::C(Either3::A(Either3::A(
+                    min_max.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Pad(pad) => Either3::C(Either3::A(Either3::B(
+                    pad.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::Random(random) => {
+                    Either3::C(Either3::A(Either3::C(random.evaluate_as_iter())))
+                }
+                FunctionCall::Range(range) => Either3::C(Either3::B(range.evaluate_as_iter(
                     d,
                     no_recoverable_error,
                     for_each,
                 )?)),
-                FunctionCall::Repeat(r) => Either3::C(Either3::C(Either::A(r.evaluate_as_iter()))),
-                FunctionCall::Replace(r) => Either3::C(Either3::C(Either::B(r.evaluate_as_iter(
-                    d,
-                    no_recoverable_error,
-                    for_each,
-                )?))),
-                // TODO: Add parseInt
+                FunctionCall::Repeat(repeat) => {
+                    Either3::C(Either3::C(Either3::A(repeat.evaluate_as_iter())))
+                }
+                FunctionCall::Replace(replace) => Either3::C(Either3::C(Either3::B(
+                    replace.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
+                FunctionCall::ParseNum(parse_num) => Either3::C(Either3::C(Either3::C(
+                    parse_num.evaluate_as_iter(d, no_recoverable_error, for_each)?,
+                ))),
             };
         Ok(r)
     }
@@ -313,7 +312,7 @@ impl FunctionCall {
             FunctionCall::Range(r) => r.into_stream(providers, no_recoverable_error).boxed(),
             FunctionCall::Repeat(r) => r.into_stream().boxed(),
             FunctionCall::Replace(r) => r.into_stream(providers, no_recoverable_error).boxed(),
-            // TODO: Add parseInt
+            FunctionCall::ParseNum(p) => p.into_stream(providers, no_recoverable_error).boxed(),
         }
     }
 }

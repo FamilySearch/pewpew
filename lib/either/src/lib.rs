@@ -9,6 +9,7 @@ use std::{
 
 use futures::Stream;
 
+/// Allows the mapping of two different (similar) types to determine either A or B.
 pub enum Either<A, B> {
     A(A),
     B(B),
@@ -37,6 +38,7 @@ impl<A, B> Either<A, B> {
 }
 
 impl<A> Either<A, A> {
+    /// If both types are the same, allow unwrap
     pub fn unwrap(self) -> A {
         match self {
             Either::A(a) => a,
@@ -147,6 +149,7 @@ where
     }
 }
 
+/// Allows the mapping of three different (similar) types to determine either A, B, or C.
 pub enum Either3<A, B, C> {
     A(A),
     B(B),

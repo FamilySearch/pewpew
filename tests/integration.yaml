@@ -45,7 +45,7 @@ endpoints:
           (response.body.b == "foo"
             && response.body.e == response.body.e2
             && request.headers.test == "123"
-            && parseInt(request.headers.test) == 123
+            && parseInt(request.headers.test) + 1 == 124
             && parseInt(request.headers.float) == 1
             && parseFloat(request.headers.float) == 1.23
             && parseInt(response.body.b) == null

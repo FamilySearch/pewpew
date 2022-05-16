@@ -3,6 +3,7 @@ on:
     paths:
       - '**.rs'
       - '**/Cargo.toml'
+      - '**/Cargo.lock'
 
 name: Pull Request
 jobs:

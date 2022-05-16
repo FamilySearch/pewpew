@@ -81,6 +81,10 @@ jobs:
     strategy:
       matrix:
         include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: false
           - build: arm-v7
             os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
@@ -121,6 +125,11 @@ jobs:
         # with:
         #   args: cross build -q --release --target ${{ matrix.target }}
 
+      - name: Build for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release --target x86_64-unknown-linux-musl
 
   wasm-pack:
     name: Wasm Build

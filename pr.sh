@@ -3,8 +3,8 @@ set -e
 set -x
 
 cargo build
-# cross build --target aarch64-unknown-linux-gnu
-# cross build --target armv7-unknown-linux-gnueabihf
+# cross build --target aarch64-unknown-linux-musl
+# cross build --target armv7-unknown-linux-musleabihf
 
 # cargo fmt --all
 cargo fmt --all -- --check

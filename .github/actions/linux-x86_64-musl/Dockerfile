@@ -12,6 +12,9 @@ RUN apt-get -qq update && \
         curl \
         musl-dev \
         musl-tools \
+        gcc-multilib-arm-linux-gnueabihf \
+        gcc-arm-linux-gnueabihf \
+        gcc-aarch64-linux-gnu \
     && apt-get -qq clean && rm -rf /var/lib/apt/lists/*
 
 RUN ls /usr/include/linux && \
@@ -56,4 +59,7 @@ ENV OPENSSL_DIR=/usr/local/musl/ \
 
 RUN curl https://sh.rustup.rs -sSf | \
     sh -s -- -y --profile minimal \
-    && rustup target add x86_64-unknown-linux-musl
+    && rustup target add x86_64-unknown-linux-musl \
+    && rustup target add aarch64-unknown-linux-musl \
+    && rustup target add armv7-unknown-linux-musleabihf
+    && cargo install cross

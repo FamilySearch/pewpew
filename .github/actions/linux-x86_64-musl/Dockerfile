@@ -61,5 +61,5 @@ RUN curl https://sh.rustup.rs -sSf | \
     sh -s -- -y --profile minimal \
     && rustup target add x86_64-unknown-linux-musl \
     && rustup target add aarch64-unknown-linux-musl \
-    && rustup target add armv7-unknown-linux-musleabihf
+    && rustup target add armv7-unknown-linux-musleabihf \
     && cargo install cross

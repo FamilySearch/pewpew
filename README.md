@@ -7,6 +7,8 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.5.10
 Changes:
 - Added logging to the binaries. All binaries now support turning on logging via the `RUST_LOG` environment variable. The default value is `error`. Other available options are `warn`, `info`, `debug`, `trace`, and `off`.
+- Changed the log_provider_stats to be a boolean (default on)
+  - For historical purposes, durations will be allowed and be considered true
 - Changed the default try script output to log `headers_all` rather than `headers`. There were complaints about not seeing duplicate headers causing confusion over what was being sent.
 - Change try script output to go through stdout instead of stderr.
 - Modified the Config WebAssembly (config-wasm) to also return file body paths from the `getInputFiles()` method.

@@ -101,12 +101,10 @@ jobs:
           - build: macos
             os: macos-latest
             rust: stable
-            target: false
             cross: false
           - build: windows
             os: windows-latest
             rust: stable
-            target: false
             cross: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -130,19 +128,29 @@ jobs:
 
       - name: Build for non-Linux
         uses: actions-rs/toolchain@v1
-        if: matrix.build != 'linux'
+        if: matrix.build != 'linux' && matrix.cross == false
         with:
           profile: minimal
           toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
-        if: matrix.build != 'linux' && matrix.target == false
+        if: matrix.build != 'linux' && matrix.cross == false
         with:
           command: build
           args: -q --release
-      - uses: actions-rs/cargo@v1
-        if: matrix.build != 'linux' && matrix.target != false
+
+      - name: Build with cross
+        uses: actions-rs/toolchain@v1
+        if: matrix.cross
         with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.cross
+        with:
+          use-cross: true
           command: build
           args: -q --release --target ${{ matrix.target }}
 

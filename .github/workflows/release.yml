@@ -57,7 +57,34 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - build: linux
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-musl
+            cross: false
+          - build: arm-v7
+            os: ubuntu-latest
+            rust: stable
+            target: armv7-unknown-linux-gnueabihf
+            linker: gcc-arm-linux-gnueabihf
+            cross: true
+          - build: aarch64
+            os: ubuntu-latest
+            rust: stable
+            target: aarch64-unknown-linux-gnu
+            linker: gcc-aarch64-linux-gnu
+            cross: true
+          - build: macos
+            os: macos-latest
+            rust: stable
+            target: false
+            cross: false
+          - build: windows
+            os: windows-latest
+            rust: stable
+            target: false
+            cross: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -87,34 +114,45 @@ jobs:
           cp Cargo.toml Cargo2.toml
           sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
 
+      - name: Install Linker
+        if: matrix.cross
+        run: |
+          sudo apt update
+          sudo apt install ${{ matrix.linker }}
+
       - name: Build for non-Linux
         uses: actions-rs/toolchain@v1
-        if: matrix.os != 'ubuntu-latest'
+        if: matrix.build != 'linux'
         with:
           profile: minimal
           toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-latest'
+        if: matrix.build != 'linux' && matrix.target == false
         with:
           command: build
           args: -q --release
+      - uses: actions-rs/cargo@v1
+        if: matrix.build != 'linux' && matrix.target != false
+        with:
+          command: build
+          args: -q --release --target ${matrix.target}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.build == 'linux'
         with:
           args: cargo build -q --release --target x86_64-unknown-linux-musl
 
-      - name: Compress for Linux
-        if: matrix.os == 'ubuntu-latest'
+      - name: Compress for Linux/Arm
+        if: matrix.target != false
         run: |
-          asset_name="pewpew-$VERSION-linux-x86_64-musl.tar.xz"
+          asset_name="pewpew-$VERSION-${matrix.target/-unknown/}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/x86_64-unknown-linux-musl/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/${matrix.target}/release/ -cJf $asset_name pewpew
 
       - name: Compress for Windows
-        if: matrix.os == 'windows-latest'
+        if: matrix.build == 'windows'
         shell: bash
         run: |
           asset_name="pewpew-$VERSION-windows-x86_64.zip"
@@ -122,7 +160,7 @@ jobs:
           7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/pewpew.exe
 
       - name: Compress for macOS
-        if: matrix.os == 'macos-latest'
+        if: matrix.build == 'macos'
         run: |
           asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV

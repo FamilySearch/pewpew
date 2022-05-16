@@ -144,7 +144,7 @@ jobs:
         if: matrix.build != 'linux' && matrix.target != false
         with:
           command: build
-          args: -q --release --target ${matrix.target}
+          args: -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/

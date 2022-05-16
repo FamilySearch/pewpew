@@ -136,7 +136,7 @@ jobs:
         if: matrix.build != 'linux' && matrix.target != false
         with:
           command: build
-          args: -q --release --target ${matrix.target}
+          args: -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
@@ -147,9 +147,10 @@ jobs:
       - name: Compress for Linux/Arm
         if: matrix.target != false
         run: |
-          asset_name="pewpew-$VERSION-${matrix.target/-unknown/}.tar.xz"
+          TARGET="${{ matrix.target }}"
+          asset_name="pewpew-$VERSION-${TARGET/-unknown/}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/${matrix.target}/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name pewpew
 
       - name: Compress for Windows
         if: matrix.build == 'windows'

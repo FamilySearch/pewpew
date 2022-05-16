@@ -4,6 +4,10 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
 
 ## Changelog
+### v0.5.11
+Changes:
+- Added armv7 (Raspberry Pi) and aarch64 (AWS Graviton) builds
+
 ### v0.5.10
 Changes:
 - Added logging to the binaries. All binaries now support turning on logging via the `RUST_LOG` environment variable. The default value is `error`. Other available options are `warn`, `info`, `debug`, `trace`, and `off`.

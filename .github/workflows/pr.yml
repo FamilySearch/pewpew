@@ -81,44 +81,19 @@ jobs:
     strategy:
       matrix:
         include:
-          - build: linux
-            os: ubuntu-latest
-            rust: stable
-            target: x86_64-unknown-linux-musl
-            cross: false
           - build: arm-v7
             os: ubuntu-latest
-            rust: stable
             target: armv7-unknown-linux-gnueabihf
             linker: gcc-arm-linux-gnueabihf
             cross: true
           - build: aarch64
             os: ubuntu-latest
-            rust: stable
             target: aarch64-unknown-linux-gnu
             linker: gcc-aarch64-linux-gnu
             cross: true
-          - build: macos
-            os: macos-latest
-            rust: stable
-            cross: false
-          - build: windows
-            os: windows-latest
-            rust: stable
-            cross: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all -- -D warnings
 
       - name: Install Linker
         if: matrix.cross
@@ -126,20 +101,8 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
-      - name: Build for non-Linux
-        uses: actions-rs/toolchain@v1
-        if: matrix.build != 'linux' && matrix.cross == false
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.build != 'linux' && matrix.cross == false
-        with:
-          command: build
-          args: -q --release
-
-      - name: Build with cross
+      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build with cross # ARM builds
         uses: actions-rs/toolchain@v1
         if: matrix.cross
         with:
@@ -153,12 +116,6 @@ jobs:
           use-cross: true
           command: build
           args: -q --release --target ${{ matrix.target }}
-
-      - name: Build for Linux
-        uses: ./.github/actions/linux-x86_64-musl/
-        if: matrix.build == 'linux'
-        with:
-          args: cargo build -q --release --target x86_64-unknown-linux-musl
 
 
   wasm-pack:

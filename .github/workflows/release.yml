@@ -60,30 +60,23 @@ jobs:
         include:
           - build: linux
             os: ubuntu-latest
-            rust: stable
             target: x86_64-unknown-linux-musl
             cross: false
           - build: arm-v7
             os: ubuntu-latest
-            rust: stable
             target: armv7-unknown-linux-gnueabihf
             linker: gcc-arm-linux-gnueabihf
             cross: true
           - build: aarch64
             os: ubuntu-latest
-            rust: stable
             target: aarch64-unknown-linux-gnu
             linker: gcc-aarch64-linux-gnu
             cross: true
           - build: macos
             os: macos-latest
-            rust: stable
-            target: false
             cross: false
           - build: windows
             os: windows-latest
-            rust: stable
-            target: false
             cross: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -120,21 +113,21 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
-      - name: Build for non-Linux
+      - name: Build for non-Linux # Windows and MacOS
         uses: actions-rs/toolchain@v1
-        if: matrix.build != 'linux' && matrix.cross == false
+        if: matrix.os != 'ubuntu-latest'
         with:
           profile: minimal
           toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
-        if: matrix.build != 'linux' && matrix.cross == false
+        if: matrix.os != 'ubuntu-latest'
         with:
           command: build
           args: -q --release
 
       # https://github.com/actions-rs/cargo#cross-compilation
-      - name: Build with cross
+      - name: Build with cross # ARM builds
         uses: actions-rs/toolchain@v1
         if: matrix.cross
         with:
@@ -156,7 +149,7 @@ jobs:
           args: cargo build -q --release --target x86_64-unknown-linux-musl
 
       - name: Compress for Linux/Arm
-        if: matrix.target != false
+        if: matrix.os == 'ubuntu-latest'
         run: |
           TARGET="${{ matrix.target }}"
           asset_name="pewpew-$VERSION-${TARGET/-unknown/}.tar.xz"
@@ -164,7 +157,7 @@ jobs:
           XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name pewpew
 
       - name: Compress for Windows
-        if: matrix.build == 'windows'
+        if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           asset_name="pewpew-$VERSION-windows-x86_64.zip"
@@ -172,7 +165,7 @@ jobs:
           7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/pewpew.exe
 
       - name: Compress for macOS
-        if: matrix.build == 'macos'
+        if: matrix.os == 'macos-latest'
         run: |
           asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV

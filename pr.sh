@@ -4,6 +4,7 @@ set -x
 
 cargo build
 # cargo install cross
+# cargo build --target x86_64-unknown-linux-musl
 # cross build --target aarch64-unknown-linux-musl
 # cross build --target armv7-unknown-linux-musleabihf
 

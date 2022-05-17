@@ -155,8 +155,8 @@ jobs:
       - name: Compress for Linux/Arm
         if: matrix.os == 'ubuntu-latest'
         run: |
-          TARGET="${{ matrix.target }}"
-          asset_name="pewpew-$VERSION-${TARGET/-unknown/}.tar.xz"
+          TARGET=$(echo "${{ matrix.target }}" | sed -e "s/-musl.*//" -e "s/-unknown//")
+          asset_name="pewpew-$VERSION-$TARGET.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name pewpew
 

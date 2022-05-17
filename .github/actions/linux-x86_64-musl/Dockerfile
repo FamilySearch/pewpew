@@ -1,6 +1,6 @@
 # Modified from https://github.com/emk/rust-musl-builder/blob/a980e27da6c6b629301844637e6139053a49e842/Dockerfile
 # Use Ubuntu 18.04 LTS as our base image.
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 # for libressl
 # ARG OPENSSL_VERSION=3.0.2
@@ -12,6 +12,9 @@ RUN apt-get -qq update && \
         curl \
         musl-dev \
         musl-tools \
+        gcc-multilib-arm-linux-gnueabihf \
+        gcc-arm-linux-gnueabihf \
+        gcc-aarch64-linux-gnu \
     && apt-get -qq clean && rm -rf /var/lib/apt/lists/*
 
 RUN ls /usr/include/linux && \
@@ -56,4 +59,7 @@ ENV OPENSSL_DIR=/usr/local/musl/ \
 
 RUN curl https://sh.rustup.rs -sSf | \
     sh -s -- -y --profile minimal \
-    && rustup target add x86_64-unknown-linux-musl
+    && rustup target add x86_64-unknown-linux-musl \
+    && rustup target add aarch64-unknown-linux-musl \
+    && rustup target add armv7-unknown-linux-musleabihf \
+    && cargo install cross

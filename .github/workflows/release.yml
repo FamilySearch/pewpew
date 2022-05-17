@@ -57,7 +57,27 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: false
+          - build: arm-v7
+            os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            linker: gcc-arm-linux-gnueabihf
+            cross: true
+          - build: aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            linker: gcc-aarch64-linux-gnu
+            cross: true
+          - build: macos
+            os: macos-latest
+            cross: false
+          - build: windows
+            os: windows-latest
+            cross: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -87,7 +107,13 @@ jobs:
           cp Cargo.toml Cargo2.toml
           sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
 
-      - name: Build for non-Linux
+      - name: Install Linker
+        if: matrix.cross
+        run: |
+          sudo apt update
+          sudo apt install ${{ matrix.linker }}
+
+      - name: Build for non-Linux # Windows and MacOS
         uses: actions-rs/toolchain@v1
         if: matrix.os != 'ubuntu-latest'
         with:
@@ -100,18 +126,39 @@ jobs:
           command: build
           args: -q --release
 
+      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build with cross # ARM builds
+        uses: actions-rs/toolchain@v1
+        if: matrix.cross
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.cross
+        with:
+          use-cross: true
+          command: build
+          args: -q --release --target ${{ matrix.target }}
+        # uses: ./.github/actions/linux-x86_64-musl/
+        # if: matrix.cross
+        # with:
+        #   args: cross build -q --release --target ${{ matrix.target }}
+
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.build == 'linux'
         with:
           args: cargo build -q --release --target x86_64-unknown-linux-musl
 
-      - name: Compress for Linux
+      - name: Compress for Linux/Arm
         if: matrix.os == 'ubuntu-latest'
         run: |
-          asset_name="pewpew-$VERSION-linux-x86_64-musl.tar.xz"
+          TARGET="${{ matrix.target }}"
+          asset_name="pewpew-$VERSION-${TARGET/-unknown/}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/x86_64-unknown-linux-musl/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name pewpew
 
       - name: Compress for Windows
         if: matrix.os == 'windows-latest'

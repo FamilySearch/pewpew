@@ -3,6 +3,7 @@ set -e
 set -x
 
 cargo build
+# cargo install cross
 # cross build --target aarch64-unknown-linux-musl
 # cross build --target armv7-unknown-linux-musleabihf
 

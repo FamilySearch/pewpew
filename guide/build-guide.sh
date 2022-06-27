@@ -33,7 +33,6 @@ WASM_OUTPUT_REACT_DIR=$(realpath $RESULTS_VIEWER_REACT_DIR/hdr-histogram-wasm)
 # build the hdr-histogram-wasm for the results viewer
 cd $WASM_LIB_DIR
 wasm-pack build --release -t web -d $WASM_OUTPUT_DIR --scope fs
-# wasm-pack build --release -t web -d $WASM_OUTPUT_REACT_DIR --scope fs
 wasm-pack build --release -t bundler -d $WASM_OUTPUT_REACT_DIR --scope fs
 cd $WASM_OUTPUT_DIR
 sed -i 's/input = .*import\.meta\.url.*/import(".\/hdr_histogram_wasm_bg.wasm");\n        input = require.resolve(".\/hdr_histogram_wasm_bg.wasm")[0][0];/' hdr_histogram_wasm.js

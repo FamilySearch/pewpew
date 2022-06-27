@@ -12,7 +12,7 @@
     "plugin:@typescript-eslint/eslint-recommended",
     "plugin:@typescript-eslint/recommended"
   ],
-  "ignorePatterns": ["hdr-histogram-wasm/"],
+  "ignorePatterns": ["hdr-histogram-wasm/", "webpack.config.js"],
   "rules": {
     "@typescript-eslint/no-explicit-any": 0,
     "@typescript-eslint/no-non-null-assertion": 0,

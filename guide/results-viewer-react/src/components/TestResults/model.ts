@@ -126,7 +126,7 @@ export class DataPoint {
       this.endTime = new Date(preProcessed.endTime * 1000);
     }
     this.requestTimeouts = preProcessed.requestTimeouts || 0;
-    this.rttHistogram = new HDRHistogram(preProcessed.rttHistogram, "warn");
+    this.rttHistogram = new HDRHistogram(preProcessed.rttHistogram);
     if (preProcessed.startTime !== 0) {
       this.startTime = new Date(preProcessed.startTime * 1000);
     }

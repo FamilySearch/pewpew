@@ -4,33 +4,30 @@ const HTMLWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
     mode: 'development',
     devtool: 'eval-source-map',
-    entry: './src/bootstrap.ts',
+    entry: './src/index.tsx',
     output: {
         filename: 'bundle.js',
         path: path.resolve(__dirname, 'dist'),
-        // webassemblyModuleFilename: 'static/wasm/[modulehash].wasm',
+        webassemblyModuleFilename: 'static/wasm/[modulehash].wasm',
     },
     experiments: {
-        syncWebAssembly: true
+        asyncWebAssembly: true
     },
     module: {
         rules: [
             {
-                test: /\.ts$/,
+                test: /\.(ts|tsx)$/,
                 use: 'ts-loader',
                 include: [path.resolve(__dirname, 'src')],
             },
         ],
     },
     resolve: {
-        extensions: ['.ts', '.js'],
-    },
-    devServer: {
-        contentBase: path.join(__dirname, 'dist'),
+        extensions: ['.ts', '.js', '.tsx', '.jsx', '.json'],
     },
     plugins: [
         new HTMLWebpackPlugin({
-            template: path.resolve(__dirname, 'src/index.html'),
+            template: path.resolve(__dirname, 'src', 'index.html'),
         }),
     ],
 };

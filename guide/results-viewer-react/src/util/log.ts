@@ -6,8 +6,7 @@ export enum LogLevel {
   ERROR = 50
 }
 
-// Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const logDebug: boolean = process.env.LoggingLevel === "debug";
+const logDebug: boolean = true;
 
 // Take a variable list of objects
 export function log (message: string, level: LogLevel = LogLevel.INFO, ...datas: any[]) {

@@ -4,16 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "serve": "webpack serve",
-    "build": "webpack",
+    "dev": "webpack serve --port 3000 --mode development --open --hot",
+    "build": "webpack --mode production",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@fs/hdr-histogram-wasm": "file:./hdr-histogram-wasm",
+    "@fs/hdr-histogram-wasm": "0.5.10",
     "chart.js": "^3.8.0",
+    "chartjs-adapter-date-fns": "^2.0.0",
+    "date-fns": "^2.28.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "styled-components": "^5.3.5"

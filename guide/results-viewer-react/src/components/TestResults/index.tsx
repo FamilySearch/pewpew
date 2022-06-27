@@ -1,5 +1,5 @@
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
-import { LogLevel, formatError, log } from "../util/log";
+import { LogLevel, formatError, log } from "../../util/log";
 import { RTT, totalCalls } from "./charts";
 import React, { useCallback, useEffect, useState } from "react";
 import { Chart } from "chart.js";

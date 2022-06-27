@@ -33,17 +33,6 @@ export const GlobalStyle = createGlobalStyle`
   }
 `;
 
-// const Root = styled.div`
-//   min-height: 100vh;
-//   flex-flow: column wrap;
-//   align-content: stretch;
-//   justify-content: left;
-// `;
-// const Index = styled(Div)`
-//   flex-flow: column wrap;
-//   align-content: stretch;
-// `;
-
 export const BasicDiv = styled.div`
   min-height: 93vh;
   min-width: 93vh;

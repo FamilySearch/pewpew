@@ -14,7 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@fs/hdr-histogram-wasm": "file:./hdr-histogram-wasm",
+    "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
     "chart.js": "^3.8.0",
     "chartjs-adapter-date-fns": "^2.0.0",
     "date-fns": "^2.28.0",

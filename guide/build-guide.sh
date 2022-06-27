@@ -26,9 +26,9 @@ RESULTS_VIEWER_DIR=$(realpath $GUIDE_DIR/results-viewer)
 RESULTS_VIEWER_REACT_DIR=$(realpath $GUIDE_DIR/results-viewer-react)
 WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
 mkdir -p "$RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm"
-WASM_OUTPUT_DIR=$(realpath $RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm)
-mkdir -p "$RESULTS_VIEWER_REACT_DIR/hdr-histogram-wasm"
-WASM_OUTPUT_REACT_DIR=$(realpath $RESULTS_VIEWER_REACT_DIR/hdr-histogram-wasm)
+WASM_OUTPUT_DIR=$RESULTS_VIEWER_DIR/lib/hdr-histogram-wasm
+mkdir -p "$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm"
+WASM_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm
 
 # build the hdr-histogram-wasm for the results viewer
 cd $WASM_LIB_DIR

@@ -409,7 +409,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
   return (
     <HeaderMain>
-      <h1> Create Pewpew Test </h1>
+      <h2> Create from Har File </h2>
       <Div style={{ marginTop: "0px", justifyContent: "space-between"}}>
         <UploadHarButton onClick={() => fileModalRef.current?.openModal()}>
           Upload Har File

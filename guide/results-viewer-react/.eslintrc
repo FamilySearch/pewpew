@@ -1,0 +1,61 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": ["./tsconfig.json"]
+  },
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "ignorePatterns": ["hdr-histogram-wasm/", "webpack.config.js"],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": 0,
+    "@typescript-eslint/no-non-null-assertion": 0,
+    "@typescript-eslint/explicit-module-boundary-types": 0,
+    "@typescript-eslint/ban-types": 1,
+    "@typescript-eslint/no-inferrable-types": 0,
+    "@typescript-eslint/no-unused-vars": [1, { "argsIgnorePattern": "^_" }],
+    "no-prototype-builtins": 1,
+    "require-await": 1,
+    "class-name": 0,
+    "curly": 1,
+    "eqeqeq": ["error", "smart"],
+    "linebreak-style": 1,
+    "object-literal-sort-keys": 0,
+    "only-arrow-functions": 0,
+    "max-classes-per-file": 1,
+    "max-line-length": 0,
+    "member-ordering": 0,
+    "no-angle-bracket-type-assertion": 0,
+    "no-bitwise": 1,
+    "no-console": 1,
+    "no-multiple-empty-lines": ["error", { "max": 2, "maxEOF": 0, "maxBOF": 0 }],
+    "no-empty": [1, { "allowEmptyCatch": true }],
+    "no-empty-interface": 0,
+    "no-reference": 0,
+    "no-string-literal": 0,
+    "no-trailing-spaces": 1,
+    "no-unused-expressions": 1,
+    "no-useless-catch": 0,
+    "prefer-const": 1,
+    "semi": 1,
+    "sort-imports": 1,
+    "space-before-function-paren": 1,
+    "spaced-comment": ["error", "always", { "block": { "balanced": true } }],
+    "space-infix-ops":"warn",
+    "strict": 1,
+    "comma-dangle": 1,
+    "triple-equals": 0,
+    "unified-signatures": 0,
+    "camelcase": 1,
+    "no-irregular-whitespace": 1,
+    "object-shorthand": 1,
+    "@typescript-eslint/await-thenable": 1,
+    "quotes": ["warn", "double"]
+  }
+}

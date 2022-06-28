@@ -23,7 +23,7 @@ cd tests/
 npm install
 npm test
 
-cd "$CWD//lib/hdr-histogram-wasm"
+cd "$CWD/lib/hdr-histogram-wasm"
 wasm-pack build --release -t nodejs --scope fs
 cd tests/
 npm install

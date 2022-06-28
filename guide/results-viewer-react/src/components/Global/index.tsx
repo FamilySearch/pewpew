@@ -14,7 +14,7 @@ export const GlobalStyle = createGlobalStyle`
     text-align: center;
   }
   input, select, option, button, textarea {
-    background-color: rgb(51, 51, 51);
+    background-color: hsl(210, 25%, 8%);
     color: rgb(200, 200, 200);
     // font-family: Papyrus,fantasy;
     font-size: .9rem;

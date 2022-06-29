@@ -50,4 +50,4 @@ npm run build
 
 # build the book
 cd $GUIDE_DIR
-mdbook serve
+((cd $RESULTS_VIEWER_REACT_DIR; npm run watch) & mdbook serve)

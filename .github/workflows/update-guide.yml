@@ -17,6 +17,14 @@ jobs:
           target: wasm32-unknown-unknown
           toolchain: stable
           override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: wasm-pack
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: mdbook
       - name: Add Node.js toolchain
         uses: actions/setup-node@v1
         with:
@@ -25,15 +33,6 @@ jobs:
       - name: Build Results Viewer and Book
         run: |
           set -x
-          # install mdbook and wasm-pack
-          mkdir ~/bin
-          PATH=$PATH:~/bin
-          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.15/mdbook-v0.4.15-x86_64-unknown-linux-gnu.tar.gz \
-            | tar -xz -C ~/bin
-
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.10.2/wasm-pack-v0.10.2-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
-
           # setup some envs to various paths for convenience
           PROJECT_ROOT=$PWD
           GUIDE_DIR=$(realpath $PROJECT_ROOT/guide)

@@ -47,4 +47,4 @@ endpoints:
 ```
 
 ## Har to Yaml Converter
-If you are attempting to load test a specific web page or the resources on a web page, you can use the [Har to Yaml Converter](https://beta.familysearch.org/status/performance-test/yamlwriter). First you need to create a [Har File](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the page load, then use the [Converter](https://beta.familysearch.org/status/performance-test/yamlwriter) to generate a Yaml Config file.
+If you are attempting to load test a specific web page or the resources on a web page, you can use the [Har to Yaml Converter](./results-viewer-react/yaml.html). First you need to create a [Har File](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the page load, then use the [Converter](./results-viewer-react/yaml.html) to generate a Yaml Config file.

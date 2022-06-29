@@ -1,58 +1,16 @@
 import * as React from "react";
 import Dropzone, { DropzoneInputProps, DropzoneRootProps } from "react-dropzone";
+import { GlobalStyle, ScreenWidthDiv } from "./components/Global";
 import { LogLevel, log } from "./util/log";
-import styled, { createGlobalStyle } from "styled-components";
 import { TestResults } from "./components/TestResults";
+import styled from "styled-components";
 
-export const GlobalStyle = createGlobalStyle`
-  body {
-    background-color: rgb(50, 50, 50);
-    color: rgb(250, 250, 250);
-    // https://familysearch.slack.com/archives/C09E2K6PL/p1577117592008900
-    // https://www.youtube.com/watch?v=jVhlJNJopOQ
-    // font-family: Papyrus,fantasy;
-    font-family: sans-serif;
-    font-size: 1.25rem;
-    line-height: 150%;
-    text-align: center;
-  }
-  input, select, option, button, textarea {
-    background-color: rgb(51, 51, 51);
-    color: rgb(200, 200, 200);
-    // font-family: Papyrus,fantasy;
-    font-size: .9rem;
-  }
-  ul {
-    text-align: left;
-  }
-  a {
-    color: lightblue;
-  }
-  a:visited {
-    color: magenta;
-  }
-`;
-
-export const BasicDiv = styled.div`
-  min-height: 93vh;
-  min-width: 93vh;
-`;
-
-export const Div = styled.div`
-  min-height: 90vh;
-  min-width: 93vw;
+const DropzoneDiv = styled(ScreenWidthDiv)`
+  align-items: center;
   vertical-align: middle;
-  align-content: start;
+  align-content: center;
   text-align: center;
   justify-content: center;
-  padding: 1px;
-  /* border-width: 1px;
-  border-style: solid;
-  border-color: white; */
-`;
-
-const DropzoneDiv = styled(Div)`
-  align-items: center;
   border-color: #eeeeee;
   border-style: dashed;
   background-color: rgb(61, 64, 67);
@@ -69,10 +27,6 @@ const DropzoneDiv = styled(Div)`
     border-color: rgb(30, 30, 30);
   }
 `;
-
-
-// const statsIntegration = "{\"test\":\"integration\",\"bin\":\"0.5.10\",\"bucketSize\":60}{\"index\":0,\"tags\":{\"_id\":\"0\",\"method\":\"POST\",\"url\":\"http://localhost:9001/\"}}{\"time\":1656339120,\"entries\":{\"0\":{\"rttHistogram\":\"HISTEwAAAAYAAAAAAAAAAwAAAAAAAAABAAAAAAAAD/8/8AAAAAAAAP8VAqkTAg\",\"statusCounts\":{\"200\":2}}}}";
-// const statsIntOnDemand = `{"test":"int_on_demand","bin":"0.5.10","bucketSize":60}{"index":0,"tags":{"_id":"0","method":"GET","url":"http://localhost:9001"}}{"index":1,"tags":{"_id":"1","method":"GET","url":"http://localhost:9001?*"}}{"time":1656339120,"entries":{"0":{"rttHistogram":"HISTEwAAAAoAAAAAAAAAAwAAAAAAAAABAAAAAAAAAAI/8AAAAAAAALkVAtkBAjkCEwI","statusCounts":{"204":4}},"1":{"rttHistogram":"HISTEwAAAAoAAAAAAAAAAwAAAAAAAAABAAAAAAAAAAI/8AAAAAAAANUSAmsCvQECVQI","statusCounts":{"204":4}}}}`;
 
 interface ResultsViewierState {
   filename: string | undefined;
@@ -129,7 +83,7 @@ export const ResultsViewer = () => {
       }
     }
   };
-  const DivSwap = state.fileContents ? BasicDiv : DropzoneDiv;
+  const DivSwap = state.fileContents ? ScreenWidthDiv : DropzoneDiv;
   return (<>
     <GlobalStyle />
     {state.error && <h1> Error: {state.error} </h1>}

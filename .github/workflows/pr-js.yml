@@ -1,10 +1,8 @@
 on:
   pull_request:
     paths:
-      - '**.js'
-      - '**.ts'
-      - '**.jsx'
-      - '**.tsx'
+      - '**.js*'
+      - '**.ts*'
       - '**.html'
       - '**/package.json'
       - '**/package-lock.json'

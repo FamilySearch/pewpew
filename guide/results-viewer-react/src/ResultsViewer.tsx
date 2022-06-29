@@ -1,12 +1,16 @@
 import * as React from "react";
-import { BasicDiv, Div, GlobalStyle } from "./components/Global";
 import Dropzone, { DropzoneInputProps, DropzoneRootProps } from "react-dropzone";
+import { GlobalStyle, ScreenWidthDiv } from "./components/Global";
 import { LogLevel, log } from "./util/log";
 import { TestResults } from "./components/TestResults";
 import styled from "styled-components";
 
-const DropzoneDiv = styled(Div)`
+const DropzoneDiv = styled(ScreenWidthDiv)`
   align-items: center;
+  vertical-align: middle;
+  align-content: center;
+  text-align: center;
+  justify-content: center;
   border-color: #eeeeee;
   border-style: dashed;
   background-color: rgb(61, 64, 67);
@@ -79,7 +83,7 @@ export const ResultsViewer = () => {
       }
     }
   };
-  const DivSwap = state.fileContents ? BasicDiv : DropzoneDiv;
+  const DivSwap = state.fileContents ? ScreenWidthDiv : DropzoneDiv;
   return (<>
     <GlobalStyle />
     {state.error && <h1> Error: {state.error} </h1>}

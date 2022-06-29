@@ -1,5 +1,5 @@
 import Dropzone, { DropzoneInputProps, DropzoneRootProps} from "react-dropzone";
-import { Div } from "../Global";
+import { Div } from "../Div";
 import React from "react";
 import styled from "styled-components";
 

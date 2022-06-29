@@ -30,20 +30,7 @@ export const GlobalStyle = createGlobalStyle`
   }
 `;
 
-export const BasicDiv = styled.div`
+export const ScreenWidthDiv = styled.div`
   min-height: 93vh;
   min-width: 93vh;
-`;
-
-export const Div = styled.div`
-  min-height: 90vh;
-  min-width: 93vw;
-  vertical-align: middle;
-  align-content: start;
-  text-align: center;
-  justify-content: center;
-  padding: 1px;
-  /* border-width: 1px;
-  border-style: solid;
-  border-color: white; */
 `;

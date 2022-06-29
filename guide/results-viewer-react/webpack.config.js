@@ -8,7 +8,7 @@ const entries = pages.reduce((config, page) => {
 }, {});
 const htmlWebpackPlugins = pages.map((page) => new HTMLWebpackPlugin({
   template: `./src/${page}.html`,
-  inject: true,
+  inject: "head",
   filename: `${page}.html`,
   chunks: [page],
 }))

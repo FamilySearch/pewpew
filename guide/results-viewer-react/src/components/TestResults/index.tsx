@@ -3,6 +3,7 @@ import { LogLevel, formatError, log } from "../../util/log";
 import { RTT, totalCalls } from "./charts";
 import React, { useCallback, useEffect, useState } from "react";
 import { Chart } from "chart.js";
+import { Danger } from "../Alert";
 import styled from "styled-components";
 
 const TIMETAKEN = styled.div`
@@ -254,7 +255,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
           })}
         </TIMETAKEN>
       ) : (
-          <h4>{state.error}</h4>
+          <Danger>{state.error}</Danger>
         )}
     </React.Fragment>
   );

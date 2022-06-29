@@ -33,11 +33,6 @@ module.exports = {
         include: [path.resolve(__dirname, 'src')],
         exclude: [/story\.tsx$/, /node_modules/],
       },
-      {
-        test: /\.css$/i,
-        use: 'css-loader',
-        include: [path.resolve(__dirname, 'src')],
-      },
     ],
   },
   resolve: {

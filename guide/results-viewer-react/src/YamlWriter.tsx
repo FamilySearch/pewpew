@@ -3,14 +3,71 @@
 * Edits and improvements by Conner Sabin (Summer 2021)
 */
 
-import "./yamlwriterstyles.css";
-import React, {useState} from "react";
+import React, { useState } from "react";
 import { GlobalStyle } from "./components/Global";
 import { HarEndpoint } from "./util/yamlwriter";
 // YamlWriterForm has all the editing of endpoints and load patterns
 import { YamlWriterForm } from "./components/YamlWriterForm";
 // YamlWriterUpload has all the loading of files
 import { YamlWriterUpload } from "./components/YamlWriterUpload";
+import styled from "styled-components";
+
+const YamlDiv = styled.div`
+/* These are needed for the smooth entering
+ and exiting transitions of all urls and inputs
+-------------------------------------------*/
+
+html {
+  box-sizing: border-box;
+}
+*,*:before,*:after {
+  box-sizing: inherit;
+}
+
+.point-enter {
+  opacity: 0.01;
+  transform: translate(-40px, 0)
+}
+
+.point-enter-active {
+  opacity: 1;
+  transform: translate(0, 0);
+  transition: all 250ms ease-in;
+}
+
+.point-exit {
+  opacity: 1;
+  transform: translate(0, 0)
+}
+
+.point-exit-active {
+  opacity: 0.01;
+  transform: translate(40px, 0);
+  transition: all 100ms ease-in;
+}
+
+.load-enter {
+  opacity: 0.01;
+  transform: translate(-40px, 0)
+}
+
+.load-enter-active {
+  opacity: 1;
+  transform: translate(0, 0);
+  transition: all 250ms ease-in;
+}
+
+.load-exit {
+  opacity: 1;
+  transform: translate(0, 0)
+}
+
+.load-exit-active {
+  opacity: 0.01;
+  transform: translate(40px, 0);
+  transition: all 100ms ease-in;
+}
+`;
 
 export type YamlWriterState = {
   endpoints: HarEndpoint[];
@@ -37,8 +94,10 @@ export const YamlWriter = () => {
   return (<>
     <GlobalStyle />
     <h1>Create a PewPew Test</h1>
-    <YamlWriterUpload sendEndpoints={updateEndpoints}/>
-    <YamlWriterForm clearParentEndpoints={clearEndpoints} parentEndpoints={state.endpoints}/>
+    <YamlDiv>
+      <YamlWriterUpload sendEndpoints={updateEndpoints}/>
+      <YamlWriterForm clearParentEndpoints={clearEndpoints} parentEndpoints={state.endpoints}/>
+    </YamlDiv>
   </>
   );
 };

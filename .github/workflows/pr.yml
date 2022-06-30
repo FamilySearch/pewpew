@@ -148,15 +148,17 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: wasm-pack
 
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
           set -x
+          # install wasm-pack
+          mkdir ~/bin
+          PATH=$PATH:~/bin
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.10.3/wasm-pack-v0.10.3-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
+
           wasm-pack build --release -t nodejs --scope fs
           WASM_FILE_FIXED="${WASM_FILE//-/_}"
           wget -O /tmp/binaryen-version_90-x86-linux.tar.gz  https://github.com/WebAssembly/binaryen/releases/download/version_90/binaryen-version_90-x86-linux.tar.gz

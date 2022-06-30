@@ -84,12 +84,18 @@ export interface TestResultProps {
 }
 
 export interface TestResultState {
+  /** Filters the results Data by a tag equalling this value. I.e. 'method', 'url', '_id' */
   summaryTagFilter: string;
+  /** Filters the results Data by a summaryTagFilter's value containing this value */
   summaryTagValueFilter: string;
-  resultsData?: ParsedFileEntry[];
-  summaryData?: ParsedFileEntry;
-  minMaxTime?: MinMaxTime;
-  error?: string;
+  /** All endpoints from the results file */
+  resultsData: ParsedFileEntry[] | undefined;
+  /** Filtered list based on the values from summaryTagFilter and summaryTagValueFilter */
+  filteredData: ParsedFileEntry[] | undefined;
+  /** Overall merged stats from all filteredData */
+  summaryData: ParsedFileEntry | undefined;
+  minMaxTime: MinMaxTime | undefined;
+  error: string | undefined;
 }
 
 export interface MinMaxTime {
@@ -203,7 +209,7 @@ const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
   return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
 };
 
-const getSummaryData = ({
+const getFilteredEndpoints = ({
   resultsData,
   summaryTagFilter,
   summaryTagValueFilter
@@ -211,26 +217,57 @@ const getSummaryData = ({
   resultsData: ParsedFileEntry[] | undefined,
   summaryTagFilter: string,
   summaryTagValueFilter: string
-}): ParsedFileEntry | undefined => {
-  let summaryData: ParsedFileEntry | undefined;
-  let summary: string = "";
+}): ParsedFileEntry[] | undefined => {
   if (resultsData && resultsData.length > 0) {
-    const allDataPoints = [];
+    const filteredEntries: ParsedFileEntry[] = [];
     for (const [tags, dataPoints] of resultsData) {
       if (summaryTagFilter && tags[summaryTagFilter] && tags[summaryTagFilter].includes(summaryTagValueFilter)
         || !summaryTagFilter) {
-        allDataPoints.push(...dataPoints);
+        filteredEntries.push([tags, dataPoints]);
       }
+    }
+    return filteredEntries.length > 0 ? filteredEntries : undefined;
+  }
+  return undefined;
+};
+
+const getSummaryDisplay = ({
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): string => {
+  let summary: string = "";
+  if (summaryTagFilter) {
+    summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
+    if (summaryTagValueFilter) {
+      summary += ` and a value containing "${summaryTagValueFilter}"`;
+    }
+  } else {
+    summary = "Including all endpoints";
+  }
+  return summary;
+};
+
+const getSummaryData = ({
+  filteredData,
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  filteredData: ParsedFileEntry[] | undefined,
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): ParsedFileEntry | undefined => {
+  let summaryData: ParsedFileEntry | undefined;
+  let summary: string = "";
+  if (filteredData && filteredData.length > 0) {
+    const allDataPoints = [];
+    for (const [, dataPoints] of filteredData) {
+      allDataPoints.push(...dataPoints);
     }
     const dataPoints = mergeAllDataPoints(...allDataPoints);
-    if (summaryTagFilter) {
-      summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
-      if (summaryTagValueFilter) {
-        summary += ` and a value containing "${summaryTagValueFilter}"`;
-      }
-    } else {
-      summary = "Including all endpoints";
-    }
+    summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
     const tags = { method: summary, url: "" };
     summaryData = [tags, dataPoints];
   }
@@ -242,6 +279,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     summaryTagFilter: "",
     summaryTagValueFilter: "",
     resultsData: undefined,
+    filteredData: undefined,
     summaryData: undefined,
     minMaxTime: undefined,
     error: undefined
@@ -251,10 +289,6 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
-
-  useEffect(() => {
-    updateResultsData(resultsText);
-  }, [resultsText]);
 
   const updateResultsData = async (resultsText: string): Promise<void> => {
     try {
@@ -280,10 +314,12 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       }
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
       const { summaryTagFilter, summaryTagValueFilter } = state;
-      const summaryData = getSummaryData({ resultsData, summaryTagFilter, summaryTagValueFilter });
+      const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+      const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
 
       updateState({
         resultsData,
+        filteredData,
         summaryData,
         error: undefined,
         minMaxTime: startEndTime
@@ -300,20 +336,48 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     const newValue = event.target.value;
     const summaryTagFilter = stateName === "summaryTagFilter" ? newValue : state.summaryTagFilter;
     const summaryTagValueFilter = stateName === "summaryTagValueFilter" ? newValue : state.summaryTagValueFilter;
-    const summaryData = getSummaryData({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+    const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+
+    const oldFilteredData = state.filteredData;
+    // Check if it changed
+    if ((!filteredData && !oldFilteredData)
+      || (filteredData && oldFilteredData
+      && filteredData.length === filteredData.length
+      && filteredData.every(([tags]: ParsedFileEntry, index: number) =>
+        JSON.stringify(tags) === JSON.stringify(oldFilteredData[index][0])))
+    ) {
+      // It hasn't changed
+      // Update the summary filter display
+      const { summaryData } = state;
+      const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+      if (summaryData && summaryData[0].method !== summary) {
+        summaryData[0] = { ...(summaryData[0]), method: summary };
+      }
+      updateState({ [stateName]: newValue });
+      log("filteredData hasn't changed", LogLevel.DEBUG);
+      return;
+    }
+    log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
 
     // Free the old data (only the summary)
     freeHistograms(undefined, state.summaryData);
+    const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
     updateState({
       [stateName]: newValue,
+      filteredData,
       summaryData
     });
   };
 
+  useEffect(() => {
+    updateResultsData(resultsText);
+  }, [resultsText]);
+
+  const displayData = state.filteredData || state.resultsData;
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
-      {state.resultsData !== undefined ? (
+      {displayData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
           <p>
@@ -339,9 +403,9 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
             : <p>No summary data to display</p>
           }
           <h1>Endpoint Data</h1>
-          {state.resultsData.map(([bucketId, dataPoints], idx) => {
+          {displayData.map(([bucketId, dataPoints]) => {
             return (
-              <Endpoint key={idx} bucketId={bucketId} dataPoints={dataPoints} />
+              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
             );
           })}
         </TIMETAKEN>

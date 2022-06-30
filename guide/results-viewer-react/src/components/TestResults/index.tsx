@@ -20,23 +20,14 @@ const H3 = styled.h3`
   word-break: break-all;
 `;
 
-const RTTDIV = styled.div`
-  margin-bottom: 2em;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
 const ENDPOINTDIV1 = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
 
-const ENDPOINTDIV2 = styled.div`
-  display: flex;
-  flex-direction: row;
-  align-items: center;
+const RTTDIV = styled(ENDPOINTDIV1)`
+  margin-bottom: 2em;
 `;
 
 const FLEXROW = styled.div`
@@ -44,17 +35,18 @@ const FLEXROW = styled.div`
   flex-direction: row;
 `;
 
-const RTTTABLE = styled.div`
-  display: flex;
-  flex-direction: column;
+const ENDPOINTDIV2 = styled(FLEXROW)`
   align-items: center;
+`;
+
+const RTTTABLE = styled(ENDPOINTDIV1)`
   max-width: 400px;
   margin-right: 15px;
 `;
 
 const CANVASBOX = styled.div`
   position: relative;
-  width: calc(100vw - 100px);
+  width: calc(55vw - 100px);
 `;
 
 const UL = styled.ul`
@@ -92,9 +84,18 @@ export interface TestResultProps {
 }
 
 export interface TestResultState {
-  resultsData?: ParsedFileEntry[];
-  minMaxTime?: MinMaxTime;
-  error?: string;
+  /** Filters the results Data by a tag equalling this value. I.e. 'method', 'url', '_id' */
+  summaryTagFilter: string;
+  /** Filters the results Data by a summaryTagFilter's value containing this value */
+  summaryTagValueFilter: string;
+  /** All endpoints from the results file */
+  resultsData: ParsedFileEntry[] | undefined;
+  /** Filtered list based on the values from summaryTagFilter and summaryTagValueFilter */
+  filteredData: ParsedFileEntry[] | undefined;
+  /** Overall merged stats from all filteredData */
+  summaryData: ParsedFileEntry | undefined;
+  minMaxTime: MinMaxTime | undefined;
+  error: string | undefined;
 }
 
 export interface MinMaxTime {
@@ -179,9 +180,107 @@ const minMaxTime = (testResults: any) => {
   return testTimes;
 };
 
+const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
+  const oldData: ParsedFileEntry[] = [
+    ...(resultsData || []),
+    ...(summaryData ? [summaryData] : [])
+  ];
+  for (const [bucketId, dataPoints] of oldData) {
+    let counter = 0;
+    for (const dataPoint of dataPoints) {
+      log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
+      dataPoint.rttHistogram.free();
+    }
+  }
+};
+
+const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+  const combinedData: Map<number, DataPoint> = new Map();
+
+  for (const dp of dataPoints) {
+    const dp2 = combinedData.get(Number(dp.time));
+    if (dp2) {
+      dp2.mergeInto(dp);
+    } else {
+      combinedData.set(Number(dp.time), dp.clone());
+    }
+  }
+
+  return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+};
+
+const getFilteredEndpoints = ({
+  resultsData,
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  resultsData: ParsedFileEntry[] | undefined,
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): ParsedFileEntry[] | undefined => {
+  if (resultsData && resultsData.length > 0) {
+    const filteredEntries: ParsedFileEntry[] = [];
+    for (const [tags, dataPoints] of resultsData) {
+      if (summaryTagFilter && tags[summaryTagFilter] && tags[summaryTagFilter].includes(summaryTagValueFilter)
+        || !summaryTagFilter) {
+        filteredEntries.push([tags, dataPoints]);
+      }
+    }
+    return filteredEntries.length > 0 ? filteredEntries : undefined;
+  }
+  return undefined;
+};
+
+const getSummaryDisplay = ({
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): string => {
+  let summary: string = "";
+  if (summaryTagFilter) {
+    summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
+    if (summaryTagValueFilter) {
+      summary += ` and a value containing "${summaryTagValueFilter}"`;
+    }
+  } else {
+    summary = "Including all endpoints";
+  }
+  return summary;
+};
+
+const getSummaryData = ({
+  filteredData,
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  filteredData: ParsedFileEntry[] | undefined,
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): ParsedFileEntry | undefined => {
+  let summaryData: ParsedFileEntry | undefined;
+  let summary: string = "";
+  if (filteredData && filteredData.length > 0) {
+    const allDataPoints = [];
+    for (const [, dataPoints] of filteredData) {
+      allDataPoints.push(...dataPoints);
+    }
+    const dataPoints = mergeAllDataPoints(...allDataPoints);
+    summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+    const tags = { method: summary, url: "" };
+    summaryData = [tags, dataPoints];
+  }
+  return summaryData;
+};
+
 export const TestResults = ({ resultsText }: TestResultProps) => {
   const defaultState: TestResultState = {
+    summaryTagFilter: "",
+    summaryTagValueFilter: "",
     resultsData: undefined,
+    filteredData: undefined,
+    summaryData: undefined,
     minMaxTime: undefined,
     error: undefined
   };
@@ -190,10 +289,6 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
-
-  useEffect(() => {
-    updateResultsData(resultsText);
-  }, [resultsText]);
 
   const updateResultsData = async (resultsText: string): Promise<void> => {
     try {
@@ -204,13 +299,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       const model = await import("./model");
       let resultsData: ParsedFileEntry[];
       // Free the old ones
-      for (const [bucketId, dataPoints] of state.resultsData || []) {
-        let counter = 0;
-        for (const dataPoint of dataPoints) {
-          log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
-          dataPoint.rttHistogram.free();
-        }
-      }
+      freeHistograms(state.resultsData, state.summaryData);
       const testStartKeys = ["test", "bin", "bucketSize"];
       const isOnlyTestStart: boolean = results.length === 1
         && Object.keys(results[0]).length === testStartKeys.length
@@ -224,9 +313,14 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
         resultsData = model.processNewJson(results);
       }
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
+      const { summaryTagFilter, summaryTagValueFilter } = state;
+      const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+      const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
 
       updateState({
         resultsData,
+        filteredData,
+        summaryData,
         error: undefined,
         minMaxTime: startEndTime
       });
@@ -238,30 +332,92 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     }
   };
 
+  const onSummaryTagFilterChange = (event: React.ChangeEvent<HTMLInputElement>, stateName: "summaryTagFilter" | "summaryTagValueFilter") => {
+    const newValue = event.target.value;
+    const summaryTagFilter = stateName === "summaryTagFilter" ? newValue : state.summaryTagFilter;
+    const summaryTagValueFilter = stateName === "summaryTagValueFilter" ? newValue : state.summaryTagValueFilter;
+    const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+
+    const oldFilteredData = state.filteredData;
+    // Check if it changed
+    if ((!filteredData && !oldFilteredData)
+      || (filteredData && oldFilteredData
+      && filteredData.length === filteredData.length
+      && filteredData.every(([tags]: ParsedFileEntry, index: number) =>
+        JSON.stringify(tags) === JSON.stringify(oldFilteredData[index][0])))
+    ) {
+      // It hasn't changed
+      // Update the summary filter display
+      const { summaryData } = state;
+      const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+      if (summaryData && summaryData[0].method !== summary) {
+        summaryData[0] = { ...(summaryData[0]), method: summary };
+      }
+      updateState({ [stateName]: newValue });
+      log("filteredData hasn't changed", LogLevel.DEBUG);
+      return;
+    }
+    log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
+
+    // Free the old data (only the summary)
+    freeHistograms(undefined, state.summaryData);
+    const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
+    updateState({
+      [stateName]: newValue,
+      filteredData,
+      summaryData
+    });
+  };
+
+  useEffect(() => {
+    updateResultsData(resultsText);
+  }, [resultsText]);
+
+  const displayData = state.filteredData || state.resultsData;
   return (
     <React.Fragment>
-      {state.resultsData !== undefined ? (
+      {state.error && <Danger>{state.error}</Danger>}
+      {displayData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
           <p>
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
-          <h1>Results</h1>
-          {state.resultsData.map(([bucketId, dataPoints], idx) => {
+          <h1>Overview charts</h1>
+          <p>Filter which endpoints are included in the summary:</p>
+          <label htmlFor="summaryTagFilter">
+            <span>Tag name</span>
+            <input id="summaryTagFilter" type="text" value={state.summaryTagFilter} placeholder="url"
+              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagFilter")}
+            />
+          </label>
+          <label htmlFor="summaryTagValueFilter">
+            <span>contains</span>
+            <input id="summaryTagValueFilter" type="text" value={state.summaryTagValueFilter} placeholder="familysearch"
+              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagValueFilter")}
+            />
+          </label>
+          {state.summaryData
+            ? <Endpoint key={"summary"} bucketId={state.summaryData[0]} dataPoints={state.summaryData[1]} />
+            : <p>No summary data to display</p>
+          }
+          <h1>Endpoint Data</h1>
+          {displayData.map(([bucketId, dataPoints]) => {
             return (
-              <Endpoint key={idx} bucketId={bucketId} dataPoints={dataPoints} />
+              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
             );
           })}
         </TIMETAKEN>
       ) : (
-          <Danger>{state.error}</Danger>
-        )}
+        <p>No Results Found</p>
+      )}
     </React.Fragment>
   );
 };
 
 const total = (dataPoints: DataPoint[]) => {
+  if (dataPoints.length === 0) { return undefined; }
   let totalRTT;
   try {
   const first: DataPoint = dataPoints[0];
@@ -407,7 +563,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </UL>
         <ENDPOINTDIV1>
           <h3>Endpoint Summary</h3>
-          <FLEXROW>
+          {totalResults && <FLEXROW>
             <RTTTABLE>
               <h5>RTT Stats</h5>
               <TABLE>
@@ -464,8 +620,9 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
                   undefined
                 )}
             </ENDPOINTDIV1>
-          </FLEXROW>
+          </FLEXROW>}
         </ENDPOINTDIV1>
+        <FLEXROW>
         <RTTDIV>
           <h3>RTT Stats</h3>
           <button onClick={() => toggleChart(rttChart!)}>
@@ -488,6 +645,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
             </CANVASBOX>
           </ENDPOINTDIV2>
         </ENDPOINTDIV1>
+      </FLEXROW>
       </ENDPOINT>
     </React.Fragment>
   );

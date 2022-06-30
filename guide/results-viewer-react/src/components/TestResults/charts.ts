@@ -67,8 +67,8 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   ].map((type, i) => {
     const borderColor = colors[i % colors.length];
     const backgroundColor = borderColor + "46";
-    let label;
-    let data;
+    let label: string;
+    let data: Chart.ChartPoint[];
     // eslint-disable-next-line eqeqeq
     if (type == "avg") {
       label = "Avg";

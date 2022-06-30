@@ -20,23 +20,14 @@ const H3 = styled.h3`
   word-break: break-all;
 `;
 
-const RTTDIV = styled.div`
-  margin-bottom: 2em;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
 const ENDPOINTDIV1 = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
 
-const ENDPOINTDIV2 = styled.div`
-  display: flex;
-  flex-direction: row;
-  align-items: center;
+const RTTDIV = styled(ENDPOINTDIV1)`
+  margin-bottom: 2em;
 `;
 
 const FLEXROW = styled.div`
@@ -44,17 +35,18 @@ const FLEXROW = styled.div`
   flex-direction: row;
 `;
 
-const RTTTABLE = styled.div`
-  display: flex;
-  flex-direction: column;
+const ENDPOINTDIV2 = styled(FLEXROW)`
   align-items: center;
+`;
+
+const RTTTABLE = styled(ENDPOINTDIV1)`
   max-width: 400px;
   margin-right: 15px;
 `;
 
 const CANVASBOX = styled.div`
   position: relative;
-  width: calc(100vw - 100px);
+  width: calc(55vw - 100px);
 `;
 
 const UL = styled.ul`
@@ -92,7 +84,10 @@ export interface TestResultProps {
 }
 
 export interface TestResultState {
+  summaryTagFilter: string;
+  summaryTagValueFilter: string;
   resultsData?: ParsedFileEntry[];
+  summaryData?: ParsedFileEntry;
   minMaxTime?: MinMaxTime;
   error?: string;
 }
@@ -179,9 +174,75 @@ const minMaxTime = (testResults: any) => {
   return testTimes;
 };
 
+const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
+  const oldData: ParsedFileEntry[] = [
+    ...(resultsData || []),
+    ...(summaryData ? [summaryData] : [])
+  ];
+  for (const [bucketId, dataPoints] of oldData) {
+    let counter = 0;
+    for (const dataPoint of dataPoints) {
+      log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
+      dataPoint.rttHistogram.free();
+    }
+  }
+};
+
+const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+  const combinedData: Map<number, DataPoint> = new Map();
+
+  for (const dp of dataPoints) {
+    const dp2 = combinedData.get(Number(dp.time));
+    if (dp2) {
+      dp2.mergeInto(dp);
+    } else {
+      combinedData.set(Number(dp.time), dp.clone());
+    }
+  }
+
+  return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+};
+
+const getSummaryData = ({
+  resultsData,
+  summaryTagFilter,
+  summaryTagValueFilter
+}: {
+  resultsData: ParsedFileEntry[] | undefined,
+  summaryTagFilter: string,
+  summaryTagValueFilter: string
+}): ParsedFileEntry | undefined => {
+  let summaryData: ParsedFileEntry | undefined;
+  let summary: string = "";
+  if (resultsData && resultsData.length > 0) {
+    const allDataPoints = [];
+    for (const [tags, dataPoints] of resultsData) {
+      if (summaryTagFilter && tags[summaryTagFilter] && tags[summaryTagFilter].includes(summaryTagValueFilter)
+        || !summaryTagFilter) {
+        allDataPoints.push(...dataPoints);
+      }
+    }
+    const dataPoints = mergeAllDataPoints(...allDataPoints);
+    if (summaryTagFilter) {
+      summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
+      if (summaryTagValueFilter) {
+        summary += ` and a value containing "${summaryTagValueFilter}"`;
+      }
+    } else {
+      summary = "Including all endpoints";
+    }
+    const tags = { method: summary, url: "" };
+    summaryData = [tags, dataPoints];
+  }
+  return summaryData;
+};
+
 export const TestResults = ({ resultsText }: TestResultProps) => {
   const defaultState: TestResultState = {
+    summaryTagFilter: "",
+    summaryTagValueFilter: "",
     resultsData: undefined,
+    summaryData: undefined,
     minMaxTime: undefined,
     error: undefined
   };
@@ -204,13 +265,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       const model = await import("./model");
       let resultsData: ParsedFileEntry[];
       // Free the old ones
-      for (const [bucketId, dataPoints] of state.resultsData || []) {
-        let counter = 0;
-        for (const dataPoint of dataPoints) {
-          log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
-          dataPoint.rttHistogram.free();
-        }
-      }
+      freeHistograms(state.resultsData, state.summaryData);
       const testStartKeys = ["test", "bin", "bucketSize"];
       const isOnlyTestStart: boolean = results.length === 1
         && Object.keys(results[0]).length === testStartKeys.length
@@ -224,9 +279,12 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
         resultsData = model.processNewJson(results);
       }
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
+      const { summaryTagFilter, summaryTagValueFilter } = state;
+      const summaryData = getSummaryData({ resultsData, summaryTagFilter, summaryTagValueFilter });
 
       updateState({
         resultsData,
+        summaryData,
         error: undefined,
         minMaxTime: startEndTime
       });
@@ -238,8 +296,23 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     }
   };
 
+  const onSummaryTagFilterChange = (event: React.ChangeEvent<HTMLInputElement>, stateName: "summaryTagFilter" | "summaryTagValueFilter") => {
+    const newValue = event.target.value;
+    const summaryTagFilter = stateName === "summaryTagFilter" ? newValue : state.summaryTagFilter;
+    const summaryTagValueFilter = stateName === "summaryTagValueFilter" ? newValue : state.summaryTagValueFilter;
+    const summaryData = getSummaryData({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+
+    // Free the old data (only the summary)
+    freeHistograms(undefined, state.summaryData);
+    updateState({
+      [stateName]: newValue,
+      summaryData
+    });
+  };
+
   return (
     <React.Fragment>
+      {state.error && <Danger>{state.error}</Danger>}
       {state.resultsData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
@@ -247,7 +320,25 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
-          <h1>Results</h1>
+          <h1>Overview charts</h1>
+          <p>Filter which endpoints are included in the summary:</p>
+          <label htmlFor="summaryTagFilter">
+            <span>Tag name</span>
+            <input id="summaryTagFilter" type="text" value={state.summaryTagFilter} placeholder="url"
+              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagFilter")}
+            />
+          </label>
+          <label htmlFor="summaryTagValueFilter">
+            <span>contains</span>
+            <input id="summaryTagValueFilter" type="text" value={state.summaryTagValueFilter} placeholder="familysearch"
+              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagValueFilter")}
+            />
+          </label>
+          {state.summaryData
+            ? <Endpoint key={"summary"} bucketId={state.summaryData[0]} dataPoints={state.summaryData[1]} />
+            : <p>No summary data to display</p>
+          }
+          <h1>Endpoint Data</h1>
           {state.resultsData.map(([bucketId, dataPoints], idx) => {
             return (
               <Endpoint key={idx} bucketId={bucketId} dataPoints={dataPoints} />
@@ -255,13 +346,14 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
           })}
         </TIMETAKEN>
       ) : (
-          <Danger>{state.error}</Danger>
-        )}
+        <p>No Results Found</p>
+      )}
     </React.Fragment>
   );
 };
 
 const total = (dataPoints: DataPoint[]) => {
+  if (dataPoints.length === 0) { return undefined; }
   let totalRTT;
   try {
   const first: DataPoint = dataPoints[0];
@@ -407,7 +499,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </UL>
         <ENDPOINTDIV1>
           <h3>Endpoint Summary</h3>
-          <FLEXROW>
+          {totalResults && <FLEXROW>
             <RTTTABLE>
               <h5>RTT Stats</h5>
               <TABLE>
@@ -464,8 +556,9 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
                   undefined
                 )}
             </ENDPOINTDIV1>
-          </FLEXROW>
+          </FLEXROW>}
         </ENDPOINTDIV1>
+        <FLEXROW>
         <RTTDIV>
           <h3>RTT Stats</h3>
           <button onClick={() => toggleChart(rttChart!)}>
@@ -488,6 +581,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
             </CANVASBOX>
           </ENDPOINTDIV2>
         </ENDPOINTDIV1>
+      </FLEXROW>
       </ENDPOINT>
     </React.Fragment>
   );

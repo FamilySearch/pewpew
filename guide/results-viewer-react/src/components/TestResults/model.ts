@@ -12,7 +12,7 @@ function isObject (o: unknown): o is object {
  * @param check {CheckType | undefined} Type of check (string or function) to use on this key and value.
  * @param unknownCheck {CheckType | undefined} Check to run (if any) if this is not a known key
  * @param key {string} key from parent object
- * @param check {any} value from parent object
+ * @param value {any} value from parent object
  * @returns A string if there is a problem with this key/value pair, undefined otherwise
  */
  function valueChecker (check: CheckType | undefined, unknownCheck: CheckType | undefined, key: string, value: any) {
@@ -66,11 +66,11 @@ function propertyChecker (
   for (const [key, value] of Object.entries(o)) {
     const check = requiredMap.get(key) || optionalMap.get(key);
     requiredMap.delete(key);
-    const checked = valueChecker(check, unknownCheck, key, value);
+    const checkedResult = valueChecker(check, unknownCheck, key, value);
     // console.log(`propertyChecker k: ${k}, v: ${JSON.stringify(v)}, value: ${JSON.stringify(value)}, unknown: ${JSON.stringify(unknown)}, checked: ${JSON.stringify(checked)}`);
     // Extra properties will still be undefined if unknownCheck is undefined
-    if (checked) {
-      return checked;
+    if (checkedResult) {
+      return checkedResult;
     }
   }
 
@@ -113,7 +113,7 @@ export class DataPoint {
   public readonly time: Date;
   public readonly duration: number;
   public readonly endTime?: Date;
-  public readonly requestTimeouts: number;
+  public requestTimeouts: number;
   public readonly rttHistogram: HDRHistogram;
   public readonly startTime?: Date;
   public readonly statusCounts: StatusCounts;
@@ -132,6 +132,33 @@ export class DataPoint {
     }
     this.statusCounts = preProcessed.statusCounts;
     this.testErrors = preProcessed.testErrors;
+  }
+
+  mergeInto (other: DataPoint) {
+    // merge the requestTimeouts
+    this.requestTimeouts += other.requestTimeouts;
+
+    // merge the rttHistogram
+    this.rttHistogram.add(other.rttHistogram);
+
+    // merge the statusCounts
+    for (const key of Object.keys(other.statusCounts)) {
+      this.statusCounts[key] = (this.statusCounts[key] || 0) + (other.statusCounts[key] || 0);
+    }
+
+    // merge the testErrors
+    for (const key of Object.keys(other.testErrors)) {
+      this.testErrors[key] = (this.testErrors[key] || 0) + (other.testErrors[key] || 0);
+    }
+  }
+
+  clone (): DataPoint {
+    const props = {
+      rttHistogram: this.rttHistogram.clone(),
+      statusCounts: Object.assign({}, this.statusCounts),
+      testErrors: Object.assign({}, this.testErrors)
+    };
+    return Object.assign(Object.create(this), this, props);
   }
 }
 
@@ -308,7 +335,7 @@ function isTags (tags: unknown): tags is Tags {
   const tags2: any = tags;
 
   return typeof tags2.index === "number"
-    && Object.entries(tags2.tags).every(([_k, v]: [string, unknown]) => typeof v == "string")
+    && Object.entries(tags2.tags).every(([_k, v]: [string, unknown]) => typeof v === "string")
     && tags2.tags["_id"] !== undefined
     && tags2.tags["method"] !== undefined
     && tags2.tags["url"] !== undefined;
@@ -321,9 +348,9 @@ function isTimeBucketEntry (tbe: unknown): tbe is TimeBucketEntry {
 
   const tbe2: any = tbe;
 
-  const fails = (tbe2["rttHistogram"] !== undefined && typeof tbe2.rttHistogram != "string")
+  const fails = (tbe2["rttHistogram"] !== undefined && typeof tbe2.rttHistogram !== "string")
     || (tbe2["statusCounts"] !== undefined && !isStatusCounts(tbe2.statusCounts))
-    || (tbe2["requestTimeouts"] !== undefined && typeof tbe2.requestTimeouts != "number")
+    || (tbe2["requestTimeouts"] !== undefined && typeof tbe2.requestTimeouts !== "number")
     || (tbe2["testErrors"] !== undefined && !isTestErrors(tbe2.testErrors));
 
   return !fails;

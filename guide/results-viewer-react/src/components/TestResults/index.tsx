@@ -218,6 +218,9 @@ const getFilteredEndpoints = ({
   summaryTagFilter: string,
   summaryTagValueFilter: string
 }): ParsedFileEntry[] | undefined => {
+  if (!summaryTagFilter) {
+    return resultsData;
+  }
   if (resultsData && resultsData.length > 0) {
     const filteredEntries: ParsedFileEntry[] = [];
     for (const [tags, dataPoints] of resultsData) {
@@ -315,8 +318,9 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
       const { summaryTagFilter, summaryTagValueFilter } = state;
       const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
-      const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
+      const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
+      log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
       updateState({
         resultsData,
         filteredData,
@@ -374,6 +378,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
   }, [resultsText]);
 
   const displayData = state.filteredData || state.resultsData;
+  log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}

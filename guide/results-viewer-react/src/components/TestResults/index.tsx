@@ -185,6 +185,7 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
     ...(resultsData || []),
     ...(summaryData ? [summaryData] : [])
   ];
+  log("freeHistograms", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
   for (const [bucketId, dataPoints] of oldData) {
     let counter = 0;
     for (const dataPoint of dataPoints) {
@@ -219,6 +220,7 @@ const getFilteredEndpoints = ({
   summaryTagValueFilter: string
 }): ParsedFileEntry[] | undefined => {
   if (!summaryTagFilter) {
+    log("getFilteredEndpoints no filter", LogLevel.DEBUG, { summaryTagFilter });
     return resultsData;
   }
   if (resultsData && resultsData.length > 0) {
@@ -343,10 +345,11 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
 
     const oldFilteredData = state.filteredData;
+    log("onSummaryTagFilterChange filteredData", LogLevel.DEBUG, { filteredData: filteredData?.length || -1, oldFilteredData: oldFilteredData?.length || -1 });
     // Check if it changed
-    if ((!filteredData && !oldFilteredData)
-      || (filteredData && oldFilteredData
-      && filteredData.length === filteredData.length
+    if ((filteredData === undefined && oldFilteredData === undefined)
+      || ((filteredData !== undefined && oldFilteredData !== undefined)
+      && filteredData.length === oldFilteredData.length
       && filteredData.every(([tags]: ParsedFileEntry, index: number) =>
         JSON.stringify(tags) === JSON.stringify(oldFilteredData[index][0])))
     ) {
@@ -379,6 +382,10 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
 
   const displayData = state.filteredData || state.resultsData;
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
+  // If we're showing all endpoints, fix the summary tags
+  const summaryTags: BucketId = state.summaryData && state.filteredData
+    ? state.summaryData[0]
+    : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
@@ -404,7 +411,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
             />
           </label>
           {state.summaryData
-            ? <Endpoint key={"summary"} bucketId={state.summaryData[0]} dataPoints={state.summaryData[1]} />
+            ? <Endpoint key={"summary"} bucketId={summaryTags} dataPoints={state.summaryData[1]} />
             : <p>No summary data to display</p>
           }
           <h1>Endpoint Data</h1>
@@ -533,7 +540,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         : "linear"
       );
     }
-  }, [dataPoints.length]);
+  }, [dataPoints]);
 
   const totalCanvas = useCallback((node: HTMLCanvasElement) => {
     if (node) {
@@ -545,7 +552,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
       setTotalChart(currentChart);
       setTotalButtonDisplay("logarithmic");
     }
-  }, [dataPoints.length]);
+  }, [dataPoints]);
 
   return (
     <React.Fragment>

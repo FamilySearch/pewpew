@@ -38,7 +38,7 @@ export const DisplayDivMain = styled.div`
   padding-left: 2%;
   font: 16px "Century Gothic", Futura, sans-serif;
   text-align: left;
-  align-items: last baseline;
+  align-items: initial;
 `;
 export const DisplayDivBody = styled.div`
 display: flex;

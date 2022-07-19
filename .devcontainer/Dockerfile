@@ -4,11 +4,11 @@ FROM rust:1.52
 # https://github.com/EmbarkStudios/cargo-deny/releases
 ARG CARGO_DENY_VER=0.12.1
 # https://github.com/rust-lang/mdBook/releases
-ARG MDBOOK_VER=v0.4.18
+ARG MDBOOK_VER=v0.4.20
 # https://github.com/rustwasm/wasm-pack/releases
 ARG WASM_PACK_VER=v0.10.3
 # https://nodejs.org/
-ARG NODE_MAJOR_VER=14
+ARG NODE_MAJOR_VER=16
 
 ARG USER=pewpew
 

@@ -26,6 +26,7 @@ use yansi::Paint;
 
 use std::{
     collections::BTreeMap,
+    fmt::Write,
     fs::File,
     future::Future,
     io, mem,
@@ -664,7 +665,9 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
         if ret.is_empty() {
             last
         } else {
-            ret.push_str(&format!(" and {}", last));
+            // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
+            let _ = write!(&mut ret, " and {}", last);
+            // ret.push_str(&format!(" and {}", last));
             ret
         }
     } else {

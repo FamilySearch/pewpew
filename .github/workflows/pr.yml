@@ -161,16 +161,17 @@ jobs:
 
           wasm-pack build --release -t nodejs --scope fs
           WASM_FILE_FIXED="${WASM_FILE//-/_}"
-          wget -O /tmp/binaryen-version_90-x86-linux.tar.gz  https://github.com/WebAssembly/binaryen/releases/download/version_90/binaryen-version_90-x86-linux.tar.gz
-          tar -xvf /tmp/binaryen-version_90-x86-linux.tar.gz -C /tmp
-          /tmp/binaryen-version_90/wasm-opt pkg/${WASM_FILE_FIXED} -o pkg/${WASM_FILE_FIXED} -Oz
+          # https://github.com/rustwasm/wasm-pack/issues/864#issuecomment-957818452
+          wget -O /tmp/binaryen-version_109-x86-linux.tar.gz  https://github.com/WebAssembly/binaryen/releases/download/version_109/binaryen-version_109-x86-linux.tar.gz
+          tar -xvf /tmp/binaryen-version_109-x86-linux.tar.gz -C /tmp
+          /tmp/binaryen-version_109/wasm-opt pkg/${WASM_FILE_FIXED} -o pkg/${WASM_FILE_FIXED} -Oz
         working-directory: ${{env.wasm-directory}}
         shell: bash
 
-      - name: Use Node.js 14.x
+      - name: Use Node.js 16.x
         uses: actions/setup-node@v2
         with:
-          node-version: 14.x
+          node-version: 16.x
       - name: Install Dependencies
         run: npm ci
         working-directory: ${{env.test-directory}}

@@ -23,14 +23,14 @@ wasm-pack build --release -t nodejs --scope fs
 # ~/.cache/.wasm-pack/wasm-opt-4d7a65327e9363b7/wasm-opt pkg/config_wasm_bg.wasm -o pkg/config_wasm_bg.wasm -Oz
 
 cd tests/
-npm install
+npm ci
 npm test
 
 cd "$CWD/lib/hdr-histogram-wasm"
 wasm-pack build --release -t nodejs --scope fs
 # ~/.cache/.wasm-pack/wasm-opt-4d7a65327e9363b7/wasm-opt pkg/hdr_histogram_wasm_bg.wasm -o pkg/hdr_histogram_wasm_bg.wasm -Oz
 cd tests/
-npm install
+npm ci
 npm test
 
 cd "$CWD"

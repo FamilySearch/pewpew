@@ -1489,7 +1489,7 @@ impl Select {
                     }
                 }
                 Ok(Either3::A(iter::once(self.select.evaluate(
-                    Cow::Borrowed(&*d),
+                    Cow::Borrowed(d),
                     self.no_recoverable_error,
                     None,
                 ))))
@@ -1503,11 +1503,8 @@ impl Select {
                     .join
                     .iter()
                     .map(|v| {
-                        match v.evaluate_as_iter(
-                            Cow::Borrowed(&*d),
-                            self.no_recoverable_error,
-                            None,
-                        ) {
+                        match v.evaluate_as_iter(Cow::Borrowed(d), self.no_recoverable_error, None)
+                        {
                             Ok(i) => Either::A(i),
                             Err(e) => Either::B(iter::once(Err(e))),
                         }
@@ -1522,7 +1519,7 @@ impl Select {
                         };
                         if let Some(wc) = &self.where_clause {
                             if !bool_value(&*wc.evaluate(
-                                Cow::Borrowed(&*d),
+                                Cow::Borrowed(d),
                                 no_recoverable_error,
                                 for_each.as_deref(),
                             )?) {
@@ -1530,11 +1527,7 @@ impl Select {
                             }
                         }
                         self.select
-                            .evaluate(
-                                Cow::Borrowed(&*d),
-                                no_recoverable_error,
-                                for_each.as_deref(),
-                            )
+                            .evaluate(Cow::Borrowed(d), no_recoverable_error, for_each.as_deref())
                             .map(Some)
                     })
                     .filter_map(Result::transpose);
@@ -1543,7 +1536,7 @@ impl Select {
                 match &self.where_clause {
                     Some(wc)
                         if !bool_value(&*wc.evaluate(
-                            Cow::Borrowed(&*d),
+                            Cow::Borrowed(d),
                             no_recoverable_error,
                             None,
                         )?) =>
@@ -1556,7 +1549,7 @@ impl Select {
                             .iter()
                             .map(|v| {
                                 match v.evaluate_as_iter(
-                                    Cow::Borrowed(&*d),
+                                    Cow::Borrowed(d),
                                     self.no_recoverable_error,
                                     None,
                                 ) {
@@ -1574,7 +1567,7 @@ impl Select {
                                 };
                                 self.select
                                     .evaluate(
-                                        Cow::Borrowed(&*d),
+                                        Cow::Borrowed(d),
                                         no_recoverable_error,
                                         for_each.as_deref(),
                                     )
@@ -1822,7 +1815,7 @@ fn parse_path(
     let start = start.expect("expected there to be a start piece while parsing path");
     if let PathStart::Ident(s) = &start {
         match rest.first() {
-            Some(PathSegment::String(next)) if &*s == "request" || &*s == "response" => {
+            Some(PathSegment::String(next)) if s == "request" || s == "response" => {
                 providers2.insert(format!("{}.{}", s, next), marker);
             }
             _ => {

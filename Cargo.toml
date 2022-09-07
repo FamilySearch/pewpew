@@ -51,7 +51,7 @@ url = "2"
 yansi = "0.5"
 zip_all = { path = "./lib/zip_all" }
 # https://github.com/softprops/json-env-logger/issues/6
-log = { version = "0.4.14", features = ["kv_unstable_std"] }
+log = { version = "0.4", features = ["kv_unstable_std"] }
 env_logger = "0.9"
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }
 # https://github.com/sfackler/rust-openssl/issues/1021#issuecomment-605602642

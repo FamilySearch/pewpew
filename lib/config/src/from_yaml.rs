@@ -340,7 +340,7 @@ impl<V> Insert for Vec<V> {
     }
 }
 
-#[cfg_attr(debug_assertions, derive(PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 #[derive(Debug)]
 pub struct TupleVec<K, V>(pub Vec<(K, V)>);
 
@@ -461,7 +461,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Nullable<T> {
     Some(T),
     Null,

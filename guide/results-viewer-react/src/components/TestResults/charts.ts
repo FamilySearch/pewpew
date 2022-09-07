@@ -16,6 +16,7 @@ import {
   Title,
   Tooltip
 } from "chart.js";
+import { LogLevel, log } from "../../util/log";
 import { DataPoint } from "./model";
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc
@@ -337,6 +338,10 @@ const afterBuildTicks = (chart: any) => {
     const chart: Chart = legend.chart;
     const datasets = chart.data.datasets!;
     let allHidden = true;
+    if (legendItem.datasetIndex === undefined) {
+      log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
+      return;
+    }
     for (let i = 0; i < datasets.length; i++) {
       const meta = chart.getDatasetMeta(i);
       if (!meta.hidden && i !== legendItem.datasetIndex) {

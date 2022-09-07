@@ -769,7 +769,7 @@ impl JsonPath {
                     // parse out the provider name, or if it's `request` or `response` get the second layer
                     let param_name_re = Regex::new(r"^((?:request\.|response\.)?[^\[.]*)").unwrap();
                     param_name_re
-                        .captures(&*json_path)
+                        .captures(json_path)
                         .ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("json_path", marker)
                         })?

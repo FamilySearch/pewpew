@@ -17,8 +17,8 @@ use std::{
 // x = number of seconds elapsed
 // y = number of hits per second
 struct LinearSegment {
-    m: f64,
-    b: f64,
+    hps_ramp_per_second: f64,
+    start_hps: f64,
     min_y: f64,
     y_limit: f64,
     duration: Duration,
@@ -27,17 +27,16 @@ struct LinearSegment {
 impl LinearSegment {
     fn new(start_hps: f64, end_hps: f64, duration: Duration) -> Self {
         let seconds = duration.as_secs_f64();
-        let m = (end_hps - start_hps) / seconds;
-        let b = start_hps;
+        let hps_ramp_per_second = (end_hps - start_hps) / seconds;
         let zero_x = {
-            let m = m.abs();
-            ((8.0 * m).sqrt() / (2.0 * m)).recip()
+            let ramp_abs = hps_ramp_per_second.abs();
+            ((8.0 * ramp_abs).sqrt() / (2.0 * ramp_abs)).recip()
         };
         let min_y = seconds.recip();
 
         LinearSegment {
-            m,
-            b,
+            hps_ramp_per_second,
+            start_hps,
             min_y: zero_x,
             duration,
             y_limit: min_y,
@@ -46,7 +45,7 @@ impl LinearSegment {
 
     fn get_hps_at(&self, time: Duration) -> f64 {
         let x = time.as_secs_f64();
-        let mut y = self.m * x + self.b;
+        let mut y = self.hps_ramp_per_second * x + self.start_hps;
         if y.is_nan() || y < self.y_limit {
             y = self.min_y;
         }

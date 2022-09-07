@@ -406,6 +406,10 @@ mod tests {
         }
     }
 
+    // https://github.com/rust-lang/rust/releases/tag/1.63.0
+    // Compatibility Notes
+    // Rounding is now used when converting a float to a Duration. The converted duration can differ slightly from what it was.
+    // https://github.com/rust-lang/rust/pull/96051/
     #[test]
     fn single_segment() {
         // start perx, duration, end perx

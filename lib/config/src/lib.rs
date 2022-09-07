@@ -288,7 +288,7 @@ impl LoadPattern {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListWithOptions {
     pub random: bool,
     pub repeat: bool,
@@ -367,7 +367,7 @@ impl FromYaml for ListWithOptions {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ListProvider {
     WithOptions(ListWithOptions),
     DefaultOptions(Vec<json::Value>),
@@ -585,7 +585,7 @@ impl fmt::Display for RangeProvider {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RangeProviderPreProcessed {
     start: i64,
     end: i64,
@@ -669,7 +669,7 @@ impl FromYaml for RangeProviderPreProcessed {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileFormat {
     Csv,
     Json,
@@ -695,7 +695,7 @@ impl Default for FileFormat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CsvHeader {
     Bool(bool),
     String(String),
@@ -732,7 +732,7 @@ fn from_yaml_char_u8<I: Iterator<Item = char>>(decoder: &mut YamlDecoder<I>) -> 
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CsvSettings {
     pub comment: Option<u8>,
     pub delimiter: Option<u8>,
@@ -1565,7 +1565,7 @@ impl FromYaml for BodyMultipartPieceBody {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EndpointProvidesSendOptions {
     Block,
     Force,

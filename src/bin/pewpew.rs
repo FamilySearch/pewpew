@@ -51,7 +51,7 @@ fn main() {
                     .long("stats-file")
                     .help("Specify the filename for the stats file")
                     .value_name("STATS_FILE")
-                    .value_parser(ValueParser::os_string())
+                    .value_parser(ValueParser::os_string()) // https://github.com/clap-rs/clap/issues/3344
             )
             .arg(
                 Arg::new("start-at")
@@ -73,7 +73,7 @@ fn main() {
                     .number_of_values(1)
                     .help("Directory to store results and logs")
                     .value_name("DIRECTORY")
-                    .value_parser(ValueParser::os_string())
+                    .value_parser(ValueParser::os_string()) // https://github.com/clap-rs/clap/issues/3344
             )
             .arg(
                 Arg::new("stats-file-format")

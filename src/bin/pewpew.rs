@@ -1,6 +1,6 @@
-use std::{convert::TryInto, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
+use std::{convert::TryInto, ffi::OsStr, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
 
-use clap::{crate_version, Arg, Command};
+use clap::{builder::ValueParser, crate_version, Arg, Command};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -51,6 +51,7 @@ fn main() {
                     .long("stats-file")
                     .help("Specify the filename for the stats file")
                     .value_name("STATS_FILE")
+                    .value_parser(ValueParser::os_string())
             )
             .arg(
                 Arg::new("start-at")
@@ -72,6 +73,7 @@ fn main() {
                     .number_of_values(1)
                     .help("Directory to store results and logs")
                     .value_name("DIRECTORY")
+                    .value_parser(ValueParser::os_string())
             )
             .arg(
                 Arg::new("stats-file-format")
@@ -165,7 +167,7 @@ fn main() {
             .value_of("CONFIG")
             .expect("should have CONFIG param")
             .into();
-        let results_dir = matches.value_of_os("results-directory").map(|d| {
+        let results_dir = matches.value_of_os("results-directory").map(|d: &OsStr| {
             create_dir_all(d).unwrap();
             PathBuf::from(d)
         });

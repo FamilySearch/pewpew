@@ -355,7 +355,7 @@ mod tests {
         match cli_config {
             ExecConfig::Run(run_config) => {
                 assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
-                assert!(run_config.output_format.is_human());
+                assert!(matches!(run_config.output_format, RunOutputFormat::Human));
                 assert!(run_config.results_dir.is_none());
                 assert!(run_config.start_at.is_none());
                 assert!(stats_regex.is_match(run_config.stats_file.to_str().unwrap()));
@@ -469,6 +469,7 @@ mod tests {
         match cli_config {
             ExecConfig::Run(run_config) => {
                 assert!(matches!(run_config.output_format, RunOutputFormat::Json));
+                assert!(!run_config.output_format.is_human());
             }
             _ => panic!(),
         }
@@ -484,6 +485,7 @@ mod tests {
         match cli_config {
             ExecConfig::Run(run_config) => {
                 assert!(matches!(run_config.output_format, RunOutputFormat::Human));
+                assert!(run_config.output_format.is_human());
             }
             _ => panic!(),
         }
@@ -532,7 +534,7 @@ mod tests {
                 assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
                 assert!(try_config.file.is_none());
                 assert!(try_config.filters.is_none());
-                assert!(try_config.format.is_human());
+                assert!(matches!(try_config.format, TryRunFormat::Human));
                 assert!(!try_config.loggers_on);
                 assert!(try_config.results_dir.is_none());
             }
@@ -576,7 +578,7 @@ mod tests {
                     }
                     _ => panic!(),
                 }
-                assert!(!try_config.format.is_human());
+                assert!(matches!(try_config.format, TryRunFormat::Json));
                 assert!(try_config.loggers_on);
                 assert!(try_config.results_dir.is_some());
                 assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
@@ -621,7 +623,7 @@ mod tests {
                     }
                     _ => panic!(),
                 }
-                assert!(!try_config.format.is_human());
+                assert!(matches!(try_config.format, TryRunFormat::Json));
                 assert!(try_config.loggers_on);
                 assert!(try_config.results_dir.is_some());
                 assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
@@ -640,6 +642,7 @@ mod tests {
         match cli_config {
             ExecConfig::Try(try_config) => {
                 assert!(matches!(try_config.format, TryRunFormat::Json));
+                assert!(!try_config.format.is_human());
             }
             _ => panic!(),
         }
@@ -655,6 +658,7 @@ mod tests {
         match cli_config {
             ExecConfig::Try(try_config) => {
                 assert!(matches!(try_config.format, TryRunFormat::Human));
+                assert!(try_config.format.is_human());
             }
             _ => panic!(),
         }

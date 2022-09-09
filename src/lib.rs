@@ -189,6 +189,12 @@ pub enum TryRunFormat {
     Json,
 }
 
+impl TryRunFormat {
+    pub fn is_human(self) -> bool {
+        matches!(self, TryRunFormat::Human)
+    }
+}
+
 impl Default for TryRunFormat {
     fn default() -> Self {
         TryRunFormat::Human
@@ -224,13 +230,13 @@ impl fmt::Display for RunConfig {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum TryFilter {
     Eq(String, String),
     Ne(String, String),
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct TryConfig {
     pub config_file: PathBuf,
     pub file: Option<String>,

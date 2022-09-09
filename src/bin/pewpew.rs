@@ -333,6 +333,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     static RUN_COMMAND: &str = "run";
@@ -342,7 +344,7 @@ mod tests {
     static STATS_FILE: &str = "stats-paths.json";
 
     #[test]
-    fn test_run_simple() {
+    fn cli_run_simple() {
         let matches = get_arg_matcher()
             .try_get_matches_from(["myprog", RUN_COMMAND, YAML_FILE])
             .unwrap();
@@ -368,7 +370,127 @@ mod tests {
     }
 
     #[test]
-    fn test_run_paths() {
+    fn cli_run_all() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                RUN_COMMAND,
+                "-d",
+                TEST_DIR,
+                "-f",
+                "json",
+                "-o",
+                STATS_FILE,
+                "-s",
+                "json",
+                "-t",
+                "1s",
+                "-w",
+                YAML_FILE,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), RUN_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Run(run_config) => {
+                assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(matches!(run_config.output_format, RunOutputFormat::Json));
+                assert!(run_config.results_dir.is_some());
+                assert_eq!(run_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+                assert!(run_config.start_at.is_some());
+                assert_eq!(run_config.start_at.unwrap(), Duration::new(1, 0));
+                assert_eq!(
+                    run_config.stats_file.to_str().unwrap(),
+                    format!("{}{}", TEST_DIR, STATS_FILE)
+                );
+                assert!(matches!(
+                    run_config.stats_file_format,
+                    StatsFileFormat::Json {}
+                ));
+                assert!(run_config.watch_config_file);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_run_all_long() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                RUN_COMMAND,
+                "--results-directory",
+                TEST_DIR,
+                "--output-format",
+                "json",
+                "--stats-file",
+                STATS_FILE,
+                "--stats-file-format",
+                "json",
+                "--start-at",
+                "1s",
+                "--watch",
+                YAML_FILE,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), RUN_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Run(run_config) => {
+                assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(matches!(run_config.output_format, RunOutputFormat::Json));
+                assert!(run_config.results_dir.is_some());
+                assert_eq!(run_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+                assert!(run_config.start_at.is_some());
+                assert_eq!(run_config.start_at.unwrap(), Duration::new(1, 0));
+                assert_eq!(
+                    run_config.stats_file.to_str().unwrap(),
+                    format!("{}{}", TEST_DIR, STATS_FILE)
+                );
+                assert!(matches!(
+                    run_config.stats_file_format,
+                    StatsFileFormat::Json {}
+                ));
+                assert!(run_config.watch_config_file);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_run_format_json() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from(["myprog", RUN_COMMAND, "-f", "json", YAML_FILE])
+            .unwrap();
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Run(run_config) => {
+                assert!(matches!(run_config.output_format, RunOutputFormat::Json));
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_run_format_human() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from(["myprog", RUN_COMMAND, "-f", "human", YAML_FILE])
+            .unwrap();
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Run(run_config) => {
+                assert!(matches!(run_config.output_format, RunOutputFormat::Human));
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_run_paths() {
         let matches = get_arg_matcher()
             .try_get_matches_from([
                 "myprog",
@@ -398,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_simple() {
+    fn cli_try_simple() {
         let matches = get_arg_matcher()
             .try_get_matches_from(["myprog", TRY_COMMAND, YAML_FILE])
             .unwrap();
@@ -419,7 +541,127 @@ mod tests {
     }
 
     #[test]
-    fn test_try_paths_no_log() {
+    fn cli_try_all() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                TRY_COMMAND,
+                "-d",
+                TEST_DIR,
+                "-f",
+                "json",
+                "-i",
+                "_id=0",
+                "-l",
+                "-o",
+                STATS_FILE,
+                YAML_FILE,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(try_config.file.is_some());
+                assert_eq!(try_config.file.unwrap(), STATS_FILE);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 1);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                assert!(!try_config.format.is_human());
+                assert!(try_config.loggers_on);
+                assert!(try_config.results_dir.is_some());
+                assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_all_long() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                TRY_COMMAND,
+                "--results-directory",
+                TEST_DIR,
+                "--format",
+                "json",
+                "--include",
+                "_id=0",
+                "--loggers",
+                "--file",
+                STATS_FILE,
+                YAML_FILE,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(try_config.file.is_some());
+                assert_eq!(try_config.file.unwrap(), STATS_FILE);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 1);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                assert!(!try_config.format.is_human());
+                assert!(try_config.loggers_on);
+                assert!(try_config.results_dir.is_some());
+                assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_format_json() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from(["myprog", TRY_COMMAND, "-f", "json", YAML_FILE])
+            .unwrap();
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert!(matches!(try_config.format, TryRunFormat::Json));
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_format_human() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from(["myprog", TRY_COMMAND, "-f", "human", YAML_FILE])
+            .unwrap();
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert!(matches!(try_config.format, TryRunFormat::Human));
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_paths_no_log() {
         // -d is only enabled with -l
         let matches = get_arg_matcher()
             .try_get_matches_from(["myprog", TRY_COMMAND, "-d", TEST_DIR, YAML_FILE])
@@ -430,6 +672,7 @@ mod tests {
         match cli_config {
             ExecConfig::Try(try_config) => {
                 assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(!try_config.loggers_on);
                 assert!(try_config.results_dir.is_none());
             }
             _ => panic!(),
@@ -437,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_paths() {
+    fn cli_try_paths() {
         // -d is only enabled with -l
         let matches = get_arg_matcher()
             .try_get_matches_from(["myprog", TRY_COMMAND, "-l", "-d", TEST_DIR, YAML_FILE])
@@ -448,6 +691,7 @@ mod tests {
         match cli_config {
             ExecConfig::Try(try_config) => {
                 assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+                assert!(try_config.loggers_on);
                 assert!(try_config.results_dir.is_some());
                 assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
             }

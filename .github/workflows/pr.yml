@@ -136,6 +136,7 @@ jobs:
     strategy:
       matrix:
         wasm-dirctory: [config-wasm, hdr-histogram-wasm]
+        node-version: [16.x, 18.x]
     runs-on: ubuntu-latest
     env:
       WASM_FILE: ${{ matrix.wasm-dirctory }}_bg.wasm
@@ -163,13 +164,13 @@ jobs:
         working-directory: ${{env.wasm-directory}}
         shell: bash
 
-      - name: Use Node.js 16.x
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v2
         with:
-          node-version: 16.x
-      - name: Install Dependencies
+          node-version: ${{ matrix.node-version }}
+      - name: Install Dependencies ${{ matrix.node-version }}
         run: npm ci
         working-directory: ${{env.test-directory}}
-      - name: Run Acceptance Tests
+      - name: Run Acceptance Tests ${{ matrix.node-version }}
         run: npm test
         working-directory: ${{env.test-directory}}

@@ -11,6 +11,9 @@ name: Pull Request Javascript
 jobs:
   create-release:
     name: Build guide
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -21,12 +24,12 @@ jobs:
           target: wasm32-unknown-unknown
           toolchain: stable
           override: true
-      - name: Add Node.js toolchain
+      - name: Add Node.js toolchain ${{ matrix.node-version }}
         uses: actions/setup-node@v1
         with:
-          node-version: 16.x
+          node-version: ${{ matrix.node-version }}
 
-      - name: Build Results Viewer and Book
+      - name: Build Results Viewer and Book ${{ matrix.node-version }}
         run: |
           set -x
           # install mdbook and wasm-pack

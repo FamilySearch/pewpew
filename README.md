@@ -7,6 +7,10 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### v0.5.11
 Changes:
 - Added armv7 (Raspberry Pi) and aarch64 (AWS Graviton) builds
+- Due to standard library changes to Durations, [conversions from float to Durations are now rounded rather than truncated](https://github.com/rust-lang/rust/pull/96051)
+
+Bug fixes:
+- Updated dependencies
 
 ### v0.5.10
 Changes:

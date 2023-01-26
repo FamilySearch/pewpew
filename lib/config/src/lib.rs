@@ -2265,8 +2265,7 @@ pub fn duration_from_string(dur: String) -> Result<Duration, Error> {
 
 fn duration_from_string2(dur: String, marker: Marker) -> Result<Duration, Error> {
     let base_re = r"(?i)(\d+)\s*(d|h|m|s|days?|hrs?|mins?|secs?|hours?|minutes?|seconds?)";
-    let sanity_re =
-        Regex::new(&format!(r"^(?:{}\s*)+$", base_re)).expect("should be a valid regex");
+    let sanity_re = Regex::new(&format!(r"^(?:{base_re}\s*)+$")).expect("should be a valid regex");
     if !sanity_re.is_match(&dur) {
         return Err(Error::InvalidDuration(dur, marker));
     }

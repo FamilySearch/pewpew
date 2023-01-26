@@ -29,10 +29,10 @@ impl RecoverableError {
 impl fmt::Display for RecoverableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BodyErr(e) => write!(f, "body error: {}", e),
-            ConnectionErr(_, e) => write!(f, "connection error: `{}`", e),
+            BodyErr(e) => write!(f, "body error: {e}"),
+            ConnectionErr(_, e) => write!(f, "connection error: `{e}`"),
             ExecutingExpression(e) => e.fmt(f),
-            ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{}`", p),
+            ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{p}`"),
             Timeout(..) => write!(f, "request timed out"),
         }
     }
@@ -65,19 +65,19 @@ use TestError::*;
 impl fmt::Display for TestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CannotCreateLoggerFile(s, e) => write!(f, "error creating logger file `{}`: {}", s, e),
-            CannotCreateStatsFile(s, e) => write!(f, "error creating stats file `{}`: {}", s, e),
+            CannotCreateLoggerFile(s, e) => write!(f, "error creating logger file `{s}`: {e}"),
+            CannotCreateStatsFile(s, e) => write!(f, "error creating stats file `{s}`: {e}"),
             CannotOpenFile(p, e) => write!(f, "error opening file `{}`: {}", p.display(), e),
             Config(e) => e.fmt(f),
-            FileReading(s, e) => write!(f, "error reading file `{}`: {}", s, e),
+            FileReading(s, e) => write!(f, "error reading file `{s}`: {e}"),
             InvalidConfigFilePath(p) => {
                 write!(f, "could not find config file at path `{}`", p.display())
             }
-            InvalidUrl(u) => write!(f, "invalid url `{}`", u),
-            Recoverable(r) => write!(f, "recoverable error: {}", r),
-            RequestBuilderErr(e) => write!(f, "error creating request: {}", e),
-            SslError(e) => write!(f, "error creating ssl connector: {}", e),
-            WritingToFile(l, e) => write!(f, "error writing to file `{}`: {}", l, e),
+            InvalidUrl(u) => write!(f, "invalid url `{u}`"),
+            Recoverable(r) => write!(f, "recoverable error: {r}"),
+            RequestBuilderErr(e) => write!(f, "error creating request: {e}"),
+            SslError(e) => write!(f, "error creating ssl connector: {e}"),
+            WritingToFile(l, e) => write!(f, "error writing to file `{l}`: {e}"),
         }
     }
 }

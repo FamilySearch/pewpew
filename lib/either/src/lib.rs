@@ -99,8 +99,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            Either::A(a) => write!(f, "{}", a),
-            Either::B(b) => write!(f, "{}", b),
+            Either::A(a) => write!(f, "{a}"),
+            Either::B(b) => write!(f, "{b}"),
         }
     }
 }
@@ -112,8 +112,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            Either::A(a) => write!(f, "Either::A({:?})", a),
-            Either::B(b) => write!(f, "Either::B({:?})", b),
+            Either::A(a) => write!(f, "Either::A({a:?})"),
+            Either::B(b) => write!(f, "Either::B({b:?})"),
         }
     }
 }
@@ -233,9 +233,9 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            Either3::A(a) => write!(f, "Either::A({:?})", a),
-            Either3::B(b) => write!(f, "Either::B({:?})", b),
-            Either3::C(c) => write!(f, "Either::C({:?})", c),
+            Either3::A(a) => write!(f, "Either::A({a:?})"),
+            Either3::B(b) => write!(f, "Either::B({b:?})"),
+            Either3::C(c) => write!(f, "Either::C({c:?})"),
         }
     }
 }
@@ -248,9 +248,9 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
-            Either3::A(a) => write!(f, "{}", a),
-            Either3::B(b) => write!(f, "{}", b),
-            Either3::C(c) => write!(f, "{}", c),
+            Either3::A(a) => write!(f, "{a}"),
+            Either3::B(b) => write!(f, "{b}"),
+            Either3::C(c) => write!(f, "{c}"),
         }
     }
 }

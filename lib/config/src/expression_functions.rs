@@ -278,7 +278,7 @@ impl Encode {
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         self.arg
             .evaluate(d, no_recoverable_error, for_each)
-            .map(|v| Cow::Owned(Encode::evaluate_with_arg(self.encoding, &*v)))
+            .map(|v| Cow::Owned(Encode::evaluate_with_arg(self.encoding, &v)))
     }
 
     pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
@@ -544,7 +544,7 @@ impl If {
         let first = self
             .first
             .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
-        if bool_value(&*first) {
+        if bool_value(&first) {
             Ok(self.second.evaluate(d, no_recoverable_error, for_each)?)
         } else {
             Ok(self.third.evaluate(d, no_recoverable_error, for_each)?)
@@ -705,7 +705,7 @@ impl Join {
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
         self.arg
             .evaluate(d, no_recoverable_error, for_each)
-            .map(|d| Cow::Owned(Join::evaluate_with_arg(&self.sep, &self.sep2, &*d)))
+            .map(|d| Cow::Owned(Join::evaluate_with_arg(&self.sep, &self.sep2, &d)))
     }
 
     pub(super) fn evaluate_as_iter<'a, 'b: 'a>(
@@ -779,9 +779,9 @@ impl JsonPath {
                 };
                 // jsonpath requires the query to start with `$.`, so add it in
                 let json_path = if json_path.starts_with('[') {
-                    format!("${}", json_path)
+                    format!("${json_path}")
                 } else {
-                    format!("$.{}", json_path)
+                    format!("$.{json_path}")
                 };
                 let json_path = json_path::Parser::compile(&json_path).map_err(|_| {
                     ExecutingExpressionError::InvalidFunctionArguments("json_path", marker)
@@ -817,7 +817,7 @@ impl JsonPath {
     }
 
     pub(super) fn evaluate<'a, 'b: 'a>(&'b self, d: Cow<'a, json::Value>) -> Cow<'a, json::Value> {
-        let v = self.evaluate_to_vec(&*d);
+        let v = self.evaluate_to_vec(&d);
         Cow::Owned(v.into())
     }
 
@@ -825,7 +825,7 @@ impl JsonPath {
         &'b self,
         d: Cow<'a, json::Value>,
     ) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
-        self.evaluate_to_vec(&*d).into_iter().map(Cow::Owned)
+        self.evaluate_to_vec(&d).into_iter().map(Cow::Owned)
     }
 
     pub(super) fn into_stream<
@@ -889,7 +889,7 @@ impl Match {
 
     fn evaluate_with_arg(regex: &Regex, capture_names: &[String], d: &json::Value) -> json::Value {
         let search_str = json_value_to_string(Cow::Borrowed(d));
-        if let Some(captures) = regex.captures(&*search_str) {
+        if let Some(captures) = regex.captures(&search_str) {
             let map: json::Map<String, json::Value> = capture_names
                 .iter()
                 .zip(captures.iter())
@@ -916,7 +916,7 @@ impl Match {
         self.arg
             .evaluate(d, no_recoverable_error, for_each)
             .map(|d| {
-                let v = Match::evaluate_with_arg(&self.regex, &self.capture_names, &*d);
+                let v = Match::evaluate_with_arg(&self.regex, &self.capture_names, &d);
                 Cow::Owned(v)
             })
     }
@@ -990,8 +990,8 @@ impl MinMax {
             (Cow::Owned(json::Value::Null), 0),
             |(left, count), right| {
                 let right = right?;
-                let l = f64_value(&*left);
-                let r = f64_value(&*right);
+                let l = f64_value(&left);
+                let r = f64_value(&right);
                 let v = match (l.partial_cmp(&r), min, l.is_finite()) {
                     (Some(Ordering::Less), true, _)
                     | (Some(Ordering::Greater), false, _)
@@ -1013,7 +1013,7 @@ impl MinMax {
         let mut left: Option<(f64, json::Value)> = None;
         for fa in &self.args {
             let right = fa.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
-            let r = f64_value(&*right);
+            let r = f64_value(&right);
             if let Some((l, _)) = &left {
                 match (l.partial_cmp(&r), self.min, l.is_finite()) {
                     (Some(Ordering::Less), true, _)
@@ -1142,7 +1142,7 @@ impl Pad {
         self.arg
             .evaluate(d, no_recoverable_error, for_each)
             .map(|d| {
-                let v = Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &*d);
+                let v = Pad::evaluate_with_arg(&self.padding, self.min_length, self.start, &d);
                 Cow::Owned(v)
             })
     }
@@ -1539,7 +1539,7 @@ impl Replace {
                 .evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?;
         let replacer = json_value_to_string(replacer_value).into_owned();
         let mut haystack = self.haystack.evaluate(d, no_recoverable_error, for_each)?;
-        Replace::replace(haystack.to_mut(), &*needle, &*replacer);
+        Replace::replace(haystack.to_mut(), &needle, &replacer);
         Ok(haystack)
     }
 
@@ -1647,7 +1647,7 @@ impl ParseNum {
         self.arg
             .evaluate(d, no_recoverable_error, for_each)
             .map(|d| {
-                let v = ParseNum::evaluate_with_arg(is_float, &*d);
+                let v = ParseNum::evaluate_with_arg(is_float, &d);
                 Cow::Owned(v)
             })
     }

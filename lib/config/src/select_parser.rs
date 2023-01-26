@@ -117,7 +117,7 @@ impl RequiredProviders {
     }
 
     pub fn unique_providers(self) -> BTreeSet<String> {
-        self.inner.into_iter().map(|(k, _)| k).collect()
+        self.inner.into_keys().collect()
     }
 
     pub fn contains(&self, p: &str) -> bool {
@@ -372,7 +372,7 @@ fn index_json<'a>(
         }
         (json, Either::B(n)) if !no_err => {
             return Err(ExecutingExpressionError::IndexingIntoJson(
-                format!("[{}]", n),
+                format!("[{n}]"),
                 json.into_owned(),
                 marker,
             ));
@@ -428,7 +428,7 @@ fn index_json2<'a>(
             }
             (json, Either::B(n)) if !no_err => {
                 return Err(ExecutingExpressionError::IndexingIntoJson(
-                    format!("[{}]", n),
+                    format!("[{n}]"),
                     json.into_owned(),
                     marker,
                 ));
@@ -955,7 +955,7 @@ impl Expression {
                 }
             };
             let rhs = rhs.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each);
-            Cow::Owned(op.evaluate(&*v, rhs)?)
+            Cow::Owned(op.evaluate(&v, rhs)?)
         } else {
             match &self.lhs {
                 ExpressionLhs::Expression(e) => e.evaluate(d, no_recoverable_error, for_each)?,
@@ -968,7 +968,7 @@ impl Expression {
                 v = Cow::Owned(b.into());
             }
             Some(false) => {
-                let b = bool_value(&*v);
+                let b = bool_value(&v);
                 v = Cow::Owned(b.into());
             }
             _ => (),
@@ -1816,7 +1816,7 @@ fn parse_path(
     if let PathStart::Ident(s) = &start {
         match rest.first() {
             Some(PathSegment::String(next)) if s == "request" || s == "response" => {
-                providers2.insert(format!("{}.{}", s, next), marker);
+                providers2.insert(format!("{s}.{next}"), marker);
             }
             _ => {
                 providers2.insert(s.clone(), marker);

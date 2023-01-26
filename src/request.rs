@@ -158,7 +158,7 @@ impl ProviderOrLogger {
     fn name(&self) -> String {
         match &self {
             Self::Provider(provider) => format!("Provider: {}", provider.name()),
-            Self::Logger(logger) => format!("Logger: {:?}", logger),
+            Self::Logger(logger) => format!("Logger: {logger:?}"),
         }
     }
 }
@@ -389,10 +389,10 @@ pub enum StreamItem {
     TemplateValue(String, json::Value, Option<AutoReturn>, Instant),
 }
 
-fn multipart_body_as_hyper_body<'a>(
+fn multipart_body_as_hyper_body(
     multipart_body: &MultipartBody,
     template_values: &TemplateValues,
-    content_type_entry: HeaderEntry<'a, HeaderValue>,
+    content_type_entry: HeaderEntry<'_, HeaderValue>,
     copy_body_value: bool,
     body_value: &mut Option<String>,
 ) -> Result<impl Future<Output = Result<(u64, HyperBody), TestError>>, TestError> {
@@ -412,12 +412,12 @@ fn multipart_body_as_hyper_body<'a>(
         if ct_str.starts_with("multipart/") {
             let is_form = ct_str.starts_with("multipart/form-data");
             *content_type =
-                HeaderValue::from_str(&format!("{};boundary={}", ct_str, boundary))
+                HeaderValue::from_str(&format!("{ct_str};boundary={boundary}"))
                     .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
             is_form
         } else {
             *content_type =
-                HeaderValue::from_str(&format!("multipart/form-data;boundary={}", boundary))
+                HeaderValue::from_str(&format!("multipart/form-data;boundary={boundary}"))
                     .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
             true
         }
@@ -572,12 +572,12 @@ async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), Te
     Ok((bytes, body))
 }
 
-fn body_template_as_hyper_body<'a>(
+fn body_template_as_hyper_body(
     body_template: &BodyTemplate,
     template_values: &TemplateValues,
     copy_body_value: bool,
     body_value: &mut Option<String>,
-    content_type_entry: HeaderEntry<'a, HeaderValue>,
+    content_type_entry: HeaderEntry<'_, HeaderValue>,
 ) -> impl Future<Output = Result<(u64, HyperBody), TestError>> {
     let template = match body_template {
         BodyTemplate::File(_, t) => t,
@@ -601,7 +601,7 @@ fn body_template_as_hyper_body<'a>(
     if let BodyTemplate::File(path, _) = body_template {
         tweak_path(&mut body, path);
         if copy_body_value {
-            *body_value = Some(format!("<<contents of file: {}>>", body));
+            *body_value = Some(format!("<<contents of file: {body}>>"));
         }
         Either3::C(create_file_hyper_body(body))
     } else {

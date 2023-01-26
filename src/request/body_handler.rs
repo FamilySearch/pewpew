@@ -80,10 +80,10 @@ impl BodyHandler {
             if let stats::StatKind::RecoverableError(e) = &kind {
                 if has_logger {
                     let error = json::json!({
-                        "msg": format!("{}", e),
+                        "msg": format!("{e}"),
                         "code": e.code(),
                     });
-                    let mut tv = (&*template_values2).clone();
+                    let mut tv = (*template_values2).clone();
                     tv.as_object_mut()
                         .expect("should be a json object")
                         .insert("error".into(), error);

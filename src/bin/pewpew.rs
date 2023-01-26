@@ -178,9 +178,9 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
                     .unwrap_or_default();
                 let test_name = config_file.file_stem().and_then(std::ffi::OsStr::to_str);
                 let file = if let Some(test_name) = test_name {
-                    format!("stats-{}-{}.json", test_name, start_sec)
+                    format!("stats-{test_name}-{start_sec}.json")
                 } else {
-                    format!("stats-{}.json", start_sec)
+                    format!("stats-{start_sec}.json")
                 };
                 PathBuf::from(file)
             });

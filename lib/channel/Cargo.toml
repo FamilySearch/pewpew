@@ -9,8 +9,8 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-ahash = "0.7"
-concurrent-queue = "1"
+ahash = "0.8"
+concurrent-queue = "2"
 dashmap = "5"
 event-listener = "2"
 futures = "0.3"

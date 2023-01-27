@@ -295,6 +295,10 @@ fn main() {
             Paint::disable();
         }
     }
+    // TODO: https://rustsec.org/advisories/RUSTSEC-2021-0145
+    // Consider
+    //  - [is-terminal](https://crates.io/crates/is-terminal)
+    //  - std::io::IsTerminal *nightly-only experimental*
     if atty::isnt(atty::Stream::Stdout) {
         Paint::disable();
     }

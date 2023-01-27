@@ -39,6 +39,7 @@ use std::{
 // A helper module which tells serde how to serialize (and deserialize, though that's not currently
 // used anywhere) an HDRHistogram
 mod histogram_serde {
+    use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
     use hdrhistogram::{
         serialization::{
             Deserializer as HDRDeserializer, Serializer as HDRSerializer, V2Serializer,
@@ -56,7 +57,7 @@ mod histogram_serde {
         v2_serializer
             .serialize(histogram, &mut buf)
             .map_err(|_e| serde::ser::Error::custom("could not serialize HDRHistogram"))?;
-        serializer.serialize_str(&base64::encode_config(&buf, base64::STANDARD_NO_PAD))
+        serializer.serialize_str(&STANDARD_NO_PAD.encode(&buf))
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Histogram<u64>, D::Error>
@@ -64,7 +65,7 @@ mod histogram_serde {
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        let bytes = base64::decode_config(string, base64::STANDARD_NO_PAD).map_err(|_| {
+        let bytes = STANDARD_NO_PAD.decode(string).map_err(|_| {
             serde::de::Error::custom("could not base64 decode string for HDRHistogram")
         })?;
         let mut hdr_deserializer = HDRDeserializer::new();

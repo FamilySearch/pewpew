@@ -80,8 +80,7 @@ export interface YamlWriterFormState {
 }
 
 const nameReg = new RegExp("^[A-Za-z_-].*$");
-// eslint-disable-next-line no-useless-escape
-const valueReg = new RegExp("^[A-Za-z0-9_-\{\}\$].*$");
+const valueReg = new RegExp("^[A-Za-z0-9_-{}$].*$");
 
 const defaults = "default";
 type YamlWriterBooleanState = "default" | "filterHeaders" | "authenticated";

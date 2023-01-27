@@ -29,8 +29,8 @@
   "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config-wasm#readme",
   "dependencies": {
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
-    "chart.js": "^3.9.1",
-    "chartjs-adapter-date-fns": "^2.0.1",
+    "chart.js": "~4.2.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^2.29.3",
     "file-saver": "^2.0.5",
     "immutability-helper": "^3.1.1",

@@ -1,5 +1,5 @@
 use std::{
-    convert::TryInto, ffi::OsString, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH,
+    convert::TryInto, ffi::OsString, fs::create_dir_all, io, path::PathBuf, time::{UNIX_EPOCH, Duration},
 };
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command};
@@ -18,11 +18,8 @@ fn get_filter_reg() -> Regex {
     Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex")
 }
 
-fn parse_duration(arg: &str) -> Result<String, config::Error> {
-    match duration_from_string(arg.into()) {
-        Ok(_) => Ok(arg.to_string()),
-        Err(error) => Err(error),
-    }
+fn parse_duration(arg: &str) -> Result<Duration, config::Error> {
+    duration_from_string(arg.into())
 }
 
 fn parse_filter(arg: &str) -> Result<String, &'static str> {
@@ -136,7 +133,12 @@ fn get_arg_matcher() -> clap::Command {
                     .long("include")
                     .long_help(r#"Filter which endpoints are included in the try run. Filters work based on an endpoint's tags. Filters are specified in the format "key=value" where "*" is a wildcard. Any endpoint matching the filter is included in the test"#)
                     // .multiple_occurrences(true)
-                    .num_args(0..)
+                    // https://github.com/clap-rs/clap/issues/2688
+                    // https://github.com/clap-rs/clap/blob/master/CHANGELOG.md#400---2022-09-28
+                    // There is no option for multiple '-i x -i y -i z' anymore. The only option is '-i x y z'
+                    // Unfortunately this means you can no longer do 'pewpew try -i x y z test.yaml'
+                    // since it will try to parse test.yaml as an include. -i must either be last, or be followed by another - parameter
+                    .num_args(1..)
                     .value_parser(parse_filter)
                     .value_name("INCLUDE")
             )
@@ -206,8 +208,8 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
         let stats_file_format = StatsFileFormat::Json;
         let watch_config_file = matches.get_flag("watch");
         let start_at = matches
-            .get_one::<String>("start-at")
-            .map(|s| duration_from_string(s.to_string()).expect("start_at should match pattern"));
+            .get_one::<Duration>("start-at")
+            .map(|d| d.to_owned());
         let run_config = RunConfig {
             config_file,
             output_format,
@@ -355,6 +357,7 @@ mod tests {
     static RUN_COMMAND: &str = "run";
     static TRY_COMMAND: &str = "try";
     static YAML_FILE: &str = "./tests/integration.yaml";
+    static YAML_FILE2: &str = "./tests/int_on_demand.yaml";
     static TEST_DIR: &str = "./tests/";
     static STATS_FILE: &str = "stats-paths.json";
 
@@ -642,6 +645,88 @@ mod tests {
                 assert!(try_config.loggers_on);
                 assert!(try_config.results_dir.is_some());
                 assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_include() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                TRY_COMMAND,
+                "-i",
+                "_id=0",
+                "_id=1",
+                "-f",
+                "json",
+                YAML_FILE2,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 2);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                match &filters[1] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "1");
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_include2() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                TRY_COMMAND,
+                YAML_FILE2,
+                "-i",
+                "_id=0",
+                "_id=1",
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 2);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                match &filters[1] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "1");
+                    }
+                    _ => panic!(),
+                }
             }
             _ => panic!(),
         }

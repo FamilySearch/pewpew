@@ -9,7 +9,7 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-base64 = "0.13"
+base64 = "0.21"
 ether = { path = "../either" }
 futures = "0.3"
 http = "0.2"

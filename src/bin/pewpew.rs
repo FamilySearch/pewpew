@@ -1,5 +1,10 @@
 use std::{
-    convert::TryInto, ffi::OsString, fs::create_dir_all, io, path::PathBuf, time::{UNIX_EPOCH, Duration},
+    convert::TryInto,
+    ffi::OsString,
+    fs::create_dir_all,
+    io,
+    path::PathBuf,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command};
@@ -695,14 +700,7 @@ mod tests {
     #[test]
     fn cli_try_include2() {
         let matches = get_arg_matcher()
-            .try_get_matches_from([
-                "myprog",
-                TRY_COMMAND,
-                YAML_FILE2,
-                "-i",
-                "_id=0",
-                "_id=1",
-            ])
+            .try_get_matches_from(["myprog", TRY_COMMAND, YAML_FILE2, "-i", "_id=0", "_id=1"])
             .unwrap();
         assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
 

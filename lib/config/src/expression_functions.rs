@@ -4,6 +4,7 @@ use crate::error::{CreatingExpressionError, ExecutingExpressionError};
 use crate::json_value_to_string;
 use crate::select_parser::ProviderStream;
 
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use jsonpath_lib as json_path;
@@ -201,7 +202,7 @@ impl Encoding {
     fn encode(self, d: &json::Value) -> String {
         let s = json_value_to_string(Cow::Borrowed(d));
         match self {
-            Encoding::Base64 => base64::encode(s.as_str()),
+            Encoding::Base64 => STANDARD_NO_PAD.encode(s.as_str()),
             Encoding::PercentSimple => {
                 percent_encoding::utf8_percent_encode(&s, percent_encoding::CONTROLS).to_string()
             }

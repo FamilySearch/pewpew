@@ -46,7 +46,7 @@ use std::{
     fmt,
     fs::File,
     future::Future,
-    io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, SeekFrom, Write},
+    io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, Write},
     mem,
     path::{Path, PathBuf},
     pin::Pin,
@@ -467,8 +467,8 @@ where
             let msg = match output_format {
                 RunOutputFormat::Human => format!("\n{} {}\n", Paint::red("Fatal error").bold(), e),
                 RunOutputFormat::Json => {
-                    let json = json::json!({"type": "fatal", "msg": format!("{}", e)});
-                    format!("{}\n", json)
+                    let json = json::json!({"type": "fatal", "msg": format!("{e}")});
+                    format!("{json}\n")
                 }
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
@@ -579,7 +579,7 @@ fn create_config_watcher(
             }
 
             // Last modified has changed
-            if file.seek(SeekFrom::Start(0)).is_err() {
+            if file.rewind().is_err() {
                 continue;
             }
 
@@ -600,7 +600,7 @@ fn create_config_watcher(
                         ),
                         RunOutputFormat::Json => {
                             let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
-                            format!("{}\n", json)
+                            format!("{json}\n")
                         }
                     };
                     let _ = block_on(stderr.send(MsgType::Other(msg)));
@@ -628,7 +628,7 @@ fn create_config_watcher(
                         ),
                         RunOutputFormat::Json => {
                             let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
-                            format!("{}\n", json)
+                            format!("{json}\n")
                         }
                     };
                     let _ = block_on(stderr.send(MsgType::Other(msg)));
@@ -682,7 +682,7 @@ fn create_config_watcher(
                         ),
                         RunOutputFormat::Json => {
                             let json = json::json!({"type": "warn", "msg": format!("{} {}", "could not reload config file", e)});
-                            format!("{}\n", json)
+                            format!("{json}\n")
                         }
                     };
                     let _ = block_on(stderr.send(MsgType::Other(msg)));
@@ -766,7 +766,7 @@ fn create_try_run_future(
                 TryFilter::Ne(key, right) => (false, key, right),
             };
             let right = right.split('*').map(regex::escape).join(".*?");
-            let right = format!("^{}$", right);
+            let right = format!("^{right}$");
             (
                 is_eq,
                 key,

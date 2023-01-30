@@ -1,4 +1,3 @@
-import "chartjs-adapter-date-fns";
 import {
   Chart,
   ChartDataset,
@@ -12,6 +11,7 @@ import {
   LinearScale,
   LogarithmicScale,
   PointElement,
+  ScatterDataPoint,
   TimeScale,
   Title,
   Tooltip
@@ -69,9 +69,9 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     const borderColor = colors[i % colors.length];
     const backgroundColor = borderColor + "46";
     let label: string;
-    let data: Chart.ChartPoint[];
-    // eslint-disable-next-line eqeqeq
-    if (type == "avg") {
+    // It's a ScatterDataPoint but thanks to chartjs-adapter-date-fns it will date Dates as well as numbers
+    let data: (Omit<ScatterDataPoint, "x"> & { x: Date | number })[];
+    if (type === "avg") {
       label = "Avg";
       data = dataPoints.map((dp) => ({
         x: dp.time,
@@ -79,8 +79,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           ? Math.round(dp.rttHistogram.getMean()) / MICROS_TO_MS
           : NaN
       }));
-      // eslint-disable-next-line eqeqeq
-    } else if (type == "min") {
+    } else if (type === "min") {
       label = "Min";
       data = dataPoints.map((dp) => ({
         x: dp.time,
@@ -88,8 +87,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           ? Number(dp.rttHistogram.getMinNonZeroValue()) / MICROS_TO_MS
           : NaN
       }));
-      // eslint-disable-next-line eqeqeq
-    } else if (type == "max") {
+    } else if (type === "max") {
       label = "Max";
       data = dataPoints.map((dp) => ({
         x: dp.time,
@@ -97,8 +95,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           ? Number(dp.rttHistogram.getMaxValue()) / MICROS_TO_MS
           : NaN
       }));
-      // eslint-disable-next-line eqeqeq
-    } else if (type == "std") {
+    } else if (type === "std") {
       label = "Std Dev";
       data = dataPoints.map((dp) => ({
         x: dp.time,
@@ -106,7 +103,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           ? Math.round(dp.rttHistogram.getStdDeviation()) / MICROS_TO_MS
           : NaN
       }));
-    } else if (typeof type == "number") {
+    } else if (typeof type === "number") {
       label = type + "th PCTL";
       data = dataPoints.map((dp) => ({
         x: dp.time,

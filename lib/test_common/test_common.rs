@@ -25,7 +25,7 @@ async fn echo_route(req: Request<Body>) -> Response<Body> {
         .path_and_query()
         .map(|piece| piece.as_str())
         .unwrap_or_else(|| uri.path());
-    let url = Url::parse(&format!("http://127.0.0.1:8080{}", url)).unwrap();
+    let url = Url::parse(&format!("http://127.0.0.1:8080{url}")).unwrap();
     for (k, v) in url.query_pairs() {
         match &*k {
             "echo" => echo = Some(v.to_string()),
@@ -52,7 +52,7 @@ async fn echo_route(req: Request<Body>) -> Response<Body> {
             .body(Body::empty())
             .unwrap(),
     };
-    let ms = wait.and_then(|c| FromStr::from_str(&*c).ok()).unwrap_or(0);
+    let ms = wait.and_then(|c| FromStr::from_str(&c).ok()).unwrap_or(0);
     let old_body = std::mem::replace(response.body_mut(), Body::empty());
     if ms > 0 {
         debug!("waiting {} ms", ms);

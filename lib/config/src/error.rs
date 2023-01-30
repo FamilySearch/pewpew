@@ -145,7 +145,7 @@ impl fmt::Display for Error {
             InvalidLoadPattern(m) => write!(f, "invalid load_pattern at line {} column {}", m.line(), m.col()),
             InvalidPeakLoad(p, m) => write!(f, "invalid peak_load `{}` at line {} column {}", p, m.line(), m.col()),
             InvalidPercent(p, m) => write!(f, "invalid percent `{}` at line {} column {}", p, m.line(), m.col()),
-            InvalidYaml(e) => write!(f, "yaml syntax error:\n\t{}", e),
+            InvalidYaml(e) => write!(f, "yaml syntax error:\n\t{e}"),
             MissingEnvironmentVariable(v, m) => write!(f, "undefined environment variable `{}` at line {} column {}", v, m.line(), m.col()),
             MissingForEach(m) => write!(f, "missing `for_each` at line {} column {}", m.line(), m.col()),
             MissingLoadPattern(m) => write!(f, "endpoint is missing a load_pattern at line {} column {}", m.line(), m.col()),

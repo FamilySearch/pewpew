@@ -232,7 +232,7 @@ impl ModInterval {
                     end_time: now + duration,
                     current_segment: segment,
                     segments: std::mem::take(&mut segments),
-                    start_time: now - start_at.unwrap_or_default(),
+                    start_time: now.checked_sub(start_at.unwrap_or_default()).unwrap(),
                     x_offset: Default::default(),
                     next_start: now,
                     following_start: None,

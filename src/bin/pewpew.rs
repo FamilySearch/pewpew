@@ -1,4 +1,11 @@
-use std::{convert::TryInto, ffi::OsStr, fs::create_dir_all, io, path::PathBuf, time::UNIX_EPOCH};
+use std::{
+    convert::TryInto,
+    ffi::OsString,
+    fs::create_dir_all,
+    io,
+    path::PathBuf,
+    time::{Duration, UNIX_EPOCH},
+};
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command};
 use config::duration_from_string;
@@ -16,8 +23,20 @@ fn get_filter_reg() -> Regex {
     Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex")
 }
 
-fn get_arg_matcher() -> clap::App<'static> {
+fn parse_duration(arg: &str) -> Result<Duration, config::Error> {
+    duration_from_string(arg.into())
+}
+
+fn parse_filter(arg: &str) -> Result<String, &'static str> {
     let filter_reg2: Regex = get_filter_reg();
+    if filter_reg2.is_match(arg) {
+        Ok(arg.to_string())
+    } else {
+        Err("include filters must be in the format `tag=value` or `tag!=value`")
+    }
+}
+
+fn get_arg_matcher() -> clap::Command {
     Command::new("pewpew")
         .about("The HTTP load test tool https://familysearch.github.io/pewpew")
         .version(crate_version!())
@@ -35,8 +54,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .long("output-format")
                     .help("Formatting for stats printed to stderr")
                     .value_name("FORMAT")
-                    .possible_value("human")
-                    .possible_value("json")
+                    .value_parser(["human","json"])
                     .default_value("human")
             )
             .arg(
@@ -45,7 +63,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .long("stats-file")
                     .help("Specify the filename for the stats file")
                     .value_name("STATS_FILE")
-                    .value_parser(ValueParser::os_string()) // https://github.com/clap-rs/clap/issues/3344
+                    .value_parser(ValueParser::os_string())
             )
             .arg(
                 Arg::new("start-at")
@@ -53,12 +71,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .long("start-at")
                     .help("Specify the time the test should start at")
                     .value_name("START_AT")
-                    .validator(|s| {
-                        match duration_from_string(s.into()) {
-                            Ok(_) => Ok(()),
-                            Err(_) => Err("".to_string()),
-                        }
-                    })
+                    .value_parser(parse_duration)
             )
             .arg(
                 Arg::new("results-directory")
@@ -67,7 +80,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .number_of_values(1)
                     .help("Directory to store results and logs")
                     .value_name("DIRECTORY")
-                    .value_parser(ValueParser::os_string()) // https://github.com/clap-rs/clap/issues/3344
+                    .value_parser(ValueParser::os_string())
             )
             .arg(
                 Arg::new("stats-file-format")
@@ -75,9 +88,8 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .long("stats-file-format")
                     .help("Format for the stats file")
                     .value_name("FORMAT")
-                    .possible_value("json")
-                    // .possible_value("html")
-                    // .possible_value("none")
+                    .value_parser(["json"])
+                    // .value_parser(["json", "html", "none"])
                     .default_value("json")
             )
             .arg(
@@ -85,11 +97,13 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .short('w')
                     .long("watch")
                     .help("Watch the config file for changes and update the test accordingly")
+                    .action(clap::ArgAction::SetTrue)
             )
             .arg(
                 Arg::new("CONFIG")
                     .help("Load test config file to use")
-                    .required(true),
+                    .required(true)
+                    .value_parser(ValueParser::os_string()),
             )
         )
         .subcommand(Command::new("try")
@@ -100,6 +114,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .short('l')
                     .long("loggers")
                     .help("Enable loggers defined in the config file")
+                    .action(clap::ArgAction::SetTrue)
             )
             .arg(
                 Arg::new("file")
@@ -114,8 +129,7 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .long("format")
                     .help("Specify the format for the try run output")
                     .value_name("FORMAT")
-                    .possible_value("human")
-                    .possible_value("json")
+                    .value_parser(["human","json"])
                     .default_value("human")
             )
             .arg(
@@ -123,15 +137,14 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .short('i')
                     .long("include")
                     .long_help(r#"Filter which endpoints are included in the try run. Filters work based on an endpoint's tags. Filters are specified in the format "key=value" where "*" is a wildcard. Any endpoint matching the filter is included in the test"#)
-                    .multiple_occurrences(true)
-                    .number_of_values(1)
-                    .validator(move |s| {
-                        if filter_reg2.is_match(s) {
-                            Ok(())
-                        } else {
-                            Err("include filters must be in the format `tag=value` or `tag!=value`".to_string())
-                        }
-                    })
+                    // .multiple_occurrences(true)
+                    // https://github.com/clap-rs/clap/issues/2688
+                    // https://github.com/clap-rs/clap/blob/master/CHANGELOG.md#400---2022-09-28
+                    // There is no option for multiple '-i x -i y -i z' anymore. The only option is '-i x y z'
+                    // Unfortunately this means you can no longer do 'pewpew try -i x y z test.yaml'
+                    // since it will try to parse test.yaml as an include. -i must either be last, or be followed by another - parameter
+                    .num_args(1..)
+                    .value_parser(parse_filter)
                     .value_name("INCLUDE")
             )
             .arg(
@@ -141,12 +154,13 @@ fn get_arg_matcher() -> clap::App<'static> {
                     .number_of_values(1)
                     .help("Directory to store logs (if enabled with --loggers)")
                     .value_name("DIRECTORY")
-                    .value_parser(ValueParser::os_string()) // https://github.com/clap-rs/clap/issues/3344
+                    .value_parser(ValueParser::os_string())
             )
             .arg(
                 Arg::new("CONFIG")
                     .help("Load test config file to use")
-                    .required(true),
+                    .required(true)
+                    .value_parser(ValueParser::os_string()),
             )
         )
 }
@@ -155,21 +169,26 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
     let filter_reg: Regex = get_filter_reg();
     if let Some(matches) = matches.subcommand_matches("run") {
         let config_file: PathBuf = matches
-            .value_of("CONFIG")
+            .get_one::<OsString>("CONFIG")
             .expect("should have CONFIG param")
+            // .as_str()
             .into();
-        let results_dir = matches.value_of_os("results-directory").map(|d: &OsStr| {
-            create_dir_all(d).unwrap();
-            PathBuf::from(d)
-        });
-        let output_format = TryInto::try_into(
+        let results_dir: Option<PathBuf> =
             matches
-                .value_of("output-format")
-                .expect("should have output_format cli arg"),
+                .get_one::<OsString>("results-directory")
+                .map(|d: &OsString| {
+                    create_dir_all(d).unwrap();
+                    PathBuf::from(d)
+                });
+        let output_format: RunOutputFormat = TryInto::try_into(
+            matches
+                .get_one::<String>("output-format")
+                .expect("should have output_format cli arg")
+                .as_str(),
         )
         .expect("output_format cli arg unrecognized");
-        let stats_file = matches
-            .value_of_os("stats-file")
+        let stats_file: PathBuf = matches
+            .get_one::<OsString>("stats-file")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
                 let start_sec = UNIX_EPOCH
@@ -178,9 +197,9 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
                     .unwrap_or_default();
                 let test_name = config_file.file_stem().and_then(std::ffi::OsStr::to_str);
                 let file = if let Some(test_name) = test_name {
-                    format!("stats-{}-{}.json", test_name, start_sec)
+                    format!("stats-{test_name}-{start_sec}.json")
                 } else {
-                    format!("stats-{}.json", start_sec)
+                    format!("stats-{start_sec}.json")
                 };
                 PathBuf::from(file)
             });
@@ -192,10 +211,10 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
             stats_file
         };
         let stats_file_format = StatsFileFormat::Json;
-        let watch_config_file = matches.is_present("watch");
+        let watch_config_file = matches.get_flag("watch");
         let start_at = matches
-            .value_of("start-at")
-            .map(|s| duration_from_string(s.to_string()).expect("start_at should match pattern"));
+            .get_one::<Duration>("start-at")
+            .map(|d| d.to_owned());
         let run_config = RunConfig {
             config_file,
             output_format,
@@ -208,11 +227,13 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
         ExecConfig::Run(run_config)
     } else if let Some(matches) = matches.subcommand_matches("try") {
         let config_file: PathBuf = matches
-            .value_of("CONFIG")
+            .get_one::<OsString>("CONFIG")
             .expect("should have CONFIG param")
             .into();
-        let results_dir = matches.value_of_os("results-directory");
-        let loggers_on = matches.is_present("loggers");
+        let results_dir = matches
+            .get_one::<OsString>("results-directory")
+            .map(|s| s.as_os_str());
+        let loggers_on = matches.get_flag("loggers");
         let results_dir = match (results_dir, loggers_on) {
             (Some(d), true) => {
                 create_dir_all(d).unwrap();
@@ -220,8 +241,9 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
             }
             _ => None,
         };
-        let filters = matches.values_of("include").map(|v| {
+        let filters = matches.get_many::<String>("include").map(|v| {
             v.map(|s| {
+                let s = s.as_str();
                 let captures = filter_reg
                     .captures(s)
                     .expect("include cli arg should match regex");
@@ -248,10 +270,10 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
             .collect()
         });
         let format: TryRunFormat = matches
-            .value_of("format")
-            .and_then(|f| f.try_into().ok())
+            .get_one::<String>("format")
+            .and_then(|f| f.as_str().try_into().ok())
             .unwrap_or_default();
-        let file = matches.value_of("file").map(Into::into);
+        let file = matches.get_one::<String>("file").map(Into::into);
         let try_config = TryConfig {
             config_file,
             file,
@@ -273,6 +295,10 @@ fn main() {
             Paint::disable();
         }
     }
+    // TODO: https://rustsec.org/advisories/RUSTSEC-2021-0145
+    // Consider
+    //  - [is-terminal](https://crates.io/crates/is-terminal)
+    //  - std::io::IsTerminal *nightly-only experimental*
     if atty::isnt(atty::Stream::Stdout) {
         Paint::disable();
     }
@@ -340,6 +366,7 @@ mod tests {
     static RUN_COMMAND: &str = "run";
     static TRY_COMMAND: &str = "try";
     static YAML_FILE: &str = "./tests/integration.yaml";
+    static YAML_FILE2: &str = "./tests/int_on_demand.yaml";
     static TEST_DIR: &str = "./tests/";
     static STATS_FILE: &str = "stats-paths.json";
 
@@ -627,6 +654,81 @@ mod tests {
                 assert!(try_config.loggers_on);
                 assert!(try_config.results_dir.is_some());
                 assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_include() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from([
+                "myprog",
+                TRY_COMMAND,
+                "-i",
+                "_id=0",
+                "_id=1",
+                "-f",
+                "json",
+                YAML_FILE2,
+            ])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 2);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                match &filters[1] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "1");
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn cli_try_include2() {
+        let matches = get_arg_matcher()
+            .try_get_matches_from(["myprog", TRY_COMMAND, YAML_FILE2, "-i", "_id=0", "_id=1"])
+            .unwrap();
+        assert_eq!(matches.subcommand_name().unwrap(), TRY_COMMAND);
+
+        let cli_config: ExecConfig = get_cli_config(matches);
+        match cli_config {
+            ExecConfig::Try(try_config) => {
+                assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);
+                assert!(try_config.filters.is_some());
+                let filters = try_config.filters.unwrap();
+                assert_eq!(filters.len(), 2);
+                match &filters[0] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "0");
+                    }
+                    _ => panic!(),
+                }
+                match &filters[1] {
+                    TryFilter::Eq(key, value) => {
+                        assert_eq!(key, "_id");
+                        assert_eq!(value, "1");
+                    }
+                    _ => panic!(),
+                }
             }
             _ => panic!(),
         }

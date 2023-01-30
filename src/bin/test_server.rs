@@ -10,7 +10,7 @@ fn main() {
         debug!("port = {}", port.unwrap_or_default());
         let (port, rx, handle) = start_test_server(port);
 
-        println!("Listening on port {}", port);
+        println!("Listening on port {port}");
 
         handle.await;
         drop(rx);

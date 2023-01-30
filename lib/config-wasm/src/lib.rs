@@ -58,7 +58,7 @@ impl Config {
         init_logging(log_level);
         let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
         let load_test = LoadTest::from_config(bytes, &PathBuf::default(), &env_vars)
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+            .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
         Ok(Config(load_test))
     }
 
@@ -73,8 +73,8 @@ impl Config {
     pub fn get_logger_files(&self) -> Box<[JsValue]> {
         self.0
             .loggers
-            .iter()
-            .map(|(_, l)| l.to.as_str().into())
+            .values()
+            .map(|l| l.to.as_str().into())
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
@@ -126,6 +126,6 @@ impl Config {
     pub fn check_ok(&self) -> Result<(), JsValue> {
         self.0
             .ok_for_loadtest()
-            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+            .map_err(|e| JsValue::from_str(&format!("{e:?}")))
     }
 }

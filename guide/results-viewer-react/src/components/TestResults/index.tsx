@@ -84,6 +84,7 @@ export interface TestResultProps {
 }
 
 export interface TestResultState {
+  defaultMessage: string;
   /** Filters the results Data by a tag equalling this value. I.e. 'method', 'url', '_id' */
   summaryTagFilter: string;
   /** Filters the results Data by a summaryTagFilter's value containing this value */
@@ -155,8 +156,7 @@ const minMaxTime = (testResults: any) => {
 
   const startTime3: Date = new Date(startTime2);
   const endTime3: Date = new Date(endTime2);
-  // eslint-disable-next-line eqeqeq
-  const includeDateWithStart = startTime3.toLocaleDateString() == endTime3.toLocaleDateString();
+  const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
   testTimes.startTime = dateToString(startTime3, includeDateWithStart);
   testTimes.endTime = dateToString(endTime3, false);
 
@@ -189,8 +189,12 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
   for (const [bucketId, dataPoints] of oldData) {
     let counter = 0;
     for (const dataPoint of dataPoints) {
-      log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
-      dataPoint.rttHistogram.free();
+      try {
+        log(`Freeing histogram ${JSON.stringify(bucketId)}: ${counter++}`, LogLevel.DEBUG);
+        dataPoint.rttHistogram.free();
+      } catch (error) {
+        log(`Freeing histogram ${JSON.stringify(bucketId)} failed: ${counter}`, LogLevel.WARN, error);
+      }
     }
   }
 };
@@ -280,7 +284,9 @@ const getSummaryData = ({
 };
 
 export const TestResults = ({ resultsText }: TestResultProps) => {
+  const defaultMessage = "Select Results File";
   const defaultState: TestResultState = {
+    defaultMessage,
     summaryTagFilter: "",
     summaryTagValueFilter: "",
     resultsData: undefined,
@@ -296,6 +302,9 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
 
   const updateResultsData = async (resultsText: string): Promise<void> => {
+    updateState({
+      defaultMessage: "Results Loading..."
+    });
     try {
       // if there are multiple jsons (new format), split them up and parse them separately
       const results = resultsText.replace(/}{/g, "}\n{")
@@ -324,6 +333,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
 
       log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
       updateState({
+        defaultMessage,
         resultsData,
         filteredData,
         summaryData,
@@ -333,6 +343,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     } catch (error) {
       log("Error parsing Data", LogLevel.ERROR, error);
       updateState({
+        defaultMessage,
         error: formatError(error)
       });
     }
@@ -375,6 +386,11 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       summaryData
     });
   };
+
+  useEffect(() => {
+    import("chartjs-adapter-date-fns")
+    .catch((error) => log("Could not load chartjs-adapter-date-fns import", LogLevel.ERROR, error));
+  }, []);
 
   useEffect(() => {
     updateResultsData(resultsText);
@@ -422,7 +438,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
           })}
         </TIMETAKEN>
       ) : (
-        <p>No Results Found</p>
+        <p>{state.defaultMessage}</p>
       )}
     </React.Fragment>
   );
@@ -562,8 +578,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </H3>
         <UL>
           {Object.entries(bucketId).map(([key, value], idx) => {
-            // eslint-disable-next-line eqeqeq
-            if (key != "method" && key != "url") {
+            if (key !== "method" && key !== "url") {
               return (
                 <li key={idx}>
                   {key} - {value}

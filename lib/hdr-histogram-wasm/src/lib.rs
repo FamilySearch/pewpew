@@ -1,4 +1,5 @@
 #![allow(clippy::all)]
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use hdrhistogram::{serialization::Deserializer, Histogram};
 use log::LevelFilter;
 use std::str::FromStr;
@@ -50,7 +51,8 @@ impl HDRHistogram {
     #[wasm_bindgen(constructor)]
     pub fn from_base64(base64: String, log_level: Option<String>) -> Result<HDRHistogram, JsValue> {
         init_logging(log_level);
-        let bytes = base64::decode(&base64)
+        let bytes = STANDARD_NO_PAD
+            .decode(&base64)
             .map_err(|_| JsValue::from_str("could not parse as a bas64 string"))?;
         let mut deserializer = Deserializer::new();
         let mut histogram = deserializer

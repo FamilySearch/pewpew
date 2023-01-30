@@ -39,6 +39,7 @@ use std::{
 // A helper module which tells serde how to serialize (and deserialize, though that's not currently
 // used anywhere) an HDRHistogram
 mod histogram_serde {
+    use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
     use hdrhistogram::{
         serialization::{
             Deserializer as HDRDeserializer, Serializer as HDRSerializer, V2Serializer,
@@ -56,7 +57,7 @@ mod histogram_serde {
         v2_serializer
             .serialize(histogram, &mut buf)
             .map_err(|_e| serde::ser::Error::custom("could not serialize HDRHistogram"))?;
-        serializer.serialize_str(&base64::encode_config(&buf, base64::STANDARD_NO_PAD))
+        serializer.serialize_str(&STANDARD_NO_PAD.encode(&buf))
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Histogram<u64>, D::Error>
@@ -64,7 +65,7 @@ mod histogram_serde {
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        let bytes = base64::decode_config(&string, base64::STANDARD_NO_PAD).map_err(|_| {
+        let bytes = STANDARD_NO_PAD.decode(string).map_err(|_| {
             serde::de::Error::custom("could not base64 decode string for HDRHistogram")
         })?;
         let mut hdr_deserializer = HDRDeserializer::new();
@@ -178,7 +179,7 @@ impl TimeBucket {
             if let Some(remaining_seconds) = remaining_seconds {
                 let test_end_msg =
                     duration_till_end_to_pretty_string(Duration::from_secs(remaining_seconds));
-                let piece = format!("\n{}\n", test_end_msg);
+                let piece = format!("\n{test_end_msg}\n");
                 print_string.push_str(&piece);
             }
         }
@@ -217,7 +218,7 @@ impl BucketGroupStats {
         match stat.kind {
             StatKind::RecoverableError(RecoverableError::Timeout(..)) => self.request_timeouts += 1,
             StatKind::RecoverableError(r) => {
-                let msg = format!("{}", r);
+                let msg = format!("{r}");
                 self.test_errors
                     .entry(msg)
                     .and_modify(|n| *n += 1)
@@ -284,7 +285,7 @@ impl BucketGroupStats {
                 // human format
                 let piece = format!(
                     "\n{}\n  calls made: {}\n  status counts: {:?}\n",
-                    Paint::yellow(format!("- {} {}:", method, url)).dimmed(),
+                    Paint::yellow(format!("- {method} {url}:")).dimmed(),
                     calls_made,
                     self.status_counts
                 );
@@ -298,9 +299,8 @@ impl BucketGroupStats {
                     print_string.push_str(&piece);
                 }
                 let piece = format!(
-                    "  p50: {}ms, p90: {}ms, p95: {}ms, p99: {}ms, p99.9: {}ms\n  \
-                     min: {}ms, max: {}ms, avg: {}ms, std. dev: {}ms\n",
-                    p50, p90, p95, p99, p99_9, min, max, mean, stddev
+                    "  p50: {p50}ms, p90: {p90}ms, p95: {p95}ms, p99: {p99}ms, p99.9: {p99_9}ms\n  \
+                     min: {min}ms, max: {max}ms, avg: {mean}ms, std. dev: {stddev}ms\n"
                 );
                 print_string.push_str(&piece);
             }
@@ -340,7 +340,7 @@ impl BucketGroupStats {
                         .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
                         .collect::<BTreeMap<_, _>>(),
                 });
-                let piece = format!("{}\n", output);
+                let piece = format!("{output}\n");
                 print_string.push_str(&piece);
             }
         }
@@ -569,12 +569,18 @@ fn get_epoch() -> u64 {
 
 // create a pretty string representing the difference between two epochs
 fn create_date_diff(start: u64, end: u64) -> String {
-    let start = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(start as i64, 0), Utc)
-        .with_timezone(&Local);
-    let end = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp((end) as i64, 0), Utc)
-        .with_timezone(&Local);
+    let start = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt(start as i64, 0).unwrap(),
+        Utc,
+    )
+    .with_timezone(&Local);
+    let end = DateTime::<Utc>::from_utc(
+        NaiveDateTime::from_timestamp_opt((end) as i64, 0).unwrap(),
+        Utc,
+    )
+    .with_timezone(&Local);
     let fmt2 = "%T %-e-%b-%Y";
-    let fmt = if start.date() == end.date() {
+    let fmt = if start.date_naive() == end.date_naive() {
         "%T"
     } else {
         fmt2
@@ -616,11 +622,11 @@ impl From<ResponseStat> for StatsMessage {
 fn duration_till_end_to_pretty_string(duration: Duration) -> String {
     let long_form = duration_to_pretty_long_form(duration);
     let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
-        format!("{} {}", s, long_form)
+        format!("{s} {long_form}")
     } else {
         long_form
     };
-    format!("Test will end {}", msg)
+    format!("Test will end {msg}")
 }
 
 fn duration_to_pretty_short_form(duration: Duration) -> Option<String> {
@@ -651,9 +657,9 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
         if count > 0 {
             secs -= count * unit;
             if count > 1 {
-                Some(format!("{} {}s", count, name))
+                Some(format!("{count} {name}s"))
             } else {
-                Some(format!("{} {}", count, name))
+                Some(format!("{count} {name}"))
             }
         } else {
             None
@@ -666,14 +672,14 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
             last
         } else {
             // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
-            let _ = write!(&mut ret, " and {}", last);
+            let _ = write!(&mut ret, " and {last}");
             // ret.push_str(&format!(" and {}", last));
             ret
         }
     } else {
         "0 seconds".to_string()
     };
-    format!("in approximately {}", long_time)
+    format!("in approximately {long_time}")
 }
 
 // create the stats channel for a try run
@@ -849,11 +855,10 @@ pub fn create_stats_channel(
                             let test_end_message = duration_till_end_to_pretty_string(d);
                             match output_format {
                                 RunOutputFormat::Human => {
-                                    format!("Test duration updated. {}\n", test_end_message)
+                                    format!("Test duration updated. {test_end_message}\n")
                                 }
                                 RunOutputFormat::Json => format!(
-                                    "{{\"type\":\"duration_updated\",\"msg\":\"{}\"}}\n",
-                                    test_end_message
+                                    "{{\"type\":\"duration_updated\",\"msg\":\"{test_end_message}\"}}\n"
                                 ),
                             }
                         };
@@ -865,11 +870,10 @@ pub fn create_stats_channel(
                         let bin_version = clap::crate_version!().into();
                         let msg = match output_format {
                             RunOutputFormat::Human => {
-                                format!("Starting load test. {}\n", test_end_message)
+                                format!("Starting load test. {test_end_message}\n")
                             }
                             RunOutputFormat::Json => format!(
-                                "{{\"type\":\"start\",\"msg\":\"{}\",\"binVersion\":\"{}\"}}\n",
-                                test_end_message, bin_version,
+                                "{{\"type\":\"start\",\"msg\":\"{test_end_message}\",\"binVersion\":\"{bin_version}\"}}\n"
                             ),
                         };
                         let header = FileHeader {

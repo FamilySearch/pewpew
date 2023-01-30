@@ -4,7 +4,7 @@ type Check = [string, CheckType];
 
 // eslint-disable-next-line  @typescript-eslint/ban-types
 function isObject (o: unknown): o is object {
-  return typeof o == "object" && !!o;
+  return typeof o === "object" && !!o;
 }
 
 /**
@@ -172,7 +172,7 @@ function isStatusCounts (sc: unknown): sc is StatusCounts {
   // check that the keys can be parsed as a number and the values are numbers
   return Object.entries(sc).every(
     ([k, v]: [string, unknown]) =>
-      Number.parseInt(k, 10) > 0 && typeof v == "number"
+      Number.parseInt(k, 10) > 0 && typeof v === "number"
   );
 }
 
@@ -181,7 +181,7 @@ function isTestErrors (sc: unknown): sc is TestErrors {
     return false;
   }
   // check that the values are all numbers
-  return Object.values(sc).every((v: unknown) => typeof v == "number");
+  return Object.values(sc).every((v: unknown) => typeof v === "number");
 }
 
 export interface DataPointPreProcessed {

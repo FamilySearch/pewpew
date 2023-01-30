@@ -160,7 +160,7 @@ pub struct Logger {
 impl Logger {
     fn json_to_msg_type(&self, j: json::Value) -> MsgType {
         let s = if self.pretty && !j.is_string() {
-            format!("{:#}\n", j)
+            format!("{j:#}\n")
         } else {
             let mut s = json_value_to_string(Cow::Owned(j)).into_owned();
             s.push('\n');

@@ -9,7 +9,7 @@ jobs:
     name: Create release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       # https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/44937/highlight/true#M5978
       - name: Get the version
@@ -80,7 +80,7 @@ jobs:
             cross: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Download artifacts
         uses: actions/download-artifact@v2
@@ -193,7 +193,7 @@ jobs:
     env:
       working-directory: ./lib/config-wasm
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Download artifacts
         uses: actions/download-artifact@v2
         with:
@@ -265,7 +265,7 @@ jobs:
     env:
       working-directory: ./lib/hdr-histogram-wasm
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Download artifacts
         uses: actions/download-artifact@v2
         with:

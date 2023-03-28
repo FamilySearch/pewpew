@@ -669,10 +669,11 @@ impl FromYaml for RangeProviderPreProcessed {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum FileFormat {
     Csv,
     Json,
+    #[default]
     Line,
 }
 
@@ -686,12 +687,6 @@ impl FromYaml for FileFormat {
             _ => return Err(Error::YamlDeserialize(None, marker)),
         };
         Ok((format, marker))
-    }
-}
-
-impl Default for FileFormat {
-    fn default() -> Self {
-        FileFormat::Line
     }
 }
 
@@ -1565,8 +1560,9 @@ impl FromYaml for BodyMultipartPieceBody {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum EndpointProvidesSendOptions {
+    #[default]
     Block,
     Force,
     IfNotFull,
@@ -1575,12 +1571,6 @@ pub enum EndpointProvidesSendOptions {
 impl EndpointProvidesSendOptions {
     pub fn is_block(self) -> bool {
         matches!(self, EndpointProvidesSendOptions::Block)
-    }
-}
-
-impl Default for EndpointProvidesSendOptions {
-    fn default() -> Self {
-        EndpointProvidesSendOptions::Block
     }
 }
 

@@ -183,8 +183,9 @@ pub enum StatsFileFormat {
     // None,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub enum TryRunFormat {
+    #[default]
     Human,
     Json,
 }
@@ -192,12 +193,6 @@ pub enum TryRunFormat {
 impl TryRunFormat {
     pub fn is_human(self) -> bool {
         matches!(self, TryRunFormat::Human)
-    }
-}
-
-impl Default for TryRunFormat {
-    fn default() -> Self {
-        TryRunFormat::Human
     }
 }
 

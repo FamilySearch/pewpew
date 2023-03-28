@@ -461,16 +461,11 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum Nullable<T> {
     Some(T),
+    #[default]
     Null,
-}
-
-impl<T> Default for Nullable<T> {
-    fn default() -> Self {
-        Nullable::Null
-    }
 }
 
 impl<T> From<Nullable<T>> for Option<T> {

@@ -6,6 +6,14 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ## Changelog
 ### v0.5.11
 Changes:
+- Try Run: Clap no longer allows multiple occurences, it only allows multiple passed on one occurence. See [Simplify the takes_value API (range-based takes_values)](https://github.com/clap-rs/clap/issues/2688) and [Clap CHANGELOG](https://github.com/clap-rs/clap/blob/master/CHANGELOG.md#400---2022-09-28). This does introduce a bug that if you specify the config file immediately after --include(s) it will think it's part of the --include. The user must either pass another option after -i or put the config file before the -i
+- Removed the old Svelte Results Viewer
+
+Bug fixes:
+- Updated dependencies
+
+### v0.5.11
+Changes:
 - Added armv7 (Raspberry Pi) and aarch64 (AWS Graviton) builds
 - Due to standard library changes to Durations, [conversions from float to Durations are now rounded rather than truncated](https://github.com/rust-lang/rust/pull/96051)
 

@@ -4,6 +4,7 @@ on:
       - '**.js*'
       - '**.ts*'
       - '**.html'
+      - 'guide/src/**/*.md'
       - '**/package.json'
       - '**/package-lock.json'
 

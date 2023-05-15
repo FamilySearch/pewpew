@@ -271,7 +271,7 @@ Using the same response data from example 2, with a provides section defined as:
 provides:
   friendsCount:
     select:
-      id: for_each[0]
+      id: for_each[0].id
       count: for_each[0].friends.length
     for_each:
       - response.body.characters

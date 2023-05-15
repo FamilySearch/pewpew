@@ -13,6 +13,7 @@ mod util;
 use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
 
+use clap::{Args, Subcommand, ValueEnum};
 use ether::Either;
 use futures::{
     channel::mpsc::{
@@ -38,6 +39,7 @@ use tokio::{sync::broadcast, task::spawn_blocking};
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use yansi::Paint;
 
+use std::str::FromStr;
 use std::{
     borrow::Cow,
     cell::RefCell,
@@ -152,10 +154,24 @@ impl Endpoints {
     }
 }
 
-#[derive(Copy, Clone, Debug, Serialize)]
+#[derive(Copy, Clone, Debug, Serialize, ValueEnum, Default)]
 pub enum RunOutputFormat {
+    #[default]
     Human,
     Json,
+}
+
+impl fmt::Display for RunOutputFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Json => "json",
+                Self::Human => "human",
+            }
+        )
+    }
 }
 
 impl RunOutputFormat {
@@ -176,14 +192,27 @@ impl TryFrom<&str> for RunOutputFormat {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ValueEnum, Default)]
 pub enum StatsFileFormat {
     // Html,
+    #[default]
     Json,
     // None,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+impl fmt::Display for StatsFileFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Json => "json",
+            }
+        )
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, ValueEnum)]
 pub enum TryRunFormat {
     #[default]
     Human,
@@ -193,6 +222,19 @@ pub enum TryRunFormat {
 impl TryRunFormat {
     pub fn is_human(self) -> bool {
         matches!(self, TryRunFormat::Human)
+    }
+}
+
+impl fmt::Display for TryRunFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Human => "human",
+                Self::Json => "json",
+            }
+        )
     }
 }
 
@@ -208,14 +250,28 @@ impl TryFrom<&str> for TryRunFormat {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Args)]
 pub struct RunConfig {
+    /// Load test config file to use
+    #[arg(value_name = "CONFIG")]
     pub config_file: PathBuf,
+    /// Formatting for stats printed to stdout
+    #[arg(short = 'f', long, value_name = "FORMAT", default_value_t)]
     pub output_format: RunOutputFormat,
+    /// Directory to store results and logs
+    #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
+    /// Specify the time the test should start at
+    #[arg(value_parser = |s: &str| config::duration_from_string(s.into()), short = 't', long)]
     pub start_at: Option<Duration>,
+    /// Specify the filename for the stats file
+    #[arg(short = 'o', long)]
     pub stats_file: PathBuf,
+    /// Format for the stats file
+    #[arg(short, long, value_name = "FORMAT", default_value_t)]
     pub stats_file_format: StatsFileFormat,
+    /// Watch the config file for changes and update the test accordingly
+    #[arg(short, long = "watch")]
     pub watch_config_file: bool,
 }
 
@@ -231,13 +287,45 @@ pub enum TryFilter {
     Ne(String, String),
 }
 
-#[derive(Clone, Debug, Serialize)]
+impl FromStr for TryFilter {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: make into lazy static
+        let reg = regex::Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex");
+
+        let caps = reg.captures(s).ok_or("failed match")?;
+        let lhs = caps.get(1).unwrap().as_str().to_owned();
+        let cmp = caps.get(2).unwrap().as_str();
+        let rhs = caps.get(3).unwrap().as_str().to_owned();
+        Ok((match cmp {
+            "=" => Self::Eq,
+            "!=" => Self::Ne,
+            _ => unreachable!(),
+        })(lhs, rhs))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Args)]
 pub struct TryConfig {
+    /// Load test config file to use
     pub config_file: PathBuf,
+    /// Send results to the specified file instead of stdout
+    #[arg(short = 'o', long)]
     pub file: Option<String>,
+    /// Filter which endpoints are included in the try run. Filters work based on an
+    /// endpoint's tags. Filters are specified in the format "key=value" where "*" is
+    /// a wildcard. Any endpoint matching the filter is included in the test
+    #[arg(short = 'i', long = "include", value_parser = TryFilter::from_str, value_name = "INCLUDE")]
     pub filters: Option<Vec<TryFilter>>,
+    /// Specify the format for the try run output
+    #[arg(short, long, default_value_t)]
     pub format: TryRunFormat,
+    /// Enable loggers defined in the config file
+    #[arg(short = 'l', long = "loggers")]
     pub loggers_on: bool,
+    /// Directory to store logs (if enabled with --loggers)
+    #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
 }
 
@@ -247,9 +335,11 @@ impl fmt::Display for TryConfig {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Subcommand, Debug)]
 pub enum ExecConfig {
+    /// Runs a full load test
     Run(RunConfig),
+    /// Runs the specified endpoint(s) a single time for testing purposes
     Try(TryConfig),
 }
 

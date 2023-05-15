@@ -23,7 +23,7 @@ base64 = "0.21"
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"
 channel = { path = "./lib/channel" }
-clap = { version = "4", features = ["cargo", "std", "help", "usage", "error-context", "wrap_help"], default-features = false }
+clap = { version = "4", features = ["derive", "cargo", "std", "help", "usage", "error-context", "wrap_help"], default-features = false }
 config = { path = "./lib/config" }
 csv = "1"
 ctrlc = "3"

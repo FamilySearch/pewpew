@@ -7,7 +7,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command, Parser};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -288,6 +288,16 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
     }
 }
 
+#[derive(Debug, Parser)]
+#[command(
+    version = clap::crate_version!(),
+    about = "The HTTP load test tool https://familysearch.github.io/pewpew"
+)]
+struct Args {
+    #[command(subcommand)]
+    command: ExecConfig,
+}
+
 fn main() {
     #[cfg(target_os = "windows")]
     {
@@ -302,7 +312,7 @@ fn main() {
     if atty::isnt(atty::Stream::Stdout) {
         Paint::disable();
     }
-    let matches = get_arg_matcher().get_matches();
+    //let matches = get_arg_matcher().get_matches();
 
     let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();
 
@@ -310,7 +320,9 @@ fn main() {
         let _ = ctrl_c_tx.unbounded_send(());
     });
 
-    let cli_config = get_cli_config(matches);
+    //let cli_config = get_cli_config(matches);
+    let cli_config = Args::parse().command;
+    println!("{:?}", cli_config);
     // For testing, we can only call the logger inits once. They can't be in get_cli_config so we can call it multiple times
     match cli_config {
         ExecConfig::Run(ref run_config) => {

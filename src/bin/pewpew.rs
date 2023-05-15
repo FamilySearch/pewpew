@@ -7,7 +7,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command, Parser};
+use clap::{builder::ValueParser, crate_version, Arg, ArgMatches, Command};
 use config::duration_from_string;
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -288,14 +288,108 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
     }
 }
 
-#[derive(Debug, Parser)]
-#[command(
+mod args {
+    use clap::{Args, Parser, Subcommand};
+    use pewpew::{ExecConfig, RunConfig, RunOutputFormat, StatsFileFormat, TryConfig};
+    use std::{
+        path::PathBuf,
+        time::{Duration, UNIX_EPOCH},
+    };
+
+    pub fn get_cli_config() -> ExecConfig {
+        ArgsData::parse().command.into()
+    }
+
+    #[derive(Debug, Parser)]
+    #[command(
     version = clap::crate_version!(),
     about = "The HTTP load test tool https://familysearch.github.io/pewpew"
 )]
-struct Args {
-    #[command(subcommand)]
-    command: ExecConfig,
+    pub struct ArgsData {
+        #[command(subcommand)]
+        command: ExecConfigTmp,
+    }
+
+    // Temporaries are for the `stats_file` property, which requires the values of other properties
+    // to evaluate its default. clap will parse directly into the temporaries, and those, which now
+    // have all the values, get converted into the "real" config data.
+
+    #[derive(Subcommand, Debug)]
+    enum ExecConfigTmp {
+        /// Runs a full load test
+        Run(RunConfigTmp),
+        /// Runs the specified endpoint(s) a single time for testing purposes
+        Try(TryConfig),
+    }
+
+    impl From<ExecConfigTmp> for ExecConfig {
+        fn from(value: ExecConfigTmp) -> Self {
+            match value {
+                ExecConfigTmp::Try(t) => Self::Try(t),
+                ExecConfigTmp::Run(r) => Self::Run(r.into()),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, Args)]
+    struct RunConfigTmp {
+        /// Load test config file to use
+        #[arg(value_name = "CONFIG")]
+        config_file: PathBuf,
+        /// Formatting for stats printed to stdout
+        #[arg(short = 'f', long, value_name = "FORMAT", default_value_t)]
+        output_format: RunOutputFormat,
+        /// Directory to store results and logs
+        #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
+        results_dir: Option<PathBuf>,
+        /// Specify the time the test should start at
+        #[arg(value_parser = |s: &str| config::duration_from_string(s.into()), short = 't', long)]
+        start_at: Option<Duration>,
+        /// Specify the filename for the stats file
+        #[arg(short = 'o', long)]
+        stats_file: Option<PathBuf>,
+        /// Format for the stats file
+        #[arg(short, long, value_name = "FORMAT", default_value_t)]
+        stats_file_format: StatsFileFormat,
+        /// Watch the config file for changes and update the test accordingly
+        #[arg(short, long = "watch")]
+        watch_config_file: bool,
+    }
+
+    impl From<RunConfigTmp> for RunConfig {
+        fn from(value: RunConfigTmp) -> Self {
+            let config_file = &value.config_file;
+            let stats_file: PathBuf = value.stats_file.unwrap_or_else(|| {
+                let start_sec = UNIX_EPOCH
+                    .elapsed()
+                    .map(|d| d.as_secs())
+                    .unwrap_or_default();
+                let test_name = config_file.file_stem().and_then(std::ffi::OsStr::to_str);
+                test_name
+                    .map_or_else(
+                        || format!("stats-{start_sec}.json"),
+                        |test_name| format!("stats-{test_name}-{start_sec}.json"),
+                    )
+                    .into()
+            });
+            let stats_file = if let Some(results_dir) = &value.results_dir {
+                let mut file = results_dir.clone();
+                file.push(stats_file);
+                file
+            } else {
+                stats_file
+            };
+            Self {
+                config_file: value.config_file,
+                output_format: value.output_format,
+                results_dir: value.results_dir,
+                start_at: value.start_at,
+                stats_file,
+                stats_file_format: value.stats_file_format,
+                watch_config_file: value.watch_config_file,
+            }
+        }
+    }
 }
 
 fn main() {
@@ -321,8 +415,7 @@ fn main() {
     });
 
     //let cli_config = get_cli_config(matches);
-    let cli_config = Args::parse().command;
-    println!("{:?}", cli_config);
+    let cli_config = args::get_cli_config();
     // For testing, we can only call the logger inits once. They can't be in get_cli_config so we can call it multiple times
     match cli_config {
         ExecConfig::Run(ref run_config) => {

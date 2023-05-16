@@ -1382,6 +1382,7 @@ dependencies = [
  "maplit",
  "mod_interval",
  "native-tls",
+ "once_cell",
  "openssl",
  "rand",
  "regex",

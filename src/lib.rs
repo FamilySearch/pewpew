@@ -291,10 +291,13 @@ impl FromStr for TryFilter {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO: make into lazy static
-        let reg = regex::Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex");
+        use once_cell::sync::Lazy;
+        use regex::Regex;
 
-        let caps = reg.captures(s).ok_or("failed match")?;
+        static REGEX: Lazy<Regex> =
+            Lazy::new(|| Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex"));
+
+        let caps = REGEX.captures(s).ok_or("failed match")?;
         let lhs = caps.get(1).unwrap().as_str().to_owned();
         let cmp = caps.get(2).unwrap().as_str();
         let rhs = caps.get(3).unwrap().as_str().to_owned();

@@ -593,6 +593,32 @@ mod tests {
     }
 
     #[test]
+    fn cli_try_include4() {
+        // Verify that the old way doesn't work.
+        // Correct is `-i x -i y -i z`, not `-i x y z`
+        let cli_config_result = args::try_parse_from([
+            "myprog",
+            TRY_COMMAND,
+            YAML_FILE,
+            "--include",
+            "_id=0",
+            "_id=1",
+        ]);
+        assert!(cli_config_result.is_err());
+        // Ensure that failure is because of missing `--include`
+        let cli_config_result = args::try_parse_from([
+            "myprog",
+            TRY_COMMAND,
+            YAML_FILE,
+            "--include",
+            "_id=0",
+            "--include",
+            "_id=1",
+        ]);
+        assert!(cli_config_result.is_ok());
+    }
+
+    #[test]
     fn cli_try_format_json() {
         let cli_config =
             args::try_parse_from(["myprog", TRY_COMMAND, "-f", "json", YAML_FILE]).unwrap();

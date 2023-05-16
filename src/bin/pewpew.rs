@@ -317,6 +317,9 @@ mod args {
     // Temporaries are for the some properties which requires the values of other properties
     // to evaluate. clap will parse directly into the temporaries, and those, which now
     // have all the values, get converted into the "real" config data.
+    //
+    // Enabling the original structs to be used directly would need a bit of compat breaking, so
+    // see if it can be done for 0.6.0
 
     #[derive(Subcommand, Debug)]
     enum ExecConfigTmp {

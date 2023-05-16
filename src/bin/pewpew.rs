@@ -290,9 +290,13 @@ fn get_cli_config(matches: ArgMatches) -> ExecConfig {
 
 mod args {
     use clap::{Args, Parser, Subcommand};
-    use pewpew::{ExecConfig, RunConfig, RunOutputFormat, StatsFileFormat, TryConfig};
+    use pewpew::{
+        ExecConfig, RunConfig, RunOutputFormat, StatsFileFormat, TryConfig, TryFilter, TryRunFormat,
+    };
     use std::{
+        fs::create_dir_all,
         path::PathBuf,
+        str::FromStr,
         time::{Duration, UNIX_EPOCH},
     };
 
@@ -310,8 +314,8 @@ mod args {
         command: ExecConfigTmp,
     }
 
-    // Temporaries are for the `stats_file` property, which requires the values of other properties
-    // to evaluate its default. clap will parse directly into the temporaries, and those, which now
+    // Temporaries are for the some properties which requires the values of other properties
+    // to evaluate. clap will parse directly into the temporaries, and those, which now
     // have all the values, get converted into the "real" config data.
 
     #[derive(Subcommand, Debug)]
@@ -319,13 +323,13 @@ mod args {
         /// Runs a full load test
         Run(RunConfigTmp),
         /// Runs the specified endpoint(s) a single time for testing purposes
-        Try(TryConfig),
+        Try(TryConfigTmp),
     }
 
     impl From<ExecConfigTmp> for ExecConfig {
         fn from(value: ExecConfigTmp) -> Self {
             match value {
-                ExecConfigTmp::Try(t) => Self::Try(t),
+                ExecConfigTmp::Try(t) => Self::Try(t.into()),
                 ExecConfigTmp::Run(r) => Self::Run(r.into()),
             }
         }
@@ -387,6 +391,48 @@ mod args {
                 stats_file,
                 stats_file_format: value.stats_file_format,
                 watch_config_file: value.watch_config_file,
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, Args)]
+    struct TryConfigTmp {
+        /// Load test config file to use
+        config_file: PathBuf,
+        /// Send results to the specified file instead of stdout
+        #[arg(short = 'o', long)]
+        file: Option<String>,
+        /// Filter which endpoints are included in the try run. Filters work based on an
+        /// endpoint's tags. Filters are specified in the format "key=value" where "*" is
+        /// a wildcard. Any endpoint matching the filter is included in the test
+        #[arg(short = 'i', long = "include", value_parser = TryFilter::from_str, value_name = "INCLUDE")]
+        filters: Option<Vec<TryFilter>>,
+        /// Specify the format for the try run output
+        #[arg(short, long, default_value_t)]
+        format: TryRunFormat,
+        /// Enable loggers defined in the config file
+        #[arg(short = 'l', long = "loggers")]
+        loggers_on: bool,
+        /// Directory to store logs (if enabled with --loggers)
+        #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
+        results_dir: Option<PathBuf>,
+    }
+
+    impl From<TryConfigTmp> for TryConfig {
+        fn from(value: TryConfigTmp) -> Self {
+            let loggers_on = value.loggers_on;
+            let results_dir = value.results_dir.filter(|_| loggers_on);
+            if let Some(d) = &results_dir {
+                create_dir_all(d).unwrap();
+            }
+
+            Self {
+                config_file: value.config_file,
+                loggers_on,
+                results_dir,
+                filters: value.filters,
+                file: value.file,
+                format: value.format,
             }
         }
     }

@@ -4,16 +4,18 @@ There are two ways that Pewpew can execute: either a full load test or a try run
 <br/><br/>
 
 ```
-USAGE:
-    pewpew <SUBCOMMAND>
+The HTTP load test tool https://familysearch.github.io/pewpew
 
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+Usage: pewpew <COMMANND>
 
-SUBCOMMANDS:
-    run    Runs a full load test
-    try    Runs the specified endpoint(s) a single time for testing purposes
+Commands:
+  run    Runs a full load test
+  try    Runs the specified endpoint(s) a single time for testing purposes
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help       Prints help information
+  -V, --version    Prints version information
 ```
 
 As signified in the above help output, there are two subcommands `run` and `try`.
@@ -22,24 +24,22 @@ Here's the output of `pewpew run --help`:
 <br/><br/>
 
 ```
-USAGE:
-    pewpew run <CONFIG>
+Usage: pewpew run [OPTIONS] <CONFIG>
 
-OPTIONS:
-    -h, --help                             Prints help information
-    -f, --output-format <FORMAT>           Formatting for stats printed to stdout [default: human]  [possible values:
-                                           human, json]
-    -d, --results-directory <DIRECTORY>    Directory to store results and logs
-    -t, --start-at <START_AT>              Specify the time the test should start at
-    -o, --stats-file <STATS_FILE>          Specify the filename for the stats file
-    -s, --stats-file-format <FORMAT>       Format for the stats file [default: json]  [possible values: json]
-    -w, --watch                            Watch the config file for changes and update the test accordingly
+Arguments:
+  <CONFIG>  Load test config file to use
 
-ARGS:
-    <CONFIG>    Load test config file to use
-
-ARGS:
-    <CONFIG>    Load test config file to use
+Options:
+  -f, --output-format <FORMAT>         Formatting for stats printed to stdout [default: human]
+                                       [possible values: human, json]
+  -d, --results-directory <DIRECTORY>  Directory to store results and logs
+  -t, --start-at <START_AT>            Specify the time the test should start at
+  -o, --stats-file <STATS_FILE>        Specify the filename for the stats file
+  -s, --stats-file-format <FORMAT>     Format for the stats file [default: json]  [possible values:
+                                       json]
+  -w, --watch                          Watch the config file for changes and update the test
+                                       accordingly
+  -h, --help                           Prints help information
 ```
 
 The `-f`, `--output-format` parameter allows changing the formatting of the stats which are printed to stdout.
@@ -54,22 +54,22 @@ Here's the output of `pewpew try --help`:
 <br/><br/>
 
 ```
-USAGE:
-    pewpew try [OPTIONS] <CONFIG>
+Usage: pewpew try [OPTIONS] <CONFIG>
 
-OPTIONS:
-    -o, --file <FILE>                      Send results to the specified file instead of stdout
-    -f, --format <FORMAT>                  Specify the format for the try run output [default: human]  [possible values:
-                                           human, json]
-    -h, --help                             Prints help information
-    -i, --include <INCLUDE>...             Filter which endpoints are included in the try run. Filters work based on an
-                                           endpoint's tags. Filters are specified in the format "key=value" where "*" is
-                                           a wildcard. Any endpoint matching the filter is included in the test
-    -l, --loggers                          Enable loggers defined in the config file
-    -d, --results-directory <DIRECTORY>    Directory to store logs (if enabled with --loggers)
+Arguments:
+  <CONFIG>  Load test config file to use
 
-ARGS:
-    <CONFIG>    Load test config file to use
+Options:
+  -o, --file <FILE>                    Send results to the specified file instead of stdout
+  -f, --format <FORMAT>                Specify the format for the try run output [default: human]
+                                       [possible values: human, json]
+  -i, --include <INCLUDE>              Filter which endpoints are included in the try run. Filters
+                                       work based on an endpoint's tags. Filters are specified in
+                                       the format "key=value" where "*" is a wildcard. Any
+                                       endpoint matching the filter is included in the test
+  -l, --loggers                        Enable loggers defined in the config file
+  -d, --results-directory <DIRECTORY>  Directory to store logs (if enabled with --loggers)
+  -h, --help                           Prints help information
 ```
 
 A try run will run one or more endpoints a single time and print out the raw HTTP requests and responses to stdout. By default all endpoints are included in the try run. This is useful for testing out a [config file](./config.md) before running a full load test. When the `--include` parameter is used, pewpew will automatically include any other endpoints needed to provide data for the explicitly included endpoints.

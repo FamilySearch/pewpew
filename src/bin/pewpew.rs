@@ -132,18 +132,19 @@ mod args {
     #[derive(Clone, Debug, Args)]
     struct TryConfigTmp {
         /// Load test config file to use
+        #[arg(value_name = "CONFIG")]
         config_file: PathBuf,
         /// Send results to the specified file instead of stdout
         #[arg(short = 'o', long)]
         file: Option<String>,
+        /// Specify the format for the try run output
+        #[arg(short, long, default_value_t)]
+        format: TryRunFormat,
         /// Filter which endpoints are included in the try run. Filters work based on an
         /// endpoint's tags. Filters are specified in the format "key=value" where "*" is
         /// a wildcard. Any endpoint matching the filter is included in the test
         #[arg(short = 'i', long = "include", value_parser = TryFilter::from_str, value_name = "INCLUDE")]
         filters: Option<Vec<TryFilter>>,
-        /// Specify the format for the try run output
-        #[arg(short, long, default_value_t)]
-        format: TryRunFormat,
         /// Enable loggers defined in the config file
         #[arg(short = 'l', long = "loggers")]
         loggers_on: bool,

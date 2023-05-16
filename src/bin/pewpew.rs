@@ -314,7 +314,7 @@ mod args {
         command: ExecConfigTmp,
     }
 
-    // Temporaries are for the some properties which requires the values of other properties
+    // Temporaries are for some properties which requires the values of other properties
     // to evaluate. clap will parse directly into the temporaries, and those, which now
     // have all the values, get converted into the "real" config data.
     //

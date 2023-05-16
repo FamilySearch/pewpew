@@ -841,6 +841,40 @@ mod tests {
     }
 
     #[test]
+    fn cli_try_include3() {
+        let cli_config = args::try_parse_from([
+            "myprog",
+            TRY_COMMAND,
+            "-i",
+            "_id!=0",
+            "-i",
+            "_id!=1",
+            YAML_FILE2,
+        ])
+        .unwrap();
+        let ExecConfig::Try(try_config) = cli_config else { panic!() };
+
+        assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);
+        assert!(try_config.filters.is_some());
+        let filters = try_config.filters.unwrap();
+        assert_eq!(filters.len(), 2);
+        match &filters[0] {
+            TryFilter::Ne(key, value) => {
+                assert_eq!(key, "_id");
+                assert_eq!(value, "0");
+            }
+            _ => panic!(),
+        }
+        match &filters[1] {
+            TryFilter::Ne(key, value) => {
+                assert_eq!(key, "_id");
+                assert_eq!(value, "1");
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
     fn cli_try_format_json() {
         let cli_config =
             args::try_parse_from(["myprog", TRY_COMMAND, "-f", "json", YAML_FILE]).unwrap();

@@ -766,12 +766,12 @@ mod tests {
 
     #[test]
     fn cli_try_include() {
-        // FAILS after 1:1 port as a result of new `-i` behavior.
         let cli_config = args::try_parse_from([
             "myprog",
             TRY_COMMAND,
             "-i",
             "_id=0",
+            "-i",
             "_id=1",
             "-f",
             "json",
@@ -802,10 +802,16 @@ mod tests {
 
     #[test]
     fn cli_try_include2() {
-        // FAILS after 1:1 port as a result of new `-i` behavior.
-        let cli_config =
-            args::try_parse_from(["myprog", TRY_COMMAND, YAML_FILE2, "-i", "_id=0", "_id=1"])
-                .unwrap();
+        let cli_config = args::try_parse_from([
+            "myprog",
+            TRY_COMMAND,
+            YAML_FILE2,
+            "-i",
+            "_id=0",
+            "-i",
+            "_id=1",
+        ])
+        .unwrap();
         let ExecConfig::Try(try_config) = cli_config else { panic!() };
 
         assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);

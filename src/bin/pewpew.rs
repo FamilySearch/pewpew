@@ -538,6 +538,12 @@ mod tests {
     static STATS_FILE: &str = "stats-paths.json";
 
     #[test]
+    fn base_clap_verify() {
+        use clap::CommandFactory;
+        args::ArgsData::command().debug_assert();
+    }
+
+    #[test]
     fn cli_run_simple() {
         let stats_regex = Regex::new(r"^stats-integration-\d+\.json$").unwrap();
         let cli_config: ExecConfig =

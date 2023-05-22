@@ -917,15 +917,8 @@ fn create_try_run_future(
     let filter_fn = move |tags: &BTreeMap<String, String>| -> bool {
         filters.is_empty()
             || filters.iter().any(|(is_eq, key, regex)| {
-                let check = tags
-                    .get(key)
-                    .map(|left| regex.is_match(left))
-                    .unwrap_or(false);
-                if *is_eq {
-                    check
-                } else {
-                    !check
-                }
+                // "should it match" compared to "does it match"
+                *is_eq == tags.get(key).map_or(false, |left| regex.is_match(left))
             })
     };
 

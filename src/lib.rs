@@ -294,17 +294,22 @@ impl FromStr for TryFilter {
         use once_cell::sync::Lazy;
         use regex::Regex;
 
+        // TODO: replace once_cell::sync::Lazy with std::sync::LazyLock once that gets stabilized
+        // out of nightly
         static REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex"));
 
         let caps = REGEX.captures(s).ok_or("failed match")?;
+
+        // Should never panic, as the Regex's known success at this point guarantees that all
+        // capture groups are present.
         let lhs = caps.get(1).unwrap().as_str().to_owned();
         let cmp = caps.get(2).unwrap().as_str();
         let rhs = caps.get(3).unwrap().as_str().to_owned();
         Ok((match cmp {
             "=" => Self::Eq,
             "!=" => Self::Ne,
-            _ => unreachable!(),
+            _ => unreachable!(r#"Regex can only catch "=" or "!=" here."#),
         })(lhs, rhs))
     }
 }
@@ -368,6 +373,10 @@ impl ExecConfig {
     }
 }
 
+/// The reason the test ended, whether temporarily or completely.
+///
+/// [`Self::ConfigUpdate`] end will allow the test to continue with the updated config, if watch mode was
+/// enabled in the [`ExecConfig`].
 #[derive(Clone)]
 pub enum TestEndReason {
     Completed,
@@ -377,6 +386,18 @@ pub enum TestEndReason {
     ConfigUpdate(Arc<BTreeMap<String, providers::Provider>>),
 }
 
+/// Inner(1)-level runtime future function.
+///
+/// Generates runner based on specified values in the [`ExecConfig`], as well as the indicated config
+/// YAML file.
+///
+/// Either a Try future or a Run future is spawned and a test end is awaited for.
+///
+/// Returns the reason that the test finished, or could not be run.
+///
+/// # Errors
+///
+/// Returns an `Err` if the test could not be run.
 async fn _create_run(
     exec_config: ExecConfig,
     mut ctrlc_channel: FCUnboundedReceiver<()>,
@@ -469,6 +490,7 @@ async fn _create_run(
 
             let providers = Arc::new(providers);
 
+            // Allow continuing test with new config file.
             if r.watch_config_file {
                 create_config_watcher(
                     file,
@@ -500,11 +522,15 @@ async fn _create_run(
     match test_runner {
         Ok(f) => {
             debug!("_create_run tokio::spawn test_runner");
+            // Start running the test.
             tokio::spawn(f);
             let mut test_result = Ok(TestEndReason::Completed);
+            // Wait until the test is done.
             while let Some(v) = test_ended_rx.next().await {
                 match v {
+                    // If test end was due to config change, keep going with new config.
                     Ok(Ok(TestEndReason::ConfigUpdate(_))) => continue,
+                    // Any other reason, and the test ends fully.
                     Ok(v) => {
                         test_result = v;
                     }
@@ -518,6 +544,15 @@ async fn _create_run(
     }
 }
 
+/// Outermost-level runtime future function.
+///
+/// Creates worker future, and checks the circumstances under which it terminates. Specific
+/// information regarding the termination reason is not returned, but rather dispatched through
+/// logging.
+///
+/// # Errors
+///
+/// Returns `Err(())` if the worker future returns an `Err`.
 pub async fn create_run<So, Se>(
     exec_config: ExecConfig,
     ctrlc_channel: FCUnboundedReceiver<()>,
@@ -611,6 +646,11 @@ where
     Ok(())
 }
 
+/// Create a watcher to see when the config file has been updated.
+///
+/// If watch mode has been enabled for the [`RunConfig`], this will be called during future generation
+/// (but not in the [`create_load_test_future`] function)
+/// to enable updating the configuration, and continuing from the same time point.
 #[allow(clippy::too_many_arguments)]
 fn create_config_watcher(
     mut file: File,
@@ -675,6 +715,11 @@ fn create_config_watcher(
             if file.read_to_end(&mut config_bytes).is_err() {
                 continue;
             }
+
+            // Config file has updated, re-parse and update.
+
+            // A decent amount of this code seems similar to that in `_create_run`; could
+            // this be unified into a common function?
 
             let config = config::LoadTest::from_config(&config_bytes, &config_file_path, &env_vars);
             let mut config = match config {
@@ -785,6 +830,11 @@ fn create_config_watcher(
     });
 }
 
+/// Inner(2)-level function, used to create worker future for a try run.
+///
+/// # Errors
+///
+/// TODO.
 fn create_try_run_future(
     mut config: config::LoadTest,
     try_config: TryConfig,
@@ -858,6 +908,8 @@ fn create_try_run_future(
             (
                 is_eq,
                 key,
+                // Should never panic, as regex::escape ensures that the result is a valid literal,
+                // and the only expressions added after are ".*?"
                 regex::Regex::new(&right).expect("filter should be a valid regex"),
             )
         })
@@ -957,6 +1009,11 @@ fn create_try_run_future(
     Ok(f)
 }
 
+/// Inner(2)-level function, used to create worker future for a full load test.
+///
+/// # Errors
+///
+/// Returns an `Err` if the config file is missing data that a full test requires.
 fn create_load_test_future(
     config: config::LoadTest,
     run_config: RunConfig,

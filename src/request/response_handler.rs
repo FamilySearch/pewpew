@@ -99,11 +99,9 @@ impl ResponseHandler {
                 )
                 .map_ok(|(_, body_buffer)| {
                     let body_string = str::from_utf8(&body_buffer).unwrap_or("<<binary data>>");
-                    let value = if let Ok(value) = json::from_str(body_string) {
-                        value
-                    } else {
-                        json::Value::String(body_string.into())
-                    };
+                    let value = json::from_str(body_string)
+                        .ok()
+                        .unwrap_or_else(|| json::Value::String(body_string.into()));
                     Some(value)
                 })
                 .a()

@@ -141,17 +141,18 @@ impl Iterator for CsvReader {
             }
             _ => (),
         }
-        let json = if let Some(headers) = &self.headers {
-            json::Value::Object(
-                headers
-                    .iter()
-                    .zip(record.iter())
-                    .map(|(k, v)| (k.into(), str_to_json(v)))
-                    .collect(),
-            )
-        } else {
-            json::Value::Array(record.into_iter().map(str_to_json).collect())
-        };
+        let json = self.headers.as_ref().map_or_else(
+            || json::Value::Array(record.into_iter().map(str_to_json).collect()),
+            |headers| {
+                json::Value::Object(
+                    headers
+                        .iter()
+                        .zip(record.iter())
+                        .map(|(k, v)| (k.into(), str_to_json(v)))
+                        .collect(),
+                )
+            },
+        );
         Some(Ok(json))
     }
 }

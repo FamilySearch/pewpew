@@ -385,11 +385,7 @@ impl RequestMaker {
                         .b()
                 }).b()
         }).then(move |_| {
-            if let Some(f) = auto_returns2 {
-                f.map(|_| Ok(())).a()
-            } else {
-                future::ready(Ok(())).b()
-            }
+            auto_returns2.map_or_else(|| future::ready(Ok(())).b(), |f| f.map(|_| Ok(())).a())
         }).b()
     }
 }

@@ -1175,11 +1175,7 @@ fn get_loggers_from_config(
                 "stdout" => stdout.clone(),
                 "stderr" => stderr.clone(),
                 _ => {
-                    let mut file_path = if let Some(results_dir) = results_dir {
-                        results_dir.clone()
-                    } else {
-                        PathBuf::new()
-                    };
+                    let mut file_path = results_dir.map_or_else(PathBuf::new, Clone::clone);
                     file_path.push(to);
                     let f = File::create(&file_path)
                         .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()))?;

@@ -25,6 +25,7 @@ use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use yansi::Paint;
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     fmt::Write,
     fs::File,
@@ -512,13 +513,10 @@ impl Stats {
         let test_complete = remaining_seconds.is_none();
         let mut is_new_bucket = false;
         let time = rounded_epoch(self.bucket_size) - self.bucket_size;
-        let bucket = match self.get_previous_bucket(test_complete) {
-            Some(b) => b,
-            None => {
-                is_new_bucket = true;
-                TimeBucket::new(time)
-            }
-        };
+        let bucket = self.get_previous_bucket(test_complete).unwrap_or_else(|| {
+            is_new_bucket = true;
+            TimeBucket::new(time)
+        });
         let mut print_string = if test_complete {
             String::new()
         } else {
@@ -621,22 +619,19 @@ impl From<ResponseStat> for StatsMessage {
 // Create a pretty string which specifies when the test will end
 fn duration_till_end_to_pretty_string(duration: Duration) -> String {
     let long_form = duration_to_pretty_long_form(duration);
-    let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
-        format!("{s} {long_form}")
-    } else {
-        long_form
-    };
+    let msg = duration_to_pretty_short_form(duration).map_or_else(
+        || Cow::Borrowed(&long_form),
+        |s| Cow::Owned(format!("{s} {long_form}")),
+    );
     format!("Test will end {msg}")
 }
 
 fn duration_to_pretty_short_form(duration: Duration) -> Option<String> {
-    if let Ok(duration) = ChronoDuration::from_std(duration) {
+    ChronoDuration::from_std(duration).ok().map(|duration| {
         let now = Local::now();
         let end = now + duration;
-        Some(format!("around {}", end.format("%T %-e-%b-%Y")))
-    } else {
-        None
-    }
+        format!("around {}", end.format("%T %-e-%b-%Y"))
+    })
 }
 
 fn duration_to_pretty_long_form(duration: Duration) -> String {
@@ -664,19 +659,20 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
         })
     })
     .collect();
-    let long_time = if let Some(last) = builder.pop() {
-        let mut ret = builder.join(", ");
-        if ret.is_empty() {
-            last
-        } else {
-            // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
-            let _ = write!(&mut ret, " and {last}");
-            // ret.push_str(&format!(" and {}", last));
-            ret
-        }
-    } else {
-        "0 seconds".to_string()
-    };
+    let long_time = builder.pop().map_or_else(
+        || Cow::Borrowed("0 seconds"),
+        |last| {
+            let mut ret = builder.join(", ");
+            Cow::Owned(if ret.is_empty() {
+                last
+            } else {
+                // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
+                let _ = write!(&mut ret, " and {last}");
+                // ret.push_str(&format!(" and {}", last));
+                ret
+            })
+        },
+    );
     format!("in approximately {long_time}")
 }
 

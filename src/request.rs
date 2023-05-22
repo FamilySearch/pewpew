@@ -68,7 +68,7 @@ impl AutoReturn {
         channel: channel::Sender<json::Value>,
         jsons: Vec<json::Value>,
     ) -> Self {
-        AutoReturn {
+        Self {
             send_option,
             channel,
             jsons,
@@ -107,7 +107,7 @@ pub struct TemplateValues(json::Value);
 
 impl TemplateValues {
     pub fn new() -> Self {
-        TemplateValues(json::Value::Object(json::Map::new()))
+        Self(json::Value::Object(json::Map::new()))
     }
 
     pub fn as_json(&self) -> &json::Value {
@@ -137,7 +137,7 @@ impl DerefMut for TemplateValues {
 
 impl From<json::Value> for TemplateValues {
     fn from(map: json::Value) -> Self {
-        TemplateValues(map)
+        Self(map)
     }
 }
 
@@ -170,7 +170,7 @@ struct Outgoing {
 
 impl Outgoing {
     fn new(select: Select, tx: ProviderOrLogger) -> Self {
-        Outgoing {
+        Self {
             select: select.into(),
             tx,
         }
@@ -226,7 +226,7 @@ impl EndpointBuilder {
         endpoint: config::Endpoint,
         start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
     ) -> Self {
-        EndpointBuilder {
+        Self {
             endpoint,
             start_stream,
         }
@@ -826,7 +826,7 @@ struct BlockSender<V: Iterator<Item = Result<json::Value, RecoverableError>> + U
 
 impl<V: Iterator<Item = Result<json::Value, RecoverableError>> + Unpin> BlockSender<V> {
     fn new(values: V, tx: ProviderOrLogger) -> Self {
-        BlockSender {
+        Self {
             tx,
             values,
             value_added: false,

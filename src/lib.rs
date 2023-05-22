@@ -70,7 +70,7 @@ struct Endpoints {
 
 impl Endpoints {
     fn new() -> Self {
-        Endpoints {
+        Self {
             inner: Vec::new(),
             providers: BTreeMap::new(),
         }
@@ -176,7 +176,7 @@ impl fmt::Display for RunOutputFormat {
 
 impl RunOutputFormat {
     pub fn is_human(self) -> bool {
-        matches!(self, RunOutputFormat::Human)
+        matches!(self, Self::Human)
     }
 }
 
@@ -185,8 +185,8 @@ impl TryFrom<&str> for RunOutputFormat {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "human" => Ok(RunOutputFormat::Human),
-            "json" => Ok(RunOutputFormat::Json),
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
             _ => Err(()),
         }
     }
@@ -221,7 +221,7 @@ pub enum TryRunFormat {
 
 impl TryRunFormat {
     pub fn is_human(self) -> bool {
-        matches!(self, TryRunFormat::Human)
+        matches!(self, Self::Human)
     }
 }
 
@@ -243,8 +243,8 @@ impl TryFrom<&str> for TryRunFormat {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "human" => Ok(TryRunFormat::Human),
-            "json" => Ok(TryRunFormat::Json),
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
             _ => Err(()),
         }
     }
@@ -360,15 +360,15 @@ impl fmt::Display for ExecConfig {
 impl ExecConfig {
     fn get_config_file(&self) -> &PathBuf {
         match self {
-            ExecConfig::Run(r) => &r.config_file,
-            ExecConfig::Try(t) => &t.config_file,
+            Self::Run(r) => &r.config_file,
+            Self::Try(t) => &t.config_file,
         }
     }
 
     fn get_output_format(&self) -> RunOutputFormat {
         match self {
-            ExecConfig::Run(r) => r.output_format,
-            ExecConfig::Try(_) => RunOutputFormat::Human,
+            Self::Run(r) => r.output_format,
+            Self::Try(_) => RunOutputFormat::Human,
         }
     }
 }

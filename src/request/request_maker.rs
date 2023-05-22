@@ -57,7 +57,7 @@ pub(super) struct ProviderDelays {
 
 impl ProviderDelays {
     pub(super) fn new() -> Self {
-        ProviderDelays { inner: Vec::new() }
+        Self { inner: Vec::new() }
     }
 
     fn push(&mut self, name: String) {

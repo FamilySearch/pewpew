@@ -60,7 +60,7 @@ impl CsvReader {
             None
         };
         let mut byte_record = csv::ByteRecord::new();
-        let mut cr = CsvReader {
+        let mut cr = Self {
             positions: Vec::new(),
             headers,
             random: None,

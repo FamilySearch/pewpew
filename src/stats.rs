@@ -112,7 +112,7 @@ struct TimeBucket {
 
 impl TimeBucket {
     fn new(time: u64) -> Self {
-        TimeBucket {
+        Self {
             time,
             entries: BTreeMap::new(),
         }
@@ -125,7 +125,7 @@ impl TimeBucket {
     }
 
     // Combine the statistics of two `TimeBucket`s
-    fn combine(&mut self, rhs: &TimeBucket) {
+    fn combine(&mut self, rhs: &Self) {
         for (index, entry) in &rhs.entries {
             self.entries
                 .entry(*index)
@@ -203,7 +203,7 @@ struct BucketGroupStats {
 
 impl Default for BucketGroupStats {
     fn default() -> Self {
-        BucketGroupStats {
+        Self {
             request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             status_counts: Default::default(),
@@ -237,7 +237,7 @@ impl BucketGroupStats {
     }
 
     // Combine two `BucketGroupStats`
-    fn combine(&mut self, rhs: &BucketGroupStats) {
+    fn combine(&mut self, rhs: &Self) {
         self.request_timeouts += rhs.request_timeouts;
         let _ = self.rtt_histogram.add(&rhs.rtt_histogram);
         for (status, count) in &rhs.status_counts {
@@ -392,7 +392,7 @@ impl Stats {
             test_killer,
             file_name.to_string_lossy().to_string(),
         );
-        Ok(Stats {
+        Ok(Self {
             bucket_size,
             current: TimeBucket::new(rounded_epoch(bucket_size)),
             console,
@@ -614,7 +614,7 @@ pub enum StatKind {
 
 impl From<ResponseStat> for StatsMessage {
     fn from(rs: ResponseStat) -> Self {
-        StatsMessage::ResponseStat(rs)
+        Self::ResponseStat(rs)
     }
 }
 

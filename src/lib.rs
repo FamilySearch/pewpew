@@ -942,11 +942,7 @@ fn create_try_run_future(
             .iter_mut()
             .filter_map(|(k, s)| {
                 s.set_send_behavior(config::EndpointProvidesSendOptions::Block);
-                if required_providers.contains(k) {
-                    None
-                } else {
-                    Some(k.clone())
-                }
+                (!required_providers.contains(k)).then(|| k.clone())
             })
             .collect::<BTreeSet<_>>();
         endpoint.on_demand = true;
@@ -955,14 +951,10 @@ fn create_try_run_future(
             .tags
             .iter()
             .filter_map(|(k, v)| {
-                if v.is_simple() {
-                    let r = v
-                        .evaluate(Cow::Owned(json::Value::Null), None)
-                        .map(|v| (k.clone(), v));
-                    Some(r)
-                } else {
-                    None
-                }
+                v.is_simple().then(|| {
+                    v.evaluate(Cow::Owned(json::Value::Null), None)
+                        .map(|v| (k.clone(), v))
+                })
             })
             .collect::<Result<_, _>>()?;
 

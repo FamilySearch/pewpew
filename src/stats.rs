@@ -654,16 +654,14 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     .into_iter()
     .filter_map(move |(unit, name)| {
         let count = secs / unit;
-        if count > 0 {
+        (count > 0).then(|| {
             secs -= count * unit;
             if count > 1 {
-                Some(format!("{count} {name}s"))
+                format!("{count} {name}s")
             } else {
-                Some(format!("{count} {name}"))
+                format!("{count} {name}")
             }
-        } else {
-            None
-        }
+        })
     })
     .collect();
     let long_time = if let Some(last) = builder.pop() {

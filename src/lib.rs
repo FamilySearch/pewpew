@@ -845,7 +845,7 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
-    let select = if let TryRunFormat::Human = try_config.format {
+    let select = if matches!(try_config.format, TryRunFormat::Human) {
         r#""`\
          Request\n\
          ========================================\n\

@@ -1,36 +1,36 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
       to: 100%
       over: 15s
 
 providers:
   a: # Counter for creating groups
-    range: {}
+    !range
 
 loggers:
   csv_data:
-    to: 'log-results-${epoch("ms")}.csv' # log to a file with a timestamp. timestamp set at test start
+    to: !file 'log-results-${x:epoch("ms")}.csv' # log to a file with a timestamp. timestamp set at test start
     pretty: false
 
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     headers:
       Accept-Language: en-us
       Content-Type: application/json
       Authorization: Bearer test-token
-    body: '{
-        "a":${a},
-        "data":"test data ${a}",
+    body: !str '{
+        "a":${p:a},
+        "data":"test data ${p:a}",
         "test":true
       }'
     peak_load: 1hps

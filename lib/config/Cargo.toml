@@ -5,25 +5,37 @@ edition = "2018"
 publish = false
 license = "Apache 2.0"
 
-[lib]
-doctest = false
-
 [dependencies]
 base64 = "0.21"
+boa_engine = "0.16.0"
+derivative = "2.2.0"
+derive_more = "0.99.17"
+diplomatic-bag = "0.3.1"
 ether = { path = "../either" }
 futures = "0.3"
+gc = "0.4.1"
 http = "0.2"
 itertools = "0.10"
 jsonpath_lib = "0.3.0"
+# pinned to 0.2.3 because newer versions made a semver incompatible change by making `Node` no longer
+# public, which we depend on https://github.com/freestrings/jsonpath/issues/36
+jsonpath_lib = "=0.2.3"
+nom = "7.1.3"
+once_cell = "1.17.1"
 percent-encoding = "2"
-pest = "2"
-pest_derive = "2"
+pest = { version = "2", optional = true }
+pest_derive = { version = "2", optional = true }
+phf = { version = "0.11", features = ["macros"] }
 rand = "0.8"
 regex = "1"
-serde = { version = "1", features = ["derive"] }
+scripting-macros = { path = "../scripting-macros" }
+serde = { version = "1.0.163", features = ["derive", "rc"] }
 serde_json = "1"
+serde-tuple-vec-map = "1.0.1"
+serde_yaml = "0.9.21"
+thiserror = "1.0.40"
 unicode-segmentation = "1"
-yaml-rust = "0.4"
+yaml-rust = { version = "0.4", optional = true }
 zip_all = { path = "../zip_all" }
 js-sys = "0.3"
 log = "0.4"
@@ -32,3 +44,6 @@ log = "0.4"
 maplit = "1"
 test_common = { path = "../test_common" }
 tokio = "1"
+
+[features]
+legacy = ["dep:yaml-rust", "dep:pest", "dep:pest_derive"]

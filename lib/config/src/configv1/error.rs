@@ -3,7 +3,7 @@ use std::{error::Error as StdError, fmt};
 use serde_json as json;
 use yaml_rust::scanner::{Marker, ScanError};
 
-type PestError = pest::error::Error<crate::select_parser::Rule>;
+type PestError = pest::error::Error<crate::configv1::select_parser::Rule>;
 
 #[derive(Clone, Debug)]
 pub enum ExecutingExpressionError {

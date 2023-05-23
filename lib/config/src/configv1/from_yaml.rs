@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::configv1::error::Error;
 
 use serde_json as json;
 use yaml_rust::{

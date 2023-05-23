@@ -1,15 +1,13 @@
+use super::error::{CreatingExpressionError, ExecutingExpressionError};
+use super::json_value_to_string;
+use super::select_parser::ProviderStream;
 use super::select_parser::{bool_value, f64_value, RequiredProviders, Value, ValueOrExpression};
+use crate::shared::{encode::*, Epoch};
 
-use crate::error::{CreatingExpressionError, ExecutingExpressionError};
-use crate::json_value_to_string;
-use crate::select_parser::ProviderStream;
-
-use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use jsonpath_lib as json_path;
 use log::warn;
-use percent_encoding::AsciiSet;
 use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
@@ -17,15 +15,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use yaml_rust::scanner::Marker;
 use zip_all::zip_all;
 
-use std::{
-    borrow::Cow,
-    cmp::Ordering,
-    collections::BTreeMap,
-    fmt, iter,
-    sync::Arc,
-    task::Poll,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt, iter, sync::Arc, task::Poll};
 
 #[derive(Clone, Debug)]
 pub(super) struct Collect {
@@ -139,103 +129,17 @@ impl Collect {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-enum Encoding {
-    Base64,
-    PercentSimple,
-    PercentQuery,
-    Percent,
-    PercentPath,
-    PercentUserinfo,
-    NonAlphanumeric,
-}
-
-// https://github.com/servo/rust-url/blob/master/UPGRADING.md
-// Prepackaged encoding sets, like QUERY_ENCODE_SET and PATH_SEGMENT_ENCODE_SET, are no longer provided.
-// You will need to read the specifications relevant to your domain and construct your own encoding sets
-// by using the percent_encoding::AsciiSet builder methods on either of the base encoding sets,
-// percent_encoding::CONTROLS or percent_encoding::NON_ALPHANUMERIC.
-
-/// This encode set is used in the URL parser for query strings.
-///
-/// Aside from special chacters defined in the [`SIMPLE_ENCODE_SET`](struct.SIMPLE_ENCODE_SET.html),
-/// space, double quote ("), hash (#), and inequality qualifiers (<), (>) are encoded.
-const QUERY_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'#')
-    .add(b'<')
-    .add(b'>');
-/// This encode set is used for path components.
-///
-/// Aside from special chacters defined in the [`SIMPLE_ENCODE_SET`](struct.SIMPLE_ENCODE_SET.html),
-/// space, double quote ("), hash (#), inequality qualifiers (<), (>), backtick (`),
-/// question mark (?), and curly brackets ({), (}) are encoded.
-const DEFAULT_ENCODE_SET: &AsciiSet = &QUERY_ENCODE_SET.add(b'`').add(b'?').add(b'{').add(b'}');
-/// This encode set is used for on '/'-separated path segment
-///
-/// Aside from special chacters defined in the [`SIMPLE_ENCODE_SET`](struct.SIMPLE_ENCODE_SET.html),
-/// space, double quote ("), hash (#), inequality qualifiers (<), (>), backtick (`),
-/// question mark (?), and curly brackets ({), (}), percent sign (%), forward slash (/) are
-/// encoded.
-const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET.add(b'%').add(b'/');
-/// This encode set is used for username and password.
-///
-/// Aside from special chacters defined in the [`SIMPLE_ENCODE_SET`](struct.SIMPLE_ENCODE_SET.html),
-/// space, double quote ("), hash (#), inequality qualifiers (<), (>), backtick (`),
-/// question mark (?), and curly brackets ({), (}), forward slash (/), colon (:), semi-colon (;),
-/// equality (=), at (@), backslash (\\), square brackets ([), (]), caret (\^), and pipe (|) are
-/// encoded.
-const USERINFO_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET
-    .add(b'/')
-    .add(b':')
-    .add(b';')
-    .add(b'=')
-    .add(b'@')
-    .add(b'[')
-    .add(b'\\')
-    .add(b']')
-    .add(b'^')
-    .add(b'|');
-
+// `Encoding` is in the shared module
 impl Encoding {
     fn encode(self, d: &json::Value) -> String {
         let s = json_value_to_string(Cow::Borrowed(d));
-        match self {
-            Encoding::Base64 => STANDARD_NO_PAD.encode(s.as_str()),
-            Encoding::PercentSimple => {
-                percent_encoding::utf8_percent_encode(&s, percent_encoding::CONTROLS).to_string()
-            }
-            Encoding::PercentQuery => {
-                percent_encoding::utf8_percent_encode(&s, QUERY_ENCODE_SET).to_string()
-            }
-            Encoding::Percent => {
-                percent_encoding::utf8_percent_encode(&s, DEFAULT_ENCODE_SET).to_string()
-            }
-            Encoding::PercentPath => {
-                percent_encoding::utf8_percent_encode(&s, PATH_SEGMENT_ENCODE_SET).to_string()
-            }
-            Encoding::PercentUserinfo => {
-                percent_encoding::utf8_percent_encode(&s, USERINFO_ENCODE_SET).to_string()
-            }
-            Encoding::NonAlphanumeric => {
-                percent_encoding::utf8_percent_encode(&s, percent_encoding::NON_ALPHANUMERIC)
-                    .to_string()
-            }
-        }
+        self.encode_str(&s)
     }
 
     fn try_from(s: &str, marker: Marker) -> Result<Encoding, CreatingExpressionError> {
-        match s {
-            "base64" => Ok(Encoding::Base64),
-            "percent-simple" => Ok(Encoding::PercentSimple),
-            "percent-query" => Ok(Encoding::PercentQuery),
-            "percent" => Ok(Encoding::Percent),
-            "percent-path" => Ok(Encoding::PercentPath),
-            "percent-userinfo" => Ok(Encoding::PercentUserinfo),
-            "non-alphanumeric" => Ok(Encoding::NonAlphanumeric),
-            _ => Err(ExecutingExpressionError::InvalidFunctionArguments("encode", marker).into()),
-        }
+        s.parse().map_err(|_| {
+            ExecutingExpressionError::InvalidFunctionArguments("encode", marker).into()
+        })
     }
 }
 
@@ -433,14 +337,7 @@ impl Entries {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub(super) enum Epoch {
-    Seconds,
-    Milliseconds,
-    Microseconds,
-    Nanoseconds,
-}
-
+// `Epoch` enum is in the shared module
 impl Epoch {
     pub(super) fn new(
         args: Vec<ValueOrExpression>,
@@ -448,15 +345,9 @@ impl Epoch {
     ) -> Result<Self, CreatingExpressionError> {
         match args.as_slice() {
             [ValueOrExpression::Value(Value::Json(json::Value::String(unit)))] => {
-                match unit.as_str() {
-                    "s" => Ok(Epoch::Seconds),
-                    "ms" => Ok(Epoch::Milliseconds),
-                    "mu" => Ok(Epoch::Microseconds),
-                    "ns" => Ok(Epoch::Nanoseconds),
-                    _ => Err(
-                        ExecutingExpressionError::InvalidFunctionArguments("epoch", marker).into(),
-                    ),
-                }
+                unit.parse().map_err(|_| {
+                    ExecutingExpressionError::InvalidFunctionArguments("epoch", marker).into()
+                })
             }
             _ => Err(ExecutingExpressionError::InvalidFunctionArguments("epoch", marker).into()),
         }
@@ -464,21 +355,7 @@ impl Epoch {
 
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn evaluate<'a>(self) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
-        // https://github.com/rustwasm/wasm-pack/issues/724#issuecomment-776892489
-        // SystemTime is not supported by wasm-pack. So for wasm-pack builds, we'll use js_sys::Date
-        let since_the_epoch = if cfg!(target_arch = "wasm32") {
-            Duration::from_millis(js_sys::Date::now() as u64)
-        } else {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_else(|_| Duration::from_secs(0))
-        };
-        let n = match self {
-            Epoch::Seconds => u128::from(since_the_epoch.as_secs()),
-            Epoch::Milliseconds => since_the_epoch.as_millis(),
-            Epoch::Microseconds => since_the_epoch.as_micros(),
-            Epoch::Nanoseconds => since_the_epoch.as_nanos(),
-        };
+        let n = self.get();
         let v = Cow::Owned(n.to_string().into());
         Ok(v)
     }
@@ -1694,6 +1571,7 @@ mod tests {
     use maplit::{btreemap, btreeset};
     use serde_json::json as j;
     use std::collections::BTreeSet;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[derive(Clone)]
     pub struct Literals(Vec<json::Value>);

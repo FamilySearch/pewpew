@@ -1,7 +1,10 @@
 use crate::error::RecoverableError;
 use crate::stats;
 
-use config::{EndpointProvidesSendOptions, Template};
+use config::{
+    common::ProviderSend,
+    templating::{Regular, Template, True},
+};
 use ether::EitherExt;
 use futures::{
     future::{select_all, try_join_all},
@@ -27,7 +30,7 @@ pub(super) struct BodyHandler {
     pub(super) provider_delays: ProviderDelays,
     pub(super) stats_tx: StatsTx,
     pub(super) status: u16,
-    pub(super) tags: Arc<BTreeMap<String, Template>>,
+    pub(super) tags: Arc<BTreeMap<Arc<str>, Template<String, Regular, True>>>,
     pub(super) template_values: TemplateValues,
 }
 
@@ -63,13 +66,13 @@ impl BodyHandler {
         };
         let template_values = Arc::new(template_values.0);
         let template_values2 = template_values.clone();
-        let tags: BTreeMap<String, String> = self
+        let tags: BTreeMap<Arc<str>, String> = self
             .tags
             .iter()
             .filter_map(|(k, t)| {
-                t.evaluate(Cow::Borrowed(&*template_values), None)
+                t.evaluate(Cow::Borrowed(&*template_values))
                     .ok()
-                    .map(|v| (k.clone(), v))
+                    .map(|v| (Arc::clone(k), v))
             })
             .collect();
         let tags = Arc::new(tags);
@@ -89,11 +92,11 @@ impl BodyHandler {
                         .insert("error".into(), error);
                     let tv: Arc<_> = tv.into();
                     for o in outgoing.iter() {
-                        let select = o.select.clone();
-                        let tv = tv.clone();
+                        let query = Arc::clone(&o.query);
+                        let tv = Arc::clone(&tv);
                         if let ProviderOrLogger::Logger(tx) = &o.tx {
-                            if let Ok(iter) = select.iter(tv) {
-                                let iter = iter.map(|v| v.map_err(Into::into));
+                            if let Ok(iter) = query.query(tv) {
+                                let iter = iter.map(|v| v.map_err(Box::new).map_err(Into::into));
                                 futures.push(
                                     BlockSender::new(iter, ProviderOrLogger::Logger(tx.clone()))
                                         .into_future(),
@@ -127,10 +130,10 @@ impl BodyHandler {
                 if !self.included_outgoing_indexes.contains(&i) {
                     continue;
                 }
-                let select = o.select.clone();
-                let send_behavior = select.get_send_behavior();
-                let iter = match select.iter(template_values.clone()).map_err(Into::into) {
-                    Ok(v) => v.map(|v| v.map_err(Into::into)),
+                let query = Arc::clone(&o.query);
+                let send_behavior = o.send;
+                let iter = match query.query(template_values.clone()).map_err(Into::into) {
+                    Ok(v) => v.map(|v| v.map_err(Box::new).map_err(Into::into)),
                     Err(e) => {
                         let r = RecoverableError::ExecutingExpression(e);
                         let kind = stats::StatKind::RecoverableError(r);
@@ -140,11 +143,8 @@ impl BodyHandler {
                 };
                 match send_behavior {
                     // This is where we actually send or block from a request
-                    EndpointProvidesSendOptions::Block => {
-                        debug!(
-                            "BodyHandler:handle EndpointProvidesSendOptions::Block {}",
-                            o.tx.name()
-                        );
+                    ProviderSend::Block => {
+                        debug!("BodyHandler:handle ProviderSend::Block {}", o.tx.name());
                         let tx = o.tx.clone();
                         let f = BlockSender::new(iter, tx).into_future().map(|_| Ok(()));
                         if o.tx.is_logger() {
@@ -153,11 +153,8 @@ impl BodyHandler {
                             blocked.push(f.boxed());
                         }
                     }
-                    EndpointProvidesSendOptions::Force => {
-                        debug!(
-                            "BodyHandler:handle EndpointProvidesSendOptions::Force {}",
-                            o.tx.name()
-                        );
+                    ProviderSend::Force => {
+                        debug!("BodyHandler:handle ProviderSend::Force {}", o.tx.name());
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,
@@ -172,11 +169,8 @@ impl BodyHandler {
                             }
                         }
                     }
-                    EndpointProvidesSendOptions::IfNotFull => {
-                        debug!(
-                            "BodyHandler:handle EndpointProvidesSendOptions::IfNotFull {}",
-                            o.tx.name()
-                        );
+                    ProviderSend::IfNotFull => {
+                        debug!("BodyHandler:handle ProviderSend::IfNotFull {}", o.tx.name());
                         for v in iter {
                             let v = match v {
                                 Ok(v) => v,
@@ -215,16 +209,17 @@ impl BodyHandler {
 mod tests {
     use super::*;
     use channel::{Limit, Receiver};
+    use config::query::Query;
     use futures::{channel::mpsc as futures_channel, executor::block_on, StreamExt};
     use maplit::{btreemap, btreeset};
-
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use config::{EndpointProvidesSendOptions::*, Select};
-
-    fn create_outgoing(select: Select) -> (Outgoing, Receiver<json::Value>) {
+    fn create_outgoing(query: Query, send: ProviderSend) -> (Outgoing, Receiver<json::Value>) {
         let (tx, rx) = channel::channel(Limit::Static(1), false, &"create_outgoing".to_string());
-        (Outgoing::new(select, ProviderOrLogger::Provider(tx)), rx)
+        (
+            Outgoing::new(query, send, ProviderOrLogger::Provider(tx)),
+            rx,
+        )
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -234,28 +229,27 @@ mod tests {
         let template_values = json::json!({"response": {}}).into();
         let included_outgoing_indexes = btreeset!(0, 1, 2);
 
-        let select1 = Select::simple("1 + 1", Force, Some(vec!["repeat(3)"]), None, None);
-        let (outgoing1, mut rx1) = create_outgoing(select1);
+        let select1 = Query::simple("1 + 1".into(), vec!["repeat(3)".into()], None).unwrap();
+        let (outgoing1, mut rx1) = create_outgoing(select1, ProviderSend::Force);
 
-        let select2 = Select::simple("1", Block, None, None, None);
-        let (outgoing2, mut rx2) = create_outgoing(select2);
+        let select2 = Query::simple("1".into(), vec![], None).unwrap();
+        let (outgoing2, mut rx2) = create_outgoing(select2, ProviderSend::Block);
 
-        let select3 = Select::simple(
-            "response.body.foo",
-            IfNotFull,
-            Some(vec!["repeat(3)"]),
+        let select3 = Query::simple(
+            "response.body.foo".to_owned(),
+            vec!["repeat(3)".to_owned()],
             None,
-            None,
-        );
-        let (outgoing3, mut rx3) = create_outgoing(select3);
+        )
+        .unwrap();
+        let (outgoing3, mut rx3) = create_outgoing(select3, ProviderSend::IfNotFull);
 
-        let select4 = Select::simple("1", Block, None, None, None);
-        let (outgoing4, mut rx4) = create_outgoing(select4);
+        let select4 = Query::simple("1".to_owned(), vec![], None).unwrap();
+        let (outgoing4, mut rx4) = create_outgoing(select4, ProviderSend::Block);
 
         let outgoing = vec![outgoing1, outgoing2, outgoing3, outgoing4].into();
         let (stats_tx, mut stats_rx) = futures_channel::unbounded();
         let status = 200;
-        let tags = Arc::new(btreemap! {"_id".into() => Template::simple("0") });
+        let tags = Arc::new(btreemap! {"_id".into() => Template::new_literal("0".to_owned()) });
 
         let bh = BodyHandler {
             now,
@@ -278,8 +272,7 @@ mod tests {
             Some(f)
         };
 
-        let r = block_on(bh.handle(Ok(Some(json::json!({"foo": "bar"}))), auto_returns));
-        assert!(r.is_ok());
+        let _ = block_on(bh.handle(Ok(Some(json::json!({"foo": "bar"}))), auto_returns)).unwrap();
         assert!(auto_return_called2.load(Ordering::Relaxed));
 
         // check that the different providers got data sent to them
@@ -356,20 +349,19 @@ mod tests {
         let template_values = json::json!({"response": {}}).into();
         let included_outgoing_indexes = btreeset!(0, 1, 2);
 
-        let select1 = Select::simple("1 + 1", Block, Some(vec!["repeat(3)"]), None, None);
-        let (outgoing1, mut rx1) = create_outgoing(select1);
+        let q1 = Query::simple("1 + 1".to_owned(), vec!["repeat(3)".to_owned()], None).unwrap();
+        let (outgoing1, mut rx1) = create_outgoing(q1, ProviderSend::Block);
 
-        let select2 = Select::simple("1", Block, None, None, None);
-        let (outgoing2, mut rx2) = create_outgoing(select2);
+        let q2 = Query::simple("1".to_owned(), vec![], None).unwrap();
+        let (outgoing2, mut rx2) = create_outgoing(q2, ProviderSend::Block);
 
-        let select3 = Select::simple(
-            "response.body.foo",
-            Block,
-            Some(vec!["repeat(2)"]),
+        let q3 = Query::simple(
+            "response.body.foo".to_owned(),
+            vec!["repeat(2)".to_owned()],
             None,
-            None,
-        );
-        let (outgoing3, mut rx3) = create_outgoing(select3);
+        )
+        .unwrap();
+        let (outgoing3, mut rx3) = create_outgoing(q3, ProviderSend::Block);
 
         let outgoing = vec![outgoing1, outgoing2, outgoing3].into();
         let (stats_tx, _) = futures_channel::unbounded();

@@ -1,25 +1,25 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
       to: 100%
       over: 5s
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 10s
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     peak_load: 1hps
     logs:
       test:

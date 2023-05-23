@@ -13,6 +13,10 @@ mod util;
 use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
 
+use config::providers::ProviderName;
+use config::query::Query;
+use config::{self, common::ProviderSend, loggers::LogTo, templating::Template, LoadTest, Logger};
+
 use clap::{Args, Subcommand, ValueEnum};
 use ether::Either;
 use futures::{
@@ -41,7 +45,6 @@ use yansi::Paint;
 
 use std::str::FromStr;
 use std::{
-    borrow::Cow,
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
@@ -58,14 +61,13 @@ use std::{
 };
 
 struct Endpoints {
-    // yaml index of the endpoint, (endpoint tags, builder)
     inner: Vec<(
-        BTreeMap<String, String>,
+        BTreeMap<Arc<str>, String>,
         request::EndpointBuilder,
-        BTreeSet<String>,
+        BTreeSet<Arc<str>>,
     )>,
     // provider name, yaml index of endpoints which provide the provider
-    providers: BTreeMap<String, Vec<usize>>,
+    providers: BTreeMap<Arc<str>, Vec<usize>>,
 }
 
 impl Endpoints {
@@ -78,14 +80,14 @@ impl Endpoints {
 
     fn append(
         &mut self,
-        endpoint_tags: BTreeMap<String, String>,
+        endpoint_tags: BTreeMap<Arc<str>, String>,
         builder: request::EndpointBuilder,
-        provides: BTreeSet<String>,
-        required_providers: config::RequiredProviders,
+        provides: BTreeSet<Arc<str>>,
+        required_providers: BTreeSet<Arc<str>>,
     ) {
         let i = self.inner.len();
-        let set = required_providers.unique_providers();
-        self.inner.push((endpoint_tags, builder, set));
+        self.inner
+            .push((endpoint_tags, builder, required_providers));
         for p in provides {
             self.providers.entry(p).or_default().push(i);
         }
@@ -95,11 +97,11 @@ impl Endpoints {
     fn build<F>(
         self,
         filter_fn: F,
-        builder_ctx: &mut request::BuilderContext,
-        response_providers: &BTreeSet<String>,
+        builder_ctx: &request::BuilderContext,
+        response_providers: &BTreeSet<Arc<str>>,
     ) -> Result<Vec<impl Future<Output = Result<(), TestError>> + Send>, TestError>
     where
-        F: Fn(&BTreeMap<String, String>) -> bool,
+        F: Fn(&BTreeMap<Arc<str>, String>) -> bool,
     {
         let mut endpoints: BTreeMap<_, _> = self
             .inner
@@ -262,7 +264,7 @@ pub struct RunConfig {
     #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
     /// Specify the time the test should start at
-    #[arg(value_parser = |s: &str| config::duration_from_string(s.into()), short = 't', long)]
+    #[arg(value_parser = |s: &str| config::duration_from_string(s.into()).ok_or("invalid duration"), short = 't', long)]
     pub start_at: Option<Duration>,
     /// Specify the filename for the stats file
     #[arg(short = 'o', long)]
@@ -383,7 +385,7 @@ pub enum TestEndReason {
     CtrlC,
     KilledByLogger,
     ProviderEnded,
-    ConfigUpdate(Arc<BTreeMap<String, providers::Provider>>),
+    ConfigUpdate(Arc<BTreeMap<Arc<str>, providers::Provider>>),
 }
 
 /// Inner(1)-level runtime future function.
@@ -407,36 +409,41 @@ async fn _create_run(
     mut test_ended_rx: BroadcastStream<Result<TestEndReason, TestError>>,
 ) -> Result<TestEndReason, TestError> {
     debug!("{{\"_create_run enter");
-    let config_file = exec_config.get_config_file().clone();
-    let config_file2 = config_file.clone();
+    let config_file: Arc<Path> = Arc::from(exec_config.get_config_file().clone());
     debug!("{{\"_create_run spawn_blocking start");
-    let (file, config_bytes) = spawn_blocking(|| {
-        debug!("{{\"_create_run spawn_blocking enter");
-        let mut file = File::open(config_file.clone()).map_err(|err| {
-            error!(
-                "File::open({}) error: {}",
-                config_file.clone().to_str().unwrap_or_default(),
-                err
-            );
-            TestError::InvalidConfigFilePath(config_file.clone())
-        })?;
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(|e| {
-            error!(
-                "File::read_to_end({}) error: {}",
-                config_file.to_str().unwrap_or_default(),
-                e
-            );
-            TestError::CannotOpenFile(config_file, e.into())
-        })?;
-        debug!("{{\"_create_run spawn_blocking exit");
-        Ok::<_, TestError>((file, bytes))
-    })
+    let (file, config_bytes) = {
+        let config_file = Arc::clone(&config_file);
+        spawn_blocking(move || {
+            debug!("{{\"_create_run spawn_blocking enter");
+            let mut file = File::open(config_file.clone()).map_err(|err| {
+                error!(
+                    "File::open({}) error: {}",
+                    config_file.clone().to_str().unwrap_or_default(),
+                    err
+                );
+                TestError::InvalidConfigFilePath(config_file.clone())
+            })?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).map_err(|e| {
+                error!(
+                    "File::read_to_end({}) error: {}",
+                    config_file.to_str().unwrap_or_default(),
+                    e
+                );
+                TestError::CannotOpenFile(config_file.clone(), e.into())
+            })?;
+            debug!("{{\"_create_run spawn_blocking exit");
+            Ok::<_, TestError>((file, bytes))
+        })
+    }
     .await
-    .map_err(move |e| {
-        warn!("config file error: {}", e);
-        let e = IOError::new(IOErrorKind::Other, e);
-        TestError::CannotOpenFile(config_file2, e.into())
+    .map_err({
+        let config_file = Arc::clone(&config_file);
+        move |e| {
+            warn!("config file error: {}", e);
+            let e = IOError::new(IOErrorKind::Other, e);
+            TestError::CannotOpenFile(config_file, e.into())
+        }
     })??;
 
     // watch for ctrl-c and kill the test
@@ -462,9 +469,12 @@ async fn _create_run(
     debug!("env_vars={:?}", env_vars.clone().keys());
     log::trace!("env_vars={:?}", env_vars.clone());
     let output_format = exec_config.get_output_format();
-    let config_file_path = exec_config.get_config_file().clone();
-    let mut config =
-        config::LoadTest::from_config(&config_bytes, exec_config.get_config_file(), &env_vars)?;
+    let mut config = LoadTest::from_yaml(
+        std::str::from_utf8(&config_bytes).expect("TODO: HANDLE THIS"),
+        Arc::clone(&config_file),
+        &env_vars,
+    )
+    .map_err(Box::new)?;
     debug!("config::LoadTest::from_config finished");
     let test_runner = match exec_config {
         ExecConfig::Try(t) => {
@@ -475,7 +485,7 @@ async fn _create_run(
             // build and register the providers
             let (providers, _) = get_providers_from_config(
                 &config_providers,
-                config.config.general.auto_buffer_start_size,
+                config.config.general.auto_buffer_start_size as usize,
                 &test_ended_tx,
                 &r.config_file,
             )?;
@@ -500,10 +510,11 @@ async fn _create_run(
                     test_ended_tx.clone(),
                     output_format,
                     r.clone(),
-                    config_file_path,
+                    Arc::clone(&config_file),
                     stats_tx.clone(),
                     config_providers,
                     providers.clone(),
+                    config.get_lib_path(),
                 );
             }
 
@@ -660,10 +671,11 @@ fn create_config_watcher(
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     output_format: RunOutputFormat,
     run_config: RunConfig,
-    config_file_path: PathBuf,
+    config_file_path: Arc<Path>,
     stats_tx: FCUnboundedSender<StatsMessage>,
-    mut previous_config_providers: BTreeMap<String, config::Provider>,
-    mut previous_providers: Arc<BTreeMap<String, providers::Provider>>,
+    mut previous_config_providers: BTreeMap<ProviderName, config::ProviderType>,
+    mut previous_providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
+    lib_path: Option<Arc<Path>>,
 ) {
     let start_time = Instant::now();
     let mut interval = IntervalStream::new(tokio::time::interval(Duration::from_millis(1000)));
@@ -688,12 +700,24 @@ fn create_config_watcher(
                 stream_counter
             );
             stream_counter += 1;
-            let modified = match file.metadata() {
-                Ok(m) => match m.modified() {
+            let modified = {
+                // get the most recent file modified; either the config yaml file, or the external
+                // js library file, it one exists
+                let m = lib_path
+                    .as_ref()
+                    .map(|p| std::fs::metadata(p).and_then(|m| m.modified()))
+                    .transpose()
+                    .and_then(|lm| {
+                        file.metadata()
+                            .and_then(|m| m.modified())
+                            .map(move |m| (lm, m))
+                    })
+                    .map(|(lm, cm)| lm.map_or(cm, |m| m.max(cm)));
+                match m {
                     Ok(m) => m,
+                    // If retrieving either modifed time fails, skip the check.
                     Err(_) => continue,
-                },
-                Err(_) => continue,
+                }
             };
 
             // Check the last modified. If we don't have one, or it hasn't changed, continue to the next loop
@@ -703,7 +727,7 @@ fn create_config_watcher(
                     last_modified = Some(modified);
                     continue;
                 }
-                _ => last_modified = Some(modified),
+                Some(_) => last_modified = Some(modified),
             }
 
             // Last modified has changed
@@ -721,7 +745,11 @@ fn create_config_watcher(
             // A decent amount of this code seems similar to that in `_create_run`; could
             // this be unified into a common function?
 
-            let config = config::LoadTest::from_config(&config_bytes, &config_file_path, &env_vars);
+            let config = LoadTest::from_yaml(
+                std::str::from_utf8(&config_bytes).expect("TODO"),
+                Arc::clone(&config_file_path),
+                &env_vars,
+            );
             let mut config = match config {
                 Ok(m) => m,
                 Err(e) => {
@@ -746,7 +774,7 @@ fn create_config_watcher(
             // build and register the providers
             let providers = get_providers_from_config(
                 &config_providers,
-                config.config.general.auto_buffer_start_size,
+                config.config.general.auto_buffer_start_size as usize,
                 &test_ended_tx,
                 &run_config.config_file,
             );
@@ -773,8 +801,8 @@ fn create_config_watcher(
             for (name, p) in &config_providers {
                 match previous_config_providers.get(name) {
                     Some(p2) if p == p2 => {
-                        if let Some(p) = previous_providers.get(name) {
-                            providers.insert(name.clone(), p.clone());
+                        if let Some(p) = previous_providers.get(&name.get()) {
+                            providers.insert(name.get(), p.clone());
                         }
                     }
                     _ => (),
@@ -788,6 +816,7 @@ fn create_config_watcher(
             let mut run_config = run_config.clone();
             run_config.start_at = Some(Instant::now() - start_time);
 
+            // old test is killed
             if test_ended_tx
                 .send(Ok(TestEndReason::ConfigUpdate(providers.clone())))
                 .is_err()
@@ -795,6 +824,10 @@ fn create_config_watcher(
                 break;
             }
 
+            // start new test
+            //
+            // this happens after killing the old test, so only one is active, fulfilling the
+            // condition required by the scripting
             let f = create_load_test_future(
                 config,
                 run_config,
@@ -836,7 +869,7 @@ fn create_config_watcher(
 ///
 /// TODO.
 fn create_try_run_future(
-    mut config: config::LoadTest,
+    mut config: LoadTest,
     try_config: TryConfig,
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     stdout: FCSender<MsgType>,
@@ -846,19 +879,26 @@ fn create_try_run_future(
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
     let select = if matches!(try_config.format, TryRunFormat::Human) {
-        r#""`\
-         Request\n\
-         ========================================\n\
-         ${request['start-line']}\n\
-         ${join(request.headers_all, '\n', ': ')}\n\
-         ${if(request.body != '', '\n${request.body}\n', '')}\n\
-         Response (RTT: ${stats.rtt}ms)\n\
-         ========================================\n\
-         ${response['start-line']}\n\
-         ${join(response.headers_all, '\n', ': ')}\n\
-         ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
+        Query::simple(
+            r#"`\
+Request\n\
+========================================\n\
+${request['start-line']}\n\
+${join(request['headers_all'], '\n', ': ')}\n\
+${request.body != '' ? request.body : ''}\n\
+
+Response (RTT: ${stats.rtt}ms)\n\
+========================================\n\
+${response['start-line']}\n\
+${join(response['headers-all'], '\n', ': ')}\n\
+${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
+                .to_string(),
+            vec![],
+            None,
+        )
     } else {
-        r#"{
+        Query::from_json(
+            r#"{
             "request": {
                 "start-line": "request['start-line']",
                 "headers": "request.headers_all",
@@ -866,29 +906,39 @@ fn create_try_run_future(
             },
             "response": {
                 "start-line": "response['start-line']",
-                "headers": "response.headers_all",
+                "headers": "response['headers-all']",
                 "body": "response.body"
             },
             "stats": {
                 "RTT": "stats.rtt"
             }
-        })"#
+        }"#,
+        )
     };
-    let to = try_config.file.unwrap_or_else(|| "stdout".into());
-    let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
+    let to = try_config.file.map_or(LogTo::Stdout, |path| {
+        LogTo::File(Template::new_literal(path))
+    });
+    // TODO: double check values for pretty/kill/true
+    let logger = Logger {
+        query: Some(select.expect("should be valid")),
+        to,
+        pretty: true,
+        kill: true,
+        limit: None,
+    };
     if !try_config.loggers_on {
         debug!("loggers_on: {}. Clearing Loggers", try_config.loggers_on);
         config.clear_loggers();
     }
     debug!("try logger: {:?}", logger);
-    config.add_logger("try_run".into(), logger)?;
+    config.add_logger("try_run".into(), logger).expect("TODO");
 
     let config_config = config.config;
 
     // build and register the providers
     let (providers, response_providers) = get_providers_from_config(
         &config.providers,
-        config_config.general.auto_buffer_start_size,
+        config_config.general.auto_buffer_start_size as usize,
         &test_ended_tx,
         &try_config.config_file,
     )?;
@@ -914,11 +964,14 @@ fn create_try_run_future(
             )
         })
         .collect();
-    let filter_fn = move |tags: &BTreeMap<String, String>| -> bool {
+    let filter_fn = move |tags: &BTreeMap<Arc<str>, String>| -> bool {
         filters.is_empty()
             || filters.iter().any(|(is_eq, key, regex)| {
                 // "should it match" compared to "does it match"
-                *is_eq == tags.get(key).map_or(false, |left| regex.is_match(left))
+                *is_eq
+                    == tags
+                        .get::<str>(key)
+                        .map_or(false, |left| regex.is_match(left))
             })
     };
 
@@ -935,13 +988,13 @@ fn create_try_run_future(
 
     // create the endpoints
     for mut endpoint in config.endpoints.into_iter() {
-        let required_providers = mem::take(&mut endpoint.required_providers);
+        let required_providers = endpoint.get_required_providers();
 
         let provides_set = endpoint
             .provides
             .iter_mut()
             .filter_map(|(k, s)| {
-                s.set_send_behavior(config::EndpointProvidesSendOptions::Block);
+                s.set_send_behavior(ProviderSend::Block);
                 (!required_providers.contains(k)).then(|| k.clone())
             })
             .collect::<BTreeSet<_>>();
@@ -950,25 +1003,20 @@ fn create_try_run_future(
         let static_tags = endpoint
             .tags
             .iter()
-            .filter_map(|(k, v)| {
-                v.is_simple().then(|| {
-                    v.evaluate(Cow::Owned(json::Value::Null), None)
-                        .map(|v| (k.clone(), v))
-                })
-            })
-            .collect::<Result<_, _>>()?;
+            .filter_map(|(k, v)| v.as_static().map(|s| (k.clone(), s.to_owned())))
+            .collect();
 
         let builder = request::EndpointBuilder::new(endpoint, None);
         endpoints.append(static_tags, builder, provides_set, required_providers);
     }
 
-    let client = create_http_client(config_config.client.keepalive)?;
+    let client = create_http_client(**config_config.client.keepalive.get())?;
 
     // create the stats channel
     let test_complete = BroadcastStream::new(test_ended_tx.subscribe());
     let stats_tx = create_try_run_stats_channel(test_complete, stderr);
 
-    let mut builder_ctx = request::BuilderContext {
+    let builder_ctx = request::BuilderContext {
         config: config_config,
         config_path: try_config.config_file,
         client: Arc::new(client),
@@ -977,7 +1025,7 @@ fn create_try_run_future(
         stats_tx,
     };
 
-    let endpoint_calls = endpoints.build(filter_fn, &mut builder_ctx, &response_providers)?;
+    let endpoint_calls = endpoints.build(filter_fn, &builder_ctx, &response_providers)?;
 
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
     let mut left = try_join_all(endpoint_calls).map(move |r| {
@@ -1000,10 +1048,10 @@ fn create_try_run_future(
 ///
 /// Returns an `Err` if the config file is missing data that a full test requires.
 fn create_load_test_future(
-    config: config::LoadTest,
+    config: LoadTest,
     run_config: RunConfig,
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
-    providers: Arc<BTreeMap<String, providers::Provider>>,
+    providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
     stats_tx: FCUnboundedSender<StatsMessage>,
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
@@ -1041,22 +1089,11 @@ fn create_load_test_future(
                 (endpoint.peak_load.as_ref(), endpoint.load_pattern.take())
             {
                 let mut mod_interval2 = ModInterval::new();
-                let pieces = match load_pattern {
-                    config::LoadPattern::Linear(l) => l.pieces,
-                };
-                for piece in pieces {
-                    let (start, end) = match peak_load {
-                        config::HitsPer::Minute(m) => (
-                            PerX::minute(piece.start_percent * *m as f64),
-                            PerX::minute(piece.end_percent * *m as f64),
-                        ),
-                        config::HitsPer::Second(s) => (
-                            PerX::second(piece.start_percent * *s as f64),
-                            PerX::second(piece.end_percent * *s as f64),
-                        ),
-                    };
-                    mod_interval2.append_segment(start, piece.duration, end);
+                for piece in load_pattern {
+                    let (from, to, over) = piece.into_pieces(PerX::minute, peak_load.get());
+                    mod_interval2.append_segment(from, **over, to);
                 }
+
                 mod_interval = Some(Box::pin(mod_interval2.into_stream(run_config.start_at)));
             }
 
@@ -1064,9 +1101,9 @@ fn create_load_test_future(
         })
         .collect();
 
-    let client = create_http_client(config_config.client.keepalive)?;
+    let client = create_http_client(**config_config.client.keepalive.get())?;
 
-    let mut builder_ctx = request::BuilderContext {
+    let builder_ctx = request::BuilderContext {
         config: config_config,
         config_path: run_config.config_file,
         client: Arc::new(client),
@@ -1075,20 +1112,25 @@ fn create_load_test_future(
         stats_tx: stats_tx.clone(),
     };
 
+    // Create Futures that run each the load test on each endpoint.
     let endpoint_calls = builders
         .into_iter()
-        .map(move |builder| builder.build(&mut builder_ctx).into_future());
+        .map(move |builder| builder.build(&builder_ctx).into_future());
 
     let _ = stats_tx.unbounded_send(StatsMessage::Start(duration));
+    // New Future that runs all the endpoint futures.
     let mut f = try_join_all(endpoint_calls);
     let mut test_timeout = Delay::new(duration);
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
+    // Future that checks for test end, either naturally or forced.
     let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
         Poll::Ready(r) => {
+            // Test is done normally.
             let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
             Poll::Ready(())
         }
         Poll::Pending => match test_ended_rx.poll_next_unpin(cx).map(|_| ()) {
+            // check if test is forced to stop
             Poll::Ready(_) => Poll::Ready(()),
             Poll::Pending => match test_timeout.poll_unpin(cx) {
                 Poll::Ready(_) => {
@@ -1118,44 +1160,34 @@ pub(crate) fn create_http_client(
     Ok(Client::builder().set_host(false).build::<_, Body>(https))
 }
 
-type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<String>), TestError>;
+type ProvidersResult =
+    Result<(BTreeMap<Arc<str>, providers::Provider>, BTreeSet<Arc<str>>), TestError>;
 
 fn get_providers_from_config(
-    config_providers: &BTreeMap<String, config::Provider>,
+    config_providers: &BTreeMap<ProviderName, config::ProviderType>,
     auto_size: usize,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
     config_path: &Path,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();
-    let default_buffer_size = config::default_auto_buffer_start_size();
     for (name, template) in config_providers {
+        use config::providers::ProviderType;
         let provider = match template.clone() {
-            config::Provider::File(mut template) => {
-                // the auto_buffer_start_size is not the default
-                if auto_size != default_buffer_size {
-                    if let config::Limit::Dynamic(_) = &template.buffer {
-                        template.buffer = config::Limit::Dynamic(auto_size);
-                    }
-                }
-                util::tweak_path(&mut template.path, config_path);
-                providers::file(template, test_ended_tx.clone(), name)?
+            ProviderType::Range(rg) => providers::range(rg, name),
+            ProviderType::List(lp) => providers::list(lp, name),
+            ProviderType::File(mut f) => {
+                util::tweak_path(f.path.get_mut(), config_path);
+                providers::file(f, test_ended_tx.clone(), name, auto_size)?
             }
-            config::Provider::Range(range) => providers::range(range, name),
-            config::Provider::Response(mut template) => {
-                // the auto_buffer_start_size is not the default
-                if auto_size != default_buffer_size {
-                    if let config::Limit::Dynamic(_) = &template.buffer {
-                        template.buffer = config::Limit::Dynamic(auto_size);
-                    }
-                }
-                response_providers.insert(name.clone());
-                providers::response(template, name)
+            ProviderType::Response(r) => {
+                response_providers.insert(name.get());
+                providers::response(r, name, auto_size)
             }
-            config::Provider::List(values) => providers::list(values.clone(), name),
         };
-        providers.insert(name.clone(), provider);
+        providers.insert(name.get(), provider);
     }
+    providers.insert(Arc::from("null"), providers::null("null"));
     Ok((providers, response_providers))
 }
 
@@ -1168,15 +1200,14 @@ fn get_loggers_from_config(
 ) -> Result<BTreeMap<String, providers::Logger>, TestError> {
     config_loggers
         .into_iter()
-        .map(|(name, mut template)| {
-            let to = mem::take(&mut template.to);
+        .map(|(name, logger)| {
             let name2 = name.clone();
-            let writer = match to.as_str() {
-                "stdout" => stdout.clone(),
-                "stderr" => stderr.clone(),
-                _ => {
+            let writer = match &logger.to {
+                LogTo::Stdout => stdout.clone(),
+                LogTo::Stderr => stderr.clone(),
+                LogTo::File(path) => {
                     let mut file_path = results_dir.map_or_else(PathBuf::new, Clone::clone);
-                    file_path.push(to);
+                    file_path.push(path.get());
                     let f = File::create(&file_path)
                         .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()))?;
                     blocking_writer(
@@ -1186,8 +1217,9 @@ fn get_loggers_from_config(
                     )
                     .0
                 }
+                LogTo::Raw { .. } => todo!(),
             };
-            let sender = providers::logger(template, test_ended_tx, writer);
+            let sender = providers::logger(logger, test_ended_tx, writer);
             Ok((name, sender))
         })
         .collect()

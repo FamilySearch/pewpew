@@ -56,16 +56,16 @@ type PewPewApiStringType = "url" | "method" | "hitRate";
 type PewPewHeaderStringType = "name" | "value";
 
 export const newHeader = () => ({ id: uniqueId(), name: "", value: "" });
-export const getAuthorizationHeader = (): PewPewHeader => ({ id: authenticated, name: "Authorization", value: "Bearer ${sessionId}" });
-const getAcceptLanguageHeader = (): PewPewHeader => ({ id: acceptLanguage, name: "Accept-Language", value: "en-us"});
-const getContentTypedHeader = (): PewPewHeader => ({ id: contentType, name: "Content-Type", value: "application/json"});
+export const getAuthorizationHeader = (): PewPewHeader => ({ id: authenticated, name: "Authorization", value: "Bearer ${v:sessionId}" });
+const getAcceptLanguageHeader = (): PewPewHeader => ({ id: acceptLanguage, name: "Accept-Language", value: "en-us" });
+const getContentTypedHeader = (): PewPewHeader => ({ id: contentType, name: "Content-Type", value: "application/json" });
 export const getDefaultHeaders = (authenticated?: boolean): PewPewHeader[] => [
   ...(authenticated ? [getAuthorizationHeader()] : []),
   getAcceptLanguageHeader(),
   getContentTypedHeader()
 ];
 
-function getHeader (headerType: HeaderType | "emptyHeader" = emptyHeader): PewPewHeader {
+function getHeader(headerType: HeaderType | "emptyHeader" = emptyHeader): PewPewHeader {
   switch (headerType) {
     case authenticated:
       return getAuthorizationHeader();
@@ -86,7 +86,7 @@ export const getUrlTitle = (invalidUrl: boolean): string | undefined => invalidU
 export const getHitRateStyle = (invalidHitRate: boolean): React.CSSProperties => ({ color: invalidHitRate ? "red" : undefined });
 export const getHitRateTitle = (invalidHitRate: boolean): string | undefined => invalidHitRate ? "Hit Rate is not valid" : undefined;
 
-export function isValidUrl (url: string): boolean {
+export function isValidUrl(url: string): boolean {
   try {
     new URL(url);
     return true;
@@ -95,7 +95,7 @@ export function isValidUrl (url: string): boolean {
   }
 }
 
-export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
+export function Urls({ data: { headers, ...data }, ...props }: UrlProps) {
   const defaultState: UrlState = {
     passed: false
   };
@@ -104,7 +104,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [state, _setState] = useState(defaultState);
-  const modalRef = useRef<ModalObject| null>(null);
+  const modalRef = useRef<ModalObject | null>(null);
   useEffectModal(modalRef);
 
   // Changes the state of authenticated button when default is checked or unchecked
@@ -255,12 +255,12 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
         ref={modalRef}
         title="Edit Endpoint"
         closeText="Close"
-        >
+      >
         <ModalEndpointInput>
-            <Label> Endpoint: {checked}</Label>
-            <input style={{ ...urlStyle, width: "500px" }} onChange={(event) => changeUrl("url", event.target.value)} title={urlTitle} name={data.id} value={data.url} id="urlUrl" />
-            <button onClick={checkUrl} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"}>Test</button>
-            <p style={{marginLeft: "10px", fontSize: "11px"}}>Endpoint must be in the form "https://www.(url)" or "http://www.(url)" </p>
+          <Label> Endpoint: {checked}</Label>
+          <input style={{ ...urlStyle, width: "500px" }} onChange={(event) => changeUrl("url", event.target.value)} title={urlTitle} name={data.id} value={data.url} id="urlUrl" />
+          <button onClick={checkUrl} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"}>Test</button>
+          <p style={{ marginLeft: "10px", fontSize: "11px" }}>Endpoint must be in the form "https://www.(url)" or "http://www.(url)" </p>
         </ModalEndpointInput>
         <ModalHitMethodInput>
           <Span>
@@ -270,15 +270,15 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
           </Span>
           <Span>
             <Label> Method: </Label>
-              <select onChange={(event) => changeUrl("method", event.target.value)} name={data.id} value={data.method} id="urlMethod">
-                <option value="GET"> Get </option>
-                <option value="POST"> Post </option>
-                <option value="PUT"> Put </option>
-                <option value="DELETE"> Delete </option>
-                <option value="PATCH"> Patch </option>
-              </select>
+            <select onChange={(event) => changeUrl("method", event.target.value)} name={data.id} value={data.method} id="urlMethod">
+              <option value="GET"> Get </option>
+              <option value="POST"> Post </option>
+              <option value="PUT"> Put </option>
+              <option value="DELETE"> Delete </option>
+              <option value="PATCH"> Patch </option>
+            </select>
           </Span>
-          <button name={data.id} style={{marginRight: "10px"}} onClick={() => addHeader()}>Add Header</button>
+          <button name={data.id} style={{ marginRight: "10px" }} onClick={() => addHeader()}>Add Header</button>
         </ModalHitMethodInput>
         <div>
           <table>
@@ -295,8 +295,8 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
                 return (
                   <tr key={header.id}>
                     <td><button onClick={() => removeHeader(header.id)}>X</button></td>
-                    <td style={{alignSelf: "center"}}><input id={`urlHeaderKey@${index}`} name={data.id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} /></td>
-                    <td><textarea style={{width: "450px", resize: "none"}} id={`urlHeaderValue@${index}`} name={data.id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} /></td>
+                    <td style={{ alignSelf: "center" }}><input id={`urlHeaderKey@${index}`} name={data.id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} /></td>
+                    <td><textarea style={{ width: "450px", resize: "none" }} id={`urlHeaderValue@${index}`} name={data.id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} /></td>
                   </tr>);
               })}
             </tbody>

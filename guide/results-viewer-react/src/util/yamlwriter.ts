@@ -1,5 +1,5 @@
 // General Types are used in Content and Header components and in writeyaml file
-import {Entry, Page} from "har-format";
+import { Entry, Page } from "har-format";
 import React from "react";
 
 /** Used when an input can be added via multiple methods (the enter key, the click of a button, or the change of a checkbox) */
@@ -8,7 +8,7 @@ export type InputEvent = React.ChangeEvent | React.KeyboardEvent<HTMLInputElemen
 export interface Har {
   log: {
     version: string
-    creator: { name: string, version: string},
+    creator: { name: string, version: string },
     entries: Entry[],
     pages: Page[],
   }
@@ -89,10 +89,10 @@ export interface LoggerSelectEntry {
   value: string;
 }
 
-export const SESSION_ID_DEFAULT = "${SESSIONID}";
-export const RAMP_TIME_DEFAULT = "${RAMP_TIME}";
-export const LOAD_TIME_DEFAULT = "${LOAD_TIME}";
-export const PEAK_LOAD_DEFAULT = "${PEAK_LOAD}";
+export const SESSION_ID_DEFAULT = "${e:SESSIONID}";
+export const RAMP_TIME_DEFAULT = "${e:RAMP_TIME}";
+export const LOAD_TIME_DEFAULT = "${e:LOAD_TIME}";
+export const PEAK_LOAD_DEFAULT = "${e:PEAK_LOAD}";
 
 export const DEV_KEY_BETA = "WCQY-7J1Q-GKVV-7DNM-SQ5M-9Q5H-JX3H-CMJK";
 export const DEV_KEY_PROD = "Q4JW-NBZX-TWHZ-ZZDJ-LSP9-G15N-NLC8-P1M3";

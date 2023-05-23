@@ -1,5 +1,5 @@
 load_pattern:
-  - linear:
+  - !linear
       to: 100%
       over: 5s
 config:
@@ -10,53 +10,73 @@ config:
 loggers:
   l:
     limit: 2
-    to: stderr
+    to: !stderr
   timeLogger:
-    to: 'test-epoch-${epoch("ms")}.json'
+    to: !file 'test-epoch-${x:epoch("ms")}.json'
 vars:
   b: "foo"
   e2: ["foo", "foo", "foo"]
-  port: "${PORT}"
+  port: "${e:PORT}"
 providers:
   a:
-    range: {}
+    !range
   c:
-    list:
+    !list
       - 123
       - 456
   d:
-    response: {}
+    !response
   f:
-    file:
+    !file
       path: integration.data
       repeat: true
 endpoints:
   - method: POST
     declare:
-      e: collect(b, 3)
-    url: http://localhost:${port}/
-    body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
+      e: !c
+        collects:
+          - take: 3
+            from: '${v:b}'
+            as: _b
+        then: ${p:_b}
+    url: http://localhost:${v:port}/
+    body: !str '{"a": ${p:a}, "b": "${v:b}", "c": ${p:c}, "e": ${p:e}, "e2": ${v:e2}, "f": "${p:f}"}'
     peak_load: 1.1hps
     headers:
       Content-Type: application/json
     logs:
       l:
-        select: >-
-          (response.body.b == "foo"
-            && response.body.e == response.body.e2
-            && request.headers.test == "123"
-            && parseInt(request.headers.test) + 1 == 124
-            && parseInt(request.headers.float) == 1
-            && parseFloat(request.headers.float) == 1.23
-            && parseInt(response.body.b) == null
+        select:
+          each:
+            - 'response.body.b == "foo"'
+            - 'val_eq(response.body.e, response.body.e2)'
+            - 'request.headers.test == "123"'
+            - 'parseInt(request.headers.test) + 1 == 124'
+            - 'parseInt(request.headers.float) == 1'
+            - 'parseFloat(request.headers.float) == 1.23'
+            - 'parseInt(response.body.b) == null'
+            - 'response.body.a == 0'
+            - 'response.body.c == 123'
+            - 'response.body.f == "line1"'
+            - 'response.body.a == 1'
+            - 'response.body.c == 456'
+            - 'response.body.f == "line2"'
+          all: >-
+            (response.body.b == "foo"
+              && val_eq(response.body.e, response.body.e2)
+              && request.headers.test == "123"
+              && parseInt(request.headers.test) + 1 == 124
+              && parseInt(request.headers.float) == 1
+              && parseFloat(request.headers.float) == 1.23
+              && parseInt(response.body.b) == null
             )
-          &&
-          (
-            (response.body.a == 0
-              && response.body.c == 123
-              && response.body.f == "line1")
-            ||
-            (response.body.a == 1
-              && response.body.c == 456
-              && response.body.f == "line2")
-          )
+            &&
+            (
+              (response.body.a == 0
+                && response.body.c == 123
+                && response.body.f == "line1")
+              ||
+              (response.body.a == 1
+                && response.body.c == 456
+                && response.body.f == "line2")
+            )

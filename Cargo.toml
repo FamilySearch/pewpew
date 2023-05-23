@@ -1,6 +1,6 @@
 [package]
 name = "pewpew"
-version = "0.5.12"
+version = "0.6.0-scripting"
 edition = "2018"
 default-run = "pewpew"
 publish = false
@@ -45,6 +45,7 @@ select_any = { path = "./lib/select_any" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 test_common = { path = "./lib/test_common" }
+thiserror = "1.0.40"
 tokio = "1"
 tokio-stream = { version = "0.1", features = ["sync", "time"] }
 url = "2"
@@ -60,6 +61,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 [dev-dependencies]
 futures-timer = "3"
 maplit = "1"
+serde_yaml = "0.9.22"
 tempfile = "3"
 
 [profile.release]
@@ -77,11 +79,13 @@ members = [
     "lib/body_reader",
     "lib/channel",
     "lib/config",
+    "lib/config-gen",
     "lib/config-wasm",
     "lib/either",
     "lib/hdr-histogram-wasm",
     "lib/for_each_parallel",
     "lib/mod_interval",
+    "lib/scripting-macros",
     "lib/select_any",
     "lib/test_common",
     "lib/zip_all",

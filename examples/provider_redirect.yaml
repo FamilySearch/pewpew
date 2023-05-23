@@ -1,49 +1,49 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 5s
 
 providers:
-  a:
-    range: {}
-  b:
-    response: {}
+  a: !range
+  b: !response
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}?echo=http://localhost:${port}?echo=${a}
+    url: http://localhost:${v:port}?echo=http://localhost:${v:port}?echo=${p:a}
     provides:
       b:
-        select:
-          url: response.body # In reality this would be something like response.headers.location
-          a: a # in many cases, whatever variable is provided in the initial request is also in the redirect
-        # where: response.status == 302 && request.headers.location != null
+        query:
+          select:
+            url: response.body # In reality this would be something like response.headers.location
+            a: a # in many cases, whatever variable is provided in the initial request is also in the redirect
+          # where: response.status == 302 && request.headers.location != null
+        send: block
     peak_load: 2hps
 
   - method: GET
-    url: '${b.url}'
+    url: '${x:${p:b}.url}'
     tags:
       # By default the url tag will be '*' since the entire url is a variable
       # We're going to alter the tag to only * the value of a so the tag will become 'http://localhost:${port}?echo=*'
       # in many cases, whatever variable is provided in the initial request is also in the redirect so we can use that
-      url: ${replace("=${b.a}", b.url, "=*")}
+      url: ${x:replace("=" + ${p:b}.a, ${p:b}.url, "=*")}
     peak_load: 1hps
     logs:
       test:
         select: response.body
 
   - method: GET
-    url: '${b.url}'
+    url: '${x:${p:b}.url}'
     # This one did not alter the tags so you can see that the url in the stats is simply '*'
     peak_load: 1hps
     logs:

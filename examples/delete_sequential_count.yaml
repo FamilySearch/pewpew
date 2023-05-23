@@ -3,12 +3,12 @@
 # This file will delete sequentially until we get 50 (createdId.end) calls
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
   ingestName: 'test:loadtest-'
   maxEmptySearch: 20
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 60m # Doesn't really matter since once createdId runs out it will exit.
@@ -16,25 +16,25 @@ load_pattern:
 config:
   client:
     headers:
-      TestTime: '${epoch("ms")}'
+      TestTime: '${x:epoch("ms")}'
       Accept: application/json
 
 providers:
   createdId:
-    range:
+    !range
       start: 1
       end: 50 # How many to delete. total time should be this / peak_load
 
 
 loggers:
   test:
-    to: stdout
+    to: !stdout
 
 endpoints:
   - method: DELETE
-    url: 'http://localhost:${port}?id=${ingestName}${start_pad(createdId, 6, "0")}?include-children=true'
+    url: 'http://localhost:${v:port}?id=${v:ingestName}${x:start_pad(${p:createdId}, 6, "0")}?include-children=true'
     tags:
-      status: ${response.status}
+      status: ${x:${p:response}.status}
     peak_load: 10hps
     logs:
       test:

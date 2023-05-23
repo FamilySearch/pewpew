@@ -1,13 +1,16 @@
-use crate::expression_functions::{
-    Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
-    Range, Repeat, Replace,
-};
 use crate::{
-    create_marker, json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions,
-    WithMarker,
+    configv1::{
+        create_marker,
+        error::{self, CreatingExpressionError, ExecutingExpressionError},
+        expression_functions::{
+            Collect, Encode, Entries, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
+            Range, Repeat, Replace,
+        },
+        json_value_to_string, EndpointProvidesPreProcessed, EndpointProvidesSendOptions,
+        WithMarker,
+    },
+    shared::Epoch,
 };
-
-use crate::error::{self, CreatingExpressionError, ExecutingExpressionError};
 
 use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
@@ -1159,7 +1162,7 @@ pub const REQUEST_URL: u16 = 0b01_0000_0000;
 pub const ERROR: u16 = 0b10_0000_0000;
 
 #[derive(Parser)]
-#[grammar = "select.pest"]
+#[grammar = "configv1/select.pest"]
 struct Parser;
 
 #[derive(Clone, Debug)]

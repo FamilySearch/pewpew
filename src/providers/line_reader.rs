@@ -23,7 +23,7 @@ pub struct LineReader {
 }
 
 impl LineReader {
-    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
+    pub fn new(config: &config::providers::FileProvider, file: &str) -> Result<Self, io::Error> {
         let mut jr = Self {
             byte_buffer: vec![0; KB8],
             buf_data_len: 0,
@@ -166,9 +166,9 @@ impl Iterator for LineReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-
+    use config::providers::{FileProvider, FileReadFormat};
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     const LINES: &[&str] = &[
         "[1,2,3]",
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn line_reader_basics_works() {
-        let fp = config::FileProvider::default();
+        let fp = FileProvider::default_with_format(FileReadFormat::Line);
 
         let expect = vec![
             json::json!([1, 2, 3]),
@@ -208,7 +208,7 @@ mod tests {
     fn lines_longer_than_buffer_work() {
         let long_line = format!("{}{}", "a".repeat(KB8), "b".repeat(10));
         let long_lines = [long_line.clone(), long_line];
-        let fp = config::FileProvider::default();
+        let fp = FileProvider::default_with_format(FileReadFormat::Line);
 
         let expect = vec![json::json!(long_lines[0]), json::json!(long_lines[1])];
 
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn line_reader_repeat_random_works() {
-        let mut fp = config::FileProvider::default();
+        let mut fp = FileProvider::default_with_format(FileReadFormat::Line);
         fp.random = true;
         fp.repeat = true;
 

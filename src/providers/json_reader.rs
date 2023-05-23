@@ -19,7 +19,7 @@ pub struct JsonReader {
 }
 
 impl JsonReader {
-    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
+    pub fn new(config: &config::providers::FileProvider, file: &str) -> Result<Self, io::Error> {
         let mut jr = Self {
             staging_buffer: vec![0; 8 * (1 << 10)],
             buffer: Vec::new(),
@@ -151,9 +151,9 @@ impl Iterator for JsonReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-
+    use config::providers::{FileProvider, FileReadFormat};
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     const JSON_LINES: &[&str] = &[
         r#"{ "foo": 1 }"#,
@@ -163,8 +163,7 @@ mod tests {
 
     #[test]
     fn json_reader_basics_works() {
-        let mut fp = config::FileProvider::default();
-        fp.format = config::FileFormat::Json;
+        let fp = FileProvider::default_with_format(FileReadFormat::Json);
 
         let expect = vec![
             json::json!({ "foo": 1 }),

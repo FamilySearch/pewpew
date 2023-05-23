@@ -1,26 +1,26 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
-  scale_percentage: ${SCALE_PERCENTAGE} # Can be 200, 300, 1000, 50
+  port: "${e:PORT}"
+  scale_percentage: '${e:SCALE_PERCENTAGE}' # Can be 200, 300, 1000, 50
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
-      to: ${scale_percentage}%
+      to: ${v:scale_percentage}%
       over: 5s
-  - linear:
-      from: ${scale_percentage}%
-      to: ${scale_percentage}%
+  - !linear
+      from: ${v:scale_percentage}%
+      to: ${v:scale_percentage}%
       over: 10s
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     peak_load: 1hps
     logs:
       test:

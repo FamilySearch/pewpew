@@ -1,7 +1,7 @@
 use crate::util::str_to_json;
+use itertools::Itertools;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
-
 use std::{fs::File, io, iter::Iterator};
 
 // A type of file reader which reads a csv file.
@@ -21,44 +21,50 @@ pub struct CsvReader {
 }
 
 impl CsvReader {
-    pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
+    pub fn new(
+        config: &config::providers::FileProvider,
+        csv: &config::providers::CsvParams,
+        file: &str,
+    ) -> Result<Self, io::Error> {
         let file = File::open(file)?;
-        let csv = &config.csv;
         let mut builder = csv::ReaderBuilder::new();
-        builder.comment(csv.comment).escape(csv.escape);
+        builder
+            .comment(csv.comment.as_deref().copied())
+            .escape(csv.escape.as_deref().copied());
         if let Some(delimiter) = csv.delimiter {
-            builder.delimiter(delimiter);
+            builder.delimiter(*delimiter);
         }
         let (first_row_headers, explicit_headers) = match &csv.headers {
-            config::CsvHeader::Bool(b) => {
+            config::providers::CsvHeaders::Use(b) => {
                 builder.has_headers(*b);
                 (*b, None)
             }
-            config::CsvHeader::String(s) => (false, Some(s)),
+            config::providers::CsvHeaders::Provide(v) => (false, Some(v)),
         };
-        if let Some(double_quote) = csv.double_quote {
-            builder.double_quote(double_quote);
-        }
+        builder.double_quote(csv.double_quote);
         if let Some(quote) = csv.quote {
-            builder.quote(quote);
+            builder.quote(*quote);
         }
         if let Some(terminator) = csv.terminator {
-            builder.terminator(csv::Terminator::Any(terminator));
+            builder.terminator(csv::Terminator::Any(*terminator));
         }
         let mut reader = builder.from_reader(file);
-        let headers = if let Some(headers) = explicit_headers {
-            let headers = builder
-                .from_reader(headers.as_bytes())
-                .headers()
-                .map_err(io::Error::from)?
-                .to_owned();
-            reader.set_headers(headers.clone());
-            Some(headers)
-        } else if first_row_headers {
-            reader.headers().ok().cloned()
-        } else {
-            None
-        };
+        let headers = explicit_headers
+            .map(|headers| -> Result<_, io::Error> {
+                let headers = builder
+                    .from_reader(headers.iter().join(",").as_bytes())
+                    .headers()
+                    .map_err(io::Error::from)?
+                    .to_owned();
+                reader.set_headers(headers.clone());
+                Ok(headers)
+            })
+            .transpose()?
+            .or_else(|| {
+                first_row_headers
+                    .then(|| reader.headers().ok().cloned())
+                    .flatten()
+            });
         let mut byte_record = csv::ByteRecord::new();
         let mut cr = Self {
             positions: Vec::new(),
@@ -160,16 +166,24 @@ impl Iterator for CsvReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-
+    use config::providers::{CsvParams, FileProvider, FileReadFormat};
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     const CSV_LINES: &[&str] = &["a,b,c", "d,e,f", r#""[1,2,3]",99,14"#];
 
     #[test]
     fn csv_reader_basics_works() {
-        let mut fp = config::FileProvider::default();
-        fp.format = config::FileFormat::Csv;
+        let csvp = CsvParams {
+            comment: None,
+            delimiter: None,
+            double_quote: true,
+            escape: None,
+            headers: Default::default(),
+            terminator: None,
+            quote: None,
+        };
+        let fp = FileProvider::default_with_format(FileReadFormat::Csv(csvp.clone()));
 
         let expect = vec![
             json::json!(["a", "b", "c"]),
@@ -182,7 +196,7 @@ mod tests {
             write!(tmp, "{}", CSV_LINES.join(line_ending)).unwrap();
             let path = tmp.path().to_str().unwrap().to_string();
 
-            let values: Vec<_> = CsvReader::new(&fp, &path)
+            let values: Vec<_> = CsvReader::new(&fp, &csvp, &path)
                 .unwrap()
                 .map(Result::unwrap)
                 .collect();

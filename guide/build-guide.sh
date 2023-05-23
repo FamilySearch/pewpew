@@ -12,6 +12,7 @@ trap_ctrlc ()
     rm -rf book
     rm -rf src/results-viewer
     rm -rf results-viewer/lib/hdr-histogram-wasm
+    rm -rf results-viewer-react.lib/config-gen
     exit 2
 }
 
@@ -27,9 +28,17 @@ WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
 mkdir -p "$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm"
 WASM_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm
 
+CFG_GEN_DIR=$(realpath $PROJECT_ROOT/lib/config-gen)
+mkdir -p "$RESULTS_VIEWER_REACT_DIR/lib/config-gen"
+CFG_GEN_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/config-gen
+
 # build the hdr-histogram-wasm for the results viewer
 cd $WASM_LIB_DIR
 wasm-pack build --release -t bundler -d $WASM_OUTPUT_REACT_DIR --scope fs
+
+# build the config-gen library for the HAR to YAML converter
+cd $CFG_GEN_DIR
+wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR
 
 # build the results viewer (which includes putting the output into the book's src)
 cd $RESULTS_VIEWER_REACT_DIR

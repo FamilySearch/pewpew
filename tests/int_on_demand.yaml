@@ -1,30 +1,34 @@
+config:
+  client: {}
+
 providers:
-  a:
-    response: {}
+  a: !response
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 5s
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 
 endpoints:
-  - url: http://localhost:${port}
+  - url: http://localhost:${v:port}
     peak_load: 1hps
     provides:
       a:
-        select: 1
+        query:
+          select: 1
+        send: if_not_full
     on_demand: true
 
-  - url: http://localhost:${port}?${a}
+  - url: http://localhost:${v:port}?${p:a}
     logs:
       test:
         select: 1

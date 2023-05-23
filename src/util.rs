@@ -18,10 +18,15 @@ pub fn tweak_path(rest: &mut String, base: &Path) {
     *rest = base.with_file_name(&rest).to_string_lossy().into();
 }
 
-pub fn config_limit_to_channel_limit(limit: config::Limit) -> channel::Limit {
+use config::providers::BufferLimit;
+
+pub fn config_limit_to_channel_limit(
+    limit: BufferLimit,
+    auto_buffer_start_size: usize,
+) -> channel::Limit {
     match limit {
-        config::Limit::Dynamic(n) => channel::Limit::dynamic(n),
-        config::Limit::Static(n) => channel::Limit::statik(n),
+        BufferLimit::Auto => channel::Limit::dynamic(auto_buffer_start_size),
+        BufferLimit::Limit(n) => channel::Limit::statik(n as usize),
     }
 }
 

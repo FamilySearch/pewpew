@@ -38,13 +38,20 @@ use crate::providers;
 use crate::stats;
 use crate::util::tweak_path;
 use config::{
-    BodyTemplate, EndpointProvidesSendOptions, MultipartBody, ProviderStream, Select, Template,
+    self,
+    common::ProviderSend,
+    endpoints::{FileBody, MultiPartBodySection},
+    query::Query,
+    scripting::{ProviderStream, ProviderStreamStream},
+    templating::{Regular, Template, True},
+    EndPointBody,
 };
 
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     future::Future,
+    iter,
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -57,14 +64,14 @@ use std::{
 
 #[derive(Clone)]
 pub struct AutoReturn {
-    send_option: EndpointProvidesSendOptions,
+    send_option: ProviderSend,
     channel: channel::Sender<json::Value>,
     jsons: Vec<json::Value>,
 }
 
 impl AutoReturn {
     pub fn new(
-        send_option: EndpointProvidesSendOptions,
+        send_option: ProviderSend,
         channel: channel::Sender<json::Value>,
         jsons: Vec<json::Value>,
     ) -> Self {
@@ -78,19 +85,19 @@ impl AutoReturn {
     pub async fn into_future(mut self) {
         debug!("AutoReturn::into_future.send_option={:?}", self.send_option);
         match self.send_option {
-            EndpointProvidesSendOptions::Block => {
+            ProviderSend::Block => {
                 let _ = self
                     .channel
                     .send_all(&mut stream::iter(self.jsons).map(Ok))
                     .await;
             }
-            EndpointProvidesSendOptions::Force => {
+            ProviderSend::Force => {
                 while let Some(json) = self.jsons.pop() {
                     log::trace!("AutoReturn::into_future::Force json={}", json);
                     self.channel.force_send(json);
                 }
             }
-            EndpointProvidesSendOptions::IfNotFull => {
+            ProviderSend::IfNotFull => {
                 while let Some(json) = self.jsons.pop() {
                     log::trace!("AutoReturn::into_future::IfNotFull json={}", json);
                     if self.channel.send(json).now_or_never().is_none() {
@@ -164,28 +171,24 @@ impl ProviderOrLogger {
 }
 
 struct Outgoing {
-    select: Arc<Select>,
+    query: Arc<Query>,
+    send: ProviderSend,
     tx: ProviderOrLogger,
 }
 
 impl Outgoing {
-    fn new(select: Select, tx: ProviderOrLogger) -> Self {
+    fn new(query: Query, send: ProviderSend, tx: ProviderOrLogger) -> Self {
         Self {
-            select: select.into(),
+            query: query.into(),
+            send,
             tx,
         }
     }
 }
 
-type ProviderStreamStream<Ar> = Box<
-    dyn Stream<Item = Result<(json::Value, Vec<Ar>), config::ExecutingExpressionError>>
-        + Send
-        + Unpin
-        + 'static,
->;
-
 impl ProviderStream<AutoReturn> for providers::Provider {
-    fn into_stream(&self) -> ProviderStreamStream<AutoReturn> {
+    type Err = config::error::EvalExprError;
+    fn as_stream(&self) -> ProviderStreamStream<AutoReturn, Self::Err> {
         let auto_return = self.auto_return.map(|ar| (ar, self.tx.clone()));
         let future = self.rx.clone().map(move |v| {
             let mut outgoing = Vec::new();
@@ -205,7 +208,7 @@ pub struct BuilderContext {
     pub client:
         Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     // a mapping of names to their prospective providers
-    pub providers: Arc<BTreeMap<String, providers::Provider>>,
+    pub providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
     // a mapping of names to their prospective loggers
     pub loggers: BTreeMap<String, providers::Logger>,
     // channel that receives and aggregates stats for the test
@@ -217,8 +220,20 @@ pub struct EndpointBuilder {
     start_stream: Option<Pin<Box<dyn Stream<Item = (Instant, Option<Instant>)> + Send>>>,
 }
 
-fn convert_to_debug<T>(value: &[(String, T)]) -> Vec<String> {
-    value.iter().map(|(key, _)| key.to_string()).collect()
+trait GetKeysDebug {
+    fn get_keys_debug(&self) -> Vec<&str>;
+}
+
+impl<S: AsRef<str>, T> GetKeysDebug for BTreeMap<S, T> {
+    fn get_keys_debug(&self) -> Vec<&str> {
+        self.keys().map(AsRef::as_ref).collect()
+    }
+}
+
+impl<S: AsRef<str>, T> GetKeysDebug for [(S, T)] {
+    fn get_keys_debug(&self) -> Vec<&str> {
+        self.iter().map(|(s, _)| s.as_ref()).collect()
+    }
 }
 
 impl EndpointBuilder {
@@ -232,31 +247,31 @@ impl EndpointBuilder {
         }
     }
 
-    pub fn build(self, ctx: &mut BuilderContext) -> Endpoint {
+    pub fn build(self, ctx: &BuilderContext) -> Endpoint {
         let mut outgoing = Vec::new();
         let mut on_demand_streams: OnDemandStreams = Vec::new();
 
+        let providers_to_stream = self.endpoint.get_required_providers();
         let config::Endpoint {
             method,
             headers,
             body,
             no_auto_returns,
-            providers_to_stream,
-            url,
-            max_parallel_requests,
             provides,
             logs,
             on_demand,
             tags,
             request_timeout,
+            url,
+            max_parallel_requests,
             ..
         } = self.endpoint;
-        debug!("EndpointBuilder.build method=\"{}\" url=\"{}\" body=\"{}\" headers=\"{:?}\" no_auto_returns=\"{}\" \
+        debug!("EndpointBuilder.build method=\"{}\" url=\"{}\" body=\"{:?}\" headers=\"{:?}\" no_auto_returns=\"{}\" \
             max_parallel_requests=\"{:?}\" provides=\"{:?}\" logs=\"{:?}\" on_demand=\"{}\" request_timeout=\"{:?}\"",
-            method.as_str(), url.evaluate_with_star(), body, convert_to_debug(&headers), no_auto_returns,
-            max_parallel_requests, convert_to_debug(&provides), convert_to_debug(&logs), on_demand, request_timeout);
+            method.as_str(), url.evaluate_with_star(), body, headers.get_keys_debug(), no_auto_returns,
+            max_parallel_requests, provides.get_keys_debug(), logs.get_keys_debug(), on_demand, request_timeout);
 
-        let timeout = request_timeout.unwrap_or(ctx.config.client.request_timeout);
+        let timeout = request_timeout.unwrap_or_else(|| ctx.config.client.request_timeout.clone());
 
         let mut provides_set = if self.start_stream.is_none() && !provides.is_empty() {
             Some(BTreeSet::new())
@@ -281,7 +296,8 @@ impl EndpointBuilder {
                     let stream = provider.on_demand.clone();
                     on_demand_streams.push(Box::new(stream));
                 }
-                Outgoing::new(v, ProviderOrLogger::Provider(tx))
+                let (query, send) = v.into();
+                Outgoing::new(query, send, ProviderOrLogger::Provider(tx))
             })
             .collect();
 
@@ -294,11 +310,7 @@ impl EndpointBuilder {
         } else if let Some(set) = provides_set {
             let stream = stream::poll_fn(move |_| {
                 let done = set.iter().all(channel::Sender::no_receivers);
-                if done {
-                    Poll::Ready(None)
-                } else {
-                    Poll::Ready(Some(Ok(StreamItem::None)))
-                }
+                Poll::Ready((!done).then(|| Ok(StreamItem::None)))
             });
             streams.push((true, Box::new(stream)));
         }
@@ -312,15 +324,16 @@ impl EndpointBuilder {
                 .loggers
                 .get(&k)
                 .expect("logs should reference a valid logger");
-            outgoing.push(Outgoing::new(v, ProviderOrLogger::Logger(tx.clone())));
+            let (query, send) = v.into();
+            outgoing.push(Outgoing::new(
+                query,
+                send,
+                ProviderOrLogger::Logger(tx.clone()),
+            ));
         }
-        // Required providers
-        // these u16s are bitwise maps of what standard select request/response/stats are selected
-        let rr_providers = providers_to_stream.get_special();
-        let precheck_rr_providers = providers_to_stream.get_where_special();
-        // go through the list of required providers and make sure we have them all
-        for name in providers_to_stream.unique_providers() {
-            let provider = match ctx.providers.get(&name) {
+
+        for name in providers_to_stream {
+            let provider = match ctx.providers.get::<str>(&name) {
                 Some(p) => p,
                 None => continue,
             };
@@ -352,7 +365,8 @@ impl EndpointBuilder {
                 name, vce
             );
             let stream = vce
-                .into_stream(&ctx.providers, false)
+                .into_stream(Arc::clone(&ctx.providers))
+                .expect("TODO")
                 .map_ok(move |(v, returns)| {
                     StreamItem::Declare(name.clone(), v, returns, Instant::now())
                 })
@@ -366,34 +380,31 @@ impl EndpointBuilder {
             client,
             headers,
             max_parallel_requests,
-            method,
+            method: method.clone(),
             no_auto_returns,
             on_demand_streams,
             outgoing, // loggers
-            precheck_rr_providers,
             provides, // providers
-            rr_providers,
             tags: Arc::new(tags),
             stats_tx,
             stream_collection: streams,
             url,
-            timeout,
+            timeout: **timeout.get(),
         }
     }
 }
 
 pub enum StreamItem {
     Instant(Option<Instant>),
-    Declare(String, json::Value, Vec<AutoReturn>, Instant),
+    Declare(Arc<str>, json::Value, Vec<AutoReturn>, Instant),
     None,
-    TemplateValue(String, json::Value, Option<AutoReturn>, Instant),
+    TemplateValue(Arc<str>, json::Value, Option<AutoReturn>, Instant),
 }
 
 fn multipart_body_as_hyper_body(
-    multipart_body: &MultipartBody,
+    multipart_body: &[(String, MultiPartBodySection)],
     template_values: &TemplateValues,
     content_type_entry: HeaderEntry<'_, HeaderValue>,
-    copy_body_value: bool,
     body_value: &mut Option<String>,
 ) -> Result<impl Future<Output = Result<(u64, HyperBody), TestError>>, TestError> {
     let boundary: String = Alphanumeric
@@ -431,31 +442,27 @@ fn multipart_body_as_hyper_body(
     let mut body_value2 = Vec::new();
 
     let pieces = multipart_body
-        .pieces
         .iter()
-        .enumerate()
-        .map(|(i, mp)| {
-            let mut body = mp
-                .template
-                .evaluate(Cow::Borrowed(template_values.as_json()), None)
-                .map_err(TestError::from)?;
+        .zip(iter::once(&b"--"[..]).chain(iter::repeat(&b"\r\n--"[..])))
+        .map(|((name, mp), lead_piece)| {
+            let (template, path) = match &mp.body {
+                EndPointBody::File(FileBody { base_path, path }) => (path, Some(base_path)),
+                EndPointBody::String(t) => (t, None),
+                EndPointBody::Multipart(_) => todo!("make unreachable"),
+            };
+            let mut body =
+                template.evaluate(Cow::Borrowed(template_values.as_json()) /*, None*/)?;
 
             let mut has_content_disposition = false;
 
-            let mut piece_data = Vec::new();
-            if i == 0 {
-                piece_data.extend_from_slice(b"--");
-            } else {
-                piece_data.extend_from_slice(b"\r\n--");
-            }
+            let mut piece_data = Vec::with_capacity(40 + mp.headers.len() * 4);
+            piece_data.extend_from_slice(lead_piece);
             piece_data.extend_from_slice(boundary.as_bytes());
 
             for (k, t) in mp.headers.iter() {
                 let key = HeaderName::from_bytes(k.as_bytes())
                     .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
-                let value = t
-                    .evaluate(Cow::Borrowed(template_values.as_json()), None)
-                    .map_err::<TestError, _>(Into::into)?;
+                let value = t.evaluate(Cow::Borrowed(template_values.as_json()) /*, None*/)?;
                 let value = HeaderValue::from_str(&value)
                     .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
 
@@ -469,16 +476,15 @@ fn multipart_body_as_hyper_body(
             }
 
             if is_form && !has_content_disposition {
-                let value = if mp.is_file {
+                let value = if path.is_some() {
                     HeaderValue::from_str(&format!(
                         "form-data; name=\"{}\"; filename=\"{}\"",
-                        mp.name, body
+                        name, body
                     ))
                 } else {
-                    HeaderValue::from_str(&format!("form-data; name=\"{}\"", mp.name))
-                };
-                let value = value
-                    .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
+                    HeaderValue::from_str(&format!("form-data; name=\"{}\"", name))
+                }
+                .map_err::<TestError, _>(|e| RecoverableError::BodyErr(Arc::new(e)).into())?;
 
                 piece_data.extend_from_slice(b"\r\ncontent-disposition: ");
                 piece_data.extend_from_slice(value.as_bytes());
@@ -486,43 +492,40 @@ fn multipart_body_as_hyper_body(
 
             piece_data.extend_from_slice(b"\r\n\r\n");
 
-            let ret = if mp.is_file {
-                if copy_body_value {
+            Ok::<_, TestError>(match path {
+                // not a map_or_else() as both paths need to mutably borrow the same data
+                Some(path) => {
                     body_value2.extend_from_slice(&piece_data);
                     body_value2.extend_from_slice(b"<<contents of file: ");
                     body_value2.extend_from_slice(body.as_bytes());
                     body_value2.extend_from_slice(b">>");
+                    let piece_data_bytes = piece_data.len() as u64;
+                    let piece_stream = future::ok(Bytes::from(piece_data)).into_stream();
+                    tweak_path(&mut body, path);
+                    let a = create_file_hyper_body(body).map_ok(move |(bytes, body)| {
+                        let stream = piece_stream.chain(body).a();
+                        (bytes + piece_data_bytes, stream)
+                    });
+                    Either::A(a)
                 }
-                let piece_data_bytes = piece_data.len() as u64;
-                let piece_stream = future::ok(Bytes::from(piece_data)).into_stream();
-                tweak_path(&mut body, &multipart_body.path);
-                let a = create_file_hyper_body(body).map_ok(move |(bytes, body)| {
-                    let stream = piece_stream.chain(body).a();
-                    (bytes + piece_data_bytes, stream)
-                });
-                Either::A(a)
-            } else {
-                piece_data.extend_from_slice(body.as_bytes());
-                if copy_body_value {
+                None => {
+                    piece_data.extend_from_slice(body.as_bytes());
                     body_value2.extend_from_slice(&piece_data);
+                    let piece_data_bytes = piece_data.len() as u64;
+                    let piece_stream = future::ok(Bytes::from(piece_data)).into_stream().b();
+                    let b = future::ok((piece_data_bytes, piece_stream));
+                    Either::B(b)
                 }
-                let piece_data_bytes = piece_data.len() as u64;
-                let piece_stream = future::ok(Bytes::from(piece_data)).into_stream().b();
-                let b = future::ok((piece_data_bytes, piece_stream));
-                Either::B(b)
-            };
-            Ok::<_, TestError>(ret)
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    if copy_body_value {
-        body_value2.extend_from_slice(&closing_boundary);
-        let bv = match String::from_utf8(body_value2) {
-            Ok(bv) => bv,
-            Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
-        };
-        *body_value = Some(bv);
-    }
+    body_value2.extend_from_slice(&closing_boundary);
+    let bv = match String::from_utf8(body_value2) {
+        Ok(bv) => bv,
+        Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+    };
+    *body_value = Some(bv);
 
     let ret = try_join_all(pieces).map_ok(move |results| {
         let mut bytes = closing_boundary.len() as u64;
@@ -573,41 +576,31 @@ async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), Te
 }
 
 fn body_template_as_hyper_body(
-    body_template: &BodyTemplate,
+    body_template: &Option<EndPointBody>,
     template_values: &TemplateValues,
-    copy_body_value: bool,
     body_value: &mut Option<String>,
     content_type_entry: HeaderEntry<'_, HeaderValue>,
 ) -> impl Future<Output = Result<(u64, HyperBody), TestError>> {
-    let template = match body_template {
-        BodyTemplate::File(_, t) => t,
-        BodyTemplate::Multipart(m) => {
-            let r = multipart_body_as_hyper_body(
-                m,
-                template_values,
-                content_type_entry,
-                copy_body_value,
-                body_value,
-            );
+    let template = match body_template.as_ref() {
+        Some(EndPointBody::File(FileBody { path, .. })) => path,
+        Some(EndPointBody::Multipart(m)) => {
+            let r =
+                multipart_body_as_hyper_body(m, template_values, content_type_entry, body_value);
             return Either3::A(future::ready(r).and_then(|x| x));
         }
-        BodyTemplate::None => return Either3::B(future::ok((0, HyperBody::empty()))),
-        BodyTemplate::String(t) => t,
+        Some(EndPointBody::String(t)) => t,
+        None => return Either3::B(future::ok((0, HyperBody::empty()))),
     };
-    let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
+    let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()) /*, None*/) {
         Ok(b) => b,
         Err(e) => return Either3::B(future::err(TestError::from(e))),
     };
-    if let BodyTemplate::File(path, _) = body_template {
-        tweak_path(&mut body, path);
-        if copy_body_value {
-            *body_value = Some(format!("<<contents of file: {body}>>"));
-        }
+    if let Some(EndPointBody::File(FileBody { base_path, .. })) = body_template {
+        tweak_path(&mut body, base_path);
+        *body_value = Some(format!("<<contents of file: {body}>>"));
         Either3::C(create_file_hyper_body(body))
     } else {
-        if copy_body_value {
-            *body_value = Some(body.clone());
-        }
+        *body_value = Some(body.clone());
         Either3::B(future::ok((body.as_bytes().len() as u64, body.into())))
     }
 }
@@ -620,22 +613,20 @@ type OnDemandStreams = Vec<Box<dyn Stream<Item = ()> + Send + Unpin + 'static>>;
 pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
-    body: BodyTemplate,
+    body: Option<EndPointBody>,
     client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
-    headers: Vec<(String, Template)>,
+    headers: config::Headers<True>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
     no_auto_returns: bool,
     on_demand_streams: OnDemandStreams,
     outgoing: Vec<Outgoing>,
-    precheck_rr_providers: u16,
     provides: Vec<Outgoing>,
-    rr_providers: u16,
-    tags: Arc<BTreeMap<String, Template>>,
+    tags: Arc<BTreeMap<Arc<str>, Template<String, Regular, True>>>,
     stats_tx: StatsTx,
     stream_collection: StreamCollection,
     timeout: Duration,
-    url: Template,
+    url: Template<String, Regular, True>,
 }
 
 impl Endpoint {
@@ -663,7 +654,6 @@ impl Endpoint {
         let method = self.method;
         let headers = self.headers;
         let body = self.body;
-        let rr_providers = self.rr_providers;
         let client = self.client;
         let stats_tx = self.stats_tx;
         let no_auto_returns = self.no_auto_returns;
@@ -694,13 +684,12 @@ impl Endpoint {
         let mut outgoing = self.outgoing;
         outgoing.extend(self.provides);
         let outgoing = Arc::new(outgoing);
-        let precheck_rr_providers = self.precheck_rr_providers;
         let timeout = self.timeout;
         let max_parallel_requests = self.max_parallel_requests;
         let tags = self.tags;
         let blocking_outgoing: Vec<_> = outgoing
             .iter()
-            .filter_map(|o| match (&o.tx, o.select.get_send_behavior().is_block()) {
+            .filter_map(|o| match (&o.tx, o.send.is_block()) {
                 (ProviderOrLogger::Provider(tx), true) => Some(tx.clone()),
                 _ => None,
             })
@@ -714,12 +703,10 @@ impl Endpoint {
             method,
             headers,
             body,
-            rr_providers,
             client,
             stats_tx,
             no_auto_returns,
             outgoing,
-            precheck_rr_providers,
             tags,
             timeout,
         };

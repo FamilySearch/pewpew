@@ -1,36 +1,34 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 5s
 
 providers:
-  a:
-    range: {}
-  b:
-    response: {}
-  c:
-    response: {}
-  d:
-    response: {}
+  a: !range
+  b: !response
+  c: !response
+  d: !response
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
-    body: '{"a": ${a}}'
+    url: http://localhost:${v:port}
+    body: !str '{"a": ${p:a}}'
     # peak_load: 1hps
     provides:
       b:
-        select: response.body.a
+        query:
+          select: response.body.a
+        send: block
     logs:
       test:
         select:
@@ -38,49 +36,57 @@ endpoints:
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"b": ${b}}'
+    url: http://localhost:${v:port}
+    body: !str '{"b": ${p:b}}'
     peak_load: 5hps
     provides:
       b:
-        select: b # Put it back on 'b' to reuse
+        query:
+          select: b # Put it back on 'b' to reuse
+        send: if_not_full
     logs:
       test:
         select:
           b: response.body.b
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"b": ${b}}'
+    url: http://localhost:${v:port}
+    body: !str '{"b": ${p:b}}'
     # peak_load: 1hps
     provides:
       c:
-        select: response.body.b # take and put it on 'c'
+        query:
+          select: response.body.b # take and put it on 'c'
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"c": ${c}}'
+    url: http://localhost:${v:port}
+    body: !str '{"c": ${p:c}}'
     peak_load: 5hps
     provides:
       c:
-        select: c # Put it back on 'c' to reuse
+        query:
+          select: c # Put it back on 'c' to reuse
+        send: if_not_full
     logs:
       test:
         select:
           c: response.body.c
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"c": ${c}}'
+    url: http://localhost:${v:port}
+    body: !str '{"c": ${p:c}}'
     peak_load: 1hps
     provides:
       d:
-        select: response.body.c # take and put it on 'd'
+        query:
+          select: response.body.c # take and put it on 'd'
+        send: if_not_full
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"d": ${d}}'
+    url: http://localhost:${v:port}
+    body: !str '{"d": ${p:d}}'
     peak_load: 1hps
     logs:
       test:

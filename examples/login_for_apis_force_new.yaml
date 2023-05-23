@@ -4,78 +4,74 @@
 # This version will always put in new sessions and slowly replace the old ones
 
 vars:
-  port: ${PORT}
+  port: ${e:PORT}
   username: test-user
-  password: ${PASSWORD}
+  password: ${e:PASSWORD}
   token_prepend: "test_token_"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 15s
 
 providers:
-  session_counter:
-    range: {}
+  session_counter: !range
   session:
-    response:
+    !response
       buffer: 500 # Allow up to 500 in the provider
       auto_return: if_not_full # as long as there's room in the provider, put them back in
-  a:
-    range: {}
-  b:
-    response: {}
-  c:
-    response: {}
-  d:
-    response: {}
+  a: !range
+  b: !response
+  c: !response
+  d: !response
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     declare:
       # Create a token that concatonates `token_prepend` and the `session_counter` padded with zeros to min length of 6
-      new_token: '`${token_prepend}${start_pad(session_counter, 6, "0")}`'
-    body: '{"username": "${username}","password":"${password}","token":"${new_token}"}'
+      new_token: !x '${v:token_prepend}${x:start_pad(${p:session_counter}, 6, "0")}'
+    body: !str '{"username": "${v:username}","password":"${v:password}","token":"${p:new_token}"}'
     peak_load: 1hps
     provides:
       session:
-        select: response.body.token
-        for_each:
-          - repeat(10) # Put 10 copies on the session provider
-        where: response.status == 200 # but only if the response status is 200. Errors ignored
+        query:
+          select: response.body.token
+          for_each:
+            - repeat(10) # Put 10 copies on the session provider
+          where: response.status == 200 # but only if the response status is 200. Errors ignored
         send: force # We always want new sessions, and will slowly throw away the old ones
     logs:
       test:
         select:
           ts: epoch("ms")
-          response: replace("${password}", request.body, "******") # remove the password from the log
+          response: replace(_v.password, request.body, "******") # remove the password from the log
           token: response.body.token
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}?b
+    url: http://localhost:${v:port}?b
     headers:
-      Authorization: Bearer ${session}
-    body: '{"b": ${a}}'
+      Authorization: Bearer ${p:session}
+    body: !str '{"b": ${p:a}}'
     peak_load: 1hps
     logs:
       test:
         select:
-          a: response.body.a
+          a: 'response.body.a | null'
 
   - method: POST
-    url: http://localhost:${port}?c
+    url: http://localhost:${v:port}?c
     headers:
-      Authorization: Bearer ${session}
-    body: '{"c": ${a}}'
+      Authorization: Bearer ${p:session}
+    body: !str '{"c": ${p:a}}'
     peak_load: 1hps
     logs:
       test:
         select:
-          a: response.body.a
+          a: 'response.body.a | null'

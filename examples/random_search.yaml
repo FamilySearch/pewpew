@@ -1,7 +1,7 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
   peakLoadSearch: 400
 
   ### Percentages of search type ####
@@ -13,7 +13,7 @@ vars:
   percentageIncludeProperties: 50
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 15s
@@ -21,18 +21,18 @@ load_pattern:
 config:
   client:
     headers:
-      TestTime: '${epoch("ms")}'
+      TestTime: '${x:epoch("ms")}'
       Accept: application/json
 
 providers:
   date_range:
-    range:
+    !range
       start: 1000
       end: 2000
       step: 10
       repeat: true
   country:
-    list:
+    !list
       repeat: true
       random: true
       values:
@@ -64,7 +64,7 @@ providers:
         - Colombia
         - Saudi Arabia
   us_state:
-    list:
+    !list
       repeat: true
       random: true
       values:
@@ -94,18 +94,21 @@ providers:
         - Alabama
         - Louisiana
   person:
-    file:
+    !file
       path: random_search.csv
       repeat: true
-      format: csv
-      csv:
-        headers: first_name,last_name,birth_date,gender
+      format: !csv
+        headers:
+          - first_name
+          - last_name
+          - birth_date
+          - gender
       random: true
 
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
   http_errors:
     select:
       timestamp: epoch("ms")
@@ -120,58 +123,63 @@ loggers:
       responseBody: response.body
     where: response.status >= 400
     limit: 1000
-    to: stderr
+    to: !stderr
     pretty: false
   search_logger:
-    to: 'search-results-${epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start
+    to: !file 'search-results-${x:epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start
     pretty: false
 
 endpoints:
   - method: PUT
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     tags:
       # Results will be bucketed based on these tags. All hasName: true will be grouped together
       type: random search
-      hasCountry: ${hasCountry}
-      hasState: ${hasState}
-      hasFromDate: ${hasFromDate}
-      hasName: ${hasName}
-      hasGender: ${hasGender}
-      includeProperties: ${includeProperties}
-      status: ${response.status} # Tag the result based on the response status
+      hasCountry: ${p:hasCountry}
+      hasState: ${p:hasState}
+      hasFromDate: ${p:hasFromDate}
+      hasName: ${p:hasName}
+      hasGender: ${p:hasGender}
+      includeProperties: ${p:includeProperties}
+      status: ${x:${p:response}.status} # Tag the result based on the response status
     declare:
-      whenFacetArray: collect(date_range, 2) # Get two dates in case we need them for hasFromDate
+      whenFacetArray: !c
+        collects:
+          - take: 2
+            from: ${p:date_range}
+            as: _dates
+        then: ${p:_dates} # Get two dates in case we need them for hasFromDate
       # Based on the random percentages, decide whether to includes these in the search
-      hasCountry: random(0,100) < percentageCountry
-      hasState: random(0,100) < percentageState
-      hasFromDate: random(0,100) < percentageFromDate
-      hasName: random(0,100) < percentageName
-      hasGender: random(0,100) < percentageGender
-      includeProperties: random(0,100) < percentageIncludeProperties
-      goPage2: random(0,100) < 7
+      hasCountry: !x '${x:random(0,100,${p:null}) < ${v:percentageCountry}}'
+      hasState: !x '${x:random(0,100,${p:null}) < ${v:percentageState}}'
+      hasFromDate: !x '${x:random(0,100,${p:null}) < ${v:percentageFromDate}}'
+      hasName: !x '${x:random(0,100,${p:null}) < ${v:percentageName}}'
+      hasGender: !x '${x:random(0,100,${p:null}) < ${v:percentageGender}}'
+      includeProperties: !x '${x:random(0,100,${p:null}) < ${v:percentageIncludeProperties}}'
+      goPage2: !x '${x:random(0,100,${p:null}) < 7}'
     headers:
       Content-Type: application/json
-    body: >-
+    body: !str >-
       {
-        "hasCountry": ${hasCountry},
-        ${if(hasCountry, '"country": ["${country}"],', "")}
-        ${if((hasCountry == false || country == "United States") && hasState, '"state": ["${us_state}"],', "")}
-        "fromDate": ${if(hasFromDate, '"${whenFacetArray[0]}"', null)},
-        "toDate": ${if(hasFromDate, '"${whenFacetArray[1]}"', null)}
-        "name": ${if(hasName, '"${person.last_name}"', null)},
-        "gender": ${if(hasGender, '"${person.gender}"', null)},
-        "includeProperties": ${includeProperties},
-        "pageNumber": ${if(goPage2, 2, 1)},
+        "hasCountry": ${p:hasCountry},
+        ${x:${p:hasCountry} ? '"country": ["' + ${p:country} + '"],' : ""}
+        ${x:(${p:hasCountry} == false || ${p:country} == "United States") && ${p:hasState} ? '"state": ["' + ${p:us_state} + '"],' : ""}
+        "fromDate": ${x:${p:hasFromDate} ?  ${p:whenFacetArray}[0]  : null},
+        "toDate": ${x:${p:hasFromDate} ? ${p:whenFacetArray}[1] : null},
+        "name": ${x:${p:hasName} ? stwrap(${p:person}.last_name) : null},
+        "gender": ${x:${p:hasGender} ? stwrap(${p:person}.gender) : null},
+        "includeProperties": ${p:includeProperties},
+        "pageNumber": ${x:${p:goPage2} ? 2 : 1},
         "results": 50,
-        "totalCount": ${random(0,1000)}
+        "totalCount": ${x:random(0,1000,${p:null})}
       }
-    peak_load: ${peakLoadSearch}hpm
+    peak_load: ${v:peakLoadSearch}hpm
     load_pattern: # Override the default load pattern for this endpoint
-      - linear:
+      - !linear
           from: 10%
           to: 100%
           over: 5s
-      - linear:
+      - !linear
           from: 100%
           to: 100%
           over: 10s

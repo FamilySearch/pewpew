@@ -1,10 +1,10 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
       to: 100%
       over: 15s
@@ -24,20 +24,20 @@ loggers:
       stats: stats
     where: response.status >= 400 && response.status != 503
     limit: 1000
-    to: stdout
+    to: !stdout
     pretty: false
 
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     headers:
       Accept-Language: en-us
       Content-Type: application/json
       Authorization: Bearer test-token
-    body: '{"test":true}'
+    body: !str '{"test":true}'
     peak_load: 1hps
     logs:
       test:

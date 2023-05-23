@@ -1,4 +1,4 @@
-use config::{BodyTemplate, LoadTest, Provider};
+use config::{endpoints::FileBody, EndPointBody, LoadTest, ProviderType};
 use js_sys::Map;
 use log::{debug, LevelFilter};
 use std::{path::PathBuf, str::FromStr};
@@ -57,8 +57,12 @@ impl Config {
     ) -> Result<Config, JsValue> {
         init_logging(log_level);
         let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
-        let load_test = LoadTest::from_config(bytes, &PathBuf::default(), &env_vars)
-            .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
+        let load_test = LoadTest::from_yaml(
+            std::str::from_utf8(bytes).expect("TODO"),
+            PathBuf::default().into(),
+            &env_vars,
+        )
+        .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
         Ok(Config(load_test))
     }
 
@@ -82,7 +86,7 @@ impl Config {
     // return the bucket size for the test
     #[wasm_bindgen(js_name = getBucketSize)]
     pub fn get_bucket_size(&self) -> u64 {
-        self.0.config.general.bucket_size.as_secs()
+        self.0.config.general.bucket_size.get().as_secs()
     }
 
     // return a string array of files used to feed providers
@@ -95,7 +99,7 @@ impl Config {
             .endpoints
             .iter()
             .filter_map(|endpoint| {
-                if let BodyTemplate::File(_, template) = &endpoint.body {
+                if let Some(EndPointBody::File(FileBody { path: template, .. })) = &endpoint.body {
                     // The path is the base path, the template.pieces has the real path
                     debug!("endpoint::body::file.template={:?}", template);
                     Some(template.evaluate_with_star().into())
@@ -110,8 +114,8 @@ impl Config {
             .providers
             .iter()
             .filter_map(|(_, v)| {
-                if let Provider::File(f) = v {
-                    Some(f.path.as_str().into())
+                if let ProviderType::File(f) = v {
+                    Some(f.path.get().as_str().into())
                 } else {
                     None
                 }

@@ -1,76 +1,80 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 5s
 
 providers:
-  a:
-    range: {}
-  b:
-    response: {}
-  c:
-    response: {}
-  d:
-    response: {}
-  e:
-    response: {}
-  f:
-    response: {}
+  a: !range
+  b: !response
+  c: !response
+  d: !response
+  e: !response
+  f: !response
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
-    body: '{"a": ${a}}'
+    url: http://localhost:${v:port}
+    body: !str '{"a": ${p:a}}'
     provides:
       b:
-        select: response.body.a
+        query:
+          select: response.body.a
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"b": ${b}}'
+    url: http://localhost:${v:port}
+    body: !str '{"b": ${p:b}}'
     provides:
       c:
-        select: response.body.b
+        query:
+          select: response.body.b
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"c": ${c}}'
+    url: http://localhost:${v:port}
+    body: !str '{"c": ${p:c}}'
     provides:
       d:
-        select: response.body.c
+        query:
+          select: response.body.c
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"d": ${d}}'
+    url: http://localhost:${v:port}
+    body: !str '{"d": ${p:d}}'
     provides:
       e:
-        select: response.body.d
+        query:
+          select: response.body.d
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"e": ${e}}'
+    url: http://localhost:${v:port}
+    body: !str '{"e": ${p:e}}'
     provides:
       f:
-        select: response.body.e
+        query:
+          select: response.body.e
+        send: block
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"f": ${f}}'
+    url: http://localhost:${v:port}
+    body: !str '{"f": ${p:f}}'
     peak_load: 1hps
     logs:
       test:

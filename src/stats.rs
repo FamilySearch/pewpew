@@ -6,6 +6,7 @@ use crate::{RunConfig, RunOutputFormat};
 
 use channel::ChannelStatsReader;
 use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
+use config::templating::True;
 use ether::Either;
 use futures::{
     channel::mpsc::{self as futures_channel, Sender as FCSender},
@@ -338,7 +339,7 @@ impl BucketGroupStats {
                     "mean": mean,
                     "stddev": stddev,
                     "tags": tags.iter()
-                        .filter(|(k, _)| k.as_str() != "method" && k.as_str() != "url")
+                        .filter(|(k, _)| &***k != "method" && &***k != "url")
                         .collect::<BTreeMap<_, _>>(),
                 });
                 let piece = format!("{output}\n");
@@ -555,7 +556,7 @@ impl Stats {
     }
 }
 
-type Tags = BTreeMap<String, String>;
+type Tags = BTreeMap<Arc<str>, String>;
 
 // get the current time as a unix epoch
 fn get_epoch() -> u64 {
@@ -729,16 +730,16 @@ pub fn create_try_run_stats_channel(
 // create the stats channel for a full test
 pub fn create_stats_channel(
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
-    config: &config::GeneralConfig,
-    providers: &BTreeMap<String, providers::Provider>,
+    config: &config::General<True>,
+    providers: &BTreeMap<Arc<str>, providers::Provider>,
     mut console: FCSender<MsgType>,
     run_config: &RunConfig,
 ) -> Result<futures_channel::UnboundedSender<StatsMessage>, TestError> {
     let (tx, mut rx) = futures_channel::unbounded::<StatsMessage>();
     let now = Instant::now();
     let start_sec = get_epoch();
-    let bucket_size = config.bucket_size;
-    let bucket_size_secs = bucket_size.as_secs();
+    let bucket_size = config.bucket_size.clone();
+    let bucket_size_secs = bucket_size.get().as_secs();
     let start_bucket = start_sec / bucket_size_secs * bucket_size_secs;
     let next_bucket =
         Duration::from_millis((bucket_size_secs - (start_sec - start_bucket)) * 1000 + 1);
@@ -754,7 +755,7 @@ pub fn create_stats_channel(
     let providers: Vec<_> = if log_provider_stats {
         providers
             .iter()
-            .map(|(name, kind)| channel::ChannelStatsReader::new(name.clone(), &kind.rx))
+            .map(|(name, kind)| channel::ChannelStatsReader::new(name.to_string(), &kind.rx))
             .collect()
     } else {
         Vec::new()
@@ -779,7 +780,7 @@ pub fn create_stats_channel(
     // create the task responsible for receiving incoming statistics
     let stats_receiver_task = async move {
         let mut print_stats_interval =
-            IntervalStream::new(time::interval_at(now + next_bucket, bucket_size));
+            IntervalStream::new(time::interval_at(now + next_bucket, **bucket_size.get()));
         // create a stream which combines getting incoming messages, printing stats on an interval
         // and checking if the test has ended
         enum StreamItem {
@@ -811,7 +812,7 @@ pub fn create_stats_channel(
                         let providers = providers
                             .iter()
                             .map(|(name, kind)| {
-                                channel::ChannelStatsReader::new(name.clone(), &kind.rx)
+                                channel::ChannelStatsReader::new(name.to_string(), &kind.rx)
                             })
                             .collect();
                         Poll::Ready(Some(StreamItem::UpdateProviders(providers)))

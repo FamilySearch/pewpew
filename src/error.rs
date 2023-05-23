@@ -1,14 +1,20 @@
+use config::{self, error::EvalExprError};
 use hyper::http::Error as HttpError;
-
-use std::{error::Error as StdError, fmt, path::PathBuf, sync::Arc, time::SystemTime};
+use std::{error::Error as StdError, path::Path, sync::Arc, time::SystemTime};
+use thiserror::Error;
 
 // An error that can happen in normal execution of an endpoint, but should not halt the test
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum RecoverableError {
-    ProviderDelay(String),
-    BodyErr(Arc<dyn StdError + Send + Sync>),
-    ConnectionErr(SystemTime, Arc<dyn StdError + Send + Sync>),
-    ExecutingExpression(Box<config::ExecutingExpressionError>),
+    #[error("endpoint was delayed waiting for provider {0}")]
+    ProviderDelay(Arc<str>),
+    #[error("body error: {0}")]
+    BodyErr(#[source] Arc<dyn StdError + Send + Sync>),
+    #[error("connection error: {1}")]
+    ConnectionErr(SystemTime, #[source] Arc<dyn StdError + Send + Sync>),
+    #[error("{0}")]
+    ExecutingExpression(#[from] Box<config::error::EvalExprError>),
+    #[error("request timed out")]
     Timeout(SystemTime),
 }
 
@@ -26,113 +32,43 @@ impl RecoverableError {
     }
 }
 
-impl fmt::Display for RecoverableError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BodyErr(e) => write!(f, "body error: {e}"),
-            ConnectionErr(_, e) => write!(f, "connection error: `{e}`"),
-            ExecutingExpression(e) => e.fmt(f),
-            ProviderDelay(p) => write!(f, "endpoint was delayed waiting for provider `{p}`"),
-            Timeout(..) => write!(f, "request timed out"),
-        }
-    }
-}
-
 // The types of errors that we may encounter during a test
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum TestError {
-    CannotCreateLoggerFile(String, Arc<std::io::Error>),
-    CannotCreateStatsFile(String, Arc<std::io::Error>),
-    CannotOpenFile(PathBuf, Arc<std::io::Error>),
-    Config(Box<config::Error>),
-    FileReading(String, Arc<std::io::Error>),
-    InvalidConfigFilePath(PathBuf),
+    #[error("error creating logger file `{0}`: {1}")]
+    CannotCreateLoggerFile(String, #[source] Arc<std::io::Error>),
+    #[error("error creating stats file `{0}`: {1}")]
+    CannotCreateStatsFile(String, #[source] Arc<std::io::Error>),
+    #[error("error opening file `{}`: {}", .0.display(), .1)]
+    CannotOpenFile(Arc<Path>, #[source] Arc<std::io::Error>),
+    #[error(transparent)]
+    Config(#[from] Box<config::error::LoadTestGenError>),
+    #[error("error reading file `{0}`: {1}")]
+    FileReading(String, #[source] Arc<std::io::Error>),
+    #[error("could not find config file at path `{}`", .0.display())]
+    InvalidConfigFilePath(Arc<Path>),
+    #[error("invalid url `{0}`")]
     InvalidUrl(String),
-    Recoverable(RecoverableError),
-    RequestBuilderErr(Arc<HttpError>),
-    SslError(Arc<native_tls::Error>),
-    WritingToFile(String, Arc<std::io::Error>),
+    #[error("invalid config for full test: {0}")]
+    LoadTestError(#[from] config::error::InvalidForLoadTest),
+    #[error("recoverable error: {0}")]
+    Recoverable(#[from] RecoverableError),
+    #[error("error creating request: {0}")]
+    RequestBuilderErr(#[source] Arc<HttpError>),
+    #[error("error creating ssl connector: `{0}`")]
+    SslError(#[from] Arc<native_tls::Error>),
+    #[error("error writing to file `{0}`: {1}")]
+    WritingToFile(String, #[source] Arc<std::io::Error>),
 }
 
-impl From<RecoverableError> for TestError {
-    fn from(re: RecoverableError) -> Self {
-        Self::Recoverable(re)
-    }
-}
-
-use TestError::*;
-
-impl fmt::Display for TestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CannotCreateLoggerFile(s, e) => write!(f, "error creating logger file `{s}`: {e}"),
-            CannotCreateStatsFile(s, e) => write!(f, "error creating stats file `{s}`: {e}"),
-            CannotOpenFile(p, e) => write!(f, "error opening file `{}`: {}", p.display(), e),
-            Config(e) => e.fmt(f),
-            FileReading(s, e) => write!(f, "error reading file `{s}`: {e}"),
-            InvalidConfigFilePath(p) => {
-                write!(f, "could not find config file at path `{}`", p.display())
-            }
-            InvalidUrl(u) => write!(f, "invalid url `{u}`"),
-            Recoverable(r) => write!(f, "recoverable error: {r}"),
-            RequestBuilderErr(e) => write!(f, "error creating request: {e}"),
-            SslError(e) => write!(f, "error creating ssl connector: {e}"),
-            WritingToFile(l, e) => write!(f, "error writing to file `{l}`: {e}"),
-        }
-    }
-}
-
-impl StdError for TestError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            CannotCreateLoggerFile(_, e) => Some(&**e),
-            CannotCreateStatsFile(_, e) => Some(&**e),
-            CannotOpenFile(_, e) => Some(&**e),
-            Config(e) => Some(e),
-            FileReading(_, e) => Some(&**e),
-            Recoverable(BodyErr(e)) => Some(&**e),
-            Recoverable(ConnectionErr(_, e)) => Some(&**e),
-            RequestBuilderErr(e) => Some(&**e),
-            SslError(e) => Some(&**e),
-            WritingToFile(_, e) => Some(&**e),
-            _ => None,
-        }
-    }
-}
-
-impl From<config::Error> for TestError {
-    fn from(ce: config::Error) -> Self {
-        if let config::Error::ExpressionErr(config::CreatingExpressionError::Executing(
-            e @ config::ExecutingExpressionError::IndexingIntoJson(..),
-        )) = ce
-        {
-            Recoverable(ExecutingExpression(e.into()))
-        } else {
-            Config(ce.into())
-        }
-    }
-}
-
-impl From<config::CreatingExpressionError> for TestError {
-    fn from(ce: config::CreatingExpressionError) -> Self {
-        Config(Box::new(ce.into()))
-    }
-}
-
-impl From<config::ExecutingExpressionError> for TestError {
-    fn from(e: config::ExecutingExpressionError) -> Self {
-        Config(Box::new(e.into()))
-    }
-}
-
-impl From<config::ExecutingExpressionError> for RecoverableError {
-    fn from(e: config::ExecutingExpressionError) -> Self {
-        ExecutingExpression(Box::new(e))
+impl From<EvalExprError> for TestError {
+    fn from(value: EvalExprError) -> Self {
+        RecoverableError::from(Box::new(value)).into()
     }
 }
 
 impl From<native_tls::Error> for TestError {
     fn from(te: native_tls::Error) -> Self {
-        SslError(te.into())
+        Self::SslError(te.into())
     }
 }

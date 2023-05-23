@@ -4,27 +4,27 @@
 # export LOAD_TIME=10s
 
 vars:
-  port: "${PORT}"
-  ramp_time: ${RAMP_TIME} # Can be 5s, 5m, 5h
-  load_time: ${LOAD_TIME} # Can be 5s, 5m, 5h
+  port: "${e:PORT}"
+  ramp_time: '${e:RAMP_TIME}' # Can be 5s, 5m, 5h
+  load_time: '${e:LOAD_TIME}' # Can be 5s, 5m, 5h
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
       to: 100%
-      over: ${ramp_time}
-  - linear:
+      over: ${v:ramp_time}
+  - !linear
       from: 100%
       to: 100%
-      over: ${load_time}
+      over: ${v:load_time}
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     peak_load: 1hps
     logs:
       test:

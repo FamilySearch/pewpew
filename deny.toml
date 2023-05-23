@@ -24,6 +24,7 @@ allow = [
     "Apache-2.0",
     "BSD-3-Clause",
     "MIT",
+    "MPL-2.0", # MPL is only copyleft in regards to modifications to the original, adding as a dependency is fine
     "Unicode-DFS-2016",
     "Zlib",
 ]

@@ -1,39 +1,37 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
   counter_limit: 5
 
 load_pattern:
-  - linear:
+  - !linear
       from: 100%
       to: 100%
       over: 15s
 
 providers:
-  a:
-    range: {}
-  b:
-    response: {}
-  c:
-    response: {}
-  d:
-    response: {}
+  a: !range
+  b: !response
+  c: !response
+  d: !response
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
-    body: '{"a": ${a}}'
+    url: http://localhost:${v:port}
+    body: !str '{"a": ${p:a}}'
     # peak_load: 1hps
     provides:
       b:
-        select:
-          value: response.body.a
-          counter: 0
+        query:
+          select:
+            value: response.body.a
+            counter: 0
+        send: block
     logs:
       test:
         select:
@@ -42,18 +40,22 @@ endpoints:
     on_demand: true
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"b": ${b.value}}'
+    url: http://localhost:${v:port}
+    body: !str '{"b": ${x:${p:b}.value}}'
     peak_load: 5hps
     provides:
       b:
-        select:
-          value: response.body.b # Put it back on 'b' to reuse
-          counter: b.counter + 1
-        where: b.counter < counter_limit
+        query:
+          select:
+            value: response.body.b # Put it back on 'b' to reuse
+            counter: b.counter + 1
+          where: b.counter < _v.counter_limit
+        send: if_not_full
       c:
-        select: response.body.b # Put it on  once we've hit counter_limit
-        where: b.counter >= counter_limit
+        query:
+          select: response.body.b # Put it on  once we've hit counter_limit
+          where: b.counter >= _v.counter_limit
+        send: if_not_full
     logs:
       test:
         select:
@@ -62,8 +64,8 @@ endpoints:
           counter: b.counter
 
   - method: POST
-    url: http://localhost:${port}
-    body: '{"c": ${c}}'
+    url: http://localhost:${v:port}
+    body: !str '{"c": ${p:c}}'
     peak_load: 1hps
     logs:
       test:

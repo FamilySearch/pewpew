@@ -9,6 +9,7 @@ use crate::line_writer::MsgType;
 use crate::util::{config_limit_to_channel_limit, json_value_to_string};
 use crate::TestEndReason;
 
+use config::{self, common::ProviderSend, providers};
 use ether::Either3;
 use futures::{
     channel::mpsc::{self, channel, Sender as FCSender},
@@ -23,6 +24,7 @@ use tokio::{sync::broadcast, task::spawn_blocking};
 use std::{
     borrow::Cow,
     io,
+    path::PathBuf,
     pin::Pin,
     sync::{
         atomic::{AtomicIsize, Ordering},
@@ -33,7 +35,7 @@ use std::{
 
 #[derive(Clone)]
 pub struct Provider {
-    pub auto_return: Option<config::EndpointProvidesSendOptions>,
+    pub auto_return: Option<ProviderSend>,
     pub rx: channel::Receiver<json::Value>,
     pub tx: channel::Sender<json::Value>,
     pub on_demand: channel::OnDemandReceiver<json::Value>,
@@ -41,7 +43,7 @@ pub struct Provider {
 
 impl Provider {
     fn new(
-        auto_return: Option<config::EndpointProvidesSendOptions>,
+        auto_return: Option<ProviderSend>,
         rx: channel::Receiver<json::Value>,
         tx: channel::Sender<json::Value>,
     ) -> Self {
@@ -57,31 +59,35 @@ impl Provider {
 // create a file provider. It takes a "test_killer" because a file provider has the means of killing a test
 // if it encounters an error while reading from the file
 pub fn file(
-    mut fp: config::FileProvider,
+    fp: providers::FileProvider,
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
     name: &str,
+    auto_buffer_start_size: usize,
 ) -> Result<Provider, TestError> {
-    let file = std::mem::take(&mut fp.path);
+    //let file = std::mem::take(&mut fp.path);
+    let file = fp.path.get();
     debug!("providers::file={}", file);
     let file2 = file.clone();
     // create a stream from the file that yields values
     let stream = match fp.format {
-        config::FileFormat::Csv => Either3::A(into_stream(
-            CsvReader::new(&fp, &file)
-                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?,
+        providers::FileReadFormat::Csv(ref csv) => Either3::A(into_stream(
+            CsvReader::new(&fp, csv, file)
+                .map_err(|e| TestError::CannotOpenFile(Arc::from(PathBuf::from(file)), e.into()))?,
         )),
-        config::FileFormat::Json => Either3::B(into_stream(
-            JsonReader::new(&fp, &file)
-                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?,
-        )),
-        config::FileFormat::Line => Either3::C(into_stream(
-            LineReader::new(&fp, &file)
-                .map_err(|e| TestError::CannotOpenFile(file.into(), e.into()))?,
-        )),
+        providers::FileReadFormat::Json => {
+            Either3::B(into_stream(JsonReader::new(&fp, file).map_err(|e| {
+                TestError::CannotOpenFile(Arc::from(PathBuf::from(file)), e.into())
+            })?))
+        }
+        providers::FileReadFormat::Line => {
+            Either3::C(into_stream(LineReader::new(&fp, file).map_err(|e| {
+                TestError::CannotOpenFile(Arc::from(PathBuf::from(file)), e.into())
+            })?))
+        }
     };
 
     // create the channel for the provider
-    let limit = config_limit_to_channel_limit(fp.buffer);
+    let limit = config_limit_to_channel_limit(fp.buffer, auto_buffer_start_size);
     let (tx, rx) = channel::channel(limit, fp.unique, name);
     let tx2 = tx.clone();
 
@@ -107,20 +113,24 @@ pub fn file(
 }
 
 // create a response provider
-pub fn response(rp: config::ResponseProvider, name: &str) -> Provider {
+pub fn response(
+    rp: providers::ResponseProvider,
+    name: &str,
+    auto_buffer_start_size: usize,
+) -> Provider {
     debug!("providers::response={:?}", rp);
     // create the channel for the provider
-    let limit = config_limit_to_channel_limit(rp.buffer);
+    let limit = config_limit_to_channel_limit(rp.buffer, auto_buffer_start_size);
     let (tx, rx) = channel::channel(limit, rp.unique, name);
 
     Provider::new(rp.auto_return, rx, tx)
 }
 
 // create a list provider
-pub fn list(lp: config::ListProvider, name: &str) -> Provider {
+pub fn list(lp: providers::ListProvider, name: &str) -> Provider {
     debug!("providers::list={:?}", lp);
     // create the channel for the provider
-    let unique = lp.unique();
+    let unique = lp.unique;
     let rs = stream::iter(lp.into_iter().map(Ok));
     let limit = channel::Limit::dynamic(5);
     let (tx, rx) = channel::channel(limit, unique, name);
@@ -135,17 +145,28 @@ pub fn list(lp: config::ListProvider, name: &str) -> Provider {
 }
 
 // create a range provider
-pub fn range(rp: config::RangeProvider, name: &str) -> Provider {
-    debug!("providers::range={}", rp);
+pub fn range(rp: providers::RangeProvider, name: &str) -> Provider {
+    debug!("providers::range={:?}", rp);
     // create the channel for the provider
     let limit = channel::Limit::dynamic(5);
-    let (tx, rx) = channel::channel(limit, rp.unique(), name);
+    let (tx, rx) = channel::channel(limit, rp.unique, name);
 
     // create a new task that pushes data from the range into the channel
-    let prime_tx = stream::iter(rp.0.map(|v| Ok(v.into()))).forward(tx.clone());
+    let prime_tx = stream::iter(rp.into_iter().map(|v| Ok(v.into()))).forward(tx.clone());
     debug!("Provider::range tokio::spawn prime_tx");
     tokio::spawn(prime_tx);
 
+    Provider::new(None, rx, tx)
+}
+
+pub fn null(name: &str) -> Provider {
+    let limit = channel::Limit::statik(500);
+    let (tx, rx) = channel::channel(limit, false, name);
+
+    let prime_tx = stream::repeat(json::Value::Null)
+        .map(Ok)
+        .forward(tx.clone());
+    tokio::spawn(prime_tx);
     Provider::new(None, rx, tx)
 }
 
@@ -215,22 +236,15 @@ pub fn logger(
     test_killer: &broadcast::Sender<Result<TestEndReason, TestError>>,
     writer: FCSender<MsgType>,
 ) -> Logger {
-    debug!("providers::logger={}", logger);
+    debug!("providers::logger={:?}", logger);
     let pretty = logger.pretty;
     let kill = logger.kill;
 
-    let test_killer = if kill {
-        Some(test_killer.clone())
-    } else {
-        None
-    };
-
-    let limit = if kill && logger.limit.is_none() {
-        Some(1)
-    } else {
-        logger.limit
-    }
-    .map(|limit| Arc::new(AtomicIsize::new(limit as isize)));
+    let test_killer = kill.then(|| test_killer.clone());
+    let limit = logger
+        .limit
+        .or_else(|| kill.then_some(1))
+        .map(|limit| Arc::new(AtomicIsize::new(limit as isize)));
 
     Logger {
         limit,
@@ -266,25 +280,25 @@ mod tests {
     use super::*;
     use crate::line_writer::blocking_writer;
 
-    use config::FromYaml;
     use futures::executor::{block_on, block_on_stream};
     use futures_timer::Delay;
     use json::json;
     use test_common::TestWriter;
     use tokio::{runtime::Runtime, time};
 
+    use serde_yaml::from_str as from_yaml;
     use std::time::Duration;
 
     #[test]
     fn range_provider_works() {
+        use config::providers::RangeProvider;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let range_params = r#"
                 start: 0
                 end: 20
             "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
             let p = range(range_params.into(), &"range_provider_works1".to_string());
             let expect: Vec<_> = (0..=20).collect();
 
@@ -300,8 +314,7 @@ mod tests {
                 end: 20
                 step: 2
             "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
             let p = range(range_params.into(), &"range_provider_works2".to_string());
 
             let expect: Vec<_> = (0..=20).step_by(2).collect();
@@ -318,8 +331,7 @@ mod tests {
                     end: 20
                     repeat: true
                 "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+            let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
             let p = range(range_params.into(), &"range_provider_works3".to_string());
 
             let expect: Vec<_> = (0..=20).cycle().take(100).collect();
@@ -334,18 +346,19 @@ mod tests {
     }
 
     #[test]
-    fn literals_provider_works() {
+    fn list_provider_works() {
+        use config::providers::ListProvider;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let jsons = vec![json!(1), json!(2), json!(3)];
-            let lwo = config::ListWithOptions {
+            let lp = ListProvider {
                 values: jsons.clone(),
                 repeat: false,
                 random: false,
                 unique: false,
             };
 
-            let p = list(lwo.into(), &"literals_provider_works1".to_string());
+            let p = list(lp.into(), &"literals_provider_works1".to_string());
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -355,14 +368,14 @@ mod tests {
 
             assert_eq!(values, expect, "first");
 
-            let lwo = config::ListWithOptions {
+            let lp = ListProvider {
                 values: jsons.clone(),
                 repeat: false,
                 random: true,
                 unique: false,
             };
 
-            let p = list(lwo.into(), &"literals_provider_works2".to_string());
+            let p = list(lp.into(), &"literals_provider_works2".to_string());
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -375,21 +388,21 @@ mod tests {
 
             assert_eq!(values, expect, "second");
 
-            let lwo = config::ListWithOptions {
+            let lp = ListProvider {
                 values: jsons.clone(),
                 repeat: true,
                 random: false,
                 unique: false,
             };
 
-            let p = list(lwo.into(), &"literals_provider_works3".to_string());
+            let p = list(lp.into(), &"literals_provider_works3".to_string());
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
             let values: Vec<_> = p.rx.take(100).collect().await;
 
             assert_eq!(values, expect, "third");
 
-            let lwo = config::ListWithOptions {
+            let lwo = ListProvider {
                 values: jsons.clone(),
                 repeat: true,
                 random: true,
@@ -415,7 +428,7 @@ mod tests {
 
             assert_eq!(values, expect, "fifth");
 
-            let lwo = config::ListWithOptions {
+            let lwo = ListProvider {
                 // be sure to keep the number of values <= the default buffer size used for a static list
                 // or this test will fail
                 values: vec![json!(1), json!(2), json!(1), json!(2), json!(1)],
@@ -443,13 +456,15 @@ mod tests {
 
     #[test]
     fn response_provider_works() {
+        use config::providers::{BufferLimit, ResponseProvider};
+
         let jsons = vec![json!(1), json!(2), json!(3)];
-        let rp = config::ResponseProvider {
+        let rp = ResponseProvider {
             auto_return: None,
-            buffer: config::Limit::dynamic(),
+            buffer: BufferLimit::Auto,
             unique: false,
         };
-        let mut p = response(rp, &"response_provider_works".to_string());
+        let mut p = response(rp, &"response_provider_works".to_string(), 5);
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }
@@ -466,6 +481,8 @@ mod tests {
 
     #[test]
     fn unique_response_provider_works() {
+        use config::providers::{BufferLimit, ResponseProvider};
+
         let jsons = vec![
             json!(1),
             json!(2),
@@ -477,12 +494,12 @@ mod tests {
             json!(2),
             json!(3),
         ];
-        let rp = config::ResponseProvider {
+        let rp = ResponseProvider {
             auto_return: None,
-            buffer: config::Limit::Static(jsons.len()),
+            buffer: BufferLimit::Limit(jsons.len() as u64),
             unique: true,
         };
-        let mut p = response(rp, &"unique_response_provider_works".to_string());
+        let mut p = response(rp, &"unique_response_provider_works".to_string(), 5);
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }
@@ -499,19 +516,14 @@ mod tests {
 
     #[test]
     fn basic_logger_works() {
+        use config::Logger;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
-                to: ""
+                to: !file
                 kill: true
             "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
+            let logger_params = from_yaml::<Logger>(logger_params).unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             let (writer_channel, _) =
@@ -541,18 +553,13 @@ mod tests {
 
     #[test]
     fn basic_logger_works_with_large_data() {
+        use config::Logger;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
-                to: ""
+                to: !file
             "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
+            let logger_params = from_yaml::<Logger>(logger_params).unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             let (writer_channel, _) = blocking_writer(writer.clone(), test_killer.clone(), "".into());
@@ -580,18 +587,13 @@ mod tests {
 
     #[test]
     fn basic_logger_works_with_would_block() {
+        use config::Logger;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
-                to: ""
+                to: !file
             "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
+            let logger_params = from_yaml::<Logger>(logger_params).unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             writer.do_would_block_on_next_write();
@@ -622,19 +624,14 @@ mod tests {
 
     #[test]
     fn logger_limit_works() {
+        use config::Logger;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
-                to: ""
+                to: !file
                 limit: 1
             "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
+            let logger_params = from_yaml::<Logger>(logger_params).unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             let (writer_channel, _) =
@@ -660,19 +657,14 @@ mod tests {
 
     #[test]
     fn logger_pretty_works() {
+        use config::Logger;
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
             let logger_params = r#"
-                to: ""
+                to: !file
                 pretty: true
             "#;
-            let logger_params = config::FromYaml::from_yaml_str(logger_params).unwrap();
-            let (logger_params, _) = config::Logger::from_pre_processed(
-                logger_params,
-                &Default::default(),
-                &mut Default::default(),
-            )
-            .unwrap();
+            let logger_params = from_yaml::<Logger>(logger_params).unwrap();
             let (test_killer, mut test_killed_rx) = broadcast::channel(1);
             let writer = TestWriter::new();
             let (writer_channel, _) =

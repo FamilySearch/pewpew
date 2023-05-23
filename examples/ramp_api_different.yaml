@@ -1,35 +1,35 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: "${e:PORT}"
 
 load_pattern:
-  - linear:
+  - !linear
       from: 10%
       to: 100%
       over: 15s
 
 loggers:
   test:
-    to: stderr
+    to: !stderr
 
 endpoints:
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     peak_load: 1hps
     logs:
       test:
         select: response.status
 
   - method: GET
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     peak_load: 1hps
     load_pattern:
-      - linear: # Delay start
+      - !linear # Delay start
           from: 0%
           to: 0%
           over: 5s
-      - linear: # No ramp, just burst traffic
+      - !linear # No ramp, just burst traffic
           from: 100%
           to: 100%
           over: 5s

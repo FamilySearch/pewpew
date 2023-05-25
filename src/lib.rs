@@ -70,7 +70,7 @@ struct Endpoints {
 
 impl Endpoints {
     fn new() -> Self {
-        Endpoints {
+        Self {
             inner: Vec::new(),
             providers: BTreeMap::new(),
         }
@@ -176,7 +176,7 @@ impl fmt::Display for RunOutputFormat {
 
 impl RunOutputFormat {
     pub fn is_human(self) -> bool {
-        matches!(self, RunOutputFormat::Human)
+        matches!(self, Self::Human)
     }
 }
 
@@ -185,8 +185,8 @@ impl TryFrom<&str> for RunOutputFormat {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "human" => Ok(RunOutputFormat::Human),
-            "json" => Ok(RunOutputFormat::Json),
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
             _ => Err(()),
         }
     }
@@ -221,7 +221,7 @@ pub enum TryRunFormat {
 
 impl TryRunFormat {
     pub fn is_human(self) -> bool {
-        matches!(self, TryRunFormat::Human)
+        matches!(self, Self::Human)
     }
 }
 
@@ -243,8 +243,8 @@ impl TryFrom<&str> for TryRunFormat {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "human" => Ok(TryRunFormat::Human),
-            "json" => Ok(TryRunFormat::Json),
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
             _ => Err(()),
         }
     }
@@ -294,17 +294,22 @@ impl FromStr for TryFilter {
         use once_cell::sync::Lazy;
         use regex::Regex;
 
+        // TODO: replace once_cell::sync::Lazy with std::sync::LazyLock once that gets stabilized
+        // out of nightly
         static REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new("^(.*?)(!=|=)(.*)").expect("is a valid regex"));
 
         let caps = REGEX.captures(s).ok_or("failed match")?;
+
+        // Should never panic, as the Regex's known success at this point guarantees that all
+        // capture groups are present.
         let lhs = caps.get(1).unwrap().as_str().to_owned();
         let cmp = caps.get(2).unwrap().as_str();
         let rhs = caps.get(3).unwrap().as_str().to_owned();
         Ok((match cmp {
             "=" => Self::Eq,
             "!=" => Self::Ne,
-            _ => unreachable!(),
+            _ => unreachable!(r#"Regex can only catch "=" or "!=" here."#),
         })(lhs, rhs))
     }
 }
@@ -355,19 +360,23 @@ impl fmt::Display for ExecConfig {
 impl ExecConfig {
     fn get_config_file(&self) -> &PathBuf {
         match self {
-            ExecConfig::Run(r) => &r.config_file,
-            ExecConfig::Try(t) => &t.config_file,
+            Self::Run(r) => &r.config_file,
+            Self::Try(t) => &t.config_file,
         }
     }
 
     fn get_output_format(&self) -> RunOutputFormat {
         match self {
-            ExecConfig::Run(r) => r.output_format,
-            ExecConfig::Try(_) => RunOutputFormat::Human,
+            Self::Run(r) => r.output_format,
+            Self::Try(_) => RunOutputFormat::Human,
         }
     }
 }
 
+/// The reason the test ended, whether temporarily or completely.
+///
+/// [`Self::ConfigUpdate`] end will allow the test to continue with the updated config, if watch mode was
+/// enabled in the [`ExecConfig`].
 #[derive(Clone)]
 pub enum TestEndReason {
     Completed,
@@ -377,6 +386,18 @@ pub enum TestEndReason {
     ConfigUpdate(Arc<BTreeMap<String, providers::Provider>>),
 }
 
+/// Inner(1)-level runtime future function.
+///
+/// Generates runner based on specified values in the [`ExecConfig`], as well as the indicated config
+/// YAML file.
+///
+/// Either a Try future or a Run future is spawned and a test end is awaited for.
+///
+/// Returns the reason that the test finished, or could not be run.
+///
+/// # Errors
+///
+/// Returns an `Err` if the test could not be run.
 async fn _create_run(
     exec_config: ExecConfig,
     mut ctrlc_channel: FCUnboundedReceiver<()>,
@@ -469,6 +490,7 @@ async fn _create_run(
 
             let providers = Arc::new(providers);
 
+            // Allow continuing test with new config file.
             if r.watch_config_file {
                 create_config_watcher(
                     file,
@@ -500,11 +522,15 @@ async fn _create_run(
     match test_runner {
         Ok(f) => {
             debug!("_create_run tokio::spawn test_runner");
+            // Start running the test.
             tokio::spawn(f);
             let mut test_result = Ok(TestEndReason::Completed);
+            // Wait until the test is done.
             while let Some(v) = test_ended_rx.next().await {
                 match v {
+                    // If test end was due to config change, keep going with new config.
                     Ok(Ok(TestEndReason::ConfigUpdate(_))) => continue,
+                    // Any other reason, and the test ends fully.
                     Ok(v) => {
                         test_result = v;
                     }
@@ -518,6 +544,15 @@ async fn _create_run(
     }
 }
 
+/// Outermost-level runtime future function.
+///
+/// Creates worker future, and checks the circumstances under which it terminates. Specific
+/// information regarding the termination reason is not returned, but rather dispatched through
+/// logging.
+///
+/// # Errors
+///
+/// Returns `Err(())` if the worker future returns an `Err`.
 pub async fn create_run<So, Se>(
     exec_config: ExecConfig,
     ctrlc_channel: FCUnboundedReceiver<()>,
@@ -611,6 +646,11 @@ where
     Ok(())
 }
 
+/// Create a watcher to see when the config file has been updated.
+///
+/// If watch mode has been enabled for the [`RunConfig`], this will be called during future generation
+/// (but not in the [`create_load_test_future`] function)
+/// to enable updating the configuration, and continuing from the same time point.
 #[allow(clippy::too_many_arguments)]
 fn create_config_watcher(
     mut file: File,
@@ -675,6 +715,11 @@ fn create_config_watcher(
             if file.read_to_end(&mut config_bytes).is_err() {
                 continue;
             }
+
+            // Config file has updated, re-parse and update.
+
+            // A decent amount of this code seems similar to that in `_create_run`; could
+            // this be unified into a common function?
 
             let config = config::LoadTest::from_config(&config_bytes, &config_file_path, &env_vars);
             let mut config = match config {
@@ -785,6 +830,11 @@ fn create_config_watcher(
     });
 }
 
+/// Inner(2)-level function, used to create worker future for a try run.
+///
+/// # Errors
+///
+/// TODO.
 fn create_try_run_future(
     mut config: config::LoadTest,
     try_config: TryConfig,
@@ -795,7 +845,7 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
-    let select = if let TryRunFormat::Human = try_config.format {
+    let select = if matches!(try_config.format, TryRunFormat::Human) {
         r#""`\
          Request\n\
          ========================================\n\
@@ -858,6 +908,8 @@ fn create_try_run_future(
             (
                 is_eq,
                 key,
+                // Should never panic, as regex::escape ensures that the result is a valid literal,
+                // and the only expressions added after are ".*?"
                 regex::Regex::new(&right).expect("filter should be a valid regex"),
             )
         })
@@ -865,15 +917,8 @@ fn create_try_run_future(
     let filter_fn = move |tags: &BTreeMap<String, String>| -> bool {
         filters.is_empty()
             || filters.iter().any(|(is_eq, key, regex)| {
-                let check = tags
-                    .get(key)
-                    .map(|left| regex.is_match(left))
-                    .unwrap_or(false);
-                if *is_eq {
-                    check
-                } else {
-                    !check
-                }
+                // "should it match" compared to "does it match"
+                *is_eq == tags.get(key).map_or(false, |left| regex.is_match(left))
             })
     };
 
@@ -897,11 +942,7 @@ fn create_try_run_future(
             .iter_mut()
             .filter_map(|(k, s)| {
                 s.set_send_behavior(config::EndpointProvidesSendOptions::Block);
-                if required_providers.contains(k) {
-                    None
-                } else {
-                    Some(k.clone())
-                }
+                (!required_providers.contains(k)).then(|| k.clone())
             })
             .collect::<BTreeSet<_>>();
         endpoint.on_demand = true;
@@ -910,14 +951,10 @@ fn create_try_run_future(
             .tags
             .iter()
             .filter_map(|(k, v)| {
-                if v.is_simple() {
-                    let r = v
-                        .evaluate(Cow::Owned(json::Value::Null), None)
-                        .map(|v| (k.clone(), v));
-                    Some(r)
-                } else {
-                    None
-                }
+                v.is_simple().then(|| {
+                    v.evaluate(Cow::Owned(json::Value::Null), None)
+                        .map(|v| (k.clone(), v))
+                })
             })
             .collect::<Result<_, _>>()?;
 
@@ -957,6 +994,11 @@ fn create_try_run_future(
     Ok(f)
 }
 
+/// Inner(2)-level function, used to create worker future for a full load test.
+///
+/// # Errors
+///
+/// Returns an `Err` if the config file is missing data that a full test requires.
 fn create_load_test_future(
     config: config::LoadTest,
     run_config: RunConfig,
@@ -1133,11 +1175,7 @@ fn get_loggers_from_config(
                 "stdout" => stdout.clone(),
                 "stderr" => stderr.clone(),
                 _ => {
-                    let mut file_path = if let Some(results_dir) = results_dir {
-                        results_dir.clone()
-                    } else {
-                        PathBuf::new()
-                    };
+                    let mut file_path = results_dir.map_or_else(PathBuf::new, Clone::clone);
                     file_path.push(to);
                     let f = File::create(&file_path)
                         .map_err(|e| TestError::CannotCreateLoggerFile(name2, e.into()))?;

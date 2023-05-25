@@ -45,7 +45,7 @@ impl Provider {
         rx: channel::Receiver<json::Value>,
         tx: channel::Sender<json::Value>,
     ) -> Self {
-        Provider {
+        Self {
             auto_return,
             on_demand: channel::OnDemandReceiver::new(&rx),
             rx,

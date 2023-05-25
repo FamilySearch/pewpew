@@ -221,6 +221,7 @@ fn main() {
         }
     }
 
+    // Create Future to run full load test or try test.
     let f = create_run(cli_config, ctrlc_channel, io::stdout(), io::stderr());
 
     let rt = runtime::Builder::new_multi_thread()
@@ -230,6 +231,7 @@ fn main() {
         .build()
         .unwrap();
     debug!("rt.block_on start");
+    // Run Future to completion
     let result = rt.block_on(f);
     debug!("rt.block_on finished. result: {:?}", result);
     // shutdown the runtime in case there are any hanging threads/tasks

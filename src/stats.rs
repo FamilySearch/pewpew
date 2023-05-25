@@ -25,6 +25,7 @@ use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use yansi::Paint;
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     fmt::Write,
     fs::File,
@@ -112,7 +113,7 @@ struct TimeBucket {
 
 impl TimeBucket {
     fn new(time: u64) -> Self {
-        TimeBucket {
+        Self {
             time,
             entries: BTreeMap::new(),
         }
@@ -125,7 +126,7 @@ impl TimeBucket {
     }
 
     // Combine the statistics of two `TimeBucket`s
-    fn combine(&mut self, rhs: &TimeBucket) {
+    fn combine(&mut self, rhs: &Self) {
         for (index, entry) in &rhs.entries {
             self.entries
                 .entry(*index)
@@ -203,7 +204,7 @@ struct BucketGroupStats {
 
 impl Default for BucketGroupStats {
     fn default() -> Self {
-        BucketGroupStats {
+        Self {
             request_timeouts: 0,
             rtt_histogram: Histogram::new(3).expect("could not create histogram"),
             status_counts: Default::default(),
@@ -237,7 +238,7 @@ impl BucketGroupStats {
     }
 
     // Combine two `BucketGroupStats`
-    fn combine(&mut self, rhs: &BucketGroupStats) {
+    fn combine(&mut self, rhs: &Self) {
         self.request_timeouts += rhs.request_timeouts;
         let _ = self.rtt_histogram.add(&rhs.rtt_histogram);
         for (status, count) in &rhs.status_counts {
@@ -392,7 +393,7 @@ impl Stats {
             test_killer,
             file_name.to_string_lossy().to_string(),
         );
-        Ok(Stats {
+        Ok(Self {
             bucket_size,
             current: TimeBucket::new(rounded_epoch(bucket_size)),
             console,
@@ -512,13 +513,10 @@ impl Stats {
         let test_complete = remaining_seconds.is_none();
         let mut is_new_bucket = false;
         let time = rounded_epoch(self.bucket_size) - self.bucket_size;
-        let bucket = match self.get_previous_bucket(test_complete) {
-            Some(b) => b,
-            None => {
-                is_new_bucket = true;
-                TimeBucket::new(time)
-            }
-        };
+        let bucket = self.get_previous_bucket(test_complete).unwrap_or_else(|| {
+            is_new_bucket = true;
+            TimeBucket::new(time)
+        });
         let mut print_string = if test_complete {
             String::new()
         } else {
@@ -614,29 +612,26 @@ pub enum StatKind {
 
 impl From<ResponseStat> for StatsMessage {
     fn from(rs: ResponseStat) -> Self {
-        StatsMessage::ResponseStat(rs)
+        Self::ResponseStat(rs)
     }
 }
 
 // Create a pretty string which specifies when the test will end
 fn duration_till_end_to_pretty_string(duration: Duration) -> String {
     let long_form = duration_to_pretty_long_form(duration);
-    let msg = if let Some(s) = duration_to_pretty_short_form(duration) {
-        format!("{s} {long_form}")
-    } else {
-        long_form
-    };
+    let msg = duration_to_pretty_short_form(duration).map_or_else(
+        || Cow::Borrowed(&long_form),
+        |s| Cow::Owned(format!("{s} {long_form}")),
+    );
     format!("Test will end {msg}")
 }
 
 fn duration_to_pretty_short_form(duration: Duration) -> Option<String> {
-    if let Ok(duration) = ChronoDuration::from_std(duration) {
+    ChronoDuration::from_std(duration).ok().map(|duration| {
         let now = Local::now();
         let end = now + duration;
-        Some(format!("around {}", end.format("%T %-e-%b-%Y")))
-    } else {
-        None
-    }
+        format!("around {}", end.format("%T %-e-%b-%Y"))
+    })
 }
 
 fn duration_to_pretty_long_form(duration: Duration) -> String {
@@ -654,31 +649,30 @@ fn duration_to_pretty_long_form(duration: Duration) -> String {
     .into_iter()
     .filter_map(move |(unit, name)| {
         let count = secs / unit;
-        if count > 0 {
+        (count > 0).then(|| {
             secs -= count * unit;
             if count > 1 {
-                Some(format!("{count} {name}s"))
+                format!("{count} {name}s")
             } else {
-                Some(format!("{count} {name}"))
+                format!("{count} {name}")
             }
-        } else {
-            None
-        }
+        })
     })
     .collect();
-    let long_time = if let Some(last) = builder.pop() {
-        let mut ret = builder.join(", ");
-        if ret.is_empty() {
-            last
-        } else {
-            // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
-            let _ = write!(&mut ret, " and {last}");
-            // ret.push_str(&format!(" and {}", last));
-            ret
-        }
-    } else {
-        "0 seconds".to_string()
-    };
+    let long_time = builder.pop().map_or_else(
+        || Cow::Borrowed("0 seconds"),
+        |last| {
+            let mut ret = builder.join(", ");
+            Cow::Owned(if ret.is_empty() {
+                last
+            } else {
+                // https://rust-lang.github.io/rust-clippy/master/index.html#format_push_string
+                let _ = write!(&mut ret, " and {last}");
+                // ret.push_str(&format!(" and {}", last));
+                ret
+            })
+        },
+    );
     format!("in approximately {long_time}")
 }
 

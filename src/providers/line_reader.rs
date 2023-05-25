@@ -24,7 +24,7 @@ pub struct LineReader {
 
 impl LineReader {
     pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
-        let mut jr = LineReader {
+        let mut jr = Self {
             byte_buffer: vec![0; KB8],
             buf_data_len: 0,
             position: 0,

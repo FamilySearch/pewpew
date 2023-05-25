@@ -20,7 +20,7 @@ pub struct JsonReader {
 
 impl JsonReader {
     pub fn new(config: &config::FileProvider, file: &str) -> Result<Self, io::Error> {
-        let mut jr = JsonReader {
+        let mut jr = Self {
             staging_buffer: vec![0; 8 * (1 << 10)],
             buffer: Vec::new(),
             position: 0,

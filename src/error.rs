@@ -56,7 +56,7 @@ pub enum TestError {
 
 impl From<RecoverableError> for TestError {
     fn from(re: RecoverableError) -> Self {
-        TestError::Recoverable(re)
+        Self::Recoverable(re)
     }
 }
 

@@ -14,6 +14,7 @@ cargo fmt --all -- --check
 cargo clippy --all -- -D warnings
 
 cargo test --all
+cargo test --all --doc
 
 CWD=$(pwd)
 

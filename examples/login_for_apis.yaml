@@ -1,3 +1,6 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+# This file also requires a PASSWORD environment variable. Any value will work and the the password will be scrubbed from the logs.
+
 vars:
   port: ${PORT}
   username: test-user

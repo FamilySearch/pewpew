@@ -1,3 +1,5 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
 vars:
   port: "${PORT}"
   counter_limit: 5
@@ -6,7 +8,7 @@ load_pattern:
   - linear:
       from: 100%
       to: 100%
-      over: 1m
+      over: 15s
 
 providers:
   a:

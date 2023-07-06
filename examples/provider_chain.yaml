@@ -1,3 +1,5 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
 vars:
   port: "${PORT}"
 

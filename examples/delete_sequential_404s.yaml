@@ -26,10 +26,10 @@ providers:
   createdId:
     range:
       start: 1
-  delete404s: # When this is empty we move on to group searches
+  delete404s:
     list:
       values:
-        - 1
+        - 1 # Initial value to pre-populate a counter
       repeat: false
 
 

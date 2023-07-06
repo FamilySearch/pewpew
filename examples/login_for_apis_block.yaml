@@ -17,7 +17,9 @@ providers:
   session_counter:
     range: {}
   session:
-    response: {}
+    response:
+      buffer: 500 # Allow up to 500 in the provider
+      auto_return: force # Always put these back in. login will only run when there's room.
   a:
     range: {}
   b:
@@ -38,13 +40,14 @@ endpoints:
       # Create a token that concatonates `token_prepend` and the `session_counter` padded with zeros to min length of 6
       new_token: '`${token_prepend}${start_pad(session_counter, 6, "0")}`'
     body: '{"username": "${username}","password":"${password}","token":"${new_token}"}'
-    # peak_load: 1hps
+    peak_load: 1hps
     provides:
       session:
         select: response.body.token
         for_each:
           - repeat(200) # Put 200 copies on the session provider
         where: response.status == 200 # but only if the response status is 200. Errors ignored
+        send: block # block and only run when there's room in the provider
     logs:
       test:
         select:

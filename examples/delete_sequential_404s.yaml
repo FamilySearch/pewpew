@@ -29,7 +29,7 @@ providers:
   delete404s:
     list:
       values:
-        - 1 # Initial value to pre-populate a counter
+        - 0 # Initial value to pre-populate a counter
       repeat: false
 
 
@@ -52,7 +52,7 @@ endpoints:
     peak_load: 1hps
     provides:
       delete404s:
-        select: if(response.status == 404, delete404s + 1, 1)
+        select: if(response.status == 404, delete404s + 1, 0)
         send: force
     logs:
       test:

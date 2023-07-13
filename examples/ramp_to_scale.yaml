@@ -2,7 +2,7 @@
 
 vars:
   port: "${PORT}"
-  scale_percentage: ${SCALE_PERCENTAGE}
+  scale_percentage: ${SCALE_PERCENTAGE} # Can be 200, 300, 1000, 50
 
 load_pattern:
   - linear:

@@ -4,7 +4,6 @@ vars:
   port: "${PORT}"
   createName: 'test:loadtest-'
   groupRate: 2
-  imagesPerGroup: 10
 
 load_pattern:
   - linear:

@@ -1,0 +1,88 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+
+providers:
+  a:
+    range: {}
+  b:
+    response: {}
+  c:
+    response: {}
+  d:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"a": ${a}}'
+    # peak_load: 1hps
+    provides:
+      b:
+        select: response.body.a
+    logs:
+      test:
+        select:
+          a: response.body.a
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"b": ${b}}'
+    peak_load: 5hps
+    provides:
+      b:
+        select: b # Put it back on 'b' to reuse
+    logs:
+      test:
+        select:
+          b: response.body.b
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"b": ${b}}'
+    # peak_load: 1hps
+    provides:
+      c:
+        select: response.body.b # take and put it on 'c'
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"c": ${c}}'
+    peak_load: 5hps
+    provides:
+      c:
+        select: c # Put it back on 'c' to reuse
+    logs:
+      test:
+        select:
+          c: response.body.c
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"c": ${c}}'
+    peak_load: 1hps
+    provides:
+      d:
+        select: response.body.c # take and put it on 'd'
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"d": ${d}}'
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          d: response.body.d

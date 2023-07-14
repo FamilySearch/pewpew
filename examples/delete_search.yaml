@@ -1,0 +1,111 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+# This file will delete sequentially until we get 50 (maxDelete404) 404s in a row. If we ever don't get a 404, it resets.
+# Once we hit 50 in a row, it logs to `test_404s` logger which causes the test to exit with `kill: true`
+
+vars:
+  port: "${PORT}"
+  createdName: 'test:loadtest-' # Only used so we can prepopulate the results for the test server
+  maxDelete404: 50
+  maxSearchDelete404: 500
+  maxEmptySearch: 20
+  peakLoadDelete: 400hpm
+  peakLoadSearch: 20hpm
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+config:
+  client:
+    headers:
+      TestTime: '${epoch("ms")}'
+      Accept: application/json
+
+providers:
+  createdId: # Only used so we can prepopulate the results for the test server
+    range:
+      start: 1
+  nextPageTokenGroup:
+    list:
+      values:
+        - token: 0
+          emptyCount: 0
+  testId:
+    response:
+      buffer: 1
+
+
+loggers:
+  test:
+    to: stderr
+  test_404s:
+    limit: 1
+    to: stdout
+    pretty: false
+    kill: true
+
+endpoints:
+  - method: PUT
+    url: 'http://localhost:${port}'
+    headers:
+      Content-Type: application/json
+    declare:
+      resultsIds: collect('${createdName}${start_pad(createdId, 6, "0")}', 0, 20)
+    body: '{
+        "pageSize": 20,
+        "name": "TEST-GROUP",
+        "nextPageToken": "${nextPageTokenGroup.token + 1}",
+        "userIds": ${resultsIds},
+        "numberReturned":${resultsIds.length}
+      }'
+    peak_load: ${peakLoadSearch}
+    provides:
+      testId:
+        select: for_each[0]
+        for_each:
+          - response.body.userIds
+        where: response.status == 200 && response.body.numberReturned > 0
+        send: block
+      nextPageTokenGroup:
+        select:
+          token: if(response.status == 200 && response.body.numberReturned > 0 && response.body.nextPageToken != null, response.body.nextPageToken + 1, 0)
+          emptyCount: if(response.status == 200 && response.body.numberReturned > 0, 0, nextPageTokenGroup.emptyCount + 1)
+        where: nextPageTokenGroup.emptyCount < maxEmptySearch
+    logs:
+      test:
+        select:
+          ids: response.body.numberReturned
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          responseBody: response.body
+          status: response.status
+          token: nextPageTokenGroup.token
+          emptyCount: nextPageTokenGroup.emptyCount
+          maxEmptySearch: maxEmptySearch
+        where: response.status == 200 && response.body != "" && response.body.numberReturned == 0
+
+
+  - method: DELETE
+    url: 'http://localhost:${port}?id=${testId}?include-children=true'
+    tags:
+      status: ${response.status}
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          id: testId
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          id: testId
+          request: request["start-line"]
+          response: response["start-line"]
+          status: response.status
+          maxDelete404: maxDelete404
+        where: response.status == 404

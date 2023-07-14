@@ -1,0 +1,31 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+# export RAMP_TIME=5s
+# export LOAD_TIME=10s
+
+vars:
+  port: "${PORT}"
+  ramp_time: ${RAMP_TIME} # Can be 5s, 5m, 5h
+  load_time: ${LOAD_TIME} # Can be 5s, 5m, 5h
+
+load_pattern:
+  - linear:
+      from: 10%
+      to: 100%
+      over: ${ramp_time}
+  - linear:
+      from: 100%
+      to: 100%
+      over: ${load_time}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: GET
+    url: http://localhost:${port}
+    peak_load: 1hps
+    logs:
+      test:
+        select: response.status

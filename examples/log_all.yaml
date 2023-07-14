@@ -1,0 +1,40 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+
+load_pattern:
+  - linear:
+      from: 10%
+      to: 100%
+      over: 15s
+
+loggers:
+  http_errors:
+    select:
+      timestamp: epoch("ms")
+      request: request["start-line"]
+      requestHeaders: request.headers # headers_all includes duplicate headers, headers only has the first of each named header
+      requestBody: request.body
+      response: response["start-line"]
+      responseHeaders: response.headers
+      responseBody: response.body
+      stats: stats
+    to: 'log-results-${epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start
+    pretty: false
+
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    headers:
+      Accept-Language: en-us
+      Content-Type: application/json
+      Authorization: Bearer test-token
+    body: '{"test":true}'
+    peak_load: 1hps
+    logs:
+      test:
+        select: response.status

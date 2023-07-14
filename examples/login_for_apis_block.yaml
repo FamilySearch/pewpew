@@ -1,0 +1,81 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+# This file also requires a PASSWORD environment variable. Any value will work and the the password will be scrubbed from the logs.
+
+# This version will initially fill the provider and will then block once we have enough to use. Alternative to `on_demand`
+
+vars:
+  port: ${PORT}
+  username: test-user
+  password: ${PASSWORD}
+  token_prepend: "test_token_"
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+providers:
+  session_counter:
+    range: {}
+  session:
+    response:
+      buffer: 500 # Allow up to 500 in the provider
+      auto_return: force # Always put these back in. login will only run when there's room.
+  a:
+    range: {}
+  b:
+    response: {}
+  c:
+    response: {}
+  d:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    declare:
+      # Create a token that concatonates `token_prepend` and the `session_counter` padded with zeros to min length of 6
+      new_token: '`${token_prepend}${start_pad(session_counter, 6, "0")}`'
+    body: '{"username": "${username}","password":"${password}","token":"${new_token}"}'
+    peak_load: 1hps
+    provides:
+      session:
+        select: response.body.token
+        for_each:
+          - repeat(200) # Put 200 copies on the session provider
+        where: response.status == 200 # but only if the response status is 200. Errors ignored
+        send: block # block and only run when there's room in the provider
+    logs:
+      test:
+        select:
+          ts: epoch("ms")
+          response: replace("${password}", request.body, "******") # remove the password from the log
+          token: response.body.token
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}?b
+    headers:
+      Authorization: Bearer ${session}
+    body: '{"b": ${a}}'
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          a: response.body.a
+
+  - method: POST
+    url: http://localhost:${port}?c
+    headers:
+      Authorization: Bearer ${session}
+    body: '{"c": ${a}}'
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          a: response.body.a

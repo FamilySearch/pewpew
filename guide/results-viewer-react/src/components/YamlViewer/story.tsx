@@ -1,7 +1,6 @@
 import YamlViewer, { YamlViewerProps } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -127,50 +126,51 @@ const propsWithAll: YamlViewerProps = {
   error: "Error loading Yaml file"
 };
 
-storiesOf("YamlViewer", module).add("Default", () => (
+export default {
+  title: "YamlViewer"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...props } />
   </React.Fragment>
-  )
-);
+  );
 
-storiesOf("YamlViewer", module).add("Contents", () => (
+export const Contents = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithContents } />
   </React.Fragment>
-  )
-);
+  );
 
-storiesOf("YamlViewer", module).add("ContentsLarge", () => (
+export const ContentsLarge = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithContentsLarge } />
   </React.Fragment>
-  )
-);
+  );
 
-storiesOf("YamlViewer", module).add("Loading", () => (
+ContentsLarge.story = {
+  name: "ContentsLarge"
+};
+
+export const Loading = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithLoading } />
   </React.Fragment>
-  )
-);
+  );
 
-storiesOf("YamlViewer", module).add("Error", () => (
+export const Error = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithError } />
   </React.Fragment>
-  )
-);
-
-storiesOf("YamlViewer", module).add("All", () => (
+  );
+export const All = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithAll } />
   </React.Fragment>
-  )
-);
+  );

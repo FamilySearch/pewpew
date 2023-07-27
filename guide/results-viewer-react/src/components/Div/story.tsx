@@ -7,7 +7,6 @@ import {
 } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 import styled from "styled-components";
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -45,14 +44,19 @@ export const Row = styled(RowInternal)`
   border-color: white;
 `;
 
-storiesOf("Div", module).add("Div", () => (
+export default {
+  title: "Div",
+  excludeStories: ["Div", "Column", "DivLeft", "DivRight", "Row"]
+};
+
+export const _Div = () => (
   <React.Fragment>
     <GlobalStyle />
     <Div>Some children</Div>
   </React.Fragment>
-));
+);
 
-storiesOf("Div", module).add("Row", () => (
+export const _Row = () => (
   <React.Fragment>
     <GlobalStyle />
     <Row>
@@ -61,9 +65,8 @@ storiesOf("Div", module).add("Row", () => (
       <Div>Some children</Div>
     </Row>
   </React.Fragment>
-));
-
-storiesOf("Div", module).add("Column", () => (
+);
+export const _Column = () => (
   <React.Fragment>
     <GlobalStyle />
     <Column>
@@ -72,9 +75,9 @@ storiesOf("Div", module).add("Column", () => (
       <Div>Some children</Div>
     </Column>
   </React.Fragment>
-));
+);
 
-storiesOf("Div", module).add("DivLeftRight", () => (
+export const DivLeftRight = () => (
   <React.Fragment>
     <GlobalStyle />
     <Row>
@@ -88,4 +91,8 @@ storiesOf("Div", module).add("DivLeftRight", () => (
       <DivRight>DivRight</DivRight>
     </Column>
   </React.Fragment>
-));
+);
+
+DivLeftRight.story = {
+  name: "DivLeftRight"
+};

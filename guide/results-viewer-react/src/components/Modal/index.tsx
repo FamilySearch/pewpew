@@ -150,16 +150,26 @@ export const Modal = forwardRef(({
 
   const open = () => {
     windowOffset = window.scrollY;
-    document.getElementById("root")!.style.position = "fixed";
-    document.getElementById("root")!.style.top = `-${windowOffset}px`;
+    const root = document.getElementById("root");
+    if (root) {
+      root.style.position = "fixed";
+      root.style.top = `-${windowOffset}px`;
+    } else {
+      log("Cannot find element #root", LogLevel.DEBUG);
+    }
     setDisplay(true);
   };
 
   const close = (event?: React.MouseEvent<HTMLButtonElement>) => {
-    const scrollY = document.getElementById("root")!.style.top;
-    document.getElementById("root")!.style.position = "";
-    document.getElementById("root")!.style.top = "";
-    window.scrollTo(0, parseInt(scrollY || "0", 10) * -1);
+    const root = document.getElementById("root");
+    if (root) {
+      const scrollY = root.style.top;
+      root.style.position = "";
+      root.style.top = "";
+      window.scrollTo(0, parseInt(scrollY || "0", 10) * -1);
+    } else {
+      log("Cannot find element #root", LogLevel.DEBUG);
+    }
     if (onClose) {
       onClose(event);
     }

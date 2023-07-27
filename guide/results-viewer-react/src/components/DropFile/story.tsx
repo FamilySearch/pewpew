@@ -1,7 +1,6 @@
 import DropFile, { DropFileProps } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -9,16 +8,19 @@ import { storiesOf } from "@storybook/react";
  * Source: https://storybook.js.org
  */
 const props: DropFileProps = {
-  onDropFile: ((_filelist: File[]) => {
+  onDropFile: (_filelist: File[]) => {
     // console.log("filelist: ", filelist);
     return Promise.resolve();
-  })
+  }
 };
 
-storiesOf("DropFile", module).add("Default", () => (
+export default {
+  title: "DropFile"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DropFile {...props} />
   </React.Fragment>
-  )
 );

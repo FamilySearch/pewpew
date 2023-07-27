@@ -3,7 +3,6 @@ import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
 import { Vars, VarsProps} from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 const props: VarsProps = {
   addVar: (newVar: PewPewVars) => {
@@ -40,7 +39,11 @@ const propsLoaded: VarsProps = { ...props,
   ]
 };
 
-storiesOf("YamlVars", module).add("Default", () => (
+export default {
+  title: "YamlVars"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -49,9 +52,9 @@ storiesOf("YamlVars", module).add("Default", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlVars", module).add("Loaded", () => (
+export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -60,4 +63,4 @@ storiesOf("YamlVars", module).add("Loaded", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);

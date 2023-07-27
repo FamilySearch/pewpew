@@ -294,8 +294,8 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
       stateVariable: string;
       returnTypeArray: LoggerSelectEntryDisplay[];
     } | undefined;
-    for (let i = 0; i < loggerOptions.length; i++) {
-      if (loggerOptions[i].type === dataType) { loggerArray = loggerOptions[i]; }
+    for (const loggerOption of loggerOptions) {
+      if (loggerOption.type === dataType) { loggerArray = loggerOption; }
     }
     log("headerClick", LogLevel.DEBUG, { dataType, loggerArray, newChecked });
     if (!loggerArray) {

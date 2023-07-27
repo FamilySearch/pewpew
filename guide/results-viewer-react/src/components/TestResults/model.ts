@@ -105,7 +105,7 @@ function asBucketId (b: unknown): BucketId | Error {
   if (result) {
     return new Error("failed property check for bucket id. " + result);
   } else {
-    return <BucketId>b;
+    return b as BucketId;
   }
 }
 
@@ -216,7 +216,7 @@ function asDataPointPreProcessed (dp: unknown): DataPointPreProcessed | Error {
   if (result) {
     return new Error("failed property check for data point. " + result);
   } else {
-    return <DataPointPreProcessed>dp;
+    return dp as DataPointPreProcessed;
   }
 }
 
@@ -252,7 +252,7 @@ function asBucketEntry (b: unknown): BucketEntry | Error {
       return result;
     }
   }
-  return <BucketEntry>b;
+  return b as BucketEntry;
 }
 
 interface StatsFile {
@@ -264,22 +264,21 @@ function asStatsFile (s: unknown): StatsFile | Error {
     return new Error("stats is not an object");
   }
 
-  // tslint:disable-next-line: no-unbound-method
-  const checks: Check[] = [["buckets", Array.isArray]];
+   const checks: Check[] = [["buckets", Array.isArray]];
   {
     const result = propertyChecker(s, checks);
     if (result) {
       return new Error("failed property check for stats. " + result);
     }
   }
-  const buckets: unknown[] = (<any>s).buckets;
+  const buckets: unknown[] = (s as any).buckets;
   for (const b of buckets) {
     const result = asBucketEntry(b);
     if (result instanceof Error) {
       return result;
     }
   }
-  return <StatsFile>s;
+  return s as StatsFile;
 }
 
 export type ParsedFileEntry = [BucketId, DataPoint[]];

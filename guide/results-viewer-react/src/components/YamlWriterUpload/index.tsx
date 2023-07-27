@@ -162,10 +162,10 @@ interface ParsedEndpoint extends Omit<HarEndpoint, "url"> {
   url: URL;
 }
 
-type IndexType = {
+interface IndexType {
   iter: number,
   id: string
-};
+}
 
 export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultState: YamlWriterUploadState = {
@@ -307,8 +307,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     for (const key of typeKeys ) {
     let typeCheck = 0;
     const type = types[key]!;
-      for (let i = 0; i < type.index.length; i++) {
-         if (indices[type.index[i].iter].selected === "yes") { typeCheck++; }
+      for (const typeIndex of type.index) {
+         if (indices[typeIndex.iter].selected === "yes") { typeCheck++; }
       }
        if (typeCheck === type.index.length) { typesTemp[key]!.selected = "yes"; }
        else if (typeCheck === 0) { typesTemp[key]!.selected = "no"; }
@@ -374,8 +374,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       const url: OutputRecord | undefined = outputName.urls[key];
       const urlTemp = urlsTemp[key];
       if (!url || !urlTemp) { continue; }
-      for (let i = 0; i < url.index.length; i++) {
-        if (indices[url.index[i].iter].selected === "yes") { urlCheck++; }
+      for (const urlIndex of url.index) {
+        if (indices[urlIndex.iter].selected === "yes") { urlCheck++; }
       }
       if (urlCheck === url.index.length) { urlTemp.selected = "yes"; }
       else if (urlCheck === 0) { urlTemp.selected = "no"; }
@@ -387,8 +387,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       const type = outputName.types[key];
       const typeTemp = typesTemp[key];
       if (!type || !typeTemp) { continue; }
-      for (let i = 0; i < type.index.length; i++) {
-        if (indices[type.index[i].iter].selected === "yes") { typeCheck++; }
+      for (const typeIndex of type.index) {
+        if (indices[typeIndex.iter].selected === "yes") { typeCheck++; }
       }
       if (typeCheck === type.index.length) { typeTemp.selected = "yes"; }
       else if (typeCheck === 0) { typeTemp.selected = "no"; }

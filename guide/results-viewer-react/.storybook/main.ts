@@ -1,4 +1,6 @@
-module.exports = {
+import type { StorybookConfig } from "@storybook/react-webpack5";
+
+const config: StorybookConfig = {
   stories: ["../src/components/**/story.tsx"],
   addons: ["@storybook/addon-links", "@storybook/addon-essentials", "@storybook/addon-interactions"],
   framework: {
@@ -30,3 +32,5 @@ module.exports = {
     autodocs: false
   }
 };
+
+export default config;

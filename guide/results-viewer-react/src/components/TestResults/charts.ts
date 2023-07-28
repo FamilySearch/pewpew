@@ -185,11 +185,11 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
 }
 
 class ChartDataSets {
-  public dataSets: Map<
+  public dataSets = new Map<
     string,
     [Map<Date, number>, ChartDataset]
-  > = new Map();
-  public dates: Set<Date> = new Set();
+  >();
+  public dates = new Set<Date>();
 
   public setPoint (
     key: string,
@@ -235,7 +235,7 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
   for (const dp of dataPoints) {
     const x = dp.time;
     const statusCounts = Object.entries(dp.statusCounts).map(
-      ([k, v]) => <[string, number]>[k + " count", v]
+      ([k, v]) => [k + " count", v] as [string, number]
     );
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {

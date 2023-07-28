@@ -2,7 +2,6 @@ import QuestionBubble, { QuestionBubbleProps } from ".";
 import { DisplayDivBody } from "../YamlWriterForm";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 
 const props: QuestionBubbleProps = {
@@ -15,7 +14,11 @@ const linkProps: QuestionBubbleProps = {
   href: "https://familysearch.github.io/pewpew/"
 };
 
-storiesOf("YamlQuestionBubble", module).add("Default", () => (
+export default {
+  title: "YamlQuestionBubble"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivBody>
@@ -23,9 +26,9 @@ storiesOf("YamlQuestionBubble", module).add("Default", () => (
       <QuestionBubble {...props} ></QuestionBubble>
     </DisplayDivBody>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlQuestionBubble", module).add("Linked Question Mark", () => (
+export const LinkedQuestionMark = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivBody>
@@ -33,4 +36,4 @@ storiesOf("YamlQuestionBubble", module).add("Linked Question Mark", () => (
       <QuestionBubble {...linkProps} ></QuestionBubble>
     </DisplayDivBody>
   </React.Fragment>
-));
+);

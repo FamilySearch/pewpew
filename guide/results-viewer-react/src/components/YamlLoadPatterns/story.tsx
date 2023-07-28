@@ -3,7 +3,6 @@ import LoadPatterns, { LoadPatternProps, loadPattern, rampPattern } from ".";
 import { GlobalStyle } from "../Global";
 import { PewPewLoadPattern } from "../../util/yamlwriter";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 const props: LoadPatternProps = {
   addPattern: (pewpewPattern: PewPewLoadPattern) => {
@@ -48,7 +47,11 @@ const propsLoaded: LoadPatternProps = { ...props,
   ]
 };
 
-storiesOf("YamlLoadPatterns", module).add("Default", () => (
+export default {
+  title: "YamlLoadPatterns"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -57,9 +60,9 @@ storiesOf("YamlLoadPatterns", module).add("Default", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlLoadPatterns", module).add("Empty", () => (
+export const Empty = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -68,9 +71,9 @@ storiesOf("YamlLoadPatterns", module).add("Empty", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlLoadPatterns", module).add("Loaded", () => (
+export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -79,4 +82,4 @@ storiesOf("YamlLoadPatterns", module).add("Loaded", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);

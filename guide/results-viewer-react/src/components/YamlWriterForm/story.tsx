@@ -1,7 +1,6 @@
 import { YamlWriterForm, YamlWriterFormProps } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -9,7 +8,7 @@ import { storiesOf } from "@storybook/react";
  * Source: https://storybook.js.org
  */
 
- const props: YamlWriterFormProps = {
+const props: YamlWriterFormProps = {
   clearParentEndpoints: () => {
     // eslint-disable-next-line no-console
     console.log("clearing parent endpoints");
@@ -17,9 +16,13 @@ import { storiesOf } from "@storybook/react";
   parentEndpoints: []
 };
 
-storiesOf("YamlWriterForm", module).add("Default", () => (
+export default {
+  title: "YamlWriterForm"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlWriterForm {...props}></YamlWriterForm>
   </React.Fragment>
-  ));
+);

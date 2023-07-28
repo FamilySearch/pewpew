@@ -1,15 +1,13 @@
 import { Alert, Danger, Info, Success, Warning } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
-/**
- * Developing and visually testing components in isolation before composing them in your app is useful.
- * This file shows an example of that for the Layout component.
- * Source: https://storybook.js.org
- */
+export default {
+  title: "Alert",
+  component: Alert
+};
 
-storiesOf("Alert", module).add("Default", () => (
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <Alert>Alert</Alert>
@@ -18,4 +16,4 @@ storiesOf("Alert", module).add("Default", () => (
     <Warning>Warning</Warning>
     <Info>Info</Info>
   </React.Fragment>
-));
+);

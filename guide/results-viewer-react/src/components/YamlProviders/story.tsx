@@ -3,7 +3,6 @@ import Providers, {ProviderMainProps} from ".";
 import { GlobalStyle } from "../Global";
 import { PewPewProvider } from "../../util/yamlwriter";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 const props: ProviderMainProps = {
   addProvider: (pewpewProvider: PewPewProvider) => {
@@ -41,7 +40,11 @@ const propsLoaded: ProviderMainProps = { ...props,
   ]
 };
 
-storiesOf("YamlProviders", module).add("Default", () => (
+export default {
+  title: "YamlProviders"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -50,9 +53,9 @@ storiesOf("YamlProviders", module).add("Default", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlProviders", module).add("Loaded", () => (
+export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -61,4 +64,4 @@ storiesOf("YamlProviders", module).add("Loaded", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);

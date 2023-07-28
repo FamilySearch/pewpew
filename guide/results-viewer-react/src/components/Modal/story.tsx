@@ -8,7 +8,6 @@ import { HeaderMain } from "../YamlWriterUpload";
 import { Label } from "../YamlStyles";
 import LoggerModal from "../YamlLoggers/LoggerModal";
 import { ProviderListEntry } from "../../util/yamlwriter";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -16,70 +15,70 @@ import { storiesOf } from "@storybook/react";
  * Source: https://storybook.js.org
  */
 
- const ModalUploadHarDemo = () => {
-  const modalRef = useRef<ModalObject| null>(null);
-  useEffectModal(modalRef, LogLevel.INFO);
+const ModalUploadHarDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
 
-  const defaultFiles: File[] = [];
-  const [files, setFiles] = useState(defaultFiles);
-  const [isReady, setIsReady] = useState(false);
+ const defaultFiles: File[] = [];
+ const [files, setFiles] = useState(defaultFiles);
+ const [isReady, setIsReady] = useState(false);
 
-  const submitEvent = () => {
-    log("submitting event and creating yaml file", LogLevel.INFO);
-    return Promise.resolve();
-  };
-  const handleFileInput = (fileList: File[]) => {
-    log("handling file input", LogLevel.INFO, fileList);
-    setIsReady(files.length > 0 || fileList.length > 0);
-    setFiles((oldFiles: File[]) => ([...oldFiles, ...fileList]));
-  };
-  const onRemoveFile = (index: number) => {
-    log("handling file remove: " + index, LogLevel.INFO, index);
-    setIsReady(files.length > 1);
-    setFiles((oldFiles: File[]) => {
-      oldFiles.splice(index);
-      return [...oldFiles];
-    });
-  };
+ const submitEvent = () => {
+   log("submitting event and creating yaml file", LogLevel.INFO);
+   return Promise.resolve();
+ };
+ const handleFileInput = (fileList: File[]) => {
+   log("handling file input", LogLevel.INFO, fileList);
+   setIsReady(files.length > 0 || fileList.length > 0);
+   setFiles((oldFiles: File[]) => ([...oldFiles, ...fileList]));
+ };
+ const onRemoveFile = (index: number) => {
+   log("handling file remove: " + index, LogLevel.INFO, index);
+   setIsReady(files.length > 1);
+   setFiles((oldFiles: File[]) => {
+     oldFiles.splice(index);
+     return [...oldFiles];
+   });
+ };
 
-  return (
-    <div>
-      <GlobalStyle />
-      <HeaderMain>
-        <button onClick={() => modalRef.current?.openModal()}>Upload Har File</button>
-        <Modal
-          ref={modalRef}
-          title={"Upload Files"}
-          submitText={"Load"}
-          onSubmit={submitEvent}
-          closeText={"Cancel"}
-          isReady={isReady}
-        >
-          <div style={{color: "rgb(242, 241, 239)"}}>
-            Drag file to drop zone or click to select file to load. Currently will only load one file at a time.
-          </div>
-          <div style={{ width: "90%", height: "250px" }}>
-            <DropFile onDropFile={handleFileInput}></DropFile>
-          </div>
-          <div>
-            {files.map((file, index) => (
-              <div style={{paddingTop: "13px"}} key={index}>
-                <button name={`remove${index}`} style={{marginRight: "5px", marginTop:"40px"}} onClick={() => onRemoveFile(index)}>X</button>
-                {file.name}
-              </div>
-            ))}
-          </div>
-        </Modal>
-      </HeaderMain>
-    </div>
-  );
+ return (
+   <div>
+     <GlobalStyle />
+     <HeaderMain>
+       <button onClick={() => modalRef.current?.openModal()}>Upload Har File</button>
+       <Modal
+         ref={modalRef}
+         title={"Upload Files"}
+         submitText={"Load"}
+         onSubmit={submitEvent}
+         closeText={"Cancel"}
+         isReady={isReady}
+       >
+         <div style={{color: "rgb(242, 241, 239)"}}>
+           Drag file to drop zone or click to select file to load. Currently will only load one file at a time.
+         </div>
+         <div style={{ width: "90%", height: "250px" }}>
+           <DropFile onDropFile={handleFileInput}></DropFile>
+         </div>
+         <div>
+           {files.map((file, index) => (
+             <div style={{paddingTop: "13px"}} key={index}>
+               <button name={`remove${index}`} style={{marginRight: "5px", marginTop:"40px"}} onClick={() => onRemoveFile(index)}>X</button>
+               {file.name}
+             </div>
+           ))}
+         </div>
+       </Modal>
+     </HeaderMain>
+   </div>
+ );
 };
 
 const ModalListDemo = () => {
-  const modalRef = useRef<ModalObject| null>(null);
+  const modalRef = useRef<ModalObject | null>(null);
   useEffectModal(modalRef, LogLevel.INFO);
 
-  const list = [ {id: "50", name: "list", value: "10"} ];
+  const list = [{ id: "50", name: "list", value: "10" }];
   const onChange = () => {
     // eslint-disable-next-line no-console
     console.log("changing value");
@@ -89,17 +88,13 @@ const ModalListDemo = () => {
       <GlobalStyle />
       <button onClick={() => modalRef.current?.openModal()}>Edit List</button>
       <DisplayDivMain>
-        <Modal
-          ref={modalRef}
-          title={"Edit List"}
-          closeText={"Close"}
-          >
+        <Modal ref={modalRef} title={"Edit List"} closeText={"Close"}>
           <div>
             Add values to your List provider&nbsp;&nbsp;
-              <input id="providerList" name="" value="" onChange={onChange}/>
-              <button id="providerList" name="" value="" >
-                  Add
-              </button>
+            <input id="providerList" name="" value="" onChange={onChange}/>
+            <button id="providerList" name="" value="" >
+              Add
+            </button>
           </div>
           <table>
             <thead>
@@ -112,7 +107,9 @@ const ModalListDemo = () => {
               {list.map((item: ProviderListEntry, index: number) => {
                 return (
                   <tr key={index}>
-                    <td className="tableButton"><button id="providerList" name="list item" value={item.id}>X</button></td>
+                    <td className="tableButton">
+                      <button id="providerList" name="list item" value={item.id}>X</button>
+                    </td>
                     <td className="tableListItem">{item.value}</td>
                   </tr>);
               })}
@@ -125,10 +122,20 @@ const ModalListDemo = () => {
 };
 
 const ModalLoggerDemo = () => {
-  const modalRef = useRef<ModalObject| null>(null);
+  const modalRef = useRef<ModalObject | null>(null);
   useEffectModal(modalRef, LogLevel.INFO);
 
-  const logger = { id: "0", name: "", select: [], where: "", to: "", pretty: false, limit: "", kill: false, ready: false};
+  const logger = {
+    id: "0",
+    name: "",
+    select: [],
+    where: "",
+    to: "",
+    pretty: false,
+    limit: "",
+    kill: false,
+    ready: false
+  };
   const changeLoggerSelect = () => {
     // eslint-disable-next-line no-console
     console.log("changing logger select");
@@ -138,14 +145,14 @@ const ModalLoggerDemo = () => {
       <GlobalStyle />
       <button onClick={() => modalRef.current?.openModal()}>Edit List</button>
       <DisplayDivMain>
-      <LoggerModal ref={modalRef} data={logger} changeLogger={changeLoggerSelect}></LoggerModal>
+        <LoggerModal ref={modalRef} data={logger} changeLogger={changeLoggerSelect}></LoggerModal>
       </DisplayDivMain>
     </div>
   );
 };
 
 const ModalCreateYamlDemo = () => {
-  const modalRef = useRef<ModalObject| null>(null);
+  const modalRef = useRef<ModalObject | null>(null);
   useEffectModal(modalRef, LogLevel.INFO);
 
   const changeFileName = () => {
@@ -179,18 +186,22 @@ const ModalCreateYamlDemo = () => {
   );
 };
 
-storiesOf("Modal", module).add("Upload Har Modal", () => (
+export default {
+  title: "Modal"
+};
+
+export const UploadHarModal = () => (
   <ModalUploadHarDemo/>
-));
+);
 
-storiesOf("Modal", module).add("List Modal", () => (
+export const ListModal = () => (
   <ModalListDemo/>
-));
+);
 
-storiesOf("Modal", module).add("Logger Modal", () => (
+export const _LoggerModal = () => (
   <ModalLoggerDemo/>
-));
+);
 
-storiesOf("Modal", module).add("Create Yaml Modal", () => (
+export const CreateYamlModal = () => (
   <ModalCreateYamlDemo/>
-));
+);

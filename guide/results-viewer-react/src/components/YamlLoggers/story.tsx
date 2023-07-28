@@ -3,7 +3,6 @@ import { LoggerProps, Loggers, getDefaultLoggers } from ".";
 import { GlobalStyle } from "../Global";
 import { PewPewLogger } from "../../util/yamlwriter";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 const props: LoggerProps = {
   addLogger: (newLogger: PewPewLogger) => {
@@ -35,7 +34,11 @@ const propsLoaded: LoggerProps = { ...props,
   ]
 };
 
-storiesOf("YamlLoggers", module).add("Default", () => (
+export default {
+  title: "YamlLoggers"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -44,9 +47,9 @@ storiesOf("YamlLoggers", module).add("Default", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlLoggers", module).add("Loaded", () => (
+export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -55,4 +58,4 @@ storiesOf("YamlLoggers", module).add("Loaded", () => (
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>
-));
+);

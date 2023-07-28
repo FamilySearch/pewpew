@@ -69,9 +69,9 @@ html {
 }
 `;
 
-export type YamlWriterState = {
+export interface YamlWriterState {
   endpoints: HarEndpoint[];
-};
+}
 
 export const YamlWriter = () => {
   const defaultState: YamlWriterState = {

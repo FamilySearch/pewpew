@@ -2,7 +2,6 @@ import Input, { Checkbox, Div, InputPropsText, InputsDiv, Label, NonFlexSpan, Sp
 import { DisplayDivMain } from "../YamlWriterForm";
 import { GlobalStyle } from "../Global";
 import React from "react";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -21,7 +20,11 @@ const inputProps: InputPropsText = {
   dataType: "this is a data type value"
 };
 
-storiesOf("YamlStyles", module).add("Default", () => (
+export default {
+  title: "YamlStyles"
+};
+
+export const Default = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>
@@ -37,9 +40,9 @@ storiesOf("YamlStyles", module).add("Default", () => (
     </InputsDiv>
   </DisplayDivMain>
 </React.Fragment>
-));
+);
 
-storiesOf("YamlStyles", module).add("Non Flex Span", () => (
+export const _NonFlexSpan = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>
@@ -55,9 +58,9 @@ storiesOf("YamlStyles", module).add("Non Flex Span", () => (
     </InputsDiv>
   </DisplayDivMain>
 </React.Fragment>
-));
+);
 
-storiesOf("YamlStyles", module).add("Filled and Checked", () => (
+export const FilledAndChecked = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>
@@ -73,4 +76,8 @@ storiesOf("YamlStyles", module).add("Filled and Checked", () => (
     </InputsDiv>
   </DisplayDivMain>
 </React.Fragment>
-));
+);
+
+FilledAndChecked.story = {
+  name: "Filled and Checked"
+};

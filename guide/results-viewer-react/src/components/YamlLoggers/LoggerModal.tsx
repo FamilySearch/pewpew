@@ -52,7 +52,7 @@ type ResponseLogger = Record<ResponseLoggerName, LoggerSelectEntryDisplay>;
 type TimingLogger = Record<TimingLoggerName, LoggerSelectEntryDisplay>;
 
 const requestLoggers: RequestLogger = {
-  "request": { display: "start-line", name: "request", value: "request.[\"start-line\"]" },
+  "request": { display: "start-line", name: "request", value: "request[\"start-line\"]" },
   "method": { display: "method", name: "method", value: "request.method" },
   "url": { display: "url", name: "url", value: "request.url" },
   "requestHeaders": { display: "headers", name: "requestHeaders", value: "request.headers" },
@@ -60,7 +60,7 @@ const requestLoggers: RequestLogger = {
   "requestBody": { display: "body", name: "requestBody", value: "request.body" }
 };
 const responseLoggers: ResponseLogger = {
-  "response": { display: "start-line", name: "response", value: "response.[\"start-line\"]" },
+  "response": { display: "start-line", name: "response", value: "response[\"start-line\"]" },
   "status": { display: "status", name: "status", value: "response.status" },
   "responseHeaders": { display: "headers", name: "responseHeaders", value: "response.headers" },
   "responseHeadersAll": { display: "headers_all", name: "responseHeadersAll", value: "response.headers_all" },
@@ -294,8 +294,8 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
       stateVariable: string;
       returnTypeArray: LoggerSelectEntryDisplay[];
     } | undefined;
-    for (let i = 0; i < loggerOptions.length; i++) {
-      if (loggerOptions[i].type === dataType) { loggerArray = loggerOptions[i]; }
+    for (const loggerOption of loggerOptions) {
+      if (loggerOption.type === dataType) { loggerArray = loggerOption; }
     }
     log("headerClick", LogLevel.DEBUG, { dataType, loggerArray, newChecked });
     if (!loggerArray) {

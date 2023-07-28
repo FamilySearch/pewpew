@@ -3,7 +3,6 @@ import { PewPewAPI, PewPewHeader } from "../../util/yamlwriter";
 import React, { useState } from "react";
 import Urls, { UrlProps, getDefaultHeaders } from ".";
 import { GlobalStyle } from "../Global";
-import { storiesOf } from "@storybook/react";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -11,32 +10,32 @@ import { storiesOf } from "@storybook/react";
  * Source: https://storybook.js.org
  */
 
- const props: UrlProps = {
-  deleteUrl: (urlId: string) => {
-    // eslint-disable-next-line no-console
-    console.log("removing url " + urlId);
-  },
-  changeUrl: (pewpewUrl: PewPewAPI) => {
-    // eslint-disable-next-line no-console
-    console.log("changing url", pewpewUrl);
-  },
-  addHeaders: (urlId: string, newHeaders: PewPewHeader[]) => {
-    // eslint-disable-next-line no-console
-    console.log("adding headers to " + urlId, newHeaders);
-  },
-  deleteHeader: (urlId: string, headerId: string) => {
-    // eslint-disable-next-line no-console
-    console.log(`removing header ${headerId} from url ${urlId}`);
-  },
-  data: {
-    id: "empty",
-    url: "",
-    hitRate: "",
-    headers: [],
-    method: "POST", authorization: null
-  },
-  authenticated: false,
-  defaultHeaders: false
+const props: UrlProps = {
+ deleteUrl: (urlId: string) => {
+   // eslint-disable-next-line no-console
+   console.log("removing url " + urlId);
+ },
+ changeUrl: (pewpewUrl: PewPewAPI) => {
+   // eslint-disable-next-line no-console
+   console.log("changing url", pewpewUrl);
+ },
+ addHeaders: (urlId: string, newHeaders: PewPewHeader[]) => {
+   // eslint-disable-next-line no-console
+   console.log("adding headers to " + urlId, newHeaders);
+ },
+ deleteHeader: (urlId: string, headerId: string) => {
+   // eslint-disable-next-line no-console
+   console.log(`removing header ${headerId} from url ${urlId}`);
+ },
+ data: {
+   id: "empty",
+   url: "",
+   hitRate: "",
+   headers: [],
+   method: "POST", authorization: null
+ },
+ authenticated: false,
+ defaultHeaders: false
 };
 
 const propsLoaded: UrlProps = {
@@ -78,7 +77,11 @@ const TestComponent: React.FC = () => {
   </React.Fragment>;
 };
 
-storiesOf("YamlUrls", module).add("Default", () => (
+export default {
+  title: "YamlUrls"
+};
+
+export const Default = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -87,9 +90,9 @@ storiesOf("YamlUrls", module).add("Default", () => (
       </UrlsDiv>
     </DisplayDivMain>
   </React.Fragment>
-));
+);
 
-storiesOf("YamlUrls", module).add("Loaded", () => (
+export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -98,9 +101,8 @@ storiesOf("YamlUrls", module).add("Loaded", () => (
       </UrlsDiv>
     </DisplayDivMain>
   </React.Fragment>
-));
-
-storiesOf("YamlUrls", module).add("Interactable", () => {
-  return <TestComponent />;
-  }
 );
+
+export const Interactable = () => {
+  return <TestComponent />;
+  };

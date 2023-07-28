@@ -200,7 +200,7 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
 };
 
 const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
-  const combinedData: Map<number, DataPoint> = new Map();
+  const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
     const dp2 = combinedData.get(Number(dp.time));
@@ -469,7 +469,7 @@ const total = (dataPoints: DataPoint[]) => {
     requestTimeouts += dp.requestTimeouts;
   }
 
-  const statusAmount: Array<[string, number, number?]> = Object.entries(
+  const statusAmount: [string, number, number?][] = Object.entries(
     statusCounts
   ).sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10));
   for (const stat of statusAmount) {

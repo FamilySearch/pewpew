@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, IsTerminal};
 
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
@@ -180,11 +180,7 @@ fn main() {
             Paint::disable();
         }
     }
-    // TODO: https://rustsec.org/advisories/RUSTSEC-2021-0145
-    // Consider
-    //  - [is-terminal](https://crates.io/crates/is-terminal)
-    //  - std::io::IsTerminal *nightly-only experimental*
-    if atty::isnt(atty::Stream::Stdout) {
+    if !io::stdout().is_terminal() {
         Paint::disable();
     }
 

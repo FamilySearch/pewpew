@@ -18,7 +18,6 @@ name = "test-server"
 path = "src/bin/test_server.rs"
 
 [dependencies]
-atty = "0.2"
 base64 = "0.21"
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"

@@ -1357,7 +1357,6 @@ dependencies = [
 name = "pewpew"
 version = "0.5.12"
 dependencies = [
- "atty",
  "base64 0.21.0",
  "body_reader",
  "bytes",

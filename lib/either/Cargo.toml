@@ -9,4 +9,4 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-futures = "0.3"
+futures.workspace = true

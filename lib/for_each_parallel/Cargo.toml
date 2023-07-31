@@ -9,8 +9,8 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-futures = "0.3"
-tokio = "1"
+futures.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
-futures-timer = "3"
+futures-timer.workspace = true

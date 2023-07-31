@@ -10,11 +10,11 @@ doctest = false
 path = "test_common.rs"
 
 [dependencies]
-futures = "0.3"
-futures-timer = "3"
-hyper = { version = "0.14", features = ["server"] }
-http = "0.2"
+futures.workspace = true
+futures-timer.workspace = true
+hyper = { workspace = true, features = ["server"] }
+http.workspace = true
 parking_lot = "0.12"
-tokio = { version = "1", features = ["full"] }
-url = "2"
-log = "0.4"
+tokio = { workspace = true, features = ["full"] }
+url.workspace = true
+log.workspace = true

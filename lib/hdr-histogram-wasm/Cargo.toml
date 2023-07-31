@@ -9,8 +9,8 @@ license = "Apache 2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-base64 = "0.21"
+base64.workspace = true
 hdrhistogram = "7"
-wasm-bindgen = "0.2"
-log = "0.4"
-wasm-logger = "0.2"
+wasm-bindgen.workspace = true
+log.workspace = true
+wasm-logger.workspace = true

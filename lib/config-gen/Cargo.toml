@@ -16,14 +16,12 @@ crate_type = ["cdylib", "rlib"]
 [dependencies]
 config = { path = "../config" }
 console_error_panic_hook = "0.1.7"
-js-sys = "0.3.64"
-serde = "1"
-serde_json = "1.0.104"
-serde-wasm-bindgen = "0.5.0"
-serde_yaml = "0.9.25"
-wasm-bindgen = "0.2.87"
-# enable required feature of transitive dependency
-getrandom = { version = "*", features = ["js"] }
+js-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+wasm-bindgen.workspace = true
+getrandom.workspace = true
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"

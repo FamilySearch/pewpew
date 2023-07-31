@@ -27,41 +27,41 @@ config = { path = "./lib/config" }
 csv = "1"
 ctrlc = "3"
 chrono = "0.4"
-ether = { path = "./lib/either" }
+ether.workspace = true
 for_each_parallel = { path = "./lib/for_each_parallel" }
-futures = "0.3"
-futures-timer = "3"
+futures.workspace = true
+futures-timer.workspace = true
 hdrhistogram = "7"
-http = "0.2"
-hyper = { version = "0.14", features = ["client", "http1", "http2", "stream"] }
+http.workspace = true
+hyper = { workspace = true, features = ["client", "http1", "http2", "stream"] }
 hyper-tls = "0.5"
-itertools = "0.10"
+itertools.workspace = true
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
-once_cell = "1.17.1"
-rand = "0.8"
-regex = "1"
+once_cell.workspace = true
+rand.workspace = true
+regex.workspace = true
 select_any = { path = "./lib/select_any" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 test_common = { path = "./lib/test_common" }
-thiserror = "1.0.40"
-tokio = "1"
+thiserror.workspace = true
+tokio.workspace = true
 tokio-stream = { version = "0.1", features = ["sync", "time"] }
-url = "2"
+url.workspace = true
 yansi = "0.5"
-zip_all = { path = "./lib/zip_all" }
+zip_all.workspace = true
 # https://github.com/softprops/json-env-logger/issues/6
-log = { version = "0.4", features = ["kv_unstable_std"] }
+log = { workspace = true, features = ["kv_unstable_std"] }
 env_logger = "0.10"
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }
 # https://github.com/sfackler/rust-openssl/issues/1021#issuecomment-605602642
 openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
-futures-timer = "3"
+futures-timer.workspace = true
 maplit = "1"
-serde_yaml = "0.9.22"
+serde_yaml.workspace = true
 tempfile = "3"
 
 [profile.release]
@@ -90,3 +90,30 @@ members = [
     "lib/test_common",
     "lib/zip_all",
 ]
+
+[workspace.dependencies]
+base64 = "0.21"
+ether = { path = "./lib/either" }
+futures = "0.3"
+futures-timer = "3"
+http = "0.2"
+hyper = "0.14"
+itertools = "0.10"
+js-sys = "0.3.64"
+log = "0.4"
+once_cell = "1.17.1"
+rand = "0.8"
+regex = "1"
+serde = "1.0.163"
+serde_json = "1.0.104"
+serde_yaml = "0.9.25"
+thiserror = "1.0.40"
+tokio = "1"
+url = "2"
+zip_all = { path = "./lib/zip_all" }
+# Not a direct dependency but get random as of 0.2.2 throws an error on "unsupported targets"
+# https://docs.rs/getrandom/0.2.2/getrandom/#unsupported-targets
+# The fix is to add it as a supported target and specify the target. As of 0.2.2 both browser and nodejs use "js"
+getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen = "0.2.87"
+wasm-logger = "0.2"

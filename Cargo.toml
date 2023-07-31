@@ -1,10 +1,10 @@
 [package]
 name = "pewpew"
-version = "0.6.0-scripting"
+version.workspace = true
 edition = "2018"
 default-run = "pewpew"
 publish = false
-license = "Apache 2.0"
+license.workspace = true
 
 [lib]
 doctest = false
@@ -90,6 +90,10 @@ members = [
     "lib/test_common",
     "lib/zip_all",
 ]
+
+[workspace.package]
+version = "0.6.0-scripting"
+license = "Apache 2.0"
 
 [workspace.dependencies]
 base64 = "0.21"

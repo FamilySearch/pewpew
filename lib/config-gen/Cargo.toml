@@ -1,7 +1,9 @@
 [package]
 name = "config-gen"
-version = "0.0.0"
+version.workspace = true
 edition = "2021"
+publish = false
+license.workspace = true
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false

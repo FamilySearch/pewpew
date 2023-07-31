@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "body_reader"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "brotli",
  "brotli-decompressor",
@@ -226,7 +226,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "channel"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "ahash",
  "concurrent-queue",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "base64 0.21.0",
  "boa_engine",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "config-gen"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "config",
  "console_error_panic_hook",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "config-wasm"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "config",
  "getrandom",
@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "ether"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "futures",
 ]
@@ -710,7 +710,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "for_each_parallel"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "futures",
  "futures-timer",
@@ -913,7 +913,7 @@ checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 
 [[package]]
 name = "hdr-histogram-wasm"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "base64 0.21.0",
  "hdrhistogram",
@@ -1291,7 +1291,7 @@ dependencies = [
 
 [[package]]
 name = "mod_interval"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "ether",
  "futures",
@@ -1792,7 +1792,7 @@ checksum = "1792db035ce95be60c3f8853017b3999209281c24e2ba5bc8e59bf97a0c590c1"
 
 [[package]]
 name = "scripting-macros"
-version = "0.1.0"
+version = "0.6.0-scripting"
 dependencies = [
  "quote",
  "syn 2.0.27",
@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "select_any"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "futures",
 ]
@@ -2036,7 +2036,7 @@ dependencies = [
 
 [[package]]
 name = "test_common"
-version = "0.1.0"
+version = "0.6.0-scripting"
 dependencies = [
  "futures",
  "futures-timer",
@@ -2628,7 +2628,7 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zip_all"
-version = "0.0.0"
+version = "0.6.0-scripting"
 dependencies = [
  "futures",
 ]

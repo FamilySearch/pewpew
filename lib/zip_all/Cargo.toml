@@ -1,8 +1,9 @@
 [package]
 name = "zip_all"
-version = "0.0.0"
+version.workspace = true
 edition = "2018"
 publish = false
+license.workspace = true
 
 [lib]
 doctest = false

@@ -1,9 +1,9 @@
 [package]
 name = "body_reader"
-version = "0.0.0"
+version.workspace = true
 edition = "2018"
 publish = false
-license = "Apache 2.0"
+license.workspace = true
 
 [lib]
 doctest = false

@@ -465,6 +465,14 @@ mod tests {
             .to_json(&mut ctx)
             .unwrap();
         assert_eq!(val, serde_json::json!([1, 2]));
+        // ensure that same cached path works as expected on different data
+        let val = ctx
+            .eval(r#"json_path({"a": [{"c": 56}, {"c": 88}], "b": null}, "$.a.*.c")"#)
+            .map_err(|js| js.display().to_string())
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap();
+        assert_eq!(val, serde_json::json!([56, 88]));
     }
 
     #[test]
@@ -625,19 +633,20 @@ mod builtins {
 
     #[boa_fn]
     fn json_path(v: SJV, s: &str) -> Vec<SJV> {
-        use jsonpath_lib::Node;
-        fn get_node(s: &str) -> Arc<Result<Node, String>> {
-            static PATH_CACHE: Mutex<BTreeMap<String, Arc<Result<Node, String>>>> =
+        use jsonpath_lib::Compiled;
+        // same pattern as in `match` helper function
+        fn get_node(s: &str) -> Arc<Result<Compiled, String>> {
+            static PATH_CACHE: Mutex<BTreeMap<String, Arc<Result<Compiled, String>>>> =
                 Mutex::new(BTreeMap::new());
 
             match PATH_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(s.to_owned())
-                    .or_insert_with(|| Arc::new(jsonpath_lib::Parser::compile(s)))
+                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(s)))
                     .clone(),
                 Err(_) => {
                     log::warn!("jsonpath cache Mutex has been poisoned");
-                    Arc::new(jsonpath_lib::Parser::compile(s))
+                    Arc::new(jsonpath_lib::Compiled::compile(s))
                 }
             }
         }
@@ -649,10 +658,7 @@ mod builtins {
                 return vec![];
             }
         };
-        jsonpath_lib::Selector::new()
-            .compiled_path(path)
-            .value(&v)
-            .select()
+        path.select(&v)
             .map(|v| v.into_iter().cloned().collect())
             .unwrap_or(vec![])
     }
@@ -661,6 +667,8 @@ mod builtins {
     fn r#match(s: AnyAsString, regex: &str) -> SJV {
         // Prevent same Regex from being compiled again.
         fn get_reg(reg: &str) -> Arc<Result<Regex, regex::Error>> {
+            // does not need to be a tokio::Mutex, as LockGuard is not held beyond any await point,
+            // being dropped within this purely-non-async function.
             static REG_CACHE: Mutex<BTreeMap<String, Arc<Result<Regex, regex::Error>>>> =
                 Mutex::new(BTreeMap::new());
 

@@ -16,7 +16,7 @@ wasm-opt = false
 crate_type = ["cdylib", "rlib"]
 
 [dependencies]
-config = { path = "../config" }
+config.workspace = true
 console_error_panic_hook = "0.1.7"
 js-sys.workspace = true
 serde.workspace = true

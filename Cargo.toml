@@ -18,12 +18,12 @@ name = "test-server"
 path = "src/bin/test_server.rs"
 
 [dependencies]
-base64 = "0.21"
+base64.workspace = true
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"
 channel = { path = "./lib/channel" }
 clap = { version = "4", features = ["derive", "cargo", "std", "help", "usage", "error-context", "wrap_help"], default-features = false }
-config = { path = "./lib/config" }
+config.workspace = true
 csv = "1"
 ctrlc = "3"
 chrono = "0.4"
@@ -97,6 +97,7 @@ license = "Apache 2.0"
 
 [workspace.dependencies]
 base64 = "0.21"
+config = { path = "./lib/config" }
 ether = { path = "./lib/either" }
 futures = "0.3"
 futures-timer = "3"

@@ -741,7 +741,7 @@ impl Join {
 #[derive(Clone)]
 pub(super) struct JsonPath {
     provider: String,
-    selector: Arc<json_path::Node>,
+    selector: Arc<json_path::Compiled>,
     marker: Marker,
 }
 
@@ -784,7 +784,7 @@ impl JsonPath {
                 } else {
                     format!("$.{json_path}")
                 };
-                let json_path = json_path::Parser::compile(&json_path).map_err(|_| {
+                let json_path = json_path::Compiled::compile(&json_path).map_err(|_| {
                     ExecutingExpressionError::InvalidFunctionArguments("json_path", marker)
                 })?;
                 let j = JsonPath {
@@ -809,12 +809,12 @@ impl JsonPath {
     }
 
     fn evaluate_to_vec(&self, d: &json::Value) -> Vec<json::Value> {
-        let mut selector = json_path::Selector::new();
-        selector
-            .compiled_path(&self.selector)
-            .value(d)
-            .select_as()
+        self.selector
+            .select(d)
             .unwrap_or_default()
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     pub(super) fn evaluate<'a, 'b: 'a>(&'b self, d: Cow<'a, json::Value>) -> Cow<'a, json::Value> {

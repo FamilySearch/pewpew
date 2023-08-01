@@ -1,6 +1,6 @@
 // Relies on older version of jsonpath_lib
-//#[cfg(feature = "legacy")]
-//pub mod configv1;
+#[cfg(feature = "legacy")]
+pub mod configv1;
 
 mod configv2;
 pub use configv2::*;

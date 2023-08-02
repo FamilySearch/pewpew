@@ -81,7 +81,8 @@ pub struct General<VD: Bool> {
     pub bucket_size: Template<Duration, VarsOnly, VD>,
     #[serde(default = "default_log_provider_stats")]
     pub log_provider_stats: bool,
-    watch_transition_time: Option<Template<Duration, VarsOnly, VD>>,
+    // TODO: was this ever getting used?
+    pub(crate) watch_transition_time: Option<Template<Duration, VarsOnly, VD>>,
 }
 
 impl<B: Bool> Default for General<B> {

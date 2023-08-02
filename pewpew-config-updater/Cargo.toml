@@ -1,0 +1,10 @@
+[package]
+name = "pewpew-config-updater"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+config = { workspace = true, features = ["convert"] }
+env_logger = "0.10"

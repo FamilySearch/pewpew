@@ -1,0 +1,77 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+
+providers:
+  a:
+    range: {}
+  b:
+    response: {}
+  c:
+    response: {}
+  d:
+    response: {}
+  e:
+    response: {}
+  f:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"a": ${a}}'
+    provides:
+      b:
+        select: response.body.a
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"b": ${b}}'
+    provides:
+      c:
+        select: response.body.b
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"c": ${c}}'
+    provides:
+      d:
+        select: response.body.c
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"d": ${d}}'
+    provides:
+      e:
+        select: response.body.d
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"e": ${e}}'
+    provides:
+      f:
+        select: response.body.e
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"f": ${f}}'
+    peak_load: 1hps
+    logs:
+      test:
+        select: response.body.f

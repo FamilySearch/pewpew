@@ -89,6 +89,7 @@ members = [
     "lib/select_any",
     "lib/test_common",
     "lib/zip_all",
+    "pewpew-config-updater",
 ]
 
 [workspace.package]

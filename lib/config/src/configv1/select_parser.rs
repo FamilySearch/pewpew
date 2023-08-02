@@ -2510,3 +2510,68 @@ mod tests {
         }
     }
 }
+
+#[cfg(feature = "convert")]
+pub mod template_convert {
+    use super::*;
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Segment {
+        Outer(String),
+        SingleSource(String),
+    }
+
+    impl Template {
+        pub fn dump(self) -> Vec<Segment> {
+            self.pieces
+                .into_iter()
+                .map(|p| match p {
+                    TemplatePiece::NotExpression(s) => Segment::Outer(s),
+                    TemplatePiece::Expression(e) => match e {
+                        ValueOrExpression::Value(Value::Json(_)) => unreachable!("probably?"),
+                        ValueOrExpression::Value(Value::Path(p)) => match *p {
+                            Path {
+                                start: PathStart::Ident(s),
+                                rest,
+                                ..
+                            } if rest.is_empty() => Segment::SingleSource(s),
+                            _ => todo!(),
+                        },
+                        ValueOrExpression::Expression(Expression {
+                            not: None,
+                            lhs: ExpressionLhs::Value(Value::Path(p)),
+                            op: None,
+                        }) => match *p {
+                            Path {
+                                start: PathStart::Ident(s),
+                                rest,
+                                ..
+                            } if rest.is_empty() => Segment::SingleSource(s),
+                            _ => todo!(),
+                        },
+                        other => todo!("handle {:?}", other),
+                    },
+                })
+                .collect()
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn template_convert() {
+            let t = Template::new(
+                "${port}",
+                &BTreeMap::new(),
+                &mut RequiredProviders::new(),
+                false,
+                unsafe { std::mem::zeroed() },
+            )
+            .unwrap();
+            let t = t.dump();
+            assert_eq!(t, vec![Segment::SingleSource("port".to_string())]);
+        }
+    }
+}

@@ -5,6 +5,9 @@ pub(crate) mod expression_functions;
 mod from_yaml;
 pub(crate) mod select_parser;
 
+#[cfg(feature = "convert")]
+pub(crate) mod convert_helper;
+
 pub use error::{CreatingExpressionError, Error, ExecutingExpressionError};
 use ether::{Either, Either3};
 pub use from_yaml::FromYaml;

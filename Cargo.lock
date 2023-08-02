@@ -1559,6 +1559,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pewpew-config-updater"
+version = "0.6.0-scripting"
+dependencies = [
+ "config",
+ "env_logger 0.10.0",
+]
+
+[[package]]
 name = "phf"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

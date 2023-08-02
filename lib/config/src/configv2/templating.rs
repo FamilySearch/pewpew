@@ -442,7 +442,38 @@ impl<T: TemplateType> From<TemplatedString<T>> for String {
     }
 }
 
+#[cfg(feature = "convert")]
+use crate::configv1::select_parser::template_convert;
+
 impl<T: TemplateType> TemplatedString<T> {
+    #[cfg(feature = "convert")]
+    pub(crate) fn convert_from_v1<I: IntoIterator<Item = template_convert::Segment>>(
+        input: I,
+        var_names: &BTreeSet<Arc<str>>,
+    ) -> Result<Self, ()> {
+        Ok(Self(
+            input
+                .into_iter()
+                .map(|s| match s {
+                    template_convert::Segment::Outer(s) => Segment::<T>::Raw(s),
+                    template_convert::Segment::SingleSource(s) => {
+                        match (
+                            T::EnvsAllowed::try_default(),
+                            T::VarsAllowed::try_default(),
+                            T::ProvAllowed::try_default(),
+                            var_names.contains::<str>(&s),
+                        ) {
+                            (Some(b), None, None, _) => Segment::Env(s, b),
+                            (None, Some(b), _, true) => Segment::Var(s, b),
+                            (None, _, Some(b), _) => Segment::Prov(s, b),
+                            _ => todo!(),
+                        }
+                    }
+                })
+                .collect(),
+        ))
+    }
+
     fn try_collect(self) -> Option<String> {
         self.0
             .into_iter()

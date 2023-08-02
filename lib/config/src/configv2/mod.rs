@@ -53,12 +53,12 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     lt_err: Option<InvalidForLoadTest>,
 }
 
-type Vars<ED> = BTreeMap<String, VarValue<ED>>;
+pub(crate) type Vars<ED> = BTreeMap<String, VarValue<ED>>;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 #[derive(serde::Serialize)]
-enum VarValue<ED: Bool> {
+pub(crate) enum VarValue<ED: Bool> {
     Map(Vars<ED>),
     Num(i64),
     Bool(bool),

@@ -14,6 +14,25 @@ pub struct RangeProvider {
     pub unique: bool,
 }
 
+#[cfg(feature = "convert")]
+impl RangeProvider {
+    pub(crate) fn from_parts(
+        start: i64,
+        end: i64,
+        step: NonZeroU16,
+        repeat: bool,
+        unique: bool,
+    ) -> Self {
+        Self {
+            start,
+            end,
+            step: Step(step),
+            repeat,
+            unique,
+        }
+    }
+}
+
 impl IntoIterator for RangeProvider {
     type Item = i64;
     type IntoIter = Box<dyn Iterator<Item = i64> + Send>;

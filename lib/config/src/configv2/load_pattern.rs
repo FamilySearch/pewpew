@@ -90,6 +90,13 @@ impl TryFrom<&str> for Percent {
 #[derive(serde::Serialize)]
 pub struct LoadPattern<VD: Bool>(Vec<LoadPatternSingle<VD>>);
 
+#[cfg(feature = "convert")]
+impl LoadPattern<False> {
+    pub(crate) fn build(from: Vec<LoadPatternSingle<False>>) -> Self {
+        Self(from)
+    }
+}
+
 impl LoadPattern<True> {
     pub(crate) fn duration(&self) -> std::time::Duration {
         self.0.iter().map(|s| **s.duration()).sum()

@@ -20,6 +20,13 @@ pub struct Headers<VD: Bool>(
     Vec<(String, Template<String, Regular, VD>)>,
 );
 
+#[cfg(feature = "convert")]
+impl Headers<False> {
+    pub(crate) fn build(v: Vec<(String, Template<String, Regular, False>)>) -> Self {
+        Self(v)
+    }
+}
+
 impl<VD: Bool> Headers<VD> {
     pub fn new() -> Self {
         Self(Vec::new())

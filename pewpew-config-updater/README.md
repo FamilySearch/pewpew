@@ -1,0 +1,3 @@
+cli tool to partially automate conversion from `0.5.x` pewpew YAML config files to `0.6.x`.
+
+Expression segments (queries and some templating sections) will need to be updated manually.

@@ -90,6 +90,13 @@ pub enum FileReadFormat {
 #[serde(into = "char")]
 pub struct CharByte(u8);
 
+#[cfg(feature = "convert")]
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
 impl TryFrom<char> for CharByte {
     type Error = std::char::TryFromCharError;
 

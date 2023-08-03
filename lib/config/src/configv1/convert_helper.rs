@@ -3,6 +3,7 @@ use crate::{
     common::{Duration, ProviderSend},
     config::{Client, Config, General},
     configv1::RequiredProviders,
+    convert::ConfigUpdaterError,
     endpoints::{
         Endpoint as EndpointV2, EndpointLogs, EndpointProvides as ProvidesV2, HitsPerMinute,
         MultiPartBodySection,
@@ -14,7 +15,7 @@ use crate::{
         RangeProvider as RangeProviderV2, ResponseProvider as ResponseProviderV2,
     },
     query::Query,
-    templating::{Bool, False, Regular, Template, TemplateType, TemplatedString, VarsOnly},
+    templating::{False, Regular, Template, TemplateType, TemplatedString, VarsOnly},
     Headers, Logger, ProviderType, VarValue,
 };
 use std::{
@@ -23,10 +24,9 @@ use std::{
     sync::Arc,
 };
 
-fn map_template(t: PreTemplate) -> Result<Vec<Segment>, ()> {
+fn map_template(t: PreTemplate) -> Result<Vec<Segment>, error::Error> {
     Ok(
-        t.as_template(&BTreeMap::new(), &mut RequiredProviders::new())
-            .map_err(|_| ())?
+        t.as_template(&BTreeMap::new(), &mut RequiredProviders::new())?
             .dump(),
     )
 }
@@ -34,24 +34,24 @@ fn map_template(t: PreTemplate) -> Result<Vec<Segment>, ()> {
 fn make_templated_string<T: TemplateType>(
     t: PreTemplate,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<TemplatedString<T>, ()> {
-    TemplatedString::convert_from_v1(map_template(t)?, var_names)
+) -> Result<TemplatedString<T>, ConfigUpdaterError> {
+    TemplatedString::convert_from_v1(map_template(t)?, var_names).map_err(Into::into)
 }
 
 fn make_template_string<T: TemplateType>(
     t: PreTemplate,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<Template<String, T, False>, ()> {
+) -> Result<Template<String, T, False>, ConfigUpdaterError> {
     make_templated_string::<T>(t, var_names)?
         .try_into()
-        .map_err(|_| ())
+        .map_err(ConfigUpdaterError::template_gen)
 }
 
 trait PreTemplateNewType: Sized
 where
     <Self::V2 as FromStr>::Err: std::error::Error + Send + Sync,
 {
-    type V2: FromStr;
+    type V2: FromStr + std::fmt::Debug + 'static;
     type TemplateType: TemplateType;
 
     fn unwrap_pretemplate(self) -> PreTemplate;
@@ -59,10 +59,10 @@ where
     fn convert_to_v2(
         self,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<Template<Self::V2, Self::TemplateType, False>, ()> {
+    ) -> Result<Template<Self::V2, Self::TemplateType, False>, ConfigUpdaterError> {
         make_templated_string(self.unwrap_pretemplate(), var_names)?
             .try_into()
-            .map_err(|_| ())
+            .map_err(ConfigUpdaterError::template_gen)
     }
 }
 
@@ -86,7 +86,7 @@ v_template_newtype!(PreHitsPer => HitsPerMinute);
 fn map_headers(
     h: TupleVec<String, PreTemplate>,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<Headers<False>, ()> {
+) -> Result<Headers<False>, ConfigUpdaterError> {
     h.0.into_iter()
         .map(|(k, v)| Ok((k, make_template_string(v, var_names)?)))
         .collect::<Result<_, _>>()
@@ -96,11 +96,11 @@ fn map_headers(
 fn map_config_section(
     cfg: ConfigPreProcessed,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<Config<False>, ()> {
+) -> Result<Config<False>, ConfigUpdaterError> {
     fn map_cfg_client(
         client: ClientConfigPreProcessed,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<Client<False>, ()> {
+    ) -> Result<Client<False>, ConfigUpdaterError> {
         let ClientConfigPreProcessed {
             headers,
             keepalive,
@@ -121,7 +121,7 @@ fn map_config_section(
     fn map_cfg_general(
         gen: GeneralConfigPreProcessed,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<General<False>, ()> {
+    ) -> Result<General<False>, ConfigUpdaterError> {
         let GeneralConfigPreProcessed {
             auto_buffer_start_size,
             bucket_size,
@@ -152,7 +152,7 @@ fn map_config_section(
 fn map_provider(
     p: ProviderPreProcessed,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<ProviderType<False>, ()> {
+) -> Result<ProviderType<False>, ConfigUpdaterError> {
     fn map_list(l: ListProvider) -> ListProviderV2 {
         match l {
             ListProvider::DefaultOptions(l) => ListProviderV2 {
@@ -197,7 +197,7 @@ fn map_provider(
     fn map_file(
         f: FileProviderPreProcessed,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<FileProviderV2<False>, ()> {
+    ) -> Result<FileProviderV2<False>, ConfigUpdaterError> {
         let FileProviderPreProcessed {
             csv,
             auto_return,
@@ -255,8 +255,8 @@ impl From<CsvSettings> for CsvParams {
     }
 }
 
-fn map_vars(v: PreVar) -> Result<VarValue<False>, ()> {
-    fn map_js_var(v: json::Value) -> Result<VarValue<False>, ()> {
+fn map_vars(v: PreVar) -> Result<VarValue<False>, ConfigUpdaterError> {
+    fn map_js_var(v: json::Value) -> Result<VarValue<False>, ConfigUpdaterError> {
         match v {
             json::Value::Null => unimplemented!("null var"),
             json::Value::Bool(b) => Ok(VarValue::Bool(b)),
@@ -268,11 +268,12 @@ fn map_vars(v: PreVar) -> Result<VarValue<False>, ()> {
                     &mut RequiredProviders::new(),
                     false,
                     create_marker(),
-                )
-                .map_err(|_| ())?;
+                )?;
                 let t = t.dump();
                 let t = TemplatedString::convert_from_v1(t, &BTreeSet::new())?;
-                Ok(VarValue::Str(t.try_into().map_err(|_| ())?))
+                Ok(VarValue::Str(
+                    t.try_into().map_err(ConfigUpdaterError::template_gen)?,
+                ))
             }
             json::Value::Array(a) => a
                 .into_iter()
@@ -289,7 +290,10 @@ fn map_vars(v: PreVar) -> Result<VarValue<False>, ()> {
     map_js_var(v.0.destruct().0)
 }
 
-fn map_load_pattern(lp: PreLoadPattern, var_names: &BTreeSet<Arc<str>>) -> Result<LPV2<False>, ()> {
+fn map_load_pattern(
+    lp: PreLoadPattern,
+    var_names: &BTreeSet<Arc<str>>,
+) -> Result<LPV2<False>, ConfigUpdaterError> {
     struct LinearTmp {
         from: PrePercent,
         to: PrePercent,
@@ -323,7 +327,10 @@ fn map_load_pattern(lp: PreLoadPattern, var_names: &BTreeSet<Arc<str>>) -> Resul
         .map(LPV2::build)
 }
 
-fn map_logger(lg: LoggerPreProcessed, var_names: &BTreeSet<Arc<str>>) -> Result<Logger<False>, ()> {
+fn map_logger(
+    lg: LoggerPreProcessed,
+    var_names: &BTreeSet<Arc<str>>,
+) -> Result<Logger<False>, ConfigUpdaterError> {
     let LoggerPreProcessed {
         select,
         for_each,
@@ -372,7 +379,7 @@ fn map_query(
 fn map_endpoint(
     e: EndpointPreProcessed,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<EndpointV2<False>, ()> {
+) -> Result<EndpointV2<False>, ConfigUpdaterError> {
     fn map_provides(pv: EndpointProvidesPreProcessed) -> ProvidesV2<False> {
         let EndpointProvidesPreProcessed {
             for_each,
@@ -433,7 +440,7 @@ fn map_endpoint(
     let tags = tags
         .into_iter()
         .map(|(k, v)| Ok((k.into(), make_template_string::<Regular>(v, var_names)?)))
-        .collect::<Result<BTreeMap<Arc<str>, _>, _>>()?;
+        .collect::<Result<BTreeMap<Arc<str>, _>, ConfigUpdaterError>>()?;
     let url = make_template_string::<Regular>(url, var_names)?;
     let provides = provides
         .0
@@ -476,11 +483,11 @@ fn map_endpoint(
                 Nullable::Null => todo!("null header?"),
                 Nullable::Some(h) => Ok((k, make_template_string(h, var_names)?)),
             })
-            .collect::<Result<_, _>>()
+            .collect::<Result<_, ConfigUpdaterError>>()
             .map(Headers::build)?,
         body: body
             .map(|b| {
-                Ok(match b {
+                Ok::<_, ConfigUpdaterError>(match b {
                     Body::File(f) => crate::EndPointBody::File(crate::endpoints::FileBody {
                         base_path: PathBuf::new().into(),
                         path: make_template_string(f, var_names)?,
@@ -509,7 +516,7 @@ fn map_endpoint(
                                     };
                                     Ok((s, MultiPartBodySection { headers, body }))
                                 })
-                                .collect::<Result<_, _>>()?;
+                                .collect::<Result<_, ConfigUpdaterError>>()?;
                         crate::EndPointBody::Multipart(m)
                     }
                 })
@@ -529,7 +536,9 @@ fn map_endpoint(
     })
 }
 
-fn map_load_test(lt: LoadTestPreProcessed) -> crate::LoadTest<False> {
+fn map_load_test(
+    lt: LoadTestPreProcessed,
+) -> Result<crate::LoadTest<False, False>, ConfigUpdaterError> {
     let LoadTestPreProcessed {
         config,
         endpoints,
@@ -538,5 +547,46 @@ fn map_load_test(lt: LoadTestPreProcessed) -> crate::LoadTest<False> {
         loggers,
         vars,
     } = lt;
-    todo!()
+    let var_names = vars.keys().map(ToOwned::to_owned).map(Into::into).collect();
+    let config = map_config_section(config, &var_names)?;
+    let endpoints = endpoints
+        .into_iter()
+        .map(|ep| map_endpoint(ep, &var_names))
+        .collect::<Result<Vec<_>, _>>()?;
+    let load_pattern = load_pattern
+        .map(|lp| map_load_pattern(lp, &var_names))
+        .transpose()?;
+    let providers = providers
+        .into_iter()
+        .map(|(n, p)| {
+            Ok::<_, ConfigUpdaterError>((
+                Cow::<str>::Owned(n).try_into().expect("came from config"),
+                map_provider(p, &var_names)?,
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    let loggers = loggers
+        .into_iter()
+        .map(|(k, l)| Ok::<_, ConfigUpdaterError>((k, map_logger(l, &var_names)?)))
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    let vars = vars
+        .into_iter()
+        .map(|(k, v)| Ok::<_, ConfigUpdaterError>((k, map_vars(v)?)))
+        .collect::<Result<_, _>>()?;
+    Ok(crate::LoadTest::<False, False> {
+        lib_src: None,
+        config,
+        loggers,
+        load_pattern,
+        vars,
+        providers,
+        endpoints,
+        lt_err: None,
+    })
+}
+
+pub(crate) fn map_v1_yaml(s: &str) -> Result<crate::LoadTest<False, False>, ConfigUpdaterError> {
+    let lt = LoadTestPreProcessed::from_yaml_str(s)?;
+
+    map_load_test(lt)
 }

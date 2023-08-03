@@ -36,13 +36,13 @@ pub use providers::ProviderType;
 #[derive(Debug, Deserialize, serde::Serialize, PartialEq)]
 pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    lib_src: Option<LibSrc>,
+    pub(crate) lib_src: Option<LibSrc>,
     #[serde(default = "Config::default")]
     pub config: config::Config<VD>,
     #[serde(bound = "load_pattern::LoadPattern<VD>: serde::de::DeserializeOwned")]
-    load_pattern: Option<load_pattern::LoadPattern<VD>>,
+    pub(crate) load_pattern: Option<load_pattern::LoadPattern<VD>>,
     #[serde(default = "Vars::new")]
-    vars: Vars<ED>,
+    pub(crate) vars: Vars<ED>,
     #[serde(default = "BTreeMap::new")]
     pub providers: BTreeMap<ProviderName, ProviderType<VD>>,
     #[serde(default = "BTreeMap::new")]
@@ -50,7 +50,7 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     #[serde(default = "Vec::new")]
     pub endpoints: Vec<Endpoint<VD>>,
     #[serde(skip)]
-    lt_err: Option<InvalidForLoadTest>,
+    pub(crate) lt_err: Option<InvalidForLoadTest>,
 }
 
 pub(crate) type Vars<ED> = BTreeMap<String, VarValue<ED>>;

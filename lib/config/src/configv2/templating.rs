@@ -450,28 +450,27 @@ impl<T: TemplateType> TemplatedString<T> {
     pub(crate) fn convert_from_v1<I: IntoIterator<Item = template_convert::Segment>>(
         input: I,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<Self, ()> {
-        Ok(Self(
-            input
-                .into_iter()
-                .map(|s| match s {
-                    template_convert::Segment::Outer(s) => Segment::<T>::Raw(s),
-                    template_convert::Segment::SingleSource(s) => {
-                        match (
-                            T::EnvsAllowed::try_default(),
-                            T::VarsAllowed::try_default(),
-                            T::ProvAllowed::try_default(),
-                            var_names.contains::<str>(&s),
-                        ) {
-                            (Some(b), None, None, _) => Segment::Env(s, b),
-                            (None, Some(b), _, true) => Segment::Var(s, b),
-                            (None, _, Some(b), _) => Segment::Prov(s, b),
-                            _ => todo!(),
-                        }
+    ) -> Result<Self, crate::convert::TemplateSegmentError> {
+        input
+            .into_iter()
+            .map(|s| match s {
+                template_convert::Segment::Outer(s) => Ok(Segment::<T>::Raw(s)),
+                template_convert::Segment::SingleSource(s) => {
+                    match (
+                        T::EnvsAllowed::try_default(),
+                        T::VarsAllowed::try_default(),
+                        T::ProvAllowed::try_default(),
+                        var_names.contains::<str>(&s),
+                    ) {
+                        (Some(b), None, None, _) => Ok(Segment::Env(s, b)),
+                        (None, Some(b), _, true) => Ok(Segment::Var(s, b)),
+                        (None, _, Some(b), _) => Ok(Segment::Prov(s, b)),
+                        _ => Err(crate::convert::TemplateSegmentError(s)),
                     }
-                })
-                .collect(),
-        ))
+                }
+            })
+            .collect::<Result<_, _>>()
+            .map(Self)
     }
 
     fn try_collect(self) -> Option<String> {

@@ -372,7 +372,7 @@ fn map_query(
     });
     select.map(|s| {
         log::warn!("query `select` item {s:?} must be updated manually");
-        Query::simple("PLEASE UPDATE MANUALLY".to_owned(), vec![], None).unwrap()
+        Query::simple("PLEASE_UPDATE_MANUALLY".to_owned(), vec![], None).unwrap()
     })
 }
 
@@ -480,7 +480,8 @@ fn map_endpoint(
             .0
             .into_iter()
             .map(|(k, v)| match v {
-                Nullable::Null => todo!("null header?"),
+                // TODO: is this correct?
+                Nullable::Null => Ok((k, Template::new_literal("null".to_owned()))),
                 Nullable::Some(h) => Ok((k, make_template_string(h, var_names)?)),
             })
             .collect::<Result<_, ConfigUpdaterError>>()

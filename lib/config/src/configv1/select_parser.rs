@@ -2519,6 +2519,7 @@ pub mod template_convert {
     pub enum Segment {
         Outer(String),
         SingleSource(String),
+        Placeholder,
     }
 
     impl Template {
@@ -2528,14 +2529,20 @@ pub mod template_convert {
                 .map(|p| match p {
                     TemplatePiece::NotExpression(s) => Segment::Outer(s),
                     TemplatePiece::Expression(e) => match e {
-                        ValueOrExpression::Value(Value::Json(_)) => unreachable!("probably?"),
+                        ValueOrExpression::Value(Value::Json(j)) => {
+                            log::warn!("not sure what this is supposed to be for, so please update manually: {j:?}");
+                            Segment::Placeholder
+                        },
                         ValueOrExpression::Value(Value::Path(p)) => match *p {
                             Path {
                                 start: PathStart::Ident(s),
                                 rest,
                                 ..
                             } if rest.is_empty() => Segment::SingleSource(s),
-                            _ => todo!(),
+                            other => {
+                                log::warn!("template path {other:?} must be updated manually");
+                                Segment::Placeholder
+                            }
                         },
                         ValueOrExpression::Expression(Expression {
                             not: None,
@@ -2547,9 +2554,15 @@ pub mod template_convert {
                                 rest,
                                 ..
                             } if rest.is_empty() => Segment::SingleSource(s),
-                            _ => todo!(),
+                            other => {
+                                log::warn!("template path {other:?} must be updated manually");
+                                Segment::Placeholder
+                            }
                         },
-                        other => todo!("handle {:?}", other),
+                        other => {
+                            log::warn!("template segment {other:?} must be updated manually");
+                            Segment::Placeholder
+                        }
                     },
                 })
                 .collect()

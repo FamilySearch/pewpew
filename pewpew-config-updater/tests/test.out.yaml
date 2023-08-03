@@ -1,0 +1,170 @@
+config:
+  client:
+    request_timeout: 60s
+    headers: {}
+    keepalive: 90s
+  general:
+    auto_buffer_start_size: 5
+    bucket_size: 60s
+    log_provider_stats: true
+    watch_transition_time: null
+load_pattern:
+- !linear
+  from: 100.000%
+  to: 100.000%
+  over: 5s
+vars:
+  port: ${e:PORT}
+providers:
+  a: !range
+    start: 0
+    end: 9223372036854775807
+    step: 1
+    repeat: false
+    unique: false
+  b: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+  c: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+  d: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+  e: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+  f: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+loggers:
+  test:
+    query: null
+    to: stderr
+    pretty: false
+    limit: null
+    kill: false
+endpoints:
+- declare: {}
+  headers: {}
+  body: !str '{"a": ${p:a}}'
+  load_pattern: null
+  method: POST
+  peak_load: null
+  tags: {}
+  url: http://localhost:${v:port}
+  provides:
+    b:
+      query:
+        select: PLEASE_UPDATE_MANUALLY
+        for_each: []
+        where: null
+      send: block
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- declare: {}
+  headers: {}
+  body: !str '{"b": ${p:b}}'
+  load_pattern: null
+  method: POST
+  peak_load: null
+  tags: {}
+  url: http://localhost:${v:port}
+  provides:
+    c:
+      query:
+        select: PLEASE_UPDATE_MANUALLY
+        for_each: []
+        where: null
+      send: block
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- declare: {}
+  headers: {}
+  body: !str '{"c": ${p:c}}'
+  load_pattern: null
+  method: POST
+  peak_load: null
+  tags: {}
+  url: http://localhost:${v:port}
+  provides:
+    d:
+      query:
+        select: PLEASE_UPDATE_MANUALLY
+        for_each: []
+        where: null
+      send: block
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- declare: {}
+  headers: {}
+  body: !str '{"d": ${p:d}}'
+  load_pattern: null
+  method: POST
+  peak_load: null
+  tags: {}
+  url: http://localhost:${v:port}
+  provides:
+    e:
+      query:
+        select: PLEASE_UPDATE_MANUALLY
+        for_each: []
+        where: null
+      send: block
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- declare: {}
+  headers: {}
+  body: !str '{"e": ${p:e}}'
+  load_pattern: null
+  method: POST
+  peak_load: null
+  tags: {}
+  url: http://localhost:${v:port}
+  provides:
+    f:
+      query:
+        select: PLEASE_UPDATE_MANUALLY
+        for_each: []
+        where: null
+      send: block
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- declare: {}
+  headers: {}
+  body: !str '{"f": ${p:f}}'
+  load_pattern: null
+  method: POST
+  peak_load: 1hps
+  tags: {}
+  url: http://localhost:${v:port}
+  provides: {}
+  on_demand: false
+  logs:
+    test:
+      select: PLEASE_UPDATE_MANUALLY
+      for_each: []
+      where: null
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null

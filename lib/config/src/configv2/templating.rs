@@ -468,6 +468,12 @@ impl<T: TemplateType> TemplatedString<T> {
                         _ => Err(crate::convert::TemplateSegmentError(s)),
                     }
                 }
+                template_convert::Segment::Placeholder => Ok(Segment::Expr(
+                    vec![Segment::Raw(
+                        "PLACEHOLDER__PLEASE_UPDATE_MANUALLY".to_owned(),
+                    )],
+                    True,
+                )),
             })
             .collect::<Result<_, _>>()
             .map(Self)

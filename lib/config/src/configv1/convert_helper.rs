@@ -1,9 +1,12 @@
 use super::{select_parser::template_convert::Segment, Template as TemplateV1, *};
 use crate::{
-    common::Duration,
+    common::{Duration, ProviderSend},
     config::{Client, Config, General},
     configv1::RequiredProviders,
-    endpoints::HitsPerMinute,
+    endpoints::{
+        Endpoint as EndpointV2, EndpointLogs, EndpointProvides as ProvidesV2, HitsPerMinute,
+        MultiPartBodySection,
+    },
     load_pattern::{LoadPattern as LPV2, LoadPatternSingle as LPSingleV2, Percent},
     loggers::LogTo,
     providers::{
@@ -35,10 +38,10 @@ fn make_templated_string<T: TemplateType>(
     TemplatedString::convert_from_v1(map_template(t)?, var_names)
 }
 
-fn make_template_string<T: TemplateType, ED: Bool>(
+fn make_template_string<T: TemplateType>(
     t: PreTemplate,
     var_names: &BTreeSet<Arc<str>>,
-) -> Result<Template<String, T, False, ED>, ()> {
+) -> Result<Template<String, T, False>, ()> {
     make_templated_string::<T>(t, var_names)?
         .try_into()
         .map_err(|_| ())
@@ -53,10 +56,10 @@ where
 
     fn unwrap_pretemplate(self) -> PreTemplate;
 
-    fn convert_to_v2<ED: Bool>(
+    fn convert_to_v2(
         self,
         var_names: &BTreeSet<Arc<str>>,
-    ) -> Result<Template<Self::V2, Self::TemplateType, False, ED>, ()> {
+    ) -> Result<Template<Self::V2, Self::TemplateType, False>, ()> {
         make_templated_string(self.unwrap_pretemplate(), var_names)?
             .try_into()
             .map_err(|_| ())
@@ -330,20 +333,9 @@ fn map_logger(lg: LoggerPreProcessed, var_names: &BTreeSet<Arc<str>>) -> Result<
         limit,
         kill,
     } = lg;
-    where_clause.map(|w| {
-        let w = w.destruct().0;
-        log::warn!("query `where` item {w:?} must be updated manually");
-    });
-    for_each.into_iter().for_each(|fe| {
-        let fe = fe.destruct().0;
-        log::warn!("query `for_each` item {fe:?} must be updated manually");
-    });
 
     Ok(Logger {
-        query: select.map(|s| {
-            log::warn!("query `select` item {s:?} must be updated manually");
-            Query::simple("PLEASE UPDATE MANUALLY".to_owned(), vec![], None).unwrap()
-        }),
+        query: map_query(select, for_each, where_clause),
         to: match to.0.inner().as_str() {
             "stdout" => LogTo::Stdout,
             "stderr" => LogTo::Stderr,
@@ -356,4 +348,195 @@ fn map_logger(lg: LoggerPreProcessed, var_names: &BTreeSet<Arc<str>>) -> Result<
         limit: limit.map(|x| x as u64),
         kill,
     })
+}
+
+fn map_query(
+    select: Option<WithMarker<json::Value>>,
+    for_each: Vec<WithMarker<String>>,
+    where_clause: Option<WithMarker<String>>,
+) -> Option<Query<False>> {
+    where_clause.map(|w| {
+        let w = w.destruct().0;
+        log::warn!("query `where` item {w:?} must be updated manually");
+    });
+    for_each.into_iter().for_each(|fe| {
+        let fe = fe.destruct().0;
+        log::warn!("query `for_each` item {fe:?} must be updated manually");
+    });
+    select.map(|s| {
+        log::warn!("query `select` item {s:?} must be updated manually");
+        Query::simple("PLEASE UPDATE MANUALLY".to_owned(), vec![], None).unwrap()
+    })
+}
+
+fn map_endpoint(
+    e: EndpointPreProcessed,
+    var_names: &BTreeSet<Arc<str>>,
+) -> Result<EndpointV2<False>, ()> {
+    fn map_provides(pv: EndpointProvidesPreProcessed) -> ProvidesV2<False> {
+        let EndpointProvidesPreProcessed {
+            for_each,
+            select,
+            send,
+            where_clause,
+        } = pv;
+        let query = map_query(Some(select), for_each, where_clause);
+        ProvidesV2 {
+            query: query.expect("passed in a Some"),
+            send: send.map_or_else(
+                || {
+                    log::warn!(
+                    "endpoint provides `send` field is not optional; defaulting to `block` here"
+                );
+                    ProviderSend::Block
+                },
+                Into::into,
+            ),
+        }
+    }
+    let EndpointPreProcessed {
+        declare,
+        headers,
+        body,
+        load_pattern,
+        method,
+        on_demand,
+        peak_load,
+        tags,
+        url,
+        provides,
+        logs,
+        max_parallel_requests,
+        no_auto_returns,
+        request_timeout,
+        ..
+    } = e;
+
+    let declare = {
+        if !declare.is_empty() {
+            log::warn!("endpoint `declare` section {declare:?} must be updated manually");
+            BTreeMap::from([(
+                Arc::<str>::from("TODO".to_owned()),
+                crate::endpoints::Declare::<False>::Expr(Template::new_literal("TODO".to_owned())),
+            )])
+        } else {
+            BTreeMap::new()
+        }
+    };
+    let load_pattern = load_pattern
+        .map(|lp| map_load_pattern(lp, var_names))
+        .transpose()?;
+    let method = crate::endpoints::Method::from(method);
+    let peak_load = peak_load
+        .map(|pl| pl.convert_to_v2(var_names))
+        .transpose()?;
+    let tags = tags
+        .into_iter()
+        .map(|(k, v)| Ok((k.into(), make_template_string::<Regular>(v, var_names)?)))
+        .collect::<Result<BTreeMap<Arc<str>, _>, _>>()?;
+    let url = make_template_string::<Regular>(url, var_names)?;
+    let provides = provides
+        .0
+        .into_iter()
+        .map(|(k, v)| (k.into(), map_provides(v)))
+        .collect();
+    let logs = logs
+        .0
+        .into_iter()
+        .map(
+            |(
+                k,
+                LogsPreProcessed {
+                    select,
+                    for_each,
+                    where_clause,
+                },
+            )| {
+                (
+                    k,
+                    EndpointLogs {
+                        query: map_query(Some(select), for_each, where_clause)
+                            .expect("passed in Some"),
+                    },
+                )
+            },
+        )
+        .collect::<Vec<_>>();
+
+    let request_timeout = request_timeout
+        .map(|rt| rt.convert_to_v2(var_names))
+        .transpose()?;
+
+    Ok(EndpointV2 {
+        declare,
+        headers: headers
+            .0
+            .into_iter()
+            .map(|(k, v)| match v {
+                Nullable::Null => todo!("null header?"),
+                Nullable::Some(h) => Ok((k, make_template_string(h, var_names)?)),
+            })
+            .collect::<Result<_, _>>()
+            .map(Headers::build)?,
+        body: body
+            .map(|b| {
+                Ok(match b {
+                    Body::File(f) => crate::EndPointBody::File(crate::endpoints::FileBody {
+                        base_path: PathBuf::new().into(),
+                        path: make_template_string(f, var_names)?,
+                    }),
+                    Body::String(s) => {
+                        crate::EndPointBody::String(make_template_string(s, var_names)?)
+                    }
+                    Body::Multipart(m) => {
+                        let m =
+                            m.0.into_iter()
+                                .map(|(s, mp)| {
+                                    let BodyMultipartPiece { headers, body } = mp;
+                                    let headers = map_headers(headers, var_names)?;
+                                    let body = match body {
+                                        BodyMultipartPieceBody::String(s) => {
+                                            crate::EndPointBody::String(make_template_string(
+                                                s, var_names,
+                                            )?)
+                                        }
+                                        BodyMultipartPieceBody::File(f) => {
+                                            crate::EndPointBody::File(crate::endpoints::FileBody {
+                                                base_path: PathBuf::new().into(),
+                                                path: make_template_string(f, var_names)?,
+                                            })
+                                        }
+                                    };
+                                    Ok((s, MultiPartBodySection { headers, body }))
+                                })
+                                .collect::<Result<_, _>>()?;
+                        crate::EndPointBody::Multipart(m)
+                    }
+                })
+            })
+            .transpose()?,
+        load_pattern,
+        method,
+        peak_load,
+        tags,
+        url,
+        provides,
+        on_demand,
+        logs,
+        max_parallel_requests,
+        no_auto_returns,
+        request_timeout,
+    })
+}
+
+fn map_load_test(lt: LoadTestPreProcessed) -> crate::LoadTest<False> {
+    let LoadTestPreProcessed {
+        config,
+        endpoints,
+        load_pattern,
+        providers,
+        loggers,
+        vars,
+    } = lt;
+    todo!()
 }

@@ -133,6 +133,12 @@ impl Endpoint<False> {
 #[serde(try_from = "&str")]
 pub struct Method(http::Method);
 
+impl From<http::Method> for Method {
+    fn from(value: http::Method) -> Self {
+        Self(value)
+    }
+}
+
 impl TryFrom<&str> for Method {
     type Error = <Self as FromStr>::Err;
 
@@ -309,7 +315,7 @@ impl TryFrom<&str> for HitsPerMinute {
 
 #[derive(Debug, Deserialize, serde::Serialize, PartialEq, Eq)]
 pub struct EndpointProvides<VD: Bool> {
-    query: Query<VD>,
+    pub(crate) query: Query<VD>,
     pub(crate) send: ProviderSend,
 }
 

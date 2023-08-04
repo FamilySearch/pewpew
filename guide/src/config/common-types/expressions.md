@@ -13,9 +13,6 @@ sent into a provider. In addition to standard JS operations, some helper functio
 
 > Only simple expressions can be executed, meaning you cannot have multiple lines.
 
-> **WARNING**: Please ensure that no expression ultimately evaluates to `undefined`. The JS engine
-> doesn't handle converting that very well.
-
 ## Helper functions
 
 ### "Dummy" parameters
@@ -313,7 +310,12 @@ or
 </td>
 <td>
 
-Generates a random number between *start* (inclusive) and *end* (exclusive). Both *start* and *end* must be number literals. If both numbers are integers only integers will be generated within the specified range. If either number is a floating point number then a floating point number will be generated within the specified range.
+Generates a random number between *start* (inclusive) and *end* (exclusive). Both *start* and *end*
+must be number literals. If both numbers are integers only integers will be generated within the
+specified range. If either number is a floating point number then a floating point number will be
+generated within the specified range.
+
+> `1.0` is still considered an `int`
 
 </td>
 </tr>

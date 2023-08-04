@@ -24,7 +24,7 @@ use crate::{
     templating::{Bool, False, True},
 };
 
-use super::{PropagateVars, VarValue, Vars};
+use super::{scripting::purge_undefined, PropagateVars, VarValue, Vars};
 
 type SelectTmp = Select<Arc<str>>;
 
@@ -294,8 +294,7 @@ impl QueryInner {
             .flatten()
             .map(|x| {
                 x.and_then(|v| {
-                    v.to_json(ctx)
-                        .map_err(EvalExprErrorInner::InvalidResultJson)
+                    purge_undefined(&v, ctx).map_err(EvalExprErrorInner::InvalidResultJson)
                 })
             })
             .collect_vec()

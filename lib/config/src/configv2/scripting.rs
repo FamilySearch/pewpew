@@ -4,9 +4,9 @@ use super::{
 };
 use crate::make_send::MakeSend;
 use boa_engine::{
-    object::{JsFunction, ObjectInitializer},
+    object::{JsArray, JsFunction, ObjectInitializer},
     prelude::*,
-    property::Attribute,
+    property::{Attribute, PropertyKey},
 };
 use derivative::Derivative;
 use futures::{Stream, TryStreamExt};
@@ -69,6 +69,76 @@ mod lib_src {
     pub(super) fn get_source() -> Option<Arc<str>> {
         (*SOURCE.lock().unwrap()).clone()
     }
+}
+
+/// The to_json() method provided by boa panics on any `undefined` value.
+///
+/// This function should be preferred instead
+pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<serde_json::Value> {
+    // copy of to_json() from boa that does not panic on undefined
+    fn purge_inner(
+        js: &JsValue,
+        context: &mut Context,
+        trace: Vec<String>,
+    ) -> JsResult<serde_json::Value> {
+        match js {
+            JsValue::Null => Ok(serde_json::Value::Null),
+            &JsValue::Boolean(b) => Ok(b.into()),
+            JsValue::String(string) => Ok(string.as_str().into()),
+            &JsValue::Rational(rat) => Ok(rat.into()),
+            &JsValue::Integer(int) => Ok(int.into()),
+            JsValue::BigInt(_bigint) => context.throw_type_error("cannot convert bigint to JSON"),
+            JsValue::Symbol(_sym) => context.throw_type_error("cannot convert Symbol to JSON"),
+            JsValue::Object(o) => {
+                if o.is_array() {
+                    let jsarr =
+                        JsArray::from_object(o.clone(), context).expect("just checked if array");
+                    let len = jsarr.length(context)?;
+                    (0..len)
+                        .map(|i| {
+                            jsarr.get(i, context).and_then(|js| {
+                                purge_inner(&js, context, {
+                                    let mut trace = trace.clone();
+                                    trace.push(i.to_string());
+                                    trace
+                                })
+                            })
+                        })
+                        .collect::<JsResult<Vec<serde_json::Value>>>()
+                        .map(Into::into)
+                } else {
+                    let mut map = serde_json::Map::new();
+                    for (key, property) in o.borrow().properties().iter() {
+                        let key = match &key {
+                            PropertyKey::String(string) => string.as_str().to_owned(),
+                            PropertyKey::Index(i) => i.to_string(),
+                            PropertyKey::Symbol(_sym) => {
+                                return context.throw_type_error("cannot convert Symbol to JSON")
+                            }
+                        };
+
+                        let value = match property.value() {
+                            Some(val) => purge_inner(val, context, {
+                                let mut trace = trace.clone();
+                                trace.push(key.clone());
+                                trace
+                            })?,
+                            None => serde_json::Value::Null,
+                        };
+
+                        map.insert(key, value);
+                    }
+
+                    Ok(serde_json::Value::Object(map))
+                }
+            }
+            JsValue::Undefined => {
+                log::error!("js value at trace {trace:?} was `undefined`; falling back to `null`");
+                Ok(serde_json::Value::Null)
+            }
+        }
+    }
+    purge_inner(js, context, vec![])
 }
 
 pub fn eval_direct(code: &str) -> Result<String, EvalExprError> {
@@ -195,11 +265,13 @@ impl EvalExpr {
         }
         let object = object.build();
         Ok((
-            efn.call(&JsValue::Null, &[object.into()], ctx)
-                .map(|js| if js.is_undefined() { JsValue::Null } else { js })
-                .map_err(EvalExprErrorInner::ExecutionError)?
-                .to_json(ctx)
-                .map_err(EvalExprErrorInner::InvalidResultJson)?,
+            purge_undefined(
+                &efn.call(&JsValue::Null, &[object.into()], ctx)
+                    .map(|js| if js.is_undefined() { JsValue::Null } else { js })
+                    .map_err(EvalExprErrorInner::ExecutionError)?,
+                ctx,
+            )
+            .map_err(EvalExprErrorInner::InvalidResultJson)?,
             values.into_iter().flat_map(|v| v.1 .1).collect_vec(),
         ))
     }
@@ -248,6 +320,10 @@ mod tests {
     use super::LibSrc;
     use boa_engine::{object::JsArray, Context, JsValue};
     use std::{path::PathBuf, sync::Arc};
+
+    // I don't bother calling purge_undefined() in here, because for unit testing we control the
+    // inputs, and none of these should be undefined. For production code that users can provide
+    // data for, that extra check is needed.
 
     #[test]
     fn parse_funcs() {
@@ -307,7 +383,11 @@ mod tests {
             ctx.eval(r#"start_pad("foo", 4, "")"#),
             Ok(JsValue::String("foo".into()))
         );
+    }
 
+    #[test]
+    fn encode_fn() {
+        let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
             ctx.eval(r#"encode("foo=bar", "percent-userinfo")"#),
             Ok(JsValue::String("foo%3Dbar".into()))
@@ -828,16 +908,7 @@ mod builtins {
 
         impl JsInput<'_> for serde_json::Value {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                match js {
-                    JsValue::Undefined => {
-                        // prevent todo!-induced panic
-                        log::warn!(
-                            "`undefined` is not currently a valid value for serde_json::Value"
-                        );
-                        Ok(serde_json::Value::Null)
-                    }
-                    js => js.to_json(ctx),
-                }
+                super::super::purge_undefined(js, ctx)
             }
         }
 

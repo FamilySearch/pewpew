@@ -101,11 +101,17 @@ impl Display for VarValue<True> {
 
 impl VarValue<True> {
     fn get(&self, path: &[&str]) -> Option<&Self> {
+        if !path.is_empty() {
+            log::trace!("searching for var value {path:?} in {self:?}");
+        }
         match (self, path) {
             (Self::Map(vars), [key, rest @ ..]) => vars.get(*key)?.get(rest),
             (Self::List(arr), [idx, rest @ ..]) => arr.get(idx.parse::<usize>().ok()?)?.get(rest),
             (terminal, []) => Some(terminal),
-            _ => None,
+            (_, [v, ..]) => {
+                log::error!("var {v:?} not found in {self:?}");
+                None
+            }
         }
     }
 }
@@ -113,6 +119,7 @@ impl VarValue<True> {
 fn get_var_at_path<'a>(vars: &'a Vars<True>, path: &str) -> Option<&'a VarValue<True>> {
     let mut path = path.split('.').collect::<VecDeque<_>>();
     let this = path.pop_front()?;
+    log::trace!("checking for var {this:?}");
     let var = vars.get(this)?;
 
     var.get(path.make_contiguous())
@@ -157,6 +164,7 @@ impl LoadTest<True, True> {
         pre_envs
             .lib_src
             .clone()
+            // this function is being called for the side effect
             .map(scripting::set_source)
             .transpose()?;
 
@@ -309,6 +317,7 @@ impl PropagateVars for LoadTest<False, True> {
     type Data<VD: Bool> = LoadTest<VD, True>;
 
     fn insert_vars(self, vars: &Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!("inserting static vars into LoadTest");
         let Self {
             config,
             load_pattern,
@@ -342,6 +351,10 @@ where
     type Data<VD: Bool> = BTreeMap<K, V::Data<VD>>;
 
     fn insert_vars(self, vars: &Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!(
+            "inserting static vars into BTreeMap of {}",
+            std::any::type_name::<V>()
+        );
         self.into_iter()
             .map(|(k, v)| Ok((k, v.insert_vars(vars)?)))
             .collect()
@@ -357,6 +370,10 @@ where
     type Data<VD: Bool> = HashMap<K, V::Data<VD>>;
 
     fn insert_vars(self, vars: &Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!(
+            "inserting static vars into HashMap of {}",
+            std::any::type_name::<V>()
+        );
         self.into_iter()
             .map(|(k, v)| Ok((k, v.insert_vars(vars)?)))
             .collect()
@@ -371,6 +388,10 @@ where
     type Data<VD: Bool> = Vec<T::Data<VD>>;
 
     fn insert_vars(self, vars: &Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!(
+            "inserting static vars into Vec of {}",
+            std::any::type_name::<T>()
+        );
         self.into_iter().map(|x| x.insert_vars(vars)).collect()
     }
 }
@@ -396,6 +417,10 @@ where
     type Data<VD: Bool> = (T, U::Data<VD>);
 
     fn insert_vars(self, vars: &Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!(
+            "inserting static vars into Map of {}",
+            std::any::type_name::<U>()
+        );
         Ok((self.0, self.1.insert_vars(vars)?))
     }
 }

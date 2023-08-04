@@ -154,12 +154,12 @@ impl Clone for QueryInner {
         let q = Self::try_from(Rc::clone(&self.src)).expect("was already made");
         if let Some(vars) = self.vars.get() {
             let _ = q.vars.set(vars.clone());
+            let v = q.vars.get().unwrap();
+            let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
+            q.ctx
+                .borrow_mut()
+                .register_global_property("_v", js, Attribute::READONLY);
         }
-        let v = q.vars.get().unwrap();
-        let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
-        q.ctx
-            .borrow_mut()
-            .register_global_property("_v", js, Attribute::READONLY);
         q
     }
 }

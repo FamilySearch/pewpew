@@ -99,6 +99,7 @@ impl PropagateVars for ProviderType<False> {
     type Data<VD: Bool> = ProviderType<VD>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {
+        log::info!("inserting static vars into provider");
         match self {
             Self::File(fp) => fp.insert_vars(vars).map(ProviderType::File),
             Self::Range(r) => Ok(ProviderType::Range(r)),

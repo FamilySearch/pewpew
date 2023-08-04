@@ -53,6 +53,7 @@ impl PropagateVars for Endpoint<False> {
     type Data<VD: Bool> = Endpoint<VD>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {
+        log::trace!("inserting static vars into endpoint");
         Ok(Endpoint {
             declare: self.declare.insert_vars(vars)?,
             headers: self.headers.insert_vars(vars)?,

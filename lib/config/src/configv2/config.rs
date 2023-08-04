@@ -26,6 +26,7 @@ impl PropagateVars for Config<False> {
     type Data<VD: Bool> = Config<VD>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {
+        log::info!("inserting static vars for config section");
         Ok(Config {
             client: self.client.insert_vars(vars)?,
             general: self.general.insert_vars(vars)?,
@@ -60,6 +61,7 @@ impl PropagateVars for Client<False> {
     type Data<VD: Bool> = Client<VD>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {
+        log::info!("inserting static vars into client config section");
         let Self {
             request_timeout,
             headers,
@@ -103,6 +105,7 @@ impl PropagateVars for General<False> {
         self,
         vars: &super::Vars<True>,
     ) -> Result<Self::Data<True>, crate::error::VarsError> {
+        log::info!("inserting static vars into general config section");
         Ok(General {
             auto_buffer_start_size: self.auto_buffer_start_size,
             bucket_size: self.bucket_size.insert_vars(vars)?,

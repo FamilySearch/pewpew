@@ -182,6 +182,7 @@ impl PropagateVars for LoadPatternSingle<False> {
     type Data<VD: Bool> = LoadPatternSingle<VD>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {
+        log::info!("inserting static vars into load pattern");
         match self {
             Self::Linear { from, to, over } => Ok(LoadPatternSingle::Linear {
                 from: from.insert_vars(vars)?,

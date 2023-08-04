@@ -406,6 +406,10 @@ where
     type Data<VD: Bool> = Template<V, T, VD, True>;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, VarsError> {
+        log::info!(
+            "inseting static vars into Templated {}",
+            std::any::type_name::<V>()
+        );
         match self {
             Self::Literal { value } => Ok(Template::Literal { value }),
             Self::PreVars {
@@ -578,9 +582,12 @@ impl<T: TemplateType<VarsAllowed = True, EnvsAllowed = False>> PropagateVars
         self.0
             .into_iter()
             .map(|p| match p {
-                Segment::Var(v, True) => super::get_var_at_path(vars, &v)
-                    .ok_or_else(|| super::VarsError::VarNotFound(v))
-                    .map(|v| Segment::Raw(v.to_string().trim_matches('"').to_owned())),
+                Segment::Var(v, True) => {
+                    log::debug!("searching for var value {v:?}");
+                    super::get_var_at_path(vars, &v)
+                        .ok_or_else(|| super::VarsError::VarNotFound(v))
+                        .map(|v| Segment::Raw(v.to_string().trim_matches('"').to_owned()))
+                }
                 Segment::Env(_, no) => no.no(),
                 Segment::Expr(v, True) => {
                     let mut has_prov = false;
@@ -589,9 +596,12 @@ impl<T: TemplateType<VarsAllowed = True, EnvsAllowed = False>> PropagateVars
                         .map(|s| match s {
                             Segment::Env(_, no) => no.no(),
                             Segment::Expr(_, no) => no.no(),
-                            Segment::Var(v, True) => super::get_var_at_path(vars, &v)
-                                .ok_or_else(|| super::VarsError::VarNotFound(v))
-                                .map(|v| Segment::Raw(v.to_string())),
+                            Segment::Var(v, True) => {
+                                log::debug!("searching for var value {v:?}");
+                                super::get_var_at_path(vars, &v)
+                                    .ok_or_else(|| super::VarsError::VarNotFound(v))
+                                    .map(|v| Segment::Raw(v.to_string()))
+                            }
                             Segment::Prov(p, b) => {
                                 has_prov = true;
                                 Ok(Segment::Prov(p, b))
@@ -602,6 +612,7 @@ impl<T: TemplateType<VarsAllowed = True, EnvsAllowed = False>> PropagateVars
                     if has_prov {
                         Ok(Segment::Expr(v, True))
                     } else {
+                        log::debug!("expr section {v:?} has no providers; evaluating statically");
                         let code = v
                             .into_iter()
                             .map(|s| match s {

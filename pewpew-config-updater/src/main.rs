@@ -36,3 +36,66 @@ fn main() {
         log::error!("error writing to {file:?}: {e}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, path::PathBuf};
+
+    #[test]
+    fn updater_simple() {
+        // from the intro section of the book
+        let v1 = r#"
+        load_pattern:
+          - linear:
+              to: 100%
+              over: 5m
+          - linear:
+              to: 100%
+              over: 2m
+        endpoints:
+          - method: GET
+            url: http://localhost/foo
+            peak_load: 42hpm
+            headers:
+              Accept: text/plain
+          - method: GET
+            url: http://localhost/bar
+            headers:
+              Accept-Language: en-us
+              Accept: application/json
+            peak_load: 15hps
+        "#;
+        let v2 = r#"
+        load_pattern:
+          - !linear
+              to: 100%
+              over: 5m
+          - !linear
+              to: 100%
+              over: 2m
+        endpoints:
+          - method: GET
+            url: http://localhost/foo
+            peak_load: 42hpm
+            headers:
+              Accept: text/plain
+          - method: GET
+            url: http://localhost/bar
+            headers:
+              Accept-Language: en-us
+              Accept: application/json
+            peak_load: 15hps
+        "#;
+        let updated = config::convert::update_v1_to_v2(v1).unwrap();
+        // I don't directly check the updated string here, because a lot of default values get
+        // filled in.
+        //
+        // Instead, a LoadTest made from the autoupdated config text is compared to one made from
+        // manually updated config text.
+        let lt_a =
+            config::LoadTest::from_yaml(&updated, PathBuf::new().into(), &BTreeMap::new()).unwrap();
+        let lt_b =
+            config::LoadTest::from_yaml(v2, PathBuf::new().into(), &BTreeMap::new()).unwrap();
+        assert_eq!(lt_a, lt_b);
+    }
+}

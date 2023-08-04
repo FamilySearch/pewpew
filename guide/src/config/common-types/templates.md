@@ -4,7 +4,11 @@ Templates are special strings that can be interpolated from a number of sources.
 take the form of the syntax `${tag:content}`, where `tag` is a single character identifying the source
 that data should be read from, and content describes what data should be read from the source.
 
-Depending of the field in the config file, the resulting string may then be parsed into some other data
+If a literal `'$'` character is needed, either top-level or inside an interpolation, it can be
+escaped with a double `$$`. This is particularly relevant for the `json_path()` expression helper
+function.
+
+Depending on the field in the config file, the resulting string may then be parsed into some other data
 type (such as a Duration).
 
 ## Template Sources

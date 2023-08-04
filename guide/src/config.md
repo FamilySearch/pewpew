@@ -51,5 +51,3 @@ If you are attempting to load test a specific web page or the resources on a web
 use the [Har to Yaml Converter](./results-viewer-react/yaml.html). First you need to create a
 [Har File](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the
 page load, then use the [Converter](./results-viewer-react/yaml.html) to generate a Yaml Config file.
-
-> **Note**: currently, the HAR Converter only generates pewpew 0.5.x config files.

@@ -2515,10 +2515,33 @@ mod tests {
 pub mod template_convert {
     use super::*;
 
+    /// Intermediate format for updating configv1 templates to configv2 templates
     #[derive(Debug, PartialEq, Eq)]
     pub enum Segment {
+        /// Top-level text; not an interpolation
         Outer(String),
+        /// Interpolations where the contents are a single identifier.
+        ///
+        /// Whether the source is an Env, Var, or Prov, (required by Templates in configv2 being
+        /// more explicit) will be inferred later in the conversion at a point when more data is
+        /// available.
+        ///
+        /// # Examples of V1 Template segments that would become this variant.
+        ///
+        /// - `"${port}"`
+        /// - `"${sessionId}"`
         SingleSource(String),
+        /// Any other interpolation segment.
+        ///
+        /// It's not necessarily "impossible" for this to be autoconverted, but efforts to make it
+        /// work have not been done at this point.
+        ///
+        /// The resulting V2 Template will insert a message to update this value manually.
+        ///
+        /// # Examples of V1Template segments that would become placeholders
+        ///
+        /// - `"${x.y}"` (is a path)
+        /// - `"${if(response.status == 200, response.body, 'failed')}"` (is code)
         Placeholder,
     }
 

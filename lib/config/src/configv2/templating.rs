@@ -188,7 +188,7 @@ where
 }
 
 impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
-    /// Converts the Template into a Stream the pulls values from the Providers as needed, and
+    /// Converts the Template into a Stream that pulls values from the Providers as needed, and
     /// evaluates the template with those values for each output.
     ///
     /// Used by the Declare into_stream() method.
@@ -207,6 +207,8 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
         self.into_stream_with(move |p| providers.get(p).map(|p| p.as_stream()))
     }
 
+    /// The `F` parameter is used by a Declare to allow this template to read from a "normal"
+    /// provider or a declare entry interchangeably.
     pub(crate) fn into_stream_with<F, Ar, E>(
         self,
         mut provider_get: F,
@@ -230,10 +232,9 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
     {
         use futures::stream::repeat;
         Ok(match self {
-            Self::Literal { value } => Either::A(repeat(Ok((
-                serde_json::Value::String(value),
-                vec![], // TODO: what is the Vec<Ar> for?
-            )))),
+            Self::Literal { value } => {
+                Either::A(repeat(Ok((serde_json::Value::String(value), vec![]))))
+            }
             Self::NeedsProviders { script, .. } => {
                 let streams = script
                     .into_iter()
@@ -270,6 +271,7 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
     /// Directly evaluate the template by passing in a map of provider name - provider data
     /// key-value pairs.
     pub fn evaluate(&self, data: Cow<'_, serde_json::Value>) -> Result<String, EvalExprError> {
+        log::debug!("evaluating template {self:?} with values {data:?}");
         match self {
             Self::Literal { value } => Ok(value.trim_matches('"').to_owned()),
             Self::NeedsProviders { script, __dontuse } => script
@@ -458,8 +460,12 @@ impl<T: TemplateType> TemplatedString<T> {
         input
             .into_iter()
             .map(|s| match s {
+                // All differences in templates involve interpolation sections (${}), so outer
+                // remains the same
                 template_convert::Segment::Outer(s) => Ok(Segment::<T>::Raw(s)),
                 template_convert::Segment::SingleSource(s) => {
+                    // Assume segment type based on what is allowed, and if there is a var named
+                    // that
                     match (
                         T::EnvsAllowed::try_default(),
                         T::VarsAllowed::try_default(),

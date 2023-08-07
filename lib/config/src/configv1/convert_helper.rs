@@ -374,10 +374,10 @@ fn map_query(
     for_each: Vec<WithMarker<String>>,
     where_clause: Option<WithMarker<String>>,
 ) -> Option<Query<False>> {
-    where_clause.map(|w| {
+    if let Some(w) = where_clause {
         let w = w.destruct().0;
         log::warn!("query `where` item {w:?} must be updated manually");
-    });
+    };
     for_each.into_iter().for_each(|fe| {
         let fe = fe.destruct().0;
         log::warn!("query `for_each` item {fe:?} must be updated manually");

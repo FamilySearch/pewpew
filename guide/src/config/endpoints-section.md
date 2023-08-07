@@ -58,7 +58,6 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
   ```yaml
     tags:
       name: Subscribe
-      # TODO: confirm that this is correct
       status: ${x:${p:response}.status}
   ```
 
@@ -81,8 +80,6 @@ The `endpoints` section declares what HTTP endpoints will be called during a tes
 - **`on_demand`** <sub><sup>*Optional*</sup></sub> - A boolean which indicates that this endpoint
   should only be called when another endpoint first needs data that this endpoint provides. If the
   endpoint has no `provides` it has no affect.
-
-  > TODO: what does this default to?
 
 - **`logs`** <sub><sup>*Optional*</sup></sub> - See the [logs subsection](#logs-subsection)
 - **`max_parallel_requests`** <sub><sup>*Optional*</sup></sub> - Limits how many requests can be

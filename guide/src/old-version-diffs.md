@@ -1,6 +1,9 @@
 # Differences from pewpew 0.5.x config
 
-> This is **not** an exhaustive list.
+> This is not necessarily an exhaustive list.
+
+Some of these changes can be automated by using the `pewpew-config-updater` program, but
+others must still be done manually.
 
 ## Enums
 

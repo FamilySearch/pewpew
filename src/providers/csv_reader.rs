@@ -1,5 +1,4 @@
 use crate::util::str_to_json;
-use itertools::Itertools;
 use rand::distributions::{Distribution, Uniform};
 use serde_json as json;
 use std::{fs::File, io, iter::Iterator};
@@ -50,16 +49,11 @@ impl CsvReader {
         }
         let mut reader = builder.from_reader(file);
         let headers = explicit_headers
-            .map(|headers| -> Result<_, io::Error> {
-                let headers = builder
-                    .from_reader(headers.iter().join(",").as_bytes())
-                    .headers()
-                    .map_err(io::Error::from)?
-                    .to_owned();
+            .map(|headers| {
+                let headers: csv::StringRecord = headers.clone().into();
                 reader.set_headers(headers.clone());
-                Ok(headers)
+                headers
             })
-            .transpose()?
             .or_else(|| {
                 first_row_headers
                     .then(|| reader.headers().ok().cloned())

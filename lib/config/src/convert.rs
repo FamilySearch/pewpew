@@ -1,3 +1,5 @@
+//! publicly accessible types and functions for config updating
+
 use crate::{
     common::ProviderSend,
     configv1::{CreatingExpressionError, CsvHeader, EndpointProvidesSendOptions as EPSO, Limit},

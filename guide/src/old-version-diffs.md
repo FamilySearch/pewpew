@@ -82,6 +82,8 @@ format: !line
 # no place to put csv parameters
 ```
 
+Additionally, the option for provided headers are given as a list rather than a single String.
+
 ## Templates
 
 Template interpolations are now tagged with the specific source that data is read from. Some tags

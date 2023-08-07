@@ -3,8 +3,14 @@ use std::{fs, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(version)]
+#[command(
+    about = "Tool to help automate updating pewpew config files from 0.5.x to 0.6.x.
+Some changes will still need to be done manually."
+)]
 struct Args {
     /// files to attempt conversion
+    ///
+    /// output result will be written to same path with a modified extension
     files: Vec<PathBuf>,
 }
 

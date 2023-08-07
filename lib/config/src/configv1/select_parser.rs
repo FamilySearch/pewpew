@@ -2538,7 +2538,7 @@ pub mod template_convert {
         ///
         /// The resulting V2 Template will insert a message to update this value manually.
         ///
-        /// # Examples of V1Template segments that would become placeholders
+        /// # Examples of V1 Template segments that would become placeholders
         ///
         /// - `"${x.y}"` (is a path)
         /// - `"${if(response.status == 200, response.body, 'failed')}"` (is code)
@@ -2608,6 +2608,59 @@ pub mod template_convert {
             .unwrap();
             let t = t.dump();
             assert_eq!(t, vec![Segment::SingleSource("port".to_string())]);
+
+            let t = Template::new(
+                "http://localhost:${port}",
+                &BTreeMap::new(),
+                &mut RequiredProviders::new(),
+                false,
+                unsafe { std::mem::zeroed() },
+            )
+            .unwrap();
+            let t = t.dump();
+            assert_eq!(
+                t,
+                vec![
+                    Segment::Outer("http://localhost:".to_owned()),
+                    Segment::SingleSource("port".to_string())
+                ]
+            );
+        }
+
+        #[test]
+        fn template_convert_with_placeholders() {
+            let t = Template::new(
+                "${collect(foo, 3, 5)}",
+                &BTreeMap::new(),
+                &mut RequiredProviders::new(),
+                false,
+                unsafe { std::mem::zeroed() },
+            )
+            .unwrap();
+            let t = t.dump();
+            assert_eq!(t, vec![Segment::Placeholder]);
+
+            let t = Template::new(
+                "http://localhost:${port}/${encode(foo, \"percent-userinfo\")}${response.body.a}",
+                &BTreeMap::new(),
+                &mut RequiredProviders::new(),
+                false,
+                unsafe { std::mem::zeroed() },
+            )
+            .unwrap();
+            let t = t.dump();
+            assert_eq!(
+                t,
+                vec![
+                    Segment::Outer("http://localhost:".to_owned()),
+                    Segment::SingleSource("port".to_owned()),
+                    Segment::Outer("/".to_owned()),
+                    // Placeholder because of script expr.
+                    Segment::Placeholder,
+                    // Placeholder because of complex path.
+                    Segment::Placeholder,
+                ]
+            );
         }
     }
 }

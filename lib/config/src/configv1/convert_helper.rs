@@ -1,3 +1,6 @@
+//! module for helping with the converter that is able to access private fields of the `configv1`
+//! module
+
 use super::{select_parser::template_convert::Segment, Template as TemplateV1, *};
 use crate::{
     common::{Duration, ProviderSend},
@@ -24,6 +27,8 @@ use std::{
     sync::Arc,
 };
 
+// Functions to convert a V1 PreTemplate into a type that can be transformed into a V2 Template
+
 fn map_template(t: PreTemplate) -> Result<Vec<Segment>, error::Error> {
     Ok(
         t.as_template(&BTreeMap::new(), &mut RequiredProviders::new())?
@@ -47,10 +52,13 @@ fn make_template_string<T: TemplateType>(
         .map_err(ConfigUpdaterError::template_gen)
 }
 
+/// Trait for Newtype structs that simply contains a PreTemplate that eventually gets evaluated to
+/// some value.
 trait PreTemplateNewType: Sized
 where
     <Self::V2 as FromStr>::Err: std::error::Error + Send + Sync,
 {
+    /// the type that the evaulated template string gets parsed into
     type V2: FromStr + std::fmt::Debug + 'static;
     type TemplateType: TemplateType;
 
@@ -82,6 +90,10 @@ macro_rules! v_template_newtype {
 v_template_newtype!(PreDuration => Duration);
 v_template_newtype!(PrePercent => Percent);
 v_template_newtype!(PreHitsPer => HitsPerMinute);
+
+// functions to convert specific sections/subsections of the config file
+// False is used as the typestate params, as inserting that data is a lossy process, and as much
+// data from the original config as possible should be preserved
 
 fn map_headers(
     h: TupleVec<String, PreTemplate>,
@@ -392,6 +404,8 @@ fn map_endpoint(
             query: query.expect("passed in a Some"),
             send: send.map_or_else(
                 || {
+                    // In configv1, the default value of `send` relies and the settings of other
+                    // fields. This behavior has not been replicated in configv2.
                     log::warn!(
                     "endpoint provides `send` field is not optional; defaulting to `block` here"
                 );
@@ -586,6 +600,8 @@ fn map_load_test(
     })
 }
 
+/// Generates a configv2 LoadTest struct fron configv1 yaml, with saome data potentially filled in
+/// with placeholder.
 pub(crate) fn map_v1_yaml(s: &str) -> Result<crate::LoadTest<False, False>, ConfigUpdaterError> {
     let lt = LoadTestPreProcessed::from_yaml_str(s)?;
 

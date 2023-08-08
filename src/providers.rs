@@ -301,11 +301,7 @@ mod tests {
                 end: 20
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works1".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = range(range_params.into(), "range_provider_works1", BUFFER_SIZE);
             let expect: Vec<_> = (0..=20).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -321,11 +317,7 @@ mod tests {
                 step: 2
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works2".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = range(range_params.into(), "range_provider_works2", BUFFER_SIZE);
 
             let expect: Vec<_> = (0..=20).step_by(2).collect();
 
@@ -342,11 +334,7 @@ mod tests {
                     repeat: true
                 "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works3".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = range(range_params.into(), "range_provider_works3", BUFFER_SIZE);
 
             let expect: Vec<_> = (0..=20).cycle().take(100).collect();
 
@@ -372,11 +360,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(
-                lp.into(),
-                &"literals_provider_works1".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = list(lp.into(), "literals_provider_works1", BUFFER_SIZE);
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -393,11 +377,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(
-                lp.into(),
-                &"literals_provider_works2".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = list(lp.into(), "literals_provider_works2", BUFFER_SIZE);
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -417,11 +397,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(
-                lp.into(),
-                &"literals_provider_works3".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = list(lp.into(), "literals_provider_works3", BUFFER_SIZE);
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
             let values: Vec<_> = p.rx.take(100).collect().await;
@@ -435,11 +411,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(
-                lwo.into(),
-                &"literals_provider_works4".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = list(lwo.into(), "literals_provider_works4", BUFFER_SIZE);
             let mut expect: Vec<_> = jsons
                 .iter()
                 .cycle()
@@ -467,11 +439,7 @@ mod tests {
                 unique: true,
             };
 
-            let p = list(
-                lwo.into(),
-                &"literals_provider_works5".to_string(),
-                BUFFER_SIZE,
-            );
+            let p = list(lwo.into(), "literals_provider_works5", BUFFER_SIZE);
             let Provider { rx, tx, .. } = p;
             drop(tx);
 
@@ -498,7 +466,7 @@ mod tests {
             buffer: BufferLimit::Auto,
             unique: false,
         };
-        let mut p = response(rp, &"response_provider_works".to_string(), BUFFER_SIZE);
+        let mut p = response(rp, "response_provider_works", BUFFER_SIZE);
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }
@@ -533,11 +501,7 @@ mod tests {
             buffer: BufferLimit::Limit(jsons.len() as u64),
             unique: true,
         };
-        let mut p = response(
-            rp,
-            &"unique_response_provider_works".to_string(),
-            BUFFER_SIZE,
-        );
+        let mut p = response(rp, "unique_response_provider_works", BUFFER_SIZE);
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }

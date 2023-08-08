@@ -731,7 +731,7 @@ mod tests {
     #[test]
     fn channel_limit_works() {
         let limit = Limit::Static(1);
-        let (mut tx, _rx) = channel::<bool>(limit, false, &"channel_limit_works".to_string());
+        let (mut tx, _rx) = channel::<bool>(limit, false, "channel_limit_works");
 
         for _ in 0..tx.limit() {
             let left = tx.send(true).now_or_never();
@@ -748,7 +748,7 @@ mod tests {
     fn unique_channel_works() {
         let cap = 8; // how many unique values we'll put into the channel
         let limit = Limit::Static(100); // the size of the channel and how many times we will insert values
-        let (tx, _rx) = channel::<usize>(limit, true, &"unique_channel_works".to_string());
+        let (tx, _rx) = channel::<usize>(limit, true, "unique_channel_works");
 
         assert!(tx.limit() > cap);
 
@@ -763,8 +763,7 @@ mod tests {
     fn channel_dynamic_limit_expands() {
         let limit = Limit::dynamic(5);
         let start_limit = limit.get();
-        let (mut tx, mut rx) =
-            channel::<bool>(limit, false, &"channel_dynamic_limit_expands".to_string());
+        let (mut tx, mut rx) = channel::<bool>(limit, false, "channel_dynamic_limit_expands");
 
         for _ in 0..start_limit {
             let left = tx.send(true).now_or_never();
@@ -809,11 +808,8 @@ mod tests {
 
     #[test]
     fn sender_errs_when_no_receivers() {
-        let (mut tx, mut rx) = channel::<bool>(
-            Limit::dynamic(5),
-            false,
-            &"sender_errs_when_no_receivers".to_string(),
-        );
+        let (mut tx, mut rx) =
+            channel::<bool>(Limit::dynamic(5), false, "sender_errs_when_no_receivers");
 
         while tx.send(true).now_or_never().is_some() {}
 
@@ -832,9 +828,9 @@ mod tests {
 
     #[test]
     fn sender_ord_works() {
-        let (tx_a, _) = channel::<bool>(Limit::dynamic(5), false, &"sender_ord_works1".to_string());
-        let (tx_b, _) = channel::<bool>(Limit::dynamic(5), false, &"sender_ord_works2".to_string());
-        let (tx_c, _) = channel::<bool>(Limit::dynamic(5), false, &"sender_ord_works3".to_string());
+        let (tx_a, _) = channel::<bool>(Limit::dynamic(5), false, "sender_ord_works1");
+        let (tx_b, _) = channel::<bool>(Limit::dynamic(5), false, "sender_ord_works2");
+        let (tx_c, _) = channel::<bool>(Limit::dynamic(5), false, "sender_ord_works3");
         let tx_a2 = tx_a.clone();
         let tx_a3 = tx_a.clone();
         let tx_b2 = tx_b.clone();
@@ -856,8 +852,7 @@ mod tests {
     fn receiver_ends_when_no_senders() {
         let limit = Limit::dynamic(5);
         let start_size = limit.get();
-        let (mut tx, mut rx) =
-            channel::<bool>(limit, false, &"receiver_ends_when_no_senders".to_string());
+        let (mut tx, mut rx) = channel::<bool>(limit, false, "receiver_ends_when_no_senders");
 
         while tx.send(true).now_or_never().is_some() {}
 
@@ -883,11 +878,7 @@ mod tests {
 
     #[test]
     fn on_demand_receiver_works() {
-        let (tx, mut rx) = channel::<()>(
-            Limit::dynamic(5),
-            false,
-            &"on_demand_receiver_works".to_string(),
-        );
+        let (tx, mut rx) = channel::<()>(Limit::dynamic(5), false, "on_demand_receiver_works");
 
         let mut on_demand = OnDemandReceiver::new(&rx);
 

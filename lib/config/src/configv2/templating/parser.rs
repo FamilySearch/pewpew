@@ -1,3 +1,5 @@
+//! Parser for the structure of Template syntax.
+
 use super::{Bool, False, TemplateType, True, TryDefault};
 use ast::Segment as ASeg;
 use derivative::Derivative;
@@ -18,7 +20,7 @@ pub enum TemplateParseError {
     InvalidTemplateType(char),
     #[error("unrecognized template type {0}")]
     UnrecognizedTemplateType(char),
-    #[error("only ${{p}} templates can appear inside of ${{x}} templates")]
+    #[error("${{x}} templates cannot appear inside of ${{x}} templates")]
     InvalidNested,
 }
 

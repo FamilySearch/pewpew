@@ -159,14 +159,9 @@ impl LoadTest<True, True> {
         file_path: Arc<Path>,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, LoadTestGenError> {
-        let pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
+        let mut pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
         // init lib js
-        pre_envs
-            .lib_src
-            .clone()
-            // this function is being called for the side effect
-            .map(scripting::set_source)
-            .transpose()?;
+        scripting::set_source(std::mem::take(&mut pre_envs.lib_src))?;
 
         let mut pre_vars = pre_envs.insert_env_vars(env_vars)?;
         pre_vars

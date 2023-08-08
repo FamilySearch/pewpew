@@ -58,11 +58,12 @@ mod lib_src {
     /// the new lib source, including Cloned ones.
     ///
     /// Should only be called when a new LoadTest is created.
-    pub(crate) fn set_source(src: LibSrc) -> Result<(), io::Error> {
-        *(SOURCE.lock().unwrap()) = Some(match src {
-            LibSrc::Inline(s) => s,
-            LibSrc::Extern(f) => fs::read_to_string(f)?.into(),
-        });
+    pub(crate) fn set_source(src: Option<LibSrc>) -> Result<(), io::Error> {
+        *(SOURCE.lock().unwrap()) = match src {
+            Some(LibSrc::Inline(s)) => Some(s),
+            Some(LibSrc::Extern(f)) => Some(fs::read_to_string(f)?.into()),
+            None => None,
+        };
         Ok(())
     }
 
@@ -570,9 +571,9 @@ mod tests {
 
     #[test]
     fn custom_js() {
-        super::set_source(LibSrc::Extern(Arc::from(PathBuf::from(
+        super::set_source(Some(LibSrc::Extern(Arc::from(PathBuf::from(
             "./tests/test_custom.js",
-        ))))
+        )))))
         .unwrap();
 
         let mut ctx = super::get_default_context();

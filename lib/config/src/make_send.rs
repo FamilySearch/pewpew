@@ -1,6 +1,7 @@
-//! Makes any arbitrary type T Send.
-//! Uses DiplomaticBag normally, but just contains a T in wasm32 builds, where threads are not
-//! supported
+//! Makes any arbitrary type T Send. Mainly used for scripting Context.
+//! Uses DiplomaticBag normally, which defers operations to background shared worker thread,
+//! but just contains a T in wasm32 builds, where threads are not supported and the regular
+//! DiplomaticBag would cause a panic
 
 #![allow(dead_code, clippy::needless_return, unused_imports)]
 

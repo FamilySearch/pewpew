@@ -79,6 +79,7 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
     fn purge_inner(
         js: &JsValue,
         context: &mut Context,
+        // trace parameter helps track where in the "root" js object the undefined was found
         trace: Vec<String>,
     ) -> JsResult<serde_json::Value> {
         match js {
@@ -221,6 +222,9 @@ impl EvalExpr {
                 .collect::<String>()
         ));
         if !uses_prov {
+            // more of a developer warning in case a previous check broke
+            // any expression that doesn't rely on providers should have been evaluated statically
+            // by this point
             log::warn!("R-Template expression ({script:?}) does not read from any providers.")
         }
         Self::from_parts(script, Arc::from(needed))
@@ -600,6 +604,7 @@ mod tests {
 }
 
 pub fn get_default_context() -> Context {
+    // the function called here is written by the `boa_mod` macro
     let mut ctx = builtins::get_default_context();
     match lib_src::get_source().as_deref() {
         Some(s) => match ctx.eval(s) {
@@ -631,7 +636,9 @@ mod builtins {
     //!   from the JS runtime as; with no `jsname`, the default will be the
     //!   native Rust function name.
     //!
-    //! IMPORTANT: Do **NOT** let these functions panic if at all possible
+    //! IMPORTANT: Do **NOT** let these functions panic if at all possible, as all scripting
+    //! operations are done on a shared thread, and any panic will make all expressions fail to
+    //! execute for the rest of the program runtime.
 
     use crate::shared::{encode::Encoding, Epoch};
     use helper::{AnyAsString, AnyNull, NumType, OrNull};
@@ -940,6 +947,9 @@ mod builtins {
             }
         }
 
+        /// Input that represents any JsValue that will then be discarded and not used.
+        /// Its purpose is for a dummy value, as described in the book, to allow forcing a
+        /// non-deterministic function (such as random()) to be called each time.
         pub(super) struct AnyNull;
 
         impl JsInput<'_> for AnyNull {

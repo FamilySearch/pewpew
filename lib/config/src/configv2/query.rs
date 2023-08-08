@@ -32,6 +32,7 @@ type SelectTmp = Select<Arc<str>>;
 #[serde(try_from = "QueryTmp")]
 pub struct Query<VD: Bool = True>(MakeSend<QueryInner>, PhantomData<VD>);
 
+// Inserting vars does not change any structure, it just adds the `_v` data to the context.
 impl PropagateVars for Query<False> {
     type Data<VD: Bool> = Query<VD>;
 
@@ -271,6 +272,7 @@ impl QueryInner {
                 .multi_cartesian_product()
                 .map(|v| JsArray::from_iter(v, ctx).into())
                 .collect_vec();
+            // If no for_each entries are specified, just select one time.
             if for_each.is_empty() {
                 vec![JsValue::Undefined]
             } else {
@@ -280,6 +282,10 @@ impl QueryInner {
         Ok(for_each
             .into_iter()
             .map(|x| {
+                // NOTE: this function got changed in boa 0.17, where it returns an error if the
+                // same property is "registered" twice, as opposed to the current behavior which
+                // overwrites it. If it is desired to update the boa engine to a newer version in
+                // the future, an alternative to this will be needed.
                 ctx.register_global_property("for_each", x, Attribute::READONLY);
                 Ok(self
                     .r#where
@@ -360,6 +366,8 @@ impl Select {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // testing cases are taken from the book
 
     #[test]
     fn test_queries() {

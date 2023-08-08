@@ -1174,8 +1174,8 @@ fn get_providers_from_config(
     for (name, template) in config_providers {
         use config::providers::ProviderType;
         let provider = match template.clone() {
-            ProviderType::Range(rg) => providers::range(rg, name),
-            ProviderType::List(lp) => providers::list(lp, name),
+            ProviderType::Range(rg) => providers::range(rg, name, auto_size),
+            ProviderType::List(lp) => providers::list(lp, name, auto_size),
             ProviderType::File(mut f) => {
                 util::tweak_path(f.path.get_mut(), config_path);
                 providers::file(f, test_ended_tx.clone(), name, auto_size)?

@@ -127,12 +127,12 @@ pub fn response(
 }
 
 // create a list provider
-pub fn list(lp: providers::ListProvider, name: &str) -> Provider {
+pub fn list(lp: providers::ListProvider, name: &str, auto_buffer_start_size: usize) -> Provider {
     debug!("providers::list={:?}", lp);
     // create the channel for the provider
     let unique = lp.unique;
     let rs = stream::iter(lp.into_iter().map(Ok));
-    let limit = channel::Limit::dynamic(5);
+    let limit = channel::Limit::dynamic(auto_buffer_start_size);
     let (tx, rx) = channel::channel(limit, unique, name);
 
     // create a new task that pushes data from the list into the channel
@@ -145,10 +145,10 @@ pub fn list(lp: providers::ListProvider, name: &str) -> Provider {
 }
 
 // create a range provider
-pub fn range(rp: providers::RangeProvider, name: &str) -> Provider {
+pub fn range(rp: providers::RangeProvider, name: &str, auto_buffer_start_size: usize) -> Provider {
     debug!("providers::range={:?}", rp);
     // create the channel for the provider
-    let limit = channel::Limit::dynamic(5);
+    let limit = channel::Limit::dynamic(auto_buffer_start_size);
     let (tx, rx) = channel::channel(limit, rp.unique, name);
 
     // create a new task that pushes data from the range into the channel
@@ -289,6 +289,8 @@ mod tests {
     use serde_yaml::from_str as from_yaml;
     use std::time::Duration;
 
+    const BUFFER_SIZE: usize = 5;
+
     #[test]
     fn range_provider_works() {
         use config::providers::RangeProvider;
@@ -299,7 +301,11 @@ mod tests {
                 end: 20
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), &"range_provider_works1".to_string());
+            let p = range(
+                range_params.into(),
+                &"range_provider_works1".to_string(),
+                BUFFER_SIZE,
+            );
             let expect: Vec<_> = (0..=20).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -315,7 +321,11 @@ mod tests {
                 step: 2
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), &"range_provider_works2".to_string());
+            let p = range(
+                range_params.into(),
+                &"range_provider_works2".to_string(),
+                BUFFER_SIZE,
+            );
 
             let expect: Vec<_> = (0..=20).step_by(2).collect();
 
@@ -332,7 +342,11 @@ mod tests {
                     repeat: true
                 "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), &"range_provider_works3".to_string());
+            let p = range(
+                range_params.into(),
+                &"range_provider_works3".to_string(),
+                BUFFER_SIZE,
+            );
 
             let expect: Vec<_> = (0..=20).cycle().take(100).collect();
 
@@ -358,7 +372,11 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), &"literals_provider_works1".to_string());
+            let p = list(
+                lp.into(),
+                &"literals_provider_works1".to_string(),
+                BUFFER_SIZE,
+            );
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -375,7 +393,11 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), &"literals_provider_works2".to_string());
+            let p = list(
+                lp.into(),
+                &"literals_provider_works2".to_string(),
+                BUFFER_SIZE,
+            );
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -395,7 +417,11 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), &"literals_provider_works3".to_string());
+            let p = list(
+                lp.into(),
+                &"literals_provider_works3".to_string(),
+                BUFFER_SIZE,
+            );
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
             let values: Vec<_> = p.rx.take(100).collect().await;
@@ -409,7 +435,11 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into(), &"literals_provider_works4".to_string());
+            let p = list(
+                lwo.into(),
+                &"literals_provider_works4".to_string(),
+                BUFFER_SIZE,
+            );
             let mut expect: Vec<_> = jsons
                 .iter()
                 .cycle()
@@ -437,7 +467,11 @@ mod tests {
                 unique: true,
             };
 
-            let p = list(lwo.into(), &"literals_provider_works5".to_string());
+            let p = list(
+                lwo.into(),
+                &"literals_provider_works5".to_string(),
+                BUFFER_SIZE,
+            );
             let Provider { rx, tx, .. } = p;
             drop(tx);
 
@@ -464,7 +498,7 @@ mod tests {
             buffer: BufferLimit::Auto,
             unique: false,
         };
-        let mut p = response(rp, &"response_provider_works".to_string(), 5);
+        let mut p = response(rp, &"response_provider_works".to_string(), BUFFER_SIZE);
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }
@@ -499,7 +533,11 @@ mod tests {
             buffer: BufferLimit::Limit(jsons.len() as u64),
             unique: true,
         };
-        let mut p = response(rp, &"unique_response_provider_works".to_string(), 5);
+        let mut p = response(
+            rp,
+            &"unique_response_provider_works".to_string(),
+            BUFFER_SIZE,
+        );
         for value in &jsons {
             let _ = block_on(p.tx.send(value.clone()));
         }

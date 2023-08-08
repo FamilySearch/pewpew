@@ -759,15 +759,19 @@ mod helpers {
     pub enum False {}
 
     impl False {
-        // last line is only unreachable in debug builds
-        #[allow(unreachable_code)]
+        /// A "call" to this function indicates that the branch is unreachable, since a value of
+        /// type False cannot be created.
         pub fn no(&self) -> ! {
             #[cfg(debug_assertions)]
             {
                 log::error!("somthing has gone horribly wrong");
                 panic!("managed to call no() on a False");
             }
-            unsafe { std::hint::unreachable_unchecked() }
+            // last line is only unreachable in debug builds
+            #[allow(unreachable_code)]
+            unsafe {
+                std::hint::unreachable_unchecked()
+            }
         }
     }
 

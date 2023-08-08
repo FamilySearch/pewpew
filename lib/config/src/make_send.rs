@@ -16,6 +16,9 @@ pub(crate) struct MakeSend<T>(DiplomaticBag<T>);
 pub(crate) struct MakeSend<T>(T);
 
 impl<T> MakeSend<T> {
+    /// Creates a new `MakeSend` from the value returned by the function.
+    ///
+    /// In non-wasm builds, forwards directly to [`DiplomaticBag::new`]
     pub(crate) fn new<F: FnOnce() -> T + Send>(f: F) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         {

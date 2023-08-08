@@ -129,6 +129,7 @@ struct QueryInner {
     for_each: Vec<Gc<CodeBlock>>,
     r#where: Option<Gc<CodeBlock>>,
     ctx: RefCell<Context>,
+    /// used for rebuilding on Clone
     src: Rc<QueryTmp>,
     vars: OnceCell<Arc<SJVal>>,
 }
@@ -244,6 +245,8 @@ impl QueryInner {
             })
             .collect_vec()
             .into_iter()
+            // put the provider values into the context for the query expressions to read
+            // unlike template expressions, queries access providers directly
             .for_each(|(n, o)| ctx.register_global_property(n.as_str(), o, Attribute::READONLY));
         let for_each = {
             let for_each: Vec<VecDeque<JsValue>> = self

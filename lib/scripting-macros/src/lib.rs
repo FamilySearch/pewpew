@@ -42,12 +42,14 @@ pub fn boa_mod(_attrs: TokenStream, input: TokenStream) -> TokenStream {
         .1
         .iter()
         .flat_map(|it| match it {
+            // get all functions for the Context
             Item::Fn(f) => Some((
                 (&f.sig.ident, f.sig.inputs.len()),
                 f.attrs
                     .iter()
                     .filter_map(|a| {
                         a.path()
+                            // only include `#[boa_fn]` functions
                             .is_ident("boa_fn")
                             .then(|| a.parse_args::<Expr>().ok())
                     })
@@ -70,6 +72,7 @@ pub fn boa_mod(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         },
                         _ => None,
                     })
+                    // check the specifically defined `jsname`, or just use the function name.
                     .find_map(|(attr, name)| (attr == "jsname").then_some(name))
                     .unwrap_or(f.sig.ident.clone().to_string()),
             )),

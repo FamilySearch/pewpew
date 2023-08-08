@@ -52,6 +52,8 @@ impl PropagateVars for Headers<False> {
 }
 
 /// Newtype wrapper around [`std::time::Duration`] that allows implementing the needed traits.
+///
+/// Does not implement Deserialize to ensure that is is only used in the Config as a Template
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Deref, serde::Serialize)]
 #[serde(into = "String")]
 pub struct Duration(SDur);

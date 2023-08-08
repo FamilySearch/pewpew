@@ -25,9 +25,15 @@ pub(crate) use lib_src::{set_source, LibSrc};
 pub type ProviderStreamStream<Ar, E> =
     Box<dyn Stream<Item = Result<(serde_json::Value, Vec<Ar>), E>> + Send + Unpin + 'static>;
 
+/// Trait used by Providers in the main `pewpew` package to provide an interface usable by
+/// scripting related types here.
+///
+/// Has to be trait-based so that this package does not need to depend on `pewpew` for the Provider
+/// type, which would be a circular dependency.
 pub trait ProviderStream<Ar: Clone + Send + Unpin + 'static> {
     type Err: Unpin + std::error::Error;
 
+    /// Returns a Stream object that yields the needed types
     fn as_stream(&self) -> ProviderStreamStream<Ar, Self::Err>;
 }
 
@@ -1019,7 +1025,7 @@ mod builtins {
         ///
         /// Any type used as a return type for a `#[boa_fn]` must implement this trait.
         ///
-        /// boa engine requires JsResult<JsValue> as the output for functions, so this is used to
+        /// boa engine requires `JsResult<JsValue>` as the output for functions, so this is used to
         /// reduce boilerplate.
         ///
         /// Code that actually calls this method is written by the `#[boa_fn]` macro.
@@ -1060,7 +1066,7 @@ mod builtins {
         /// Represents an output that is always a valid JsValue, defaulting to `null` if no value
         /// is explicitly provided.
         ///
-        /// In contrast to standard Option<T>, which errors in the None case.
+        /// In contrast to standard `Option<T>`, which errors in the None case.
         pub struct OrNull<T>(pub(super) Option<T>);
 
         impl<T> From<Option<T>> for OrNull<T> {

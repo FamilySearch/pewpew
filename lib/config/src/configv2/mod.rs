@@ -49,6 +49,7 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     pub loggers: BTreeMap<String, Logger<VD>>,
     #[serde(default = "Vec::new")]
     pub endpoints: Vec<Endpoint<VD>>,
+    /// Tracks errors that would prevent a full Load Test
     #[serde(skip)]
     pub(crate) lt_err: Option<InvalidForLoadTest>,
 }
@@ -154,6 +155,7 @@ impl VarValue<False> {
 }
 
 impl LoadTest<True, True> {
+    /// Entrypoint for generating config data from the YAML text.
     pub fn from_yaml(
         yaml: &str,
         file_path: Arc<Path>,
@@ -184,6 +186,8 @@ impl LoadTest<True, True> {
         Ok(lt)
     }
 
+    /// Removes all loggers and each Endpoint's logs data.
+    /// Used to prepare for a try run.
     pub fn clear_loggers(&mut self) {
         self.loggers.clear();
         for endpoint in &mut self.endpoints {
@@ -249,7 +253,11 @@ impl LoadTest<True, True> {
         }
     }
 
+    /// Return the full duration of the load test, that being the maximum duration of each
+    /// endpoint's specifically defined load pattern, or the global.
     pub fn get_duration(&self) -> std::time::Duration {
+        // the global load_pattern has alreday been inserted into each endpoint, so it does not
+        // need to be checked explicitly
         self.endpoints
             .iter()
             .filter_map(|e| {
@@ -261,6 +269,9 @@ impl LoadTest<True, True> {
             .unwrap_or_default()
     }
 
+    /// Returns the path to an externally defined js library, if one exists.
+    ///
+    /// Can be used to check for updates to that file.
     pub fn get_lib_path(&self) -> Option<Arc<Path>> {
         match &self.lib_src {
             None => None,

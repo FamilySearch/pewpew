@@ -95,6 +95,7 @@ where
                 __dontuse,
             } => template,
             Template::PreVars { template, .. } => template,
+            // probably won't be needed, as serialization is done with `<VD = False>` templates.
             Template::NeedsProviders { .. } => todo!(),
         }
     }
@@ -582,6 +583,7 @@ impl<T: TemplateType> FromIterator<Segment<T>> for TemplatedString<T> {
 impl<T: TemplateType<VarsAllowed = True, EnvsAllowed = False>> PropagateVars
     for TemplatedString<T>
 {
+    // TemplatedString does not track typestate.
     type Data<VD: Bool> = Self;
 
     fn insert_vars(self, vars: &super::Vars<True>) -> Result<Self::Data<True>, super::VarsError> {

@@ -53,7 +53,7 @@ impl PropagateVars for Headers<False> {
 
 /// Newtype wrapper around [`std::time::Duration`] that allows implementing the needed traits.
 ///
-/// Does not implement Deserialize to ensure that is is only used in the Config as a Template
+/// Does not implement Deserialize to ensure that it is only used in the Config as a Template
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Deref, serde::Serialize)]
 #[serde(into = "String")]
 pub struct Duration(SDur);
@@ -129,7 +129,6 @@ mod tests {
 
     #[test]
     fn basic_test_provider_send() {
-        // provider send
         let ps: ProviderSend = from_yaml("!block").unwrap();
         assert_eq!(ps, ProviderSend::Block);
         let ps: ProviderSend = from_yaml("!force").unwrap();

@@ -311,10 +311,15 @@ impl QueryInner {
     }
 }
 
+/// Defines the structure of a select.
+///
+/// Initially deserialized as strings, but those terminal strings are eventually compiled to the
+/// codeblocks
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 #[derive(serde::Serialize)]
 enum Select<T = Gc<CodeBlock>> {
+    /// String that gets compiled into bytecode
     Expr(T),
     Map(BTreeMap<Arc<str>, Self>),
     List(Vec<Self>),
@@ -322,6 +327,7 @@ enum Select<T = Gc<CodeBlock>> {
 }
 
 impl SelectTmp {
+    /// converts temporary to queryable by compiling any String terminal into bytecode
     fn compile(&self, ctx: &mut Context) -> Result<Select, QueryGenError> {
         match self {
             Self::Expr(src) => compile(src, ctx).map(Select::Expr),

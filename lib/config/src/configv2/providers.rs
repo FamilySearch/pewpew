@@ -22,6 +22,7 @@ pub use list::ListProvider;
 pub use range::RangeProvider;
 use thiserror::Error;
 
+/// Wrapper struct that prevents name collisions with reserved provider identifiers.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, PartialOrd, Ord, Hash)]
 #[serde(try_from = "Cow<'_, str>")]
 #[derive(serde::Serialize)]

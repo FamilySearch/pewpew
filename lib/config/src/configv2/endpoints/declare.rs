@@ -77,6 +77,7 @@ impl Take {
         }
     }
 
+    /// Create a Stream that takes multiple `Ok`s from the input stream.
     fn collect_stream<E, S: Stream<Item = Result<(T, Vec<Ar>), E>> + Unpin, T, Ar>(
         self,
         mut s: S,
@@ -163,6 +164,8 @@ impl Declare<True> {
         Ar: Clone + Send + Unpin + 'static,
         E: StdError + Send + Clone + Unpin + 'static + From<EvalExprError>,
     {
+        // poll_fn stream is not Clone, so an abstraction is made over a clonable stream vs a
+        // function that returns a non-clonable stream
         fn make_stream<S: Clone, F: Fn() -> S2, S2>(e: &Either<S, F>) -> Either<S, S2> {
             match e {
                 Either::A(s) => Either::A(s.clone()),
@@ -178,6 +181,8 @@ impl Declare<True> {
                         let providers = providers.clone();
                         let stream = {
                             match from.as_static().map(ToOwned::to_owned) {
+                                // collect does not need providers, so just repeat the same value
+                                // as needed
                                 Some(v) => Either::A(futures::stream::repeat_with(move || {
                                     Ok((
                                         vec![
@@ -187,6 +192,8 @@ impl Declare<True> {
                                         vec![],
                                     ))
                                 })),
+                                // collect does need providers, so make a stream combinator to
+                                // gather and yield values
                                 None => Either::B({
                                     let _ = from.clone().into_stream(Arc::clone(&providers))?;
                                     move || {

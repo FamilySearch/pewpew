@@ -104,6 +104,7 @@ impl Endpoint<True> {
         }
     }
 
+    /// Inserts the special implicit tags.
     pub(crate) fn insert_special_tags(&mut self, id: usize) {
         let tags = &mut self.tags;
         tags.insert("_id".into(), Template::new_literal(id.to_string()));
@@ -112,10 +113,12 @@ impl Endpoint<True> {
             Template::new_literal(self.method.to_string()),
         );
         let url = &self.url;
+        // the `url` tag can be defined explicity, and if it is, it should not be overwritten
         tags.entry("url".into())
             .or_insert_with(|| Template::new_literal(url.evaluate_with_star()));
     }
 
+    /// Insert headers from config section
     pub(crate) fn insert_global_headers(&mut self, headers: &Headers<True>) {
         self.headers.extend(headers.iter().cloned())
     }

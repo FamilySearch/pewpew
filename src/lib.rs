@@ -918,12 +918,11 @@ ${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
     let to = try_config.file.map_or(LogTo::Stdout, |path| {
         LogTo::File(Template::new_literal(path))
     });
-    // TODO: double check values for pretty/kill/true
     let logger = Logger {
         query: Some(select.expect("should be valid")),
         to,
-        pretty: true,
-        kill: true,
+        pretty: false,
+        kill: false,
         limit: None,
     };
     if !try_config.loggers_on {

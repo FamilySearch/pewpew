@@ -37,16 +37,6 @@ pub enum LogTo<VD: Bool> {
     Stdout,
     Stderr,
     File(Template<String, VarsOnly, VD>),
-    /// Allows templating of non-file paths, similar to the legacy parser. Literal string values of
-    /// "stdout" and "stderr" will redirect to the corresponding target, where anything else will
-    /// be a file of that name.
-    ///
-    /// Make sure to be extra cautious about spelling the sentinel values correctly.
-    ///
-    /// not actually implemented currently
-    Raw {
-        to: Template<String, VarsOnly, VD>,
-    },
 }
 
 impl PropagateVars for LogTo<False> {
@@ -58,7 +48,6 @@ impl PropagateVars for LogTo<False> {
             Stderr => Ok(Stderr),
             Stdout => Ok(Stdout),
             File(path) => Ok(File(path.insert_vars(vars)?)),
-            Raw { .. } => todo!(),
         }
     }
 }
@@ -69,7 +58,6 @@ impl LogTo<True> {
             Self::Stdout => "stdout",
             Self::Stderr => "stderr",
             Self::File(path) => path.get().as_str(),
-            Self::Raw { .. } => todo!(),
         }
     }
 }

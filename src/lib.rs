@@ -1216,7 +1216,6 @@ fn get_loggers_from_config(
                     )
                     .0
                 }
-                LogTo::Raw { .. } => todo!(),
             };
             let sender = providers::logger(logger, test_ended_tx, writer);
             Ok((name, sender))

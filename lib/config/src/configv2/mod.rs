@@ -54,7 +54,7 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     pub(crate) lt_err: Option<InvalidForLoadTest>,
 }
 
-pub(crate) type Vars<ED> = BTreeMap<String, VarValue<ED>>;
+pub(crate) type Vars<ED> = BTreeMap<Arc<str>, VarValue<ED>>;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(untagged)]
@@ -74,7 +74,11 @@ impl From<VarValue<True>> for serde_json::Value {
             VarValue::Num(n) => Self::Number(n.into()),
             VarValue::Str(mut t) => Self::String(std::mem::take(t.get_mut())),
             VarValue::List(l) => l.into_iter().map(Into::into).collect::<Vec<Self>>().into(),
-            VarValue::Map(m) => Self::Object(m.into_iter().map(|(k, v)| (k, v.into())).collect()),
+            VarValue::Map(m) => Self::Object(
+                m.into_iter()
+                    .map(|(k, v)| (k.to_string(), v.into()))
+                    .collect(),
+            ),
         }
     }
 }

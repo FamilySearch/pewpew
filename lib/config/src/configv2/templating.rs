@@ -890,21 +890,21 @@ mod tests {
         let raw = "${v:a}--${x:${v:b}[0] + ${v:b.1} + parseInt(${v:c.d}) + ${v:c}.e}";
         let template: Template<String, VarsOnly, False, True> = serde_yaml::from_str(raw).unwrap();
         let vars = Vars::<True>::from([
-            ("a".to_owned(), VarValue::Bool(true)),
+            ("a".to_owned().into(), VarValue::Bool(true)),
             (
-                "b".to_owned(),
+                "b".to_owned().into(),
                 VarValue::List(vec![VarValue::Num(45), VarValue::Num(23)]),
             ),
             (
-                "c".to_owned(),
+                "c".to_owned().into(),
                 VarValue::Map(
                     [
                         (
-                            "d".to_owned(),
+                            "d".to_owned().into(),
                             VarValue::Str(Template::new_literal("77".to_owned())),
                         ),
-                        ("e".to_owned(), VarValue::Num(12)),
-                        ("e1".to_owned(), VarValue::Num(999)),
+                        ("e".to_owned().into(), VarValue::Num(12)),
+                        ("e1".to_owned().into(), VarValue::Num(999)),
                     ]
                     .into(),
                 ),

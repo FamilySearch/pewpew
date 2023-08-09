@@ -294,7 +294,7 @@ fn map_vars(v: PreVar) -> Result<VarValue<False>, ConfigUpdaterError> {
                 .map(VarValue::List),
             json::Value::Object(o) => o
                 .into_iter()
-                .map(|(k, v)| Ok((k, map_js_var(v)?)))
+                .map(|(k, v)| Ok((k.into(), map_js_var(v)?)))
                 .collect::<Result<_, _>>()
                 .map(VarValue::Map),
         }
@@ -586,7 +586,7 @@ fn map_load_test(
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let vars = vars
         .into_iter()
-        .map(|(k, v)| Ok::<_, ConfigUpdaterError>((k, map_vars(v)?)))
+        .map(|(k, v)| Ok::<_, ConfigUpdaterError>((k.into(), map_vars(v)?)))
         .collect::<Result<_, _>>()?;
     Ok(crate::LoadTest::<False, False> {
         lib_src: None,

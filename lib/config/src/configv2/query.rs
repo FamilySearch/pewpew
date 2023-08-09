@@ -63,6 +63,11 @@ impl<VD: Bool> serde::ser::Serialize for Query<VD> {
 }
 
 impl Query<True> {
+    /// Perform the query on the passed in `data`.
+    ///
+    /// Each [`serde_json::Value`] in the output iterator represents a selection from one of the
+    /// `for_each` entries, or, if no `for_each` was specified, the iterator will yield a single
+    /// value.
     pub fn query(
         &self,
         data: Arc<SJVal>,
@@ -77,6 +82,8 @@ impl Query<True> {
 }
 
 impl<VD: Bool> Query<VD> {
+    /// Create a new simple query where the passed in `select` is a single expression that is
+    /// evaluated.
     pub fn simple(
         select: String,
         for_each: Vec<String>,
@@ -90,24 +97,15 @@ impl<VD: Bool> Query<VD> {
         .try_into()
     }
 
+    /// Create a query from a JSON string.
+    ///
+    /// The json defines the structure of the select, where any terminal string value is an
+    /// expression to evaluate.
     pub fn from_json(json: &str) -> Result<Self, QueryGenError> {
-        fn json_to_select(sjv: SJVal) -> SelectTmp {
-            match sjv {
-                SJVal::String(s) => Select::Expr(Arc::from(s)),
-                SJVal::Number(n) => Select::Int(n.as_i64().unwrap_or_default()),
-                SJVal::Array(m) => Select::List(m.into_iter().map(json_to_select).collect()),
-                SJVal::Object(m) => Select::Map(
-                    m.into_iter()
-                        .map(|(k, v)| (Arc::from(k), json_to_select(v)))
-                        .collect(),
-                ),
-                _ => unimplemented!(),
-            }
-        }
-        let structure = serde_json::from_str(json)?;
+        let structure: SelectTmp = serde_json::from_str(json)?;
 
         QueryTmp {
-            select: json_to_select(structure),
+            select: structure,
             for_each: vec![],
             r#where: None,
         }

@@ -199,19 +199,16 @@ impl LoadTest<True, True> {
         }
     }
 
-    #[allow(clippy::result_unit_err)]
-    pub fn add_logger(&mut self, name: Arc<str>, l: Logger) -> Result<(), ()> {
+    pub fn add_logger(&mut self, name: Arc<str>, l: Logger) {
         self.loggers.insert(name.clone(), l.clone());
         self.endpoints.iter_mut().for_each(|e| {
             e.logs.push((
                 name.clone(),
                 EndpointLogs {
-                    query: l.query.clone().unwrap(),
+                    query: l.query.clone().expect("try_run logger should have Query"),
                 },
             ))
         });
-        // TODO: when should error?
-        Ok(())
     }
 
     fn make_lt_err(&self) -> Option<InvalidForLoadTest> {

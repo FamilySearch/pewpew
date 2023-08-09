@@ -42,6 +42,8 @@ pub enum LogTo<VD: Bool> {
     /// be a file of that name.
     ///
     /// Make sure to be extra cautious about spelling the sentinel values correctly.
+    ///
+    /// not actually implemented currently
     Raw {
         to: Template<String, VarsOnly, VD>,
     },
@@ -72,26 +74,6 @@ impl LogTo<True> {
     }
 }
 
-/*
-impl LogTo {
-    // "Flattens" a [`LogTo::Raw`] into one of the other options by evaluating the template.
-    /*fn flatten_raw(
-        &self,
-        _vars: &super::templating::Vars,
-    ) -> Result<Self, super::templating::TemplateError<String>> {
-        /*match self {
-            Self::Raw(ots) => match ots.evaluate(vars)?.as_str() {
-                "stdout" => Ok(Self::Stdout),
-                "stderr" => Ok(Self::Stderr),
-                other => Ok(Self::File(OrTemplated::new_literal(other.to_owned()))),
-            },
-            other => Ok(other.clone()),
-        }*/
-        todo!()
-    }*/
-}
-*/
-
 #[cfg(test)]
 mod tests {
     use crate::configv2::templating::False;
@@ -114,25 +96,6 @@ mod tests {
         );
         assert!(from_yaml::<LogTo<False>>("!stder").is_err());
     }
-
-    // This test may need to be rewritten when the templating/vars structure is changed
-    /*#[test]
-    fn test_log_to_raw() {
-        let to = from_yaml::<LogTo>("!raw stdout").unwrap();
-        assert_eq!(to.flatten_raw(&[].into()), Ok(LogTo::Stdout));
-        let to = from_yaml::<LogTo>("!raw stderr").unwrap();
-        assert_eq!(to.flatten_raw(&[].into()), Ok(LogTo::Stderr));
-        let to = from_yaml::<LogTo>("!raw out.txt").unwrap();
-        assert_eq!(
-            to.flatten_raw(&[].into()),
-            Ok(LogTo::File(OrTemplated::new_literal("out.txt".to_owned())))
-        );
-        let to = from_yaml::<LogTo>("!raw stder").unwrap();
-        assert_eq!(
-            to.flatten_raw(&[].into()),
-            Ok(LogTo::File(OrTemplated::new_literal("stder".to_owned())))
-        );
-    }*/
 
     #[test]
     fn test_logger_defaults() {

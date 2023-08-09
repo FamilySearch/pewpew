@@ -930,7 +930,7 @@ ${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
         config.clear_loggers();
     }
     debug!("try logger: {:?}", logger);
-    config.add_logger("try_run".into(), logger).expect("TODO");
+    config.add_logger("try_run".into(), logger);
 
     let config_config = config.config;
 

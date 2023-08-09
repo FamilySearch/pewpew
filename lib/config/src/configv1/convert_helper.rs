@@ -474,7 +474,7 @@ fn map_endpoint(
                 },
             )| {
                 (
-                    k,
+                    k.into(),
                     EndpointLogs {
                         query: map_query(Some(select), for_each, where_clause)
                             .expect("passed in Some"),
@@ -582,7 +582,7 @@ fn map_load_test(
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let loggers = loggers
         .into_iter()
-        .map(|(k, l)| Ok::<_, ConfigUpdaterError>((k, map_logger(l, &var_names)?)))
+        .map(|(k, l)| Ok::<_, ConfigUpdaterError>((k.into(), map_logger(l, &var_names)?)))
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let vars = vars
         .into_iter()

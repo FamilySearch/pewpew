@@ -1192,12 +1192,12 @@ fn get_providers_from_config(
 }
 
 fn get_loggers_from_config(
-    config_loggers: BTreeMap<String, config::Logger>,
+    config_loggers: BTreeMap<Arc<str>, config::Logger>,
     results_dir: Option<&PathBuf>,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
     stdout: &FCSender<MsgType>,
     stderr: &FCSender<MsgType>,
-) -> Result<BTreeMap<String, providers::Logger>, TestError> {
+) -> Result<BTreeMap<Arc<str>, providers::Logger>, TestError> {
     config_loggers
         .into_iter()
         .map(|(name, logger)| {

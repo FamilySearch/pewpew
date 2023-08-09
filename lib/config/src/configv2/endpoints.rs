@@ -42,7 +42,7 @@ pub struct Endpoint<VD: Bool = True> {
     #[serde(default)]
     pub on_demand: bool,
     #[serde(default = "Vec::new", with = "tuple_vec_map")]
-    pub logs: Vec<(String, EndpointLogs<VD>)>,
+    pub logs: Vec<(Arc<str>, EndpointLogs<VD>)>,
     pub max_parallel_requests: Option<NonZeroUsize>,
     #[serde(default)]
     pub no_auto_returns: bool,

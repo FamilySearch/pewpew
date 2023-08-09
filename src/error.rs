@@ -36,7 +36,7 @@ impl RecoverableError {
 #[derive(Clone, Debug, Error)]
 pub enum TestError {
     #[error("error creating logger file `{0}`: {1}")]
-    CannotCreateLoggerFile(String, #[source] Arc<std::io::Error>),
+    CannotCreateLoggerFile(Arc<str>, #[source] Arc<std::io::Error>),
     #[error("error creating stats file `{0}`: {1}")]
     CannotCreateStatsFile(String, #[source] Arc<std::io::Error>),
     #[error("error opening file `{}`: {}", .0.display(), .1)]

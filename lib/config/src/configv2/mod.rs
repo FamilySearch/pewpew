@@ -46,7 +46,7 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     #[serde(default = "BTreeMap::new")]
     pub providers: BTreeMap<ProviderName, ProviderType<VD>>,
     #[serde(default = "BTreeMap::new")]
-    pub loggers: BTreeMap<String, Logger<VD>>,
+    pub loggers: BTreeMap<Arc<str>, Logger<VD>>,
     #[serde(default = "Vec::new")]
     pub endpoints: Vec<Endpoint<VD>>,
     /// Tracks errors that would prevent a full Load Test
@@ -196,7 +196,7 @@ impl LoadTest<True, True> {
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn add_logger(&mut self, name: String, l: Logger) -> Result<(), ()> {
+    pub fn add_logger(&mut self, name: Arc<str>, l: Logger) -> Result<(), ()> {
         self.loggers.insert(name.clone(), l.clone());
         self.endpoints.iter_mut().for_each(|e| {
             e.logs.push((

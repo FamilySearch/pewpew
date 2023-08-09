@@ -210,7 +210,7 @@ pub struct BuilderContext {
     // a mapping of names to their prospective providers
     pub providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
     // a mapping of names to their prospective loggers
-    pub loggers: BTreeMap<String, providers::Logger>,
+    pub loggers: BTreeMap<Arc<str>, providers::Logger>,
     // channel that receives and aggregates stats for the test
     pub stats_tx: StatsTx,
 }
@@ -322,7 +322,7 @@ impl EndpointBuilder {
             );
             let tx = ctx
                 .loggers
-                .get(&k)
+                .get::<str>(&k)
                 .expect("logs should reference a valid logger");
             let (query, send) = v.into();
             outgoing.push(Outgoing::new(

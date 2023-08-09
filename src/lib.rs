@@ -890,7 +890,7 @@ ${request.body != '' ? request.body : ''}\n\
 Response (RTT: ${stats.rtt}ms)\n\
 ========================================\n\
 ${response['start-line']}\n\
-${join(response['headers-all'], '\n', ': ')}\n\
+${join(response.headers_all, '\n', ': ')}\n\
 ${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
                 .to_string(),
             vec![],
@@ -906,7 +906,7 @@ ${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
             },
             "response": {
                 "start-line": "response['start-line']",
-                "headers": "response['headers-all']",
+                "headers": "response.headers_all",
                 "body": "response.body"
             },
             "stats": {

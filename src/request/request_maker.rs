@@ -241,6 +241,10 @@ impl RequestMaker {
                 "start-line".into(),
                 format!("{method} {url_path_and_query} {version:?}").into(),
             );
+            request_obj.insert(
+                "start_line".into(),
+                format!("{method} {url_path_and_query} {version:?}").into(),
+            );
             // insert request headers
             let mut headers_json = json::Map::new();
             for (k, v) in headers.iter() {

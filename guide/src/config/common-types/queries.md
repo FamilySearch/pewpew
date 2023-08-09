@@ -14,16 +14,16 @@ var values are accessed through the `_v` object.
 Some special values are available to Query expressions.
 
 - `request`: Contains data about the HTTP request that was sent. Has the properties
-  - `start-line`
+  - `start_line`
   - `method`
   - `url`
   - `headers`
   - `headers_all`
   - `body`
 - `response`: Contains Response data. Has the properties
-  - `start-line`
+  - `start_line`
   - `headers`
-  - `headers-all`
+  - `headers_all`
   - `body`
   - `status`
 - `stats`
@@ -32,7 +32,7 @@ Some special values are available to Query expressions.
 See [this MDN article](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages) on HTTP
 messages for more details on the structure of HTTP requests and responses.
 
-`start-line` is a string and `headers` is represented as a JSON object with key/value string
+`start_line` is a string and `headers` is represented as a JSON object with key/value string
 pairs. In the event where a request or response has multiple headers with the same name, the
 `headers_all` property can be used which is a JSON object where the header name is the key and
 the value an array of header values. Currently, `body` in the request is always a string and

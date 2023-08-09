@@ -134,6 +134,9 @@ fn handle_response_requirements(
     response: &Response<HyperBody>,
 ) {
     // check if we need the response startline and it hasn't already been set
+    rp.entry("start_line")
+        .or_insert_with(|| format!("{:?} {}", response.version(), response.status()).into());
+    // preserve compatability
     rp.entry("start-line")
         .or_insert_with(|| format!("{:?} {}", response.version(), response.status()).into());
     // check if we need response.headers and it hasn't already been set
@@ -150,6 +153,23 @@ fn handle_response_requirements(
         })
     });
     // check if we need response.headers_all and it hasn't already been set
+    rp.entry("headers_all").or_insert_with(|| {
+        json::Value::Object({
+            let mut headers_json = json::Map::new();
+            for (k, v) in response.headers() {
+                headers_json
+                    .entry(k.as_str())
+                    .or_insert_with(|| json::Value::Array(Vec::new()))
+                    .as_array_mut()
+                    .expect("should be a json array")
+                    .push(json::Value::String(
+                        String::from_utf8_lossy(v.as_bytes()).into_owned(),
+                    ))
+            }
+            headers_json
+        })
+    });
+    // preserve compatability
     rp.entry("headers-all").or_insert_with(|| {
         json::Value::Object({
             let mut headers_json = json::Map::new();

@@ -174,7 +174,7 @@ to a provider will only select a single value. For example, in:
 endpoints:
   - method: PUT
     url: https://localhost/ship/${p:shipId}/speed
-    body: '{"shipId":"${p:shipId}","kesselRunTime":75}'
+    body: !str '{"shipId":"${p:shipId}","kesselRunTime":75}'
 ```
 
 both references to the provider `shipId` will resolve to the same value, which in many cases is desired.

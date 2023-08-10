@@ -121,6 +121,9 @@ go along with this.
   Notably, the `if()` function can be replaced by the ternary operator.
   - Additionally, the context-dependent `collect()` function was removed and replaced with
     a more specific config syntax.
+  - Due to JS `==` operator comparing objects by reference, whereas pewpew 0.5.x expressions used
+    it to compare by value, a `val_eq()` function was added to perform by-value comparison on any
+    data.
 
 Even though a full JS runtime is included, expressions (particularly those used in Templates)
 must still be simple inline expressions[^note].
@@ -203,3 +206,9 @@ provides:
       select: response.body.a
     send: block
 ```
+
+## Endpoint `provides` `send`
+
+In `0.5.x`, the `send` field of a [provides](./config/endpoints-section.md/provides-subsection)
+had a default value that was dependent on how other fields in the endpoint were set. This behavior
+was not reimplemented, so `send` is now required.

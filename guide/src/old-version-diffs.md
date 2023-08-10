@@ -16,7 +16,8 @@ This applies to:
  - `providers` types
  - file provider `format`
  - logger `to` destination
- - other places as well
+ - endpoint [body](./config/endpoints-section.md#body-subsection) content
+ - endpoint [declare](./config/endpoints-section.md#declare-subsection) sources
 
 ### Examples
 

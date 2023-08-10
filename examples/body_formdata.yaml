@@ -1,0 +1,37 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+# This file also requires a PASSWORD environment variable. Any value will work and the the password will be scrubbed from the logs.
+
+# This version will always put in new sessions and slowly replace the old ones
+
+vars:
+  port: ${PORT}
+  username: test-user
+  password: test-password
+  dev_key: dev-key-001
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    headers:
+      Accept-Language: en-us
+      Content-Type: application/x-www-form-urlencoded
+    body: username=${username}&password=${password}&grant_type=password&client_id=${dev_key}
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          ts: epoch("ms")
+          response: request.body
+          token: response.body.token
+    on_demand: true
+

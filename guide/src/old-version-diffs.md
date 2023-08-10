@@ -211,4 +211,4 @@ provides:
 
 In `0.5.x`, the `send` field of a [provides](./config/endpoints-section.md/provides-subsection)
 had a default value that was dependent on how other fields in the endpoint were set. This behavior
-was not reimplemented, so `send` is now required.
+was not reimplemented for the current config handler, so `send` is now required.

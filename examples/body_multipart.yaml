@@ -1,13 +1,11 @@
-# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
-
 vars:
-  port: "${PORT}"
+  port: ${e:PORT}
 
 load_pattern:
-  - linear:
-      from: 10%
-      to: 100%
-      over: 15s
+  - !linear
+    from: 10%
+    to: 100%
+    over: 15s
 
 loggers:
   test:
@@ -15,21 +13,19 @@ loggers:
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     headers:
       Content-Type: multipart/form-data
-    body: 
-      multipart: 
-        modelProperties:
-          headers:
-            Content-Disposition: form-data; name="modelProperties"
-          body: 'english'
-        file:
-          headers:
-            Content-Disposition: form-data; name="file"; filename="pewpew.jpg"
-            Content-Type: image/jpeg
-          body:
-            file: pewpew.jpg
+    body: !multipart
+      modelProperties:
+        headers:
+          Content-Disposition: form-data; name="modelProperties"
+        body: !str english
+      file:
+        headers:
+          Content-Disposition: form-data; name="file"; filename="pewpew.jpg"
+          Content-Type: image/jpeg
+        body: !file pewpew.jpg
     peak_load: 1hps
     logs:
       test:

@@ -1,13 +1,13 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
 
 vars:
-  port: "${PORT}"
+  port: ${e:PORT}
 
 load_pattern:
-  - linear:
-      from: 10%
-      to: 100%
-      over: 15s
+- !linear
+  from: 10%
+  to: 100%
+  over: 15s
 
 loggers:
   test:
@@ -15,19 +15,16 @@ loggers:
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     headers:
       Content-Type: application/json
-    body: '{
+    body: !str '{
         "a": "A long string",
         "b": 42,
         "c": true,
         "d": ["array","of","values"],
-        "e": ${port},
-        "f": {
-          g: "sub",
-          h: "object"
-        }
+        "e": ${v:port},
+        "f": { g: "sub", h: "object" }
       }'
     peak_load: 1hps
     logs:

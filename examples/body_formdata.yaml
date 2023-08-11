@@ -4,16 +4,16 @@
 # This version will always put in new sessions and slowly replace the old ones
 
 vars:
-  port: ${PORT}
+  port: ${e:PORT}
   username: test-user
   password: test-password
   dev_key: dev-key-001
 
 load_pattern:
-  - linear:
-      from: 100%
-      to: 100%
-      over: 15s
+  - !linear
+    from: 100%
+    to: 100%
+    over: 15s
 
 loggers:
   test:
@@ -21,11 +21,11 @@ loggers:
 
 endpoints:
   - method: POST
-    url: http://localhost:${port}
+    url: http://localhost:${v:port}
     headers:
       Accept-Language: en-us
       Content-Type: application/x-www-form-urlencoded
-    body: username=${username}&password=${password}&grant_type=password&client_id=${dev_key}
+    body: !str username=${v:username}&password=${v:password}&grant_type=password&client_id=${v:dev_key}
     peak_load: 1hps
     logs:
       test:
@@ -34,4 +34,3 @@ endpoints:
           response: request.body
           token: response.body.token
     on_demand: true
-

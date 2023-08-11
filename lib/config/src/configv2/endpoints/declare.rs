@@ -88,26 +88,39 @@ impl Take {
         let mut ars = vec![];
         let mut size = self.next_size();
         futures::stream::poll_fn(move |ctx| match s.poll_next_unpin(ctx) {
-            Poll::Pending => Poll::Pending,
+            // TODO: check why try scripts hang on collect
+            Poll::Pending => {
+                log::debug!("declare Take::collect_string Poll::Pending");
+                Poll::Pending
+            }
             Poll::Ready(Some(Ok((v, a)))) => {
+                log::debug!("declare Take::collect_string Poll::Ready Ok cache.len: {}, size: {}, a.len: {}", cache.len(), size, a.len());
                 cache.push(v);
                 ars.extend(a);
                 if cache.len() >= size {
                     size = self.next_size();
+                    log::debug!(
+                        "declare Take::collect_string Poll::Ready - next_size: {}, ars.len: {}",
+                        size,
+                        ars.len()
+                    );
                     Poll::Ready(Some(Ok((
                         replace(&mut cache, Vec::with_capacity(size)),
                         take(&mut ars),
                     ))))
                 } else {
+                    log::debug!("declare Take::collect_string Poll::Ready else Poll::Pending");
                     Poll::Pending
                 }
             }
             Poll::Ready(Some(Err(e))) => {
+                log::debug!("declare Take::collect_string Poll::Ready Err");
                 // Don't clear cache, because an Ok() may be
                 // yielded later.
                 Poll::Ready(Some(Err(e)))
             }
             Poll::Ready(None) => {
+                log::debug!("declare Take::collect_string Poll::Ready None");
                 // Underlying stream has finished; yield any
                 // cached values, or return None.
                 Poll::Ready((!cache.is_empty()).then(|| Ok((take(&mut cache), take(&mut ars)))))

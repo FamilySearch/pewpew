@@ -11,18 +11,19 @@ load_pattern:
 
 loggers:
   http_errors:
-    select:
-      timestamp: epoch("ms")
-      request: request["start-line"]
-      method: request.method
-      url: request.url.href
-      requestHeaders: request.headers_all # headers_all includes duplicate headers
-      response: response["start-line"]
-      status: response.status
-      responseHeaders: response.headers_all
-      responseBody: response.body
-      stats: stats
-    where: response.status >= 400 && response.status != 503
+    query:
+      select:
+        timestamp: epoch("ms")
+        request: request["start-line"]
+        method: request.method
+        url: request.url.href
+        requestHeaders: request.headers_all # headers_all includes duplicate headers
+        response: response["start-line"]
+        status: response.status
+        responseHeaders: response.headers_all
+        responseBody: response.body
+        stats: stats
+      where: response.status >= 400 && response.status != 503
     limit: 1000
     to: !stdout
     pretty: false

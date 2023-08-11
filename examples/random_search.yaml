@@ -110,18 +110,19 @@ loggers:
   test:
     to: !stderr
   http_errors:
-    select:
-      timestamp: epoch("ms")
-      request: request["start-line"]
-      method: request.method
-      url: request.url
-      requestHeaders: request.headers
-      requestBody: request.body
-      response: response["start-line"]
-      status: response.status
-      responseHeaders: response.headers
-      responseBody: response.body
-    where: response.status >= 400
+    query:
+      select:
+        timestamp: epoch("ms")
+        request: request["start-line"]
+        method: request.method
+        url: request.url
+        requestHeaders: request.headers
+        requestBody: request.body
+        response: response["start-line"]
+        status: response.status
+        responseHeaders: response.headers
+        responseBody: response.body
+      where: response.status >= 400
     limit: 1000
     to: !stderr
     pretty: false

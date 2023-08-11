@@ -11,15 +11,16 @@ load_pattern:
 
 loggers:
   http_errors:
-    select:
-      timestamp: epoch("ms")
-      request: request["start-line"]
-      requestHeaders: request.headers # headers_all includes duplicate headers, headers only has the first of each named header
-      requestBody: request.body
-      response: response["start-line"]
-      responseHeaders: response.headers
-      responseBody: response.body
-      stats: stats
+    query:
+      select:
+        timestamp: epoch("ms")
+        request: request["start-line"]
+        requestHeaders: request.headers # headers_all includes duplicate headers, headers only has the first of each named header
+        requestBody: request.body
+        response: response["start-line"]
+        responseHeaders: response.headers
+        responseBody: response.body
+        stats: stats
     to: !file 'log-results-${x:epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start
     pretty: false
 

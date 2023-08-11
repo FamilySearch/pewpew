@@ -63,7 +63,7 @@ endpoints:
     logs:
       test:
         select:
-          a: 'response.body.a | null'
+          a: 'response.body.a'
 
   - method: POST
     url: http://localhost:${v:port}?c
@@ -74,4 +74,4 @@ endpoints:
     logs:
       test:
         select:
-          a: 'response.body.a | null'
+          a: 'response.body.a'

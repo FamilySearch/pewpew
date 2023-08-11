@@ -120,22 +120,28 @@ jobs:
           use-cross: true
           command: build
           args: -q --release --target ${{ matrix.target }}
-        # uses: ./.github/actions/linux-x86_64-musl/
-        # if: matrix.cross
-        # with:
-        #   args: cross build -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
           args: cargo build -q --release --target x86_64-unknown-linux-musl
+      - name: Build Test Server for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release --target x86_64-unknown-linux-musl --bin test-server
+      - name: Build Config Updater for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q -p pewpew-config-updater --release --target x86_64-unknown-linux-musl
 
   wasm-pack:
     name: Wasm Build
     strategy:
       matrix:
-        wasm-dirctory: [config-wasm, hdr-histogram-wasm]
+        wasm-dirctory: [config-wasm, hdr-histogram-wasm, config-gen]
         node-version: [16.x, 18.x, 20.x]
     runs-on: ubuntu-latest
     env:

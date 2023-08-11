@@ -189,9 +189,12 @@ jobs:
   wasm-release-config:
     name: Wasm Pack and Upload Config Parser
     needs: ['create-release']
+    strategy:
+      matrix:
+        wasm-dirctory: [config-wasm, config-gen]
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/config-wasm
+      working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
       - uses: actions/checkout@v3
       - name: Download artifacts
@@ -241,7 +244,7 @@ jobs:
 
       - name: Compress for Linux
         run: |
-          asset_name="pewpew-$VERSION-config-wasm.tar.xz"
+          asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
         working-directory: ${{env.working-directory}}/pkg/

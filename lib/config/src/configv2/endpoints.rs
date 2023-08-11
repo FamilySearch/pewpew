@@ -22,6 +22,11 @@ use thiserror::Error;
 
 #[derive(Debug, Deserialize, serde::Serialize, PartialEq)]
 pub struct Endpoint<VD: Bool = True> {
+    #[serde(default)]
+    pub method: Method,
+    pub url: Template<String, Regular, VD>,
+    #[serde(default = "BTreeMap::new")]
+    pub tags: BTreeMap<Arc<str>, Template<String, Regular, VD>>,
     #[serde(default = "BTreeMap::new")]
     pub declare: BTreeMap<Arc<str>, Declare<VD>>,
     #[serde(default = "Headers::new")]
@@ -29,12 +34,7 @@ pub struct Endpoint<VD: Bool = True> {
     pub body: Option<EndPointBody<VD>>,
     #[serde(bound(deserialize = "LoadPattern<VD>: serde::de::DeserializeOwned"))]
     pub load_pattern: Option<LoadPattern<VD>>,
-    #[serde(default)]
-    pub method: Method,
     pub peak_load: Option<Template<HitsPerMinute, VarsOnly, VD>>,
-    #[serde(default = "BTreeMap::new")]
-    pub tags: BTreeMap<Arc<str>, Template<String, Regular, VD>>,
-    pub url: Template<String, Regular, VD>,
     #[serde(default = "BTreeMap::new")]
     pub provides: BTreeMap<Arc<str>, EndpointProvides<VD>>,
     // book says optional, check what the behavior should be and if this
@@ -93,6 +93,7 @@ impl Endpoint<True> {
                     .values()
                     .flat_map(|b| b.get_required_providers()),
             )
+            .filter(|p| !self.declare.contains_key(p))
             .collect()
     }
 

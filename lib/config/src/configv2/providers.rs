@@ -77,6 +77,12 @@ impl Borrow<str> for ProviderName {
     }
 }
 
+impl Borrow<str> for &ProviderName {
+    fn borrow(&self) -> &str {
+        self
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "snake_case")]
 #[derive(serde::Serialize)]

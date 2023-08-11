@@ -4,6 +4,7 @@ use super::{
     PropagateVars,
 };
 use serde::Deserialize;
+use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
@@ -11,6 +12,16 @@ use serde::Deserialize;
 pub struct Config<VD: Bool = True> {
     pub client: Client<VD>,
     pub general: General<VD>,
+}
+
+impl Config<True> {
+    pub(crate) fn get_required_providers(&self) -> BTreeSet<Arc<str>> {
+        self.client
+            .headers
+            .iter()
+            .flat_map(|(_, h)| h.get_required_providers())
+            .collect()
+    }
 }
 
 impl<VD: Bool> Default for Config<VD> {

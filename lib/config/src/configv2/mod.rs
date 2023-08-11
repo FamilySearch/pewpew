@@ -7,6 +7,7 @@ use self::scripting::LibSrc;
 use self::templating::{Bool, EnvsOnly, False, Template, True};
 use itertools::Itertools;
 use serde::Deserialize;
+use std::collections::BTreeSet;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fmt::{self, Display},
@@ -35,18 +36,18 @@ pub use providers::ProviderType;
 
 #[derive(Debug, Deserialize, serde::Serialize, PartialEq)]
 pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
+    #[serde(default = "Vars::new")]
+    pub(crate) vars: Vars<ED>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) lib_src: Option<LibSrc>,
     #[serde(default = "Config::default")]
     pub config: config::Config<VD>,
     #[serde(bound = "load_pattern::LoadPattern<VD>: serde::de::DeserializeOwned")]
     pub(crate) load_pattern: Option<load_pattern::LoadPattern<VD>>,
-    #[serde(default = "Vars::new")]
-    pub(crate) vars: Vars<ED>,
-    #[serde(default = "BTreeMap::new")]
-    pub providers: BTreeMap<ProviderName, ProviderType<VD>>,
     #[serde(default = "BTreeMap::new")]
     pub loggers: BTreeMap<Arc<str>, Logger<VD>>,
+    #[serde(default = "BTreeMap::new")]
+    pub providers: BTreeMap<ProviderName, ProviderType<VD>>,
     #[serde(default = "Vec::new")]
     pub endpoints: Vec<Endpoint<VD>>,
     /// Tracks errors that would prevent a full Load Test
@@ -176,18 +177,37 @@ impl LoadTest<True, True> {
             .for_each(|e| e.insert_path(Arc::clone(&file_path)));
         let vars = std::mem::take(&mut pre_vars.vars);
         let mut lt = pre_vars.insert_vars(&vars)?;
+
+        // Check if providers all exists for the templates
+        let missing = lt
+            .get_required_providers()
+            .into_iter()
+            .filter(|p| !lt.providers.contains_key::<str>(p))
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            todo!("error on missing providers: {missing:?}");
+        }
+
         let lp = &lt.load_pattern;
         let ep = &mut lt.endpoints;
         let headers = &lt.config.client.headers;
-        ep.iter_mut().enumerate().for_each(|(i, e)| {
-            e.insert_load_pattern(lp.as_ref());
-            e.insert_special_tags(i);
-            e.insert_global_headers(headers);
+        ep.iter_mut().enumerate().for_each(|(id, endpoint)| {
+            endpoint.insert_load_pattern(lp.as_ref());
+            endpoint.insert_special_tags(id);
+            endpoint.insert_global_headers(headers);
         });
 
         lt.lt_err = lt.make_lt_err();
 
         Ok(lt)
+    }
+
+    fn get_required_providers(&self) -> BTreeSet<Arc<str>> {
+        self.endpoints
+            .iter()
+            .flat_map(|e| e.get_required_providers())
+            .chain(self.config.get_required_providers())
+            .collect()
     }
 
     /// Removes all loggers and each Endpoint's logs data.

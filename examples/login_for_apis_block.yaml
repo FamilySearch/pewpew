@@ -37,7 +37,7 @@ endpoints:
     declare:
       # Create a token that concatonates `token_prepend` and the `session_counter` padded with zeros to min length of 6
       new_token: !x '${v:token_prepend}${x:start_pad(${p:session_counter}, 6, "0")}'
-    body: !str '{"username": "${v:username}","password":"${p:password}","token":"${p:new_token}"}'
+    body: !str '{"username": "${v:username}","password":"${v:password}","token":"${p:new_token}"}'
     peak_load: 1hps
     provides:
       session:

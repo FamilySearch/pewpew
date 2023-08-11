@@ -593,7 +593,10 @@ fn body_template_as_hyper_body(
     };
     let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()) /*, None*/) {
         Ok(b) => b,
-        Err(e) => return Either3::B(future::err(TestError::from(e))),
+        Err(e) => {
+            log::error!("Body parsing error {}", e);
+            return Either3::B(future::err(TestError::from(e)));
+        }
     };
     if let Some(EndPointBody::File(FileBody { base_path, .. })) = body_template {
         tweak_path(&mut body, base_path);

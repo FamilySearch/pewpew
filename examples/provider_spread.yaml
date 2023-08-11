@@ -38,7 +38,7 @@ endpoints:
     tags:
       type: create group
     body: !str '{
-        "id":"${p:createName}${x:start_pad(${p:group_range}, 6, "0")}",
+        "id":"${v:createName}${x:start_pad(${p:group_range}, 6, "0")}",
         "name":"TEST-GROUP"
       }'
     provides:

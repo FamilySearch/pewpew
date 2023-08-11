@@ -207,6 +207,8 @@ impl LoadTest<True, True> {
             .iter()
             .flat_map(|e| e.get_required_providers())
             .chain(self.config.get_required_providers())
+            // Filter out p:null?
+            .filter(|p| !p.eq_ignore_ascii_case("null"))
             .collect()
     }
 

@@ -3,7 +3,7 @@ on:
     tags:
       - guide-latest
 
-name: Release
+name: Release Guide
 jobs:
   create-release:
     name: Update guide

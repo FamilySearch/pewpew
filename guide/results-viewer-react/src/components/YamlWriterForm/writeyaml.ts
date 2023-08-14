@@ -1,4 +1,3 @@
-import * as cfgen from "@fs/config-gen";
 import {
   PewPewAPI,
   PewPewLoadPattern,
@@ -6,6 +5,7 @@ import {
   PewPewProvider,
   PewPewVars
 } from "../../util/yamlwriter";
+import { load_test_yaml_from_js as loadTestYamlFromJs } from "@fs/config-gen";
 import { log } from "../../util/log";
 import { saveAs } from "file-saver";
 
@@ -47,7 +47,7 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
   myYaml.config.client = {};
   myYaml.config.client.headers = { "User-Agent": "FS-QA-SystemTest" };
   // eslint-disable-next-line camelcase
-  myYaml.config.general = { bucket_size: "1m", log_provider_stats: true };
+  myYaml.config.general = { bucket_size: "1m" };
 
   // Patterns that have been selected
   if (patterns.length > 0) {
@@ -142,7 +142,7 @@ export function createYamlString ({ urls, patterns, vars, providers, loggers }: 
   const myYamlString = JSON.stringify(myYaml);
 
   log(myYamlString);
-  return cfgen.load_test_yaml_from_js(myYamlString);
+  return loadTestYamlFromJs(myYamlString);
 }
 
 // Writes endpoints to one object, and then uses js-yaml to write as a yaml

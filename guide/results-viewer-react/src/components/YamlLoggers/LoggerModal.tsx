@@ -106,25 +106,25 @@ export const loggerOptions: {
   stateVariable: string;
   returnTypeArray: LoggerSelectEntryDisplay[];
 }[] = [
-    // Here is all of the Request information (loggerOptions[0])
-    {
-      type: request,
-      stateVariable: "defaultRequest",
-      returnTypeArray: Object.values(requestLoggers)
-    },
-    // Here is all of the Response information (loggerOptions[1])
-    {
-      type: response,
-      stateVariable: "defaultResponse",
-      returnTypeArray: Object.values(responseLoggers)
-    },
-    // Here is all of the Timing information (loggerOptions[2])
-    {
-      type: timing,
-      stateVariable: "defaultTiming",
-      returnTypeArray: Object.values(timingLoggers)
-    }
-  ];
+  // Here is all of the Request information (loggerOptions[0])
+  {
+    type: request,
+    stateVariable: "defaultRequest",
+    returnTypeArray: Object.values(requestLoggers)
+  },
+  // Here is all of the Response information (loggerOptions[1])
+  {
+    type: response,
+    stateVariable: "defaultResponse",
+    returnTypeArray: Object.values(responseLoggers)
+  },
+  // Here is all of the Timing information (loggerOptions[2])
+  {
+    type: timing,
+    stateVariable: "defaultTiming",
+    returnTypeArray: Object.values(timingLoggers)
+  }
+];
 
 export const debugLoggerSelect: LoggerSelectEntry[] = [
   getLoggerSelectEntryByName("timestamp"),
@@ -337,12 +337,7 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
   };
 
   return (
-    <Modal
-      ref={ref}
-      title="Select Loggers"
-      closeText="Close"
-      onClose={onClose}
-    >
+    <Modal ref={ref} title="Select Loggers" closeText="Close" onClose={onClose}>
       {loggerOptions.map((header, index: number) => {
         const stateVariable = header.type === request ? state.defaultRequest : header.type === response ? state.defaultResponse : state.defaultTiming;
         const itemType = header.type === request ? state.request : header.type === response ? state.response : state.timing;

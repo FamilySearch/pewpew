@@ -251,11 +251,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
       <EndpointDisplay style={urlStyle} title={urlTitle}>
         {data.url ? data.url : "Url"}
       </EndpointDisplay>
-      <Modal
-        ref={modalRef}
-        title="Edit Endpoint"
-        closeText="Close"
-      >
+      <Modal ref={modalRef} title="Edit Endpoint" closeText="Close">
         <ModalEndpointInput>
           <Label> Endpoint: {checked}</Label>
           <input style={{ ...urlStyle, width: "500px" }} onChange={(event) => changeUrl("url", event.target.value)} title={urlTitle} name={data.id} value={data.url} id="urlUrl" />

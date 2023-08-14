@@ -65,7 +65,7 @@ export const getDefaultHeaders = (authenticated?: boolean): PewPewHeader[] => [
   getContentTypedHeader()
 ];
 
-function getHeader(headerType: HeaderType | "emptyHeader" = emptyHeader): PewPewHeader {
+function getHeader (headerType: HeaderType | "emptyHeader" = emptyHeader): PewPewHeader {
   switch (headerType) {
     case authenticated:
       return getAuthorizationHeader();
@@ -86,7 +86,7 @@ export const getUrlTitle = (invalidUrl: boolean): string | undefined => invalidU
 export const getHitRateStyle = (invalidHitRate: boolean): React.CSSProperties => ({ color: invalidHitRate ? "red" : undefined });
 export const getHitRateTitle = (invalidHitRate: boolean): string | undefined => invalidHitRate ? "Hit Rate is not valid" : undefined;
 
-export function isValidUrl(url: string): boolean {
+export function isValidUrl (url: string): boolean {
   try {
     new URL(url);
     return true;
@@ -95,7 +95,7 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
-export function Urls({ data: { headers, ...data }, ...props }: UrlProps) {
+export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const defaultState: UrlState = {
     passed: false
   };

@@ -38,7 +38,7 @@ wasm-pack build --release -t bundler -d $WASM_OUTPUT_REACT_DIR --scope fs
 
 # build the config-gen library for the HAR to YAML converter
 cd $CFG_GEN_DIR
-wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR
+wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR --scope fs
 
 # build the results viewer (which includes putting the output into the book's src)
 cd $RESULTS_VIEWER_REACT_DIR

@@ -58,7 +58,7 @@ jobs:
 
           # build the config-gen library for the HAR to YAML converter
           cd $CFG_GEN_DIR
-          wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR
+          wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR --scope fs
 
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci

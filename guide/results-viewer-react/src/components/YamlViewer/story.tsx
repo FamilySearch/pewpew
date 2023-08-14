@@ -25,8 +25,8 @@ client:
   headers:
     TestTime: '\${epoch("ms")}'
     Accept: application/json
-    FS-User-Agent-Chain: PPAAS-Agent-Performance Test
-    User-Agent: FS-QA-SystemTest PPAAS Agent Performance Test
+    FS-User-Agent-Chain: Pewpew-Agent-Performance Test
+    User-Agent: Pewpew Agent Performance Test
 general:
   bucket_size: 1m
   log_provider_stats: 1m
@@ -56,8 +56,8 @@ client:
   headers:
     TestTime: '\${epoch("ms")}'
     Accept: application/json
-    FS-User-Agent-Chain: PPAAS-Agent-Performance Test
-    User-Agent: FS-QA-SystemTest PPAAS Agent Performance Test
+    FS-User-Agent-Chain: Pewpew-Agent-Performance Test
+    User-Agent: Pewpew Agent Performance Test
 general:
   bucket_size: 1m
   log_provider_stats: 1m

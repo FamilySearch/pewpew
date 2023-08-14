@@ -125,17 +125,19 @@ jobs:
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q --release --target x86_64-unknown-linux-musl
+          args: cargo build -q --release --bin pewpew --target x86_64-unknown-linux-musl
+
       - name: Build Test Server for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q --release --target x86_64-unknown-linux-musl --bin test-server
+          args: cargo build -q --release --bin test-server --target x86_64-unknown-linux-musl
+
       - name: Build Config Updater for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q -p pewpew-config-updater --release --target x86_64-unknown-linux-musl
+          args: cargo build -q --release -p pewpew-config-updater --target x86_64-unknown-linux-musl
 
   wasm-pack:
     name: Wasm Build

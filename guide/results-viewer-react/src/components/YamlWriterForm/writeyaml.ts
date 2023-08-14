@@ -43,9 +43,9 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
   // Default config
   myYaml.config = {};
   myYaml.config.client = {};
-  myYaml.config.client.headers = {"User-Agent": "FS-QA-SystemTest"};
+  myYaml.config.client.headers = { "User-Agent": "Pewpew Performance Load Test" };
   // eslint-disable-next-line camelcase
-  myYaml.config.general = {bucket_size: "1m", log_provider_stats: "1m"};
+  myYaml.config.general = { bucket_size: "1m" };
 
   // Patterns that have been selected
   if (patterns.length > 0) {

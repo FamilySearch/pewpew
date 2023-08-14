@@ -191,7 +191,7 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
-        wasm-dirctory: [config-wasm, config-gen]
+        wasm-dirctory: [config-wasm]
     runs-on: ubuntu-latest
     env:
       working-directory: ./lib/${{ matrix.wasm-dirctory }}
@@ -260,13 +260,16 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  # The hdr-histogram-wasm needs to be build with bundler rather than nodejs
+  # The hdr-histogram-wasm and config-gen need to be build with bundler rather than nodejs
   wasm-release-histogram:
     name: Wasm Pack and Upload Histogram
     needs: ['create-release']
+    strategy:
+      matrix:
+        wasm-dirctory: [hdr-histogram-wasm, config-gen]
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/hdr-histogram-wasm
+      working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
       - uses: actions/checkout@v3
       - name: Download artifacts
@@ -316,7 +319,7 @@ jobs:
 
       - name: Compress for Linux
         run: |
-          asset_name="pewpew-$VERSION-hdr-histogram-wasm.tar.xz"
+          asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json hdr*
         working-directory: ${{env.working-directory}}/pkg/

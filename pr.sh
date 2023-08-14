@@ -22,7 +22,6 @@ CWD=$(pwd)
 
 cd "$CWD/lib/config-wasm"
 # cargo install wasm-pack
-wasm-pack test --node
 wasm-pack build --release -t nodejs --scope fs
 # ~/.cache/.wasm-pack/wasm-opt-4d7a65327e9363b7/wasm-opt pkg/config_wasm_bg.wasm -o pkg/config_wasm_bg.wasm -Oz
 
@@ -32,6 +31,7 @@ npm test
 
 cd "$CWD/lib/config-gen"
 # cargo install wasm-pack
+wasm-pack test --node
 wasm-pack build --release -t nodejs --scope fs
 # ~/.cache/.wasm-pack/wasm-opt-4d7a65327e9363b7/wasm-opt pkg/config_wasm_bg.wasm -o pkg/config_wasm_bg.wasm -Oz
 

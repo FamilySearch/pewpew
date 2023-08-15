@@ -57,12 +57,13 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
-        binary:
-          - build_param: "--bin"
-            binary_name: "pewpew"
-          - build_param: "-p"
-            binary_name: "pewpew-config-updater"
+        binary: ["pewpew", "pewpew-config-updater"]
+        build: ["linux", "arm-v7", "aarch64", "macos", "windows"]
         include:
+          - binary: "pewpew"
+            build_param: "--bin"
+          - binary: "pewpew-config-updater"
+            build_param: "-p"
           - build: linux
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
@@ -129,7 +130,7 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         with:
           command: build
-          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }}
+          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary }}
 
       # https://github.com/actions-rs/cargo#cross-compilation
       - name: Build with cross # ARM builds
@@ -145,36 +146,36 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }} --target ${{ matrix.target }}
+          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary }} --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }} --target x86_64-unknown-linux-musl
+          args: cargo build -q --release ${{ matrix.build_param }} ${{ matrix.binary }} --target x86_64-unknown-linux-musl
 
       - name: Compress for Linux/Arm
         if: matrix.os == 'ubuntu-latest'
         run: |
           TARGET=$(echo "${{ matrix.target }}" | sed -e "s/-musl.*//" -e "s/-unknown//")
-          asset_name="${{ matrix.binary_name }}-$VERSION-$TARGET.tar.xz"
+          asset_name="${{ matrix.binary }}-$VERSION-$TARGET.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name ${{ matrix.binary_name }}
+          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name ${{ matrix.binary }}
 
       - name: Compress for Windows
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          asset_name="${{ matrix.binary_name }}-$VERSION-windows-x86_64.zip"
+          asset_name="${{ matrix.binary }}-$VERSION-windows-x86_64.zip"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/${{ matrix.binary_name }}.exe
+          7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/${{ matrix.binary }}.exe
 
       - name: Compress for macOS
         if: matrix.os == 'macos-latest'
         run: |
-          asset_name="${{ matrix.binary_name }}-$VERSION-apple-darwin-x86_64.tar.xz"
+          asset_name="${{ matrix.binary }}-$VERSION-apple-darwin-x86_64.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name ${{ matrix.binary_name }}
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name ${{ matrix.binary }}
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1.0.1

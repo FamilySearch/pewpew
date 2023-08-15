@@ -23,7 +23,12 @@ pub struct Percent(f64);
 
 impl Display for Percent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.3}%", self.0 * 100.0)
+        let value = self.0 * 100.0;
+        if value.fract() == 0.0 {
+            write!(f, "{:.0}%", value)
+        } else {
+            write!(f, "{:.3}%", value)
+        }
     }
 }
 

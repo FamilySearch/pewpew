@@ -1,0 +1,25 @@
+{
+  "name": "config-gen-tests",
+  "version": "0.0.0",
+  "description": "Integration tests for the config-gen web assembly",
+  "main": "test.js",
+  "scripts": {
+    "test": "mocha test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FamilySearch/pewpew.git"
+  },
+  "engines": {
+    "node": "^16 || ^18"
+  },
+  "bugs": {
+    "url": "https://github.com/FamilySearch/pewpew/issues"
+  },
+  "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config-wasm#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "chai": "^4.3.7",
+    "mocha": "^10.2.0"
+  }
+}

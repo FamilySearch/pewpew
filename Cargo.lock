@@ -412,11 +412,13 @@ dependencies = [
  "console_error_panic_hook",
  "getrandom",
  "js-sys",
+ "log",
  "serde",
  "serde_json",
  "serde_yaml",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "wasm-logger",
 ]
 
 [[package]]

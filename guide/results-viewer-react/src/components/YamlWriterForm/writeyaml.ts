@@ -5,9 +5,9 @@ import {
   PewPewProvider,
   PewPewVars
 } from "../../util/yamlwriter";
-import { saveAs } from "file-saver";
-import * as cfgen from "config-gen";
+import { load_test_yaml_from_js as loadTestYamlFromJs } from "@fs/config-gen";
 import { log } from "../../util/log";
+import { saveAs } from "file-saver";
 
 
 export interface PewPewYamlFile {
@@ -45,9 +45,9 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
   // Default config
   myYaml.config = {};
   myYaml.config.client = {};
-  myYaml.config.client.headers = { "User-Agent": "FS-QA-SystemTest" };
+  myYaml.config.client.headers = { "User-Agent": "Pewpew Performance Load Test" };
   // eslint-disable-next-line camelcase
-  myYaml.config.general = { bucket_size: "1m", log_provider_stats: true };
+  myYaml.config.general = { bucket_size: "1m" };
 
   // Patterns that have been selected
   if (patterns.length > 0) {
@@ -137,16 +137,16 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
   return myYaml;
 };
 
-export function createYamlString({ urls, patterns, vars, providers, loggers }: Omit<WriteFileParam, "filename">): string {
+export function createYamlString ({ urls, patterns, vars, providers, loggers }: Omit<WriteFileParam, "filename">): string {
   const myYaml: PewPewYamlFile = createYamlJson({ urls, patterns, vars, providers, loggers });
-  let json_str = JSON.stringify(myYaml);
+  const myYamlString = JSON.stringify(myYaml);
 
-  log(json_str);
-  return cfgen.load_test_yaml_from_js(json_str);
+  log(myYamlString);
+  return loadTestYamlFromJs(myYamlString);
 }
 
 // Writes endpoints to one object, and then uses js-yaml to write as a yaml
-export function writeFile({ urls, patterns, vars, providers, loggers, filename }: WriteFileParam) {
+export function writeFile ({ urls, patterns, vars, providers, loggers, filename }: WriteFileParam) {
   const myYaml: string = createYamlString({ urls, patterns, vars, providers, loggers });
 
   // Here we add the name of test and the date to the top of file

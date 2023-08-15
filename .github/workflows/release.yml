@@ -57,6 +57,11 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
+        binary:
+          - build_param: "--bin"
+            binary_name: "pewpew"
+          - build_param: "-p"
+            binary_name: "pewpew-config-updater"
         include:
           - build: linux
             os: ubuntu-latest
@@ -124,7 +129,7 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         with:
           command: build
-          args: -q --release
+          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }}
 
       # https://github.com/actions-rs/cargo#cross-compilation
       - name: Build with cross # ARM builds
@@ -140,40 +145,36 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: -q --release --target ${{ matrix.target }}
-        # uses: ./.github/actions/linux-x86_64-musl/
-        # if: matrix.cross
-        # with:
-        #   args: cross build -q --release --target ${{ matrix.target }}
+          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }} --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q --release --target x86_64-unknown-linux-musl
+          args: cargo build -q --release ${{ matrix.build_param }} ${{ matrix.binary_name }} --target x86_64-unknown-linux-musl
 
       - name: Compress for Linux/Arm
         if: matrix.os == 'ubuntu-latest'
         run: |
           TARGET=$(echo "${{ matrix.target }}" | sed -e "s/-musl.*//" -e "s/-unknown//")
-          asset_name="pewpew-$VERSION-$TARGET.tar.xz"
+          asset_name="${{ matrix.binary_name }}-$VERSION-$TARGET.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/${{ matrix.target }}/release/ -cJf $asset_name ${{ matrix.binary_name }}
 
       - name: Compress for Windows
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          asset_name="pewpew-$VERSION-windows-x86_64.zip"
+          asset_name="${{ matrix.binary_name }}-$VERSION-windows-x86_64.zip"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/pewpew.exe
+          7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/${{ matrix.binary_name }}.exe
 
       - name: Compress for macOS
         if: matrix.os == 'macos-latest'
         run: |
-          asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
+          asset_name="${{ matrix.binary_name }}-$VERSION-apple-darwin-x86_64.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name ${{ matrix.binary_name }}
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1.0.1
@@ -189,9 +190,12 @@ jobs:
   wasm-release-config:
     name: Wasm Pack and Upload Config Parser
     needs: ['create-release']
+    strategy:
+      matrix:
+        wasm-dirctory: [config-wasm]
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/config-wasm
+      working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
       - uses: actions/checkout@v3
       - name: Download artifacts
@@ -232,7 +236,7 @@ jobs:
           # install wasm-pack
           mkdir ~/bin
           PATH=$PATH:~/bin
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.11.0/wasm-pack-v0.11.0-x86_64-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
           wasm-pack build --release -t nodejs --scope fs
@@ -241,7 +245,7 @@ jobs:
 
       - name: Compress for Linux
         run: |
-          asset_name="pewpew-$VERSION-config-wasm.tar.xz"
+          asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
         working-directory: ${{env.working-directory}}/pkg/
@@ -257,13 +261,16 @@ jobs:
           asset_content_type: application/octet-stream
 
 
-  # The hdr-histogram-wasm needs to be build with bundler rather than nodejs
+  # The hdr-histogram-wasm and config-gen need to be build with bundler rather than nodejs
   wasm-release-histogram:
     name: Wasm Pack and Upload Histogram
     needs: ['create-release']
+    strategy:
+      matrix:
+        wasm-dirctory: [hdr-histogram-wasm, config-gen]
     runs-on: ubuntu-latest
     env:
-      working-directory: ./lib/hdr-histogram-wasm
+      working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
       - uses: actions/checkout@v3
       - name: Download artifacts
@@ -304,7 +311,7 @@ jobs:
           # install wasm-pack
           mkdir ~/bin
           PATH=$PATH:~/bin
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.11.0/wasm-pack-v0.11.0-x86_64-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
           wasm-pack build --release -t bundler --scope fs
@@ -313,7 +320,7 @@ jobs:
 
       - name: Compress for Linux
         run: |
-          asset_name="pewpew-$VERSION-hdr-histogram-wasm.tar.xz"
+          asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json hdr*
         working-directory: ${{env.working-directory}}/pkg/

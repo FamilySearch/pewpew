@@ -5,13 +5,6 @@ edition = "2021"
 publish = false
 license.workspace = true
 
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = false
-[package.metadata.wasm-pack.profile.dev]
-wasm-opt = false
-[package.metadata.wasm-pack.profile.profiling]
-wasm-opt = false
-
 [lib]
 crate_type = ["cdylib", "rlib"]
 
@@ -24,9 +17,8 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 wasm-bindgen.workspace = true
 getrandom.workspace = true
+log.workspace = true
+wasm-logger.workspace = true
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"
-
-[profile.release]
-debug = true

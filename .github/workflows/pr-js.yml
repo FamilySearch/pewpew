@@ -38,7 +38,7 @@ jobs:
           PATH=$PATH:~/bin
           curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.20/mdbook-v0.4.20-x86_64-unknown-linux-gnu.tar.gz \
             | tar -xz -C ~/bin
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.11.0/wasm-pack-v0.11.0-x86_64-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
           # setup some envs to various paths for convenience
@@ -48,9 +48,17 @@ jobs:
           WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
           WASM_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm
 
+          CFG_GEN_DIR=$(realpath $PROJECT_ROOT/lib/config-gen)
+          mkdir -p "$RESULTS_VIEWER_REACT_DIR/lib/config-gen"
+          CFG_GEN_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/config-gen
+
           # build the hdr-histogram-wasm for the results viewer
           cd $WASM_LIB_DIR
           wasm-pack build --release -t bundler -d $WASM_OUTPUT_REACT_DIR --scope fs
+
+          # build the config-gen library for the HAR to YAML converter
+          cd $CFG_GEN_DIR
+          wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR --scope fs
 
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci

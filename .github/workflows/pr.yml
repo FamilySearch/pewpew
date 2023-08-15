@@ -120,22 +120,30 @@ jobs:
           use-cross: true
           command: build
           args: -q --release --target ${{ matrix.target }}
-        # uses: ./.github/actions/linux-x86_64-musl/
-        # if: matrix.cross
-        # with:
-        #   args: cross build -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
         if: matrix.build == 'linux'
         with:
-          args: cargo build -q --release --target x86_64-unknown-linux-musl
+          args: cargo build -q --release --bin pewpew --target x86_64-unknown-linux-musl
+
+      - name: Build Test Server for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release --bin test-server --target x86_64-unknown-linux-musl
+
+      - name: Build Config Updater for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release -p pewpew-config-updater --target x86_64-unknown-linux-musl
 
   wasm-pack:
     name: Wasm Build
     strategy:
       matrix:
-        wasm-dirctory: [config-wasm, hdr-histogram-wasm]
+        wasm-dirctory: [config-wasm, hdr-histogram-wasm, config-gen]
         node-version: [16.x, 18.x, 20.x]
     runs-on: ubuntu-latest
     env:
@@ -157,9 +165,16 @@ jobs:
           # install wasm-pack
           mkdir ~/bin
           PATH=$PATH:~/bin
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.11.0/wasm-pack-v0.11.0-x86_64-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
+          if [ "${{ matrix.wasm-dirctory }}" = "config-gen" ]; then
+            echo "Running wasm-pack test"
+            wasm-pack test --node
+
+            # The npm tests also need the config-wasm built
+            (cd ../config-wasm; wasm-pack build --release -t nodejs --scope fs)
+          fi
           wasm-pack build --release -t nodejs --scope fs
         working-directory: ${{env.wasm-directory}}
         shell: bash

@@ -1,7 +1,7 @@
 {
-  "name": "config-wasm-tests",
+  "name": "config-gen-tests",
   "version": "0.0.0",
-  "description": "Integration tests for the config-wasm web assembly",
+  "description": "Integration tests for the config-gen web assembly",
   "main": "test.js",
   "scripts": {
     "test": "mocha test.js"

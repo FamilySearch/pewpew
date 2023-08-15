@@ -6,7 +6,5 @@ set -x
 
 wasm-pack test --node
 wasm-pack build --release -t nodejs --scope fs
-cd tests/
-npm install
-npm test
-cd ..
+(cd ../config-wasm; wasm-pack build --release -t nodejs --scope fs)
+(cd tests/; npm install; npm test)

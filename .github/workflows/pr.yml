@@ -171,6 +171,9 @@ jobs:
           if [ "${{ matrix.wasm-dirctory }}" = "config-gen"]; then
             echo "Running wasm-pack test"
             wasm-pack test --node
+
+            # The npm tests also need the config-wasm built
+            (cd ../config-wasm; wasm-pack build --release -t nodejs --scope fs)
           fi
           wasm-pack build --release -t nodejs --scope fs
         working-directory: ${{env.wasm-directory}}

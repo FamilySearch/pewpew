@@ -25,7 +25,7 @@ jobs:
             echo PRERELEASE=true >> $GITHUB_ENV
           else
             # check that the version in Cargo.toml is equal to the tag
-            grep -q "version = \"${version}\"" Cargo.toml || (echo "$(tput setaf 1)Tag version did NOT match version in Cargo.toml" && false)
+            grep -q "^version = \"${version}\"" Cargo.toml || (echo "$(tput setaf 1)Tag version did NOT match version in Cargo.toml" && false)
             echo PRERELEASE=false >> $GITHUB_ENV
           fi
         shell: bash
@@ -110,7 +110,7 @@ jobs:
           version=${VERSION/v/}
           # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
           cp Cargo.toml Cargo2.toml
-          sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+          sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
 
       - name: Install Linker
         if: matrix.cross
@@ -188,11 +188,13 @@ jobs:
 
 
   wasm-release-config:
-    name: Wasm Pack and Upload Config Parser
+    name: Wasm Pack and Upload Node Release
     needs: ['create-release']
     strategy:
       matrix:
-        wasm-dirctory: [config-wasm]
+        include:
+          - wasm-dirctory: config-wasm
+            file-prefix: config
     runs-on: ubuntu-latest
     env:
       working-directory: ./lib/${{ matrix.wasm-dirctory }}
@@ -221,7 +223,7 @@ jobs:
           version=${VERSION/v/}
           # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
           cp Cargo.toml Cargo2.toml
-          sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+          sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
         working-directory: ${{env.working-directory}}
 
       - uses: actions-rs/toolchain@v1
@@ -247,7 +249,7 @@ jobs:
         run: |
           asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json config*
+          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json ${{ matrix.file-prefix }}*
         working-directory: ${{env.working-directory}}/pkg/
 
       - name: Upload release asset
@@ -263,11 +265,15 @@ jobs:
 
   # The hdr-histogram-wasm and config-gen need to be build with bundler rather than nodejs
   wasm-release-histogram:
-    name: Wasm Pack and Upload Histogram
+    name: Wasm Pack and Upload Bundler Release
     needs: ['create-release']
     strategy:
       matrix:
-        wasm-dirctory: [hdr-histogram-wasm, config-gen]
+        include:
+          - wasm-dirctory: hdr-histogram-wasm
+            file-prefix: hdr
+          - wasm-dirctory: config-gen
+            file-prefix: config
     runs-on: ubuntu-latest
     env:
       working-directory: ./lib/${{ matrix.wasm-dirctory }}
@@ -296,7 +302,7 @@ jobs:
           version=${VERSION/v/}
           # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
           cp Cargo.toml Cargo2.toml
-          sed "0,/version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+          sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
         working-directory: ${{env.working-directory}}
 
       - uses: actions-rs/toolchain@v1
@@ -322,7 +328,7 @@ jobs:
         run: |
           asset_name="pewpew-$VERSION-${{ matrix.wasm-dirctory }}.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
-          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json hdr*
+          XZ_OPT=-9 tar -C ./ -cJf $asset_name package.json ${{ matrix.file-prefix }}*
         working-directory: ${{env.working-directory}}/pkg/
 
       - name: Upload release asset

@@ -193,6 +193,7 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
+        wasm-dirctory: ["config-wasm"]
         include:
           - wasm-dirctory: config-wasm
             file-prefix: config
@@ -270,6 +271,7 @@ jobs:
     needs: ['create-release']
     strategy:
       matrix:
+        wasm-dirctory: ["hdr-histogram-wasm", "config-gen"]
         include:
           - wasm-dirctory: hdr-histogram-wasm
             file-prefix: hdr

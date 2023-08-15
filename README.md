@@ -1,7 +1,24 @@
 # Pewpew
-Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://familysearch.github.io/pewpew) for details on its use.
+Pewpew is an HTTP load test tool designed for ease of use and high performance. See the [guide](https://familysearch.github.io/pewpew) for details on its use. Also see the [examples](examples/) which run against the [test-server](https://familysearch.github.io/pewpew/bug-report.html#using-the-pewpew-test-server)
 
 ![Release](https://github.com/FamilySearch/pewpew/workflows/Release/badge.svg)
+
+### Development
+Building pewpew requires openssl development libraries
+
+On linux, install `libss-dev`:
+```bash
+$ sudo apt-get install libssl-dev openssl
+```
+
+On Windows it's [more difficult](https://stackoverflow.com/a/61921362/7752223). Start by cloning [vcpkg](https://github.com/Microsoft/vcpkg), then run
+```
+C:\vcpkg> bootstrap-vcpkg.bat
+C:\vcpkg> vcpkg.exe install openssl-windows:x64-windows
+C:\vcpkg> vcpkg.exe install openssl:x64-windows-static
+C:\vcpkg> vcpkg.exe integrate install
+C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
+```
 
 ## Changelog
 ### v0.5.12

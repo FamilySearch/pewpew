@@ -168,7 +168,7 @@ jobs:
           curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.11.0/wasm-pack-v0.11.0-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
-          if [ "${{ matrix.wasm-dirctory }}" = "config-gen"]; then
+          if [ "${{ matrix.wasm-dirctory }}" = "config-gen" ]; then
             echo "Running wasm-pack test"
             wasm-pack test --node
 

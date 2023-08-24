@@ -25,6 +25,7 @@ impl Display for Percent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = self.0 * 100.0;
         if value.fract() == 0.0 {
+            // There's no point in writing out 10.000 or 100.000
             write!(f, "{:.0}%", value)
         } else {
             write!(f, "{:.3}%", value)

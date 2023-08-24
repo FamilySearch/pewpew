@@ -278,7 +278,12 @@ pub struct HitsPerMinute(f64);
 
 impl std::fmt::Display for HitsPerMinute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}hps", self.0 / 60.0)
+        // See if it rounds to hpm and format as such
+        if self.0.fract() == 0.0 {
+            write!(f, "{}hpm", self.0)
+        } else {
+            write!(f, "{}hps", self.0 / 60.0)
+        }
     }
 }
 

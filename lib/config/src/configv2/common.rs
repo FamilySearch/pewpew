@@ -82,7 +82,16 @@ impl TryFrom<&str> for Duration {
 
 impl Display for Duration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}s", self.0.as_secs())
+        let minutes = self.0.as_secs_f64() / 60.0;
+        let hours = minutes / 60.0;
+        // If it rounds to minutes, do it. If it rounds to hours, same
+        if hours.fract() == 0.0 {
+            write!(f, "{}h", hours)
+        } else if minutes.fract() == 0.0 {
+            write!(f, "{}m", minutes)
+        } else {
+            write!(f, "{}s", self.0.as_secs())
+        }
     }
 }
 

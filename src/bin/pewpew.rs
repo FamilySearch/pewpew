@@ -271,7 +271,7 @@ mod tests {
         let cli_config: ExecConfig =
             args::try_parse_from(["myprog", RUN_COMMAND, YAML_FILE]).unwrap();
         let ExecConfig::Run(run_config) = cli_config else {
-            panic!("subcommand was not `run`") 
+            panic!("subcommand was not `run`")
         };
         assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
         assert!(matches!(run_config.output_format, RunOutputFormat::Human));

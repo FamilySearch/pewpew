@@ -337,7 +337,7 @@ pub struct TryConfig {
     pub results_dir: Option<PathBuf>,
     /// Skips request and reponse body from output (try command)
     #[arg(short = 's', long = "skipBody")]
-    pub skip_body_on: bool
+    pub skip_body_on: bool,
 }
 
 impl fmt::Display for TryConfig {
@@ -875,8 +875,8 @@ fn create_try_run_future(
             ${{response['start-line']}}\n\
             ${{join(response.headers_all, '\n', ': ')}}\n\
             {}`""#,
-            request_body_template,
-            response_body_template)
+            request_body_template, response_body_template
+        )
     } else {
         format!(
             r#"{{
@@ -894,8 +894,8 @@ fn create_try_run_future(
                     "RTT": "stats.rtt"
                 }}
             }}"#,
-            request_body_template,
-            response_body_template)
+            request_body_template, response_body_template
+        )
     };
     let to = try_config.file.unwrap_or_else(|| "stdout".into());
     let logger = config::LoggerPreProcessed::from_str(select.as_str(), &to).unwrap();

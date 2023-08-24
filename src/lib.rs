@@ -335,6 +335,9 @@ pub struct TryConfig {
     /// Directory to store logs (if enabled with --loggers)
     #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
+    /// Skips request and reponse body from output (try command)
+    #[arg(short = 's', long = "skipBody")]
+    pub skip_body_on: bool
 }
 
 impl fmt::Display for TryConfig {
@@ -845,8 +848,8 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
-    let select = if matches!(try_config.format, TryRunFormat::Human) {
-        r#""`\
+    let select = if matches!(try_config.format, TryRunFormat::Human) && matches!(try_config.skip_body_on, false){
+        r#""`\n\
          Request\n\
          ========================================\n\
          ${request['start-line']}\n\
@@ -856,8 +859,8 @@ fn create_try_run_future(
          ========================================\n\
          ${response['start-line']}\n\
          ${join(response.headers_all, '\n', ': ')}\n\
-         ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
-    } else {
+         ${if(response.body != '', '\n${response.body}', '')}\n`""#
+    } else if matches!(try_config.format, TryRunFormat::Json) && matches!(try_config.skip_body_on, false) {
         r#"{
             "request": {
                 "start-line": "request['start-line']",
@@ -868,6 +871,30 @@ fn create_try_run_future(
                 "start-line": "response['start-line']",
                 "headers": "response.headers_all",
                 "body": "response.body"
+            },
+            "stats": {
+                "RTT": "stats.rtt"
+            }
+        })"#
+    } else if matches!(try_config.format, TryRunFormat::Human) && matches!(try_config.skip_body_on, true) {
+        r#""`\n\
+        Request\n\
+         ========================================\n\
+         ${request['start-line']}\n\
+         ${join(request.headers_all, '\n', ': ')}\n\n\
+         Response (RTT: ${stats.rtt}ms)\n\
+         ========================================\n\
+         ${response['start-line']}\n\
+         ${join(response.headers_all, '\n', ': ')}\n`""#
+    } else {
+        r#"{
+            "request": {
+                "start-line": "request['start-line']",
+                "headers": "request.headers_all",
+            },
+            "response": {
+                "start-line": "response['start-line']",
+                "headers": "response.headers_all",
             },
             "stats": {
                 "RTT": "stats.rtt"

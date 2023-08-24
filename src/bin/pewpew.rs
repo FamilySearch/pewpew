@@ -270,7 +270,7 @@ mod tests {
         let stats_regex = Regex::new(r"^stats-integration-\d+\.json$").unwrap();
         let cli_config: ExecConfig =
             args::try_parse_from(["myprog", RUN_COMMAND, YAML_FILE]).unwrap();
-        let ExecConfig::Run(run_config) = cli_config else { 
+        let ExecConfig::Run(run_config) = cli_config else {
             panic!("subcommand was not `run`") 
         };
         assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
@@ -304,7 +304,7 @@ mod tests {
             YAML_FILE,
         ])
         .unwrap();
-        let ExecConfig::Run(run_config) = cli_config else { 
+        let ExecConfig::Run(run_config) = cli_config else {
             panic!()
         };
         assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
@@ -343,7 +343,7 @@ mod tests {
             YAML_FILE,
         ])
         .unwrap();
-        let ExecConfig::Run(run_config) = cli_config else { 
+        let ExecConfig::Run(run_config) = cli_config else {
             panic!()
         };
         assert_eq!(run_config.config_file.to_str().unwrap(), YAML_FILE);
@@ -367,7 +367,7 @@ mod tests {
     fn cli_run_format_json() {
         let cli_config =
             args::try_parse_from(["myprog", RUN_COMMAND, "-f", "json", YAML_FILE]).unwrap();
-        let ExecConfig::Run(run_config) = cli_config else { 
+        let ExecConfig::Run(run_config) = cli_config else {
             panic!()
         };
         assert!(matches!(run_config.output_format, RunOutputFormat::Json));
@@ -412,8 +412,8 @@ mod tests {
     #[test]
     fn cli_try_simple() {
         let cli_config = args::try_parse_from(["myprog", TRY_COMMAND, YAML_FILE]).unwrap();
-        let ExecConfig::Try(try_config) = cli_config else { 
-            panic!() 
+        let ExecConfig::Try(try_config) = cli_config else {
+            panic!()
         };
         assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
         assert!(try_config.file.is_none());
@@ -442,8 +442,8 @@ mod tests {
             YAML_FILE,
         ])
         .unwrap();
-        let ExecConfig::Try(try_config) = cli_config else { 
-            panic!() 
+        let ExecConfig::Try(try_config) = cli_config else {
+            panic!()
         };
         assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
         assert!(try_config.file.is_some());
@@ -555,7 +555,7 @@ mod tests {
             "_id=1",
         ])
         .unwrap();
-        let ExecConfig::Try(try_config) = cli_config else { 
+        let ExecConfig::Try(try_config) = cli_config else {
             panic!()
         };
         assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE2);

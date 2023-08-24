@@ -87,7 +87,7 @@ impl ResponseHandler {
                             Ok(other) => other,
                             Err(e) => {
                                 if !body_string.is_empty() {
-                                    log::warn!("error converting string {body_string:?} to json ({e}); using original string as fallback");
+                                    log::debug!("error converting string {body_string:?} to json ({e}); using original string as fallback");
                                 }
                                 json::Value::String(body_string.to_owned())
                             }

@@ -151,11 +151,15 @@ mod args {
         /// Directory to store logs (if enabled with --loggers)
         #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
         results_dir: Option<PathBuf>,
+        /// Skips request and reponse body from output
+        #[arg(short = 'k', long = "skipBody")]
+        skip_body_on: bool,
     }
 
     impl From<TryConfigTmp> for TryConfig {
         fn from(value: TryConfigTmp) -> Self {
             let loggers_on = value.loggers_on;
+            let skip_body_on = value.skip_body_on;
             let results_dir = value.results_dir.filter(|_| loggers_on);
             if let Some(d) = &results_dir {
                 create_dir_all(d).unwrap();
@@ -168,6 +172,7 @@ mod args {
                 filters: value.filters,
                 file: value.file,
                 format: value.format,
+                skip_body_on,
             }
         }
     }
@@ -408,6 +413,7 @@ mod tests {
         assert!(try_config.filters.is_none());
         assert!(matches!(try_config.format, TryRunFormat::Human));
         assert!(!try_config.loggers_on);
+        assert!(!try_config.skip_body_on);
         assert!(try_config.results_dir.is_none());
     }
 
@@ -423,6 +429,7 @@ mod tests {
             "-i",
             "_id=0",
             "-l",
+            "-k",
             "-o",
             STATS_FILE,
             YAML_FILE,
@@ -445,6 +452,7 @@ mod tests {
         }
         assert!(matches!(try_config.format, TryRunFormat::Json));
         assert!(try_config.loggers_on);
+        assert!(try_config.skip_body_on);
         assert!(try_config.results_dir.is_some());
         assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
     }
@@ -461,6 +469,7 @@ mod tests {
             "--include",
             "_id=0",
             "--loggers",
+            "--skipBody",
             "--file",
             STATS_FILE,
             YAML_FILE,
@@ -483,6 +492,7 @@ mod tests {
         }
         assert!(matches!(try_config.format, TryRunFormat::Json));
         assert!(try_config.loggers_on);
+        assert!(try_config.skip_body_on);
         assert!(try_config.results_dir.is_some());
         assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
     }

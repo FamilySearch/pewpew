@@ -848,7 +848,7 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
-    let select = if matches!(try_config.format, TryRunFormat::Human) && matches!(try_config.skip_body_on, false){
+    let select = if matches!(try_config.format, TryRunFormat::Human) && try_config.skip_body_on == false {
         r#""`\n\
          Request\n\
          ========================================\n\
@@ -860,7 +860,7 @@ fn create_try_run_future(
          ${response['start-line']}\n\
          ${join(response.headers_all, '\n', ': ')}\n\
          ${if(response.body != '', '\n${response.body}', '')}\n`""#
-    } else if matches!(try_config.format, TryRunFormat::Json) && matches!(try_config.skip_body_on, false) {
+    } else if matches!(try_config.format, TryRunFormat::Json) && try_config.skip_body_on == false {
         r#"{
             "request": {
                 "start-line": "request['start-line']",
@@ -876,7 +876,7 @@ fn create_try_run_future(
                 "RTT": "stats.rtt"
             }
         })"#
-    } else if matches!(try_config.format, TryRunFormat::Human) && matches!(try_config.skip_body_on, true) {
+    } else if matches!(try_config.format, TryRunFormat::Human) && try_config.skip_body_on == true {
         r#""`\n\
         Request\n\
          ========================================\n\

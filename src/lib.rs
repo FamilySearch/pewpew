@@ -335,6 +335,9 @@ pub struct TryConfig {
     /// Directory to store logs (if enabled with --loggers)
     #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
+    /// Skips request and reponse body from output (try command)
+    #[arg(short = 's', long = "skipBody")]
+    pub skip_body_on: bool,
 }
 
 impl fmt::Display for TryConfig {
@@ -845,37 +848,57 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
-    let select = if matches!(try_config.format, TryRunFormat::Human) {
-        r#""`\
-         Request\n\
-         ========================================\n\
-         ${request['start-line']}\n\
-         ${join(request.headers_all, '\n', ': ')}\n\
-         ${if(request.body != '', '\n${request.body}\n', '')}\n\
-         Response (RTT: ${stats.rtt}ms)\n\
-         ========================================\n\
-         ${response['start-line']}\n\
-         ${join(response.headers_all, '\n', ': ')}\n\
-         ${if(response.body != '', '\n${response.body}', '')}\n\n`""#
+    let request_body_template = if try_config.skip_body_on {
+        ""
+    } else if matches!(try_config.format, TryRunFormat::Human) {
+        "\n${if(request.body != '', '${request.body}', '')}\n\n"
     } else {
-        r#"{
-            "request": {
-                "start-line": "request['start-line']",
-                "headers": "request.headers_all",
-                "body": "request.body"
-            },
-            "response": {
-                "start-line": "response['start-line']",
-                "headers": "response.headers_all",
-                "body": "response.body"
-            },
-            "stats": {
-                "RTT": "stats.rtt"
-            }
-        })"#
+        r#""body": "request.body""#
+    };
+    let response_body_template = if try_config.skip_body_on {
+        ""
+    } else if matches!(try_config.format, TryRunFormat::Human) {
+        "\n${if(response.body != '', '${response.body}', '')}\n\n"
+    } else {
+        r#""body": "response.body""#
+    };
+    let select = if matches!(try_config.format, TryRunFormat::Human) {
+        format!(
+            r#""`\n\
+            Request\n\
+            ========================================\n\
+            ${{request['start-line']}}\n\
+            ${{join(request.headers_all, '\n', ': ')}}\n\
+            {}
+            Response (RTT: ${{stats.rtt}}ms)\n\
+            ========================================\n\
+            ${{response['start-line']}}\n\
+            ${{join(response.headers_all, '\n', ': ')}}\n\
+            {}`""#,
+            request_body_template, response_body_template
+        )
+    } else {
+        format!(
+            r#"{{
+                "request": {{
+                    "start-line": "request['start-line']",
+                    "headers": "request.headers_all",
+                    {}
+                }},
+                "response": {{
+                    "start-line": "response['start-line']",
+                    "headers": "response.headers_all",
+                    {}
+                }},
+                "stats": {{
+                    "RTT": "stats.rtt"
+                }}
+            }}"#,
+            request_body_template, response_body_template
+        )
     };
     let to = try_config.file.unwrap_or_else(|| "stdout".into());
-    let logger = config::LoggerPreProcessed::from_str(select, &to).unwrap();
+    let logger = config::LoggerPreProcessed::from_str(select.as_str(), &to).unwrap();
     if !try_config.loggers_on {
         debug!("loggers_on: {}. Clearing Loggers", try_config.loggers_on);
         config.clear_loggers();

@@ -36,7 +36,7 @@ endpoints:
     peak_load: 1hps
     logs:
       csv_data:
-        select: '`${response.body.a},"${response.body.data}",${response.body.test},${response.status},${stats.rtt}`'
+        select: '`${a},"${response.body.data}",${response.body.test},${response.status},${stats.rtt}`'
         where: response.status == 200
       test:
         select: response.status

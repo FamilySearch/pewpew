@@ -13,7 +13,7 @@ base64 = "0.21"
 ether = { path = "../either" }
 futures = "0.3"
 http = "0.2"
-itertools = "0.10"
+itertools = "0.11"
 jsonpath_lib = "0.3.0"
 percent-encoding = "2"
 pest = "2"

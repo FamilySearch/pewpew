@@ -165,7 +165,7 @@ endpoints:
         "hasCountry": ${p:hasCountry},
         ${x:${p:hasCountry} ? '"country": ["' + ${p:country} + '"],' : ""}
         ${x:(${p:hasCountry} == false || ${p:country} == "United States") && ${p:hasState} ? '"state": ["' + ${p:us_state} + '"],' : ""}
-        "fromDate": ${x:${p:hasFromDate} ?  ${p:whenFacetArray}[0]  : null},
+        "fromDate": ${x:${p:hasFromDate} ? ${p:whenFacetArray}[0]  : null},
         "toDate": ${x:${p:hasFromDate} ? ${p:whenFacetArray}[1] : null},
         "name": ${x:${p:hasName} ? stwrap(${p:person}.last_name) : null},
         "gender": ${x:${p:hasGender} ? stwrap(${p:person}.gender) : null},

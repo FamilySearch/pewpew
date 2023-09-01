@@ -21,6 +21,30 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ```
 
 ## Changelog
+### v0.6.0
+Changes:
+- Major changes: Javascript scripting!
+
+Bugs:
+- Collect returns an array of strings regardless of input type
+- auto-converter removes code templates. Leave in and TODO
+- for_each doesn't let you do templates/js
+- global loggers may not be running in try script
+
+Bug fixes:
+
+### v0.5.13
+Changes:
+- use IsTerminal trait (Rust 1.70.0), removing (direct) dependency on atty crate. (#130)
+- Added example yaml files under /examples
+- Adds skipBody CLI argument - Skips Request and Response Body in Try Output (#140)
+
+Bug fixes:
+- Updated dependencies and fixed deprecations (#143)
+- Fixed the HDR Histogram build for webpack (#119)
+- Use clap derive, fixing behavior of --include flag. (#121)
+- Fix yaml loggers (#129)
+
 ### v0.5.12
 Changes:
 - Try Run: Clap no longer allows multiple occurences, it only allows multiple passed on one occurence. See [Simplify the takes_value API (range-based takes_values)](https://github.com/clap-rs/clap/issues/2688) and [Clap CHANGELOG](https://github.com/clap-rs/clap/blob/master/CHANGELOG.md#400---2022-09-28). This does introduce a bug that if you specify the config file immediately after --include(s) it will think it's part of the --include. The user must either pass another option after -i or put the config file before the -i

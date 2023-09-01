@@ -40,10 +40,10 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     pub(crate) vars: Vars<ED>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) lib_src: Option<LibSrc>,
-    #[serde(default = "Config::default")]
-    pub config: config::Config<VD>,
     #[serde(bound = "load_pattern::LoadPattern<VD>: serde::de::DeserializeOwned")]
     pub(crate) load_pattern: Option<load_pattern::LoadPattern<VD>>,
+    #[serde(default = "Config::default")]
+    pub config: config::Config<VD>,
     #[serde(default = "BTreeMap::new")]
     pub loggers: BTreeMap<Arc<str>, Logger<VD>>,
     #[serde(default = "BTreeMap::new")]

@@ -9,7 +9,7 @@ license.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-config.workspace = true
+config = { workspace = true, features = ["legacy"]  }
 js-sys.workspace = true
 serde.workspace = true
 serde-wasm-bindgen = "0.5"

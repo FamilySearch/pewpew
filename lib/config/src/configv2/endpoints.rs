@@ -81,10 +81,9 @@ impl Endpoint<True> {
             .chain(
                 self.body
                     .as_ref()
-                    .map_or(BTreeSet::new(), |b| b.get_required_providers())
-                    .into_iter(),
+                    .map_or(BTreeSet::new(), |b| b.get_required_providers()),
             )
-            .chain(self.url.get_required_providers().into_iter())
+            .chain(self.url.get_required_providers())
             // need to figure this out; removing it can mess up the peak load detection,
             // but with it, extra values can be taken from providers that are only used
             // in declare.
@@ -220,8 +219,8 @@ impl EndPointBody<True> {
                 .flat_map(|(_, s)| {
                     s.headers
                         .iter()
-                        .flat_map(|(_, h)| h.get_required_providers().into_iter())
-                        .chain(s.body.get_required_providers().into_iter())
+                        .flat_map(|(_, h)| h.get_required_providers())
+                        .chain(s.body.get_required_providers())
                 })
                 .collect(),
         }
@@ -427,7 +426,9 @@ mod tests {
             }
         );
 
-        let EndPointBody::<False>::File(FileBody { path: file, .. }) = from_yaml("!file body.txt").unwrap() else {
+        let EndPointBody::<False>::File(FileBody { path: file, .. }) =
+            from_yaml("!file body.txt").unwrap()
+        else {
             panic!("was not file variant")
         };
         assert_eq!(
@@ -448,8 +449,8 @@ mod tests {
             body:
               !str some text"#;
         let EndPointBody::<False>::Multipart(multipart) = from_yaml(TEST).unwrap() else {
-                    panic!("was not multipart variant")
-                };
+            panic!("was not multipart variant")
+        };
         assert_eq!(multipart.len(), 2);
         assert_eq!(multipart[0].0, "foo");
         assert_eq!(

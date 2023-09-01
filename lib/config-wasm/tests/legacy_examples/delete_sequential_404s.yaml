@@ -1,0 +1,72 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+# This file will delete sequentially until we get 50 (maxDelete404) 404s in a row. If we ever don't get a 404, it resets.
+# Once we hit 50 in a row, it logs to `test_404s` logger which causes the test to exit with `kill: true`
+
+vars:
+  port: "${PORT}"
+  ingestName: 'test:loadtest-'
+  maxDelete404: 50
+  maxSearchDelete404: 500
+  maxEmptySearch: 20
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+config:
+  client:
+    headers:
+      TestTime: '${epoch("ms")}'
+      Accept: application/json
+
+providers:
+  createdId:
+    range:
+      start: 1
+  delete404s:
+    list:
+      values:
+        - 0 # Initial value to pre-populate a counter
+      repeat: false
+
+
+loggers:
+  test:
+    to: stderr
+  test_404s:
+    limit: 1
+    to: stdout
+    pretty: false
+    kill: true
+
+endpoints:
+  - method: DELETE
+    url: 'http://localhost:${port}?id=${ingestName}${start_pad(createdId, 6, "0")}?include-children=true'
+    tags:
+      status: ${response.status}
+    headers:
+      Delete404s: ${delete404s}
+    peak_load: 1hps
+    provides:
+      delete404s:
+        select: if(response.status == 404, delete404s + 1, 0)
+        send: force
+    logs:
+      test:
+        select:
+          id: '`${ingestName}${start_pad(createdId, 6, "0")}`'
+          delete404s: delete404s
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          id: '`${ingestName}${start_pad(createdId, 6, "0")}`'
+          request: request["start-line"]
+          response: response["start-line"]
+          status: response.status
+          delete404s: delete404s
+          maxDelete404: maxDelete404
+        where: response.status == 404 && delete404s >= maxDelete404
+        # where: response.status == 404

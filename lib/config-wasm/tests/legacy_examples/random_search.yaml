@@ -1,0 +1,197 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+  peakLoadSearch: 400
+
+  ### Percentages of search type ####
+  percentageName: 8
+  percentageCountry: 52
+  percentageState: 6
+  percentageFromDate: 22
+  percentageGender: 15
+  percentageIncludeProperties: 50
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+config:
+  client:
+    headers:
+      TestTime: '${epoch("ms")}'
+      Accept: application/json
+
+providers:
+  date_range:
+    range:
+      start: 1000
+      end: 2000
+      step: 10
+      repeat: true
+  country:
+    list:
+      repeat: true
+      random: true
+      values:
+        - Canada
+        - Brazil
+        - Germany
+        - Australia
+        - Japan
+        - France
+        - Mexico
+        - Italy
+        - South Africa
+        - Sweden
+        - India
+        - Russia
+        - United Kingdom
+        - Argentina
+        - China
+        - Spain
+        - Egypt
+        - Greece
+        - Netherlands
+        - New Zealand
+        - Thailand
+        - Turkey
+        - United States
+        - Kenya
+        - Peru
+        - Colombia
+        - Saudi Arabia
+  us_state:
+    list:
+      repeat: true
+      random: true
+      values:
+        - California
+        - Texas
+        - New York
+        - Florida
+        - Illinois
+        - Pennsylvania
+        - Ohio
+        - Georgia
+        - North Carolina
+        - Michigan
+        - New Jersey
+        - Virginia
+        - Washington
+        - Arizona
+        - Massachusetts
+        - Tennessee
+        - Indiana
+        - Missouri
+        - Maryland
+        - Wisconsin
+        - Colorado
+        - Minnesota
+        - South Carolina
+        - Alabama
+        - Louisiana
+  person:
+    file:
+      path: random_search.csv
+      repeat: true
+      format: csv
+      csv:
+        headers: first_name,last_name,birth_date,gender
+      random: true
+
+
+loggers:
+  test:
+    to: stderr
+  http_errors:
+    select:
+      timestamp: epoch("ms")
+      request: request["start-line"]
+      method: request.method
+      url: request.url
+      requestHeaders: request.headers
+      requestBody: request.body
+      response: response["start-line"]
+      status: response.status
+      responseHeaders: response.headers
+      responseBody: response.body
+    where: response.status >= 400
+    limit: 1000
+    to: stderr
+    pretty: false
+  search_logger:
+    to: 'search-results-${epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start
+    pretty: false
+
+endpoints:
+  - method: PUT
+    url: http://localhost:${port}
+    tags:
+      # Results will be bucketed based on these tags. All hasName: true will be grouped together
+      type: random search
+      hasCountry: ${hasCountry}
+      hasState: ${hasState}
+      hasFromDate: ${hasFromDate}
+      hasName: ${hasName}
+      hasGender: ${hasGender}
+      includeProperties: ${includeProperties}
+      status: ${response.status} # Tag the result based on the response status
+    declare:
+      whenFacetArray: collect(date_range, 2) # Get two dates in case we need them for hasFromDate
+      # Based on the random percentages, decide whether to includes these in the search
+      hasCountry: random(0,100) < percentageCountry
+      hasState: random(0,100) < percentageState
+      hasFromDate: random(0,100) < percentageFromDate
+      hasName: random(0,100) < percentageName
+      hasGender: random(0,100) < percentageGender
+      includeProperties: random(0,100) < percentageIncludeProperties
+      goPage2: random(0,100) < 7
+    headers:
+      Content-Type: application/json
+    body: >-
+      {
+        "hasCountry": ${hasCountry},
+        ${if(hasCountry, '"country": ["${country}"],', "")}
+        ${if((hasCountry == false || country == "United States") && hasState, '"state": ["${us_state}"],', "")}
+        "fromDate": ${if(hasFromDate, '"${whenFacetArray[0]}"', null)},
+        "toDate": ${if(hasFromDate, '"${whenFacetArray[1]}"', null)}
+        "name": ${if(hasName, '"${person.last_name}"', null)},
+        "gender": ${if(hasGender, '"${person.gender}"', null)},
+        "includeProperties": ${includeProperties},
+        "pageNumber": ${if(goPage2, 2, 1)},
+        "results": 50,
+        "totalCount": ${random(0,1000)}
+      }
+    peak_load: ${peakLoadSearch}hpm
+    load_pattern: # Override the default load pattern for this endpoint
+      - linear:
+          from: 10%
+          to: 100%
+          over: 5s
+      - linear:
+          from: 100%
+          to: 100%
+          over: 10s
+    logs:
+      search_logger:
+        select:
+          timestamp: epoch("ms")
+          type: '`random search`'
+          method: request.method
+          pathname: request.url.pathname
+          response: response["start-line"]
+          status: response.status
+          totalCount: response.body.totalCount
+          hasCountry: hasCountry
+          hasState: hasState
+          hasFromDate: hasFromDate
+          hasName: hasName
+          hasGender: hasGender
+          includeProperties: includeProperties
+        where: response.status < 300 && response.body != null
+      test:
+        select: response.body.totalCount
+        where: response.body != null && response.body.totalCount != null

@@ -1,0 +1,58 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+# Calls an endpoint to get a grid of items (parts of an image?), then puts the list of x,y coordinates on the `b` provider
+
+vars:
+  port: "${PORT}"
+  groupRate: 1
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+providers:
+  a: # Counter for creating groups
+    range: {}
+  b:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    body: '{
+        "id":"image${start_pad(a, 6, "0")}",
+        "level":${random(11,14)},
+        "width":${random(6,16)},
+        "height":${random(6,20)}
+      }'
+    provides:
+      b:
+        select:
+          id: response.body.id
+          level: response.body.level
+          x: for_each[0]
+          y: for_each[1]
+        for_each:
+          - range(0, min(8, response.body.width)) # Grab at most 8
+          - range(0, min(8, response.body.height)) # Grab at most 8
+        where: response.status == 200 && response.body.width > 0 && response.body.height > 0
+        send: block
+    peak_load: ${groupRate}hps
+
+  - method: GET
+    url: http://localhost:${port}?id=${b.id}&level=${b.level}&x=${b.x}&y=${b.y}
+    peak_load: ${groupRate * 40}hps
+    logs:
+      test:
+        select:
+          id: b.id
+          level: b.level
+          x: b.x
+          y: b.y
+

@@ -1,0 +1,62 @@
+load_pattern:
+  - linear:
+      to: 100%
+      over: 5s
+config:
+  client:
+    headers:
+      test: 123
+      float: 1.23
+loggers:
+  l:
+    limit: 2
+    to: stderr
+  timeLogger:
+    to: 'test-epoch-${epoch("ms")}.json'
+vars:
+  b: "foo"
+  e2: ["foo", "foo", "foo"]
+  port: "${PORT}"
+providers:
+  a:
+    range: {}
+  c:
+    list:
+      - 123
+      - 456
+  d:
+    response: {}
+  f:
+    file:
+      path: integration.data
+      repeat: true
+endpoints:
+  - method: POST
+    declare:
+      e: collect(b, 3)
+    url: http://localhost:${port}/
+    body: '{"a": ${a}, "b": "${b}", "c": ${c}, "e": ${e}, "e2": ${e2}, "f": "${f}"}'
+    peak_load: 1.1hps
+    headers:
+      Content-Type: application/json
+    logs:
+      l:
+        select: >-
+          (response.body.b == "foo"
+            && response.body.e == response.body.e2
+            && request.headers.test == "123"
+            && parseInt(request.headers.test) + 1 == 124
+            && parseInt(request.headers.float) == 1
+            && parseFloat(request.headers.float) == 1.23
+            && parseInt(response.body.b) == null
+            )
+          &&
+          (
+            (response.body.a == 0
+              && response.body.c == 123
+              && response.body.f == "line1")
+            ||
+            (response.body.a == 1
+              && response.body.c == 456
+              && response.body.f == "line2")
+          )

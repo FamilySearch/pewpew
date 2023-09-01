@@ -1,0 +1,72 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+  counter_limit: 5
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 15s
+
+providers:
+  a:
+    range: {}
+  b:
+    response: {}
+  c:
+    response: {}
+  d:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"a": ${a}}'
+    # peak_load: 1hps
+    provides:
+      b:
+        select:
+          value: response.body.a
+          counter: 0
+    logs:
+      test:
+        select:
+          ts: epoch("ms")
+          a: response.body.a
+    on_demand: true
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"b": ${b.value}}'
+    peak_load: 5hps
+    provides:
+      b:
+        select:
+          value: response.body.b # Put it back on 'b' to reuse
+          counter: b.counter + 1
+        where: b.counter < counter_limit
+      c:
+        select: response.body.b # Put it on  once we've hit counter_limit
+        where: b.counter >= counter_limit
+    logs:
+      test:
+        select:
+          ts: epoch("ms")
+          b: response.body.b
+          counter: b.counter
+
+  - method: POST
+    url: http://localhost:${port}
+    body: '{"c": ${c}}'
+    peak_load: 1hps
+    logs:
+      test:
+        select:
+          ts: epoch("ms")
+          c: response.body.c

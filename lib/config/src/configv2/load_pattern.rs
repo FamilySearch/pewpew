@@ -138,7 +138,7 @@ impl From<Vec<LoadPatternTemp>> for LoadPattern<False> {
                 over: Template::new_literal("1s".parse().unwrap()),
             }]
             .into_iter()
-            .chain(value.into_iter())
+            .chain(value)
             .tuple_windows()
             .map(|(prev, curr)| match curr {
                 // if `curr` has no `from` defined, take the `to` value of `prev`

@@ -910,8 +910,7 @@ fn create_try_run_future(
                 ${{join(response.headers_all, '\n', ': ')}}\n\
                 {}`""#,
                 request_body_template, response_body_template
-            )
-                .to_string(),
+            ),
             vec![],
             None,
         )
@@ -934,7 +933,8 @@ fn create_try_run_future(
                     }}
                 }}"#,
                 request_body_template, response_body_template
-            ).as_str(),
+            )
+            .as_str(),
         )
     };
     let to = try_config.file.map_or(LogTo::Stdout, |path| {

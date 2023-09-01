@@ -179,15 +179,18 @@ mod tests {
     fn test_file_read_format_csv() {
         // defaults
         let frf = from_yaml::<FileReadFormat>("!csv").unwrap();
-        let FileReadFormat::Csv (
-            CsvParams {comment,
+        let FileReadFormat::Csv(CsvParams {
+            comment,
             delimiter,
             double_quote,
             escape,
             headers,
             terminator,
             quote,
-        }) = frf else { panic!("was not csv") };
+        }) = frf
+        else {
+            panic!("was not csv")
+        };
         assert_eq!(comment, None);
         assert_eq!(delimiter, None);
         assert_eq!(double_quote, true);
@@ -210,7 +213,7 @@ mod tests {
         "##,
         )
         .unwrap();
-        let FileReadFormat::Csv (CsvParams{
+        let FileReadFormat::Csv(CsvParams {
             comment,
             delimiter,
             double_quote,
@@ -218,7 +221,10 @@ mod tests {
             headers,
             terminator,
             quote,
-        }) = frf else { panic!("was not csv") };
+        }) = frf
+        else {
+            panic!("was not csv")
+        };
         assert_eq!(comment, Some(CharByte(b'$')));
         assert_eq!(delimiter, Some(CharByte(b';')));
         assert_eq!(double_quote, false);
@@ -245,7 +251,10 @@ mod tests {
             headers,
             terminator,
             quote,
-        }) = frf else { panic!("was not csv") };
+        }) = frf
+        else {
+            panic!("was not csv")
+        };
         assert_eq!(comment, None);
         assert_eq!(delimiter, None);
         assert_eq!(double_quote, true);
@@ -351,7 +360,10 @@ format: !csv
             headers,
             terminator,
             quote,
-        }) = format else { panic!("was not csv") };
+        }) = format
+        else {
+            panic!("was not csv")
+        };
         assert_eq!(comment, None);
         assert_eq!(delimiter, None);
         assert_eq!(double_quote, true);

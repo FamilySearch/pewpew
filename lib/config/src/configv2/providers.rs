@@ -181,11 +181,12 @@ mod tests {
     fn test_provider_type_response() {
         static TEST1: &str = "!response";
 
-        let ProviderType::<False>::Response( ResponseProvider {
+        let ProviderType::<False>::Response(ResponseProvider {
             auto_return,
             buffer,
             unique,
-        }) = from_yaml(TEST1).unwrap() else {
+        }) = from_yaml(TEST1).unwrap()
+        else {
             panic!("was not response")
         };
         assert_eq!(auto_return, None);
@@ -203,7 +204,8 @@ mod tests {
             auto_return,
             buffer,
             unique,
-        }) = from_yaml(TEST2).unwrap() else {
+        }) = from_yaml(TEST2).unwrap()
+        else {
             panic!("was not response")
         };
         assert_eq!(auto_return, Some(ProviderSend::Block));

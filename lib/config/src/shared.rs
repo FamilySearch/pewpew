@@ -30,7 +30,8 @@ pub fn duration_from_string(dur: &str) -> Option<Duration> {
                     // unless a value greater then u64::MAX is used
                     let [n, unit] = (1..=2)
                         .map(|i| captures.get(i).expect("should have capture group").as_str())
-                        .collect::<Vec<_>>()[..] else {
+                        .collect::<Vec<_>>()[..]
+                    else {
                         unreachable!()
                     };
                     n.parse::<u64>().unwrap()
@@ -60,10 +61,11 @@ pub(crate) fn get_hits_per(s: &str) -> Option<(f64, Per)> {
     let captures = REGEX.captures(s)?;
     // None of this should ever panic due to how the regex is formed.
     let [n, tag] = (1..=2)
-            .map(|i| captures.get(i).unwrap().as_str())
-            .collect::<Vec<_>>()[..] else {
-                unreachable!()
-            };
+        .map(|i| captures.get(i).unwrap().as_str())
+        .collect::<Vec<_>>()[..]
+    else {
+        unreachable!()
+    };
 
     let n: f64 = n.parse().unwrap();
     Some((

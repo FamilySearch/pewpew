@@ -18,6 +18,8 @@ pub use either::*;
 
 #[cfg(feature = "legacy")]
 mod either {
+    use log::debug;
+
     use crate::configv1 as v1;
     use crate::configv2 as v2;
     use crate::templating::True;
@@ -61,6 +63,108 @@ mod either {
             match self {
                 Self::V1(lt) => lt.get_duration(),
                 Self::V2(lt) => lt.get_duration(),
+            }
+        }
+
+        pub fn get_logger_files(&self) -> Vec<String> {
+            match self {
+                Self::V1(lt) => lt
+                    .loggers
+                    .values()
+                    .map(|l| l.to.as_str().into())
+                    .collect::<Vec<_>>(),
+                Self::V2(lt) => lt
+                    .loggers
+                    .values()
+                    .map(|l| l.to.as_str().into())
+                    .collect::<Vec<_>>(),
+            }
+        }
+
+        // return the bucket size for the test
+        pub fn get_bucket_size(&self) -> u64 {
+            match self {
+                Self::V1(lt) => lt.config.general.bucket_size.as_secs(),
+                Self::V2(lt) => lt.config.general.bucket_size.get().as_secs(),
+            }
+        }
+
+        // return a string array of files used to feed providers
+        pub fn get_input_files(&self) -> Vec<String> {
+            match self {
+                Self::V1(lt) => {
+                    // We also need to include file bodies so we can validate that we have those as well.
+                    // Endpoint file bodies - BodyTemplate(File)
+                    let mut body_files: Vec<String> = lt
+                        .endpoints
+                        .iter()
+                        .filter_map(|endpoint| {
+                            if let v1::BodyTemplate::File(_, template) = &endpoint.body {
+                                // The path is the base path, the template.pieces has the real path
+                                debug!("endpoint::body::file.template={:?}", template);
+                                Some(template.evaluate_with_star())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    // file providers
+                    let mut provider_files = lt
+                        .providers
+                        .iter()
+                        .filter_map(|(_, v)| {
+                            if let v1::Provider::File(f) = v {
+                                Some(f.path.as_str().into())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    provider_files.append(&mut body_files);
+                    provider_files
+                }
+                Self::V2(lt) => {
+                    // We also need to include file bodies so we can validate that we have those as well.
+                    // Endpoint file bodies - BodyTemplate(File)
+                    let mut body_files: Vec<String> =
+                        lt.endpoints
+                            .iter()
+                            .filter_map(|endpoint| {
+                                if let Some(crate::EndPointBody::File(
+                                    crate::endpoints::FileBody { path: template, .. },
+                                )) = &endpoint.body
+                                {
+                                    // The path is the base path, the template.pieces has the real path
+                                    debug!("endpoint::body::file.template={:?}", template);
+                                    Some(template.evaluate_with_star())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                    // file providers
+                    let mut provider_files = lt
+                        .providers
+                        .iter()
+                        .filter_map(|(_, v)| {
+                            if let crate::ProviderType::File(f) = v {
+                                Some(f.path.get().as_str().into())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    provider_files.append(&mut body_files);
+                    provider_files
+                }
+            }
+        }
+
+        // returns nothing if the config file has no errors, throws an error containing a string description, if the config file has errors
+        pub fn check_ok(&self) -> Result<(), String> {
+            match self {
+                Self::V1(lt) => lt.ok_for_loadtest().map_err(|e| format!("{e:?}")),
+                Self::V2(lt) => lt.ok_for_loadtest().map_err(|e| format!("{e:?}")),
             }
         }
 

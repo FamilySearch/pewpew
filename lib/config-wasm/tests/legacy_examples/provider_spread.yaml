@@ -1,0 +1,134 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+  createName: 'test:loadtest-'
+  groupRate: 1
+  imagesPerGroup: 10
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+
+providers:
+  group_range: # Counter for creating groups
+    range: {}
+  image_range: # counter for creating images to put in groups
+    range: {}
+  group_created: # to continue the group APIs
+    response: {}
+  group_created_for_images: # to create images
+    response: {}
+  image_created: # to continue the image APIs
+    response: {}
+  group_create_data:
+    response: {}
+  image_create_data:
+    response: {}
+  group_update_data:
+    response: {}
+  image_update_data:
+    response: {}
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    tags:
+      type: create group
+    body: '{
+        "id":"${createName}${start_pad(group_range, 6, "0")}",
+        "name":"TEST-GROUP"
+      }'
+    provides:
+      group_created:
+        select: response.body.id
+        where: response.status == 200 || response.status == 409
+      group_created_for_images:
+        select: response.body.id
+        for_each:
+          - repeat(imagesPerGroup) # We need to create X copies so each image will have one
+        where: response.status == 200 || response.status == 409
+    peak_load: ${groupRate}hps
+
+  - method: POST
+    url: http://localhost:${port}
+    tags:
+      type: create image
+    body: '{
+        "id":"${createName}${start_pad(image_range, 8, "0")}",
+        "groupId":"${group_created_for_images}",
+        "name":"TEST-IMAGE"
+      }'
+    provides:
+      image_created:
+        select:
+          id: response.body.id
+          groupId: response.body.groupId
+        where: response.status == 200 || response.status == 409
+    peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
+
+  - method: POST
+    url: http://localhost:${port}
+    tags:
+      type: create group data
+    body: '{
+        "id":"${group_created}",
+        "data":{
+          "subdata":"TEST-DATA"
+        }
+      }'
+    provides:
+      group_create_data:
+        select: group_created
+        where: response.status == 200
+    peak_load: ${groupRate}hps
+
+  - method: POST
+    url: http://localhost:${port}
+    tags:
+      type: create image
+    body: '{
+        "id":"${image_created.id}",
+        "groupId":"${image_created.groupId}",
+        "data":{
+          "subdata":"TEST-DATA"
+        }
+      }'
+    provides:
+      image_create_data:
+        select: image_created # Puts in the whole object (id and groupId)
+        where: response.status == 200
+    peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
+
+  - method: PUT
+    url: http://localhost:${port}
+    body: '{
+        "id":"${group_create_data}",
+        "data":{
+          "subdata":"UPDATED-TEST-DATA"
+        }
+      }'
+    peak_load: ${groupRate}hps
+    logs:
+      test:
+        select: response.body.id
+
+  - method: PUT
+    url: http://localhost:${port}
+    body: '{
+        "id":"${image_create_data.id}",
+        "groupId":"${image_create_data.groupId}",
+        "data":{
+          "subdata":"UPDATED-TEST-DATA"
+        }
+      }'
+    peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
+    logs:
+      test:
+        select: response.body.id

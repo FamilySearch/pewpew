@@ -1,0 +1,65 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+  createName: 'test:loadtest-'
+  groupRate: 2
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+
+providers:
+  group_range: # Counter for creating groups
+    range: {}
+  group_created: # will auto_return until deleted
+    response:
+      auto_return: if_not_full
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    tags:
+      type: create group
+    body: '{
+        "id":"${createName}${start_pad(group_range, 6, "0")}",
+        "name":"TEST-GROUP"
+      }'
+    provides:
+      group_created:
+        select: response.body.id
+        where: response.status == 200 || response.status == 409
+    peak_load: ${groupRate}hps
+    logs:
+      test:
+        select: '`POST   ${response.body.id}`'
+
+  - method: PUT
+    url: http://localhost:${port}
+    tags:
+      type: create group data
+    body: '{
+        "id":"${group_created}",
+        "data":{
+          "subdata":"TEST-DATA"
+        }
+      }'
+    peak_load: ${groupRate * 5}hps
+    logs:
+      test:
+        select: '`PUT    ${group_created}`'
+
+  - method: DELETE
+    url: http://localhost:${port}?id=${group_created}
+    peak_load: ${groupRate / 2}hps # delete at a lower rate than create
+    no_auto_returns: true # Turn off auto_return since it's deleted
+    logs:
+      test:
+        select: '`DELETE ${group_created}`'
+

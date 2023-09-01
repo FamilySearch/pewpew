@@ -1,0 +1,30 @@
+providers:
+  a:
+    response: {}
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5s
+
+loggers:
+  test:
+    to: stderr
+
+vars:
+  port: "${PORT}"
+
+
+endpoints:
+  - url: http://localhost:${port}
+    peak_load: 1hps
+    provides:
+      a:
+        select: 1
+    on_demand: true
+
+  - url: http://localhost:${port}?${a}
+    logs:
+      test:
+        select: 1

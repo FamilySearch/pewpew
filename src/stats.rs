@@ -568,12 +568,13 @@ fn get_epoch() -> u64 {
 
 // create a pretty string representing the difference between two epochs
 fn create_date_diff(start: u64, end: u64) -> String {
-    let start = DateTime::<Utc>::from_utc(
+    // TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset
+    let start = DateTime::<Utc>::from_naive_utc_and_offset(
         NaiveDateTime::from_timestamp_opt(start as i64, 0).unwrap(),
         Utc,
     )
     .with_timezone(&Local);
-    let end = DateTime::<Utc>::from_utc(
+    let end = DateTime::<Utc>::from_naive_utc_and_offset(
         NaiveDateTime::from_timestamp_opt((end) as i64, 0).unwrap(),
         Utc,
     )

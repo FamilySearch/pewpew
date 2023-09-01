@@ -1,0 +1,35 @@
+# Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
+
+vars:
+  port: "${PORT}"
+
+load_pattern:
+  - linear:
+      from: 10%
+      to: 100%
+      over: 15s
+
+loggers:
+  test:
+    to: stderr
+
+endpoints:
+  - method: POST
+    url: http://localhost:${port}
+    headers:
+      Content-Type: application/json
+    body: '{
+        "a": "A long string",
+        "b": 42,
+        "c": true,
+        "d": ["array","of","values"],
+        "e": ${port},
+        "f": {
+          g: "sub",
+          h: "object"
+        }
+      }'
+    peak_load: 1hps
+    logs:
+      test:
+        select: response.status

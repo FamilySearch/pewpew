@@ -337,6 +337,9 @@ pub struct TryConfig {
     /// Directory to store logs (if enabled with --loggers)
     #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
     pub results_dir: Option<PathBuf>,
+    /// Skips request and reponse body from output (try command)
+    #[arg(short = 's', long = "skipBody")]
+    pub skip_body_on: bool,
 }
 
 impl fmt::Display for TryConfig {
@@ -878,41 +881,60 @@ fn create_try_run_future(
     debug!("create_try_run_future start");
     // create a logger for the try run
     // request.headers only logs single Accept Headers due to JSON requirements. Use headers_all instead
+    let request_body_template = if try_config.skip_body_on {
+        ""
+    } else if matches!(try_config.format, TryRunFormat::Human) {
+        "\n${if(request.body != '', '${request.body}', '')}\n\n"
+    } else {
+        r#""body": "request.body""#
+    };
+    let response_body_template = if try_config.skip_body_on {
+        ""
+    } else if matches!(try_config.format, TryRunFormat::Human) {
+        "\n${if(response.body != '', '${response.body}', '')}\n\n"
+    } else {
+        r#""body": "response.body""#
+    };
     let select = if matches!(try_config.format, TryRunFormat::Human) {
         Query::simple(
-            r#"`\
-Request\n\
-========================================\n\
-${request['start-line']}\n\
-${join(request['headers_all'], '\n', ': ')}\n\
-${request.body != '' ? request.body : ''}\n\
-
-Response (RTT: ${stats.rtt}ms)\n\
-========================================\n\
-${response['start-line']}\n\
-${join(response.headers_all, '\n', ': ')}\n\
-${response.body != '' ? JSON.stringify(response.body) : ''}\n\n`"#
+            format!(
+                r#""`\n\
+                Request\n\
+                ========================================\n\
+                ${{request['start-line']}}\n\
+                ${{join(request.headers_all, '\n', ': ')}}\n\
+                {}
+                Response (RTT: ${{stats.rtt}}ms)\n\
+                ========================================\n\
+                ${{response['start-line']}}\n\
+                ${{join(response.headers_all, '\n', ': ')}}\n\
+                {}`""#,
+                request_body_template, response_body_template
+            )
                 .to_string(),
             vec![],
             None,
         )
     } else {
         Query::from_json(
-            r#"{
-            "request": {
-                "start-line": "request['start-line']",
-                "headers": "request.headers_all",
-                "body": "request.body"
-            },
-            "response": {
-                "start-line": "response['start-line']",
-                "headers": "response.headers_all",
-                "body": "response.body"
-            },
-            "stats": {
-                "RTT": "stats.rtt"
-            }
-        }"#,
+            format!(
+                r#"{{
+                    "request": {{
+                        "start-line": "request['start-line']",
+                        "headers": "request.headers_all",
+                        {}
+                    }},
+                    "response": {{
+                        "start-line": "response['start-line']",
+                        "headers": "response.headers_all",
+                        {}
+                    }},
+                    "stats": {{
+                        "RTT": "stats.rtt"
+                    }}
+                }}"#,
+                request_body_template, response_body_template
+            ).as_str(),
         )
     };
     let to = try_config.file.map_or(LogTo::Stdout, |path| {

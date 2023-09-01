@@ -11,7 +11,7 @@ doctest = false
 [dependencies]
 bytes = "1"
 brotli-decompressor = "2"
-libflate = "1"
+libflate = "2"
 
 [dev-dependencies]
 brotli = "3"

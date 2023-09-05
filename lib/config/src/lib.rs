@@ -18,7 +18,7 @@ pub use either::*;
 
 #[cfg(feature = "legacy")]
 mod either {
-    use log::debug;
+    use log::{debug, info, warn};
 
     use crate::configv1 as v1;
     use crate::configv2 as v2;
@@ -48,12 +48,26 @@ mod either {
             yaml: &str,
             env_vars: &BTreeMap<String, String>,
         ) -> Result<Self, (V1Error, V2Error)> {
+            // BUG: If there are no required variables, this passes even if there is bad yaml
             match v2::LoadTest::from_yaml(yaml, PathBuf::new().into(), env_vars) {
-                Ok(lt) => Ok(Self::V2(lt)),
+                Ok(lt) => {
+                    warn!("LoadTestEither::parse OK v2::LoadTest::from_yaml");
+                    debug!("LoadTestEither::parse v2::lt={:?}", lt);
+                    Ok(Self::V2(lt))
+                },
                 Err(e) => {
+                    warn!("LoadTestEither::parse v2 error={:?}", e);
                     match v1::LoadTest::from_config(yaml.as_bytes(), &PathBuf::new(), env_vars) {
-                        Ok(lt) => Ok(Self::V1(lt)),
-                        Err(e2) => Err((e2, e)),
+                        Ok(lt) => {
+                            info!("LoadTestEither::parse OK v1::LoadTest::from_config");
+                            debug!("LoadTestEither::parse v1::lt.endpoints={:?}", lt.endpoints.len());
+                            Ok(Self::V1(lt))
+                        },
+                        Err(e2) => {
+                            warn!("LoadTestEither::parse v1 error={:?}", e2);
+                            warn!("LoadTestEither::parse v2 error={:?}", e);
+                            Err((e2, e))
+                        },
                     }
                 }
             }

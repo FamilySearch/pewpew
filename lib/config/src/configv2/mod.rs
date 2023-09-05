@@ -166,7 +166,9 @@ impl LoadTest<True, True> {
         file_path: Arc<Path>,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, LoadTestGenError> {
+        // TODO: Why isn't this causing errors on empty
         let mut pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
+        log::debug!("from_yaml pre_envs: {:?}", pre_envs);
         // init lib js
         scripting::set_source(std::mem::take(&mut pre_envs.lib_src))?;
 

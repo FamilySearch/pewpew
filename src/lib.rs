@@ -897,7 +897,8 @@ fn create_try_run_future(
     };
     let select = if matches!(try_config.format, TryRunFormat::Human) {
         Query::simple(
-            format!(r#"`\
+            format!(
+                r#"`\
 Request\n\
 ========================================\n\
 ${{request['start-line']}}\n\
@@ -909,8 +910,7 @@ Response (RTT: ${{stats.rtt}}ms)\n\
 ${{response['start-line']}}\n\
 ${{join(response.headers_all, '\n', ': ')}}\n\
 {}\n`"#,
-            request_body_template,
-            response_body_template
+                request_body_template, response_body_template
             ),
             vec![],
             None,

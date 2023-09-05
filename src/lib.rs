@@ -478,7 +478,7 @@ async fn _create_run(
         &env_vars,
     )
     .map_err(Box::new)?;
-    debug!("config::LoadTest::from_config finished");
+    debug!("config::LoadTest::from_config finished: {:?}", config);
     let test_runner = match exec_config {
         ExecConfig::Try(t) => {
             create_try_run_future(config, t, test_ended_tx.clone(), stdout, stderr).map(Either::A)
@@ -884,32 +884,33 @@ fn create_try_run_future(
     let request_body_template = if try_config.skip_body_on {
         ""
     } else if matches!(try_config.format, TryRunFormat::Human) {
-        "\n${if(request.body != '', '${request.body}', '')}\n\n"
+        "${request.body != '' ? request.body : ''}\n"
     } else {
-        r#""body": "request.body""#
+        r#","body": "request.body""#
     };
     let response_body_template = if try_config.skip_body_on {
         ""
     } else if matches!(try_config.format, TryRunFormat::Human) {
-        "\n${if(response.body != '', '${response.body}', '')}\n\n"
+        "${response.body != '' ? JSON.stringify(response.body) : ''}\n"
     } else {
-        r#""body": "response.body""#
+        r#","body": "response.body""#
     };
     let select = if matches!(try_config.format, TryRunFormat::Human) {
         Query::simple(
-            format!(
-                r#""`\n\
-                Request\n\
-                ========================================\n\
-                ${{request['start-line']}}\n\
-                ${{join(request.headers_all, '\n', ': ')}}\n\
-                {}
-                Response (RTT: ${{stats.rtt}}ms)\n\
-                ========================================\n\
-                ${{response['start-line']}}\n\
-                ${{join(response.headers_all, '\n', ': ')}}\n\
-                {}`""#,
-                request_body_template, response_body_template
+            format!(r#"`\
+Request\n\
+========================================\n\
+${{request['start-line']}}\n\
+${{join(request['headers_all'], '\n', ': ')}}\n\
+{}\
+
+Response (RTT: ${{stats.rtt}}ms)\n\
+========================================\n\
+${{response['start-line']}}\n\
+${{join(response.headers_all, '\n', ': ')}}\n\
+{}\n`"#,
+            request_body_template,
+            response_body_template
             ),
             vec![],
             None,
@@ -920,12 +921,12 @@ fn create_try_run_future(
                 r#"{{
                     "request": {{
                         "start-line": "request['start-line']",
-                        "headers": "request.headers_all",
+                        "headers": "request.headers_all"
                         {}
                     }},
                     "response": {{
                         "start-line": "response['start-line']",
-                        "headers": "response.headers_all",
+                        "headers": "response.headers_all"
                         {}
                     }},
                     "stats": {{
@@ -937,6 +938,7 @@ fn create_try_run_future(
             .as_str(),
         )
     };
+    debug!("create_try_run_future select: {:?}", select);
     let to = try_config.file.map_or(LogTo::Stdout, |path| {
         LogTo::File(Template::new_literal(path))
     });

@@ -24,11 +24,11 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ### v0.6.0
 Changes:
 - Major changes: Javascript scripting!
+- Updated config-wasm to parse legacy and scripting yaml files
 
 Bugs:
 - Collect returns an array of strings regardless of input type
 - auto-converter removes code templates. Leave in and TODO
-- for_each doesn't let you do templates/js
 - global loggers may not be running in try script
 
 Bug fixes:

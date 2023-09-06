@@ -47,29 +47,72 @@ mod either {
         pub fn parse(
             yaml: &str,
             env_vars: &BTreeMap<String, String>,
+            validate_legacy_only: Option<bool>,
         ) -> Result<Self, (V1Error, V2Error)> {
+            debug!(
+                "LoadTestEither::parse validate_legacy_only={:?}",
+                validate_legacy_only
+            );
             // BUG: If there are no required variables, this passes even if there is bad yaml
-            match v2::LoadTest::from_yaml(yaml, PathBuf::new().into(), env_vars) {
-                Ok(lt) => {
-                    warn!("LoadTestEither::parse OK v2::LoadTest::from_yaml");
-                    debug!("LoadTestEither::parse v2::lt={:?}", lt);
-                    Ok(Self::V2(lt))
-                },
-                Err(e) => {
-                    warn!("LoadTestEither::parse v2 error={:?}", e);
-                    match v1::LoadTest::from_config(yaml.as_bytes(), &PathBuf::new(), env_vars) {
-                        Ok(lt) => {
-                            info!("LoadTestEither::parse OK v1::LoadTest::from_config");
-                            debug!("LoadTestEither::parse v1::lt.endpoints={:?}", lt.endpoints.len());
-                            Ok(Self::V1(lt))
-                        },
-                        Err(e2) => {
-                            warn!("LoadTestEither::parse v1 error={:?}", e2);
-                            warn!("LoadTestEither::parse v2 error={:?}", e);
-                            Err((e2, e))
-                        },
+            // TODO: Add param that forces it to one or the other?
+            match validate_legacy_only {
+                Some(legacy_only) => {
+                    if legacy_only {
+                        match v1::LoadTest::from_config(yaml.as_bytes(), &PathBuf::new(), env_vars)
+                        {
+                            Ok(lt) => {
+                                info!("LoadTestEither::parse OK v1::LoadTest::from_config");
+                                debug!(
+                                    "LoadTestEither::parse v1::lt.endpoints={:?}",
+                                    lt.endpoints.len()
+                                );
+                                Ok(Self::V1(lt))
+                            }
+                            Err(e) => {
+                                warn!("LoadTestEither::parse v1 error={:?}", e);
+                                Err((e, V2Error::OtherErr("V1 Error".to_string())))
+                            }
+                        }
+                    } else {
+                        match v2::LoadTest::from_yaml(yaml, PathBuf::new().into(), env_vars) {
+                            Ok(lt) => {
+                                info!("LoadTestEither::parse OK v2::LoadTest::from_yaml");
+                                debug!("LoadTestEither::parse v2::lt={:?}", lt);
+                                Ok(Self::V2(lt))
+                            }
+                            Err(e) => {
+                                warn!("LoadTestEither::parse v2 error={:?}", e);
+                                Err((V1Error::OtherErr("V2 Error".to_string()), e))
+                            }
+                        }
                     }
                 }
+                None => match v2::LoadTest::from_yaml(yaml, PathBuf::new().into(), env_vars) {
+                    Ok(lt) => {
+                        info!("LoadTestEither::parse OK v2::LoadTest::from_yaml");
+                        debug!("LoadTestEither::parse v2::lt={:?}", lt);
+                        Ok(Self::V2(lt))
+                    }
+                    Err(e) => {
+                        warn!("LoadTestEither::parse v2 error={:?}", e);
+                        match v1::LoadTest::from_config(yaml.as_bytes(), &PathBuf::new(), env_vars)
+                        {
+                            Ok(lt) => {
+                                info!("LoadTestEither::parse OK v1::LoadTest::from_config");
+                                debug!(
+                                    "LoadTestEither::parse v1::lt.endpoints={:?}",
+                                    lt.endpoints.len()
+                                );
+                                Ok(Self::V1(lt))
+                            }
+                            Err(e2) => {
+                                warn!("LoadTestEither::parse v1 error={:?}", e2);
+                                warn!("LoadTestEither::parse v2 error={:?}", e);
+                                Err((e2, e))
+                            }
+                        }
+                    }
+                },
             }
         }
 

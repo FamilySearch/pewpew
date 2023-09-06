@@ -226,6 +226,8 @@ jobs:
           # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
           cp Cargo.toml Cargo2.toml
           sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+          echo "version = $version"
+          echo "Cargo $(grep "^version =" Cargo.toml )"
         working-directory: ${{env.working-directory}}
 
       - uses: actions-rs/toolchain@v1
@@ -306,6 +308,8 @@ jobs:
           # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
           cp Cargo.toml Cargo2.toml
           sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
+          echo "version = $version"
+          echo "Cargo $(grep "^version =" Cargo.toml )"
         working-directory: ${{env.working-directory}}
 
       - uses: actions-rs/toolchain@v1

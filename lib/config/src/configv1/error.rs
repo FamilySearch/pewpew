@@ -60,6 +60,8 @@ pub enum Error {
     UnknownLogger(String, Marker),
     UnrecognizedKey(String, Option<String>, Marker),
     YamlDeserialize(Option<String>, Marker),
+    // Used by the config-wasm when only passing back a V2 error
+    OtherErr(String),
 }
 
 // impl Error {
@@ -160,6 +162,7 @@ impl fmt::Display for Error {
             UnrecognizedKey(k, None, m) => write!(f, "unrecognized key `{}` at line {} column {}", k, m.line(), m.col()),
             YamlDeserialize(Some(name), m) => write!(f, "unexpected value for `{}` at line {} column {}", name, m.line(), m.col()),
             YamlDeserialize(None, m) => write!(f, "unexpected value for field at line {} column {}", m.line(), m.col()),
+            OtherErr(s) => write!(f, "Error {}", s),
         }
     }
 }

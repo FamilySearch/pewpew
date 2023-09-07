@@ -48,7 +48,7 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
     pub loggers: BTreeMap<Arc<str>, Logger<VD>>,
     #[serde(default = "BTreeMap::new")]
     pub providers: BTreeMap<ProviderName, ProviderType<VD>>,
-    #[serde(default = "Vec::new")]
+    #[serde()] // Don't have a default here
     pub endpoints: Vec<Endpoint<VD>>,
     /// Tracks errors that would prevent a full Load Test
     #[serde(skip)]
@@ -166,7 +166,10 @@ impl LoadTest<True, True> {
         file_path: Arc<Path>,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, LoadTestGenError> {
+        use LoadTestGenError::NoEndpoints;
+        // TODO: Why isn't this causing errors on empty
         let mut pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
+        log::debug!("from_yaml pre_envs: {:?}", pre_envs);
         // init lib js
         scripting::set_source(std::mem::take(&mut pre_envs.lib_src))?;
 
@@ -191,6 +194,10 @@ impl LoadTest<True, True> {
         let lp = &lt.load_pattern;
         let ep = &mut lt.endpoints;
         let headers = &lt.config.client.headers;
+        // Check for no endpoints
+        if ep.is_empty() {
+            return Err(NoEndpoints());
+        }
         ep.iter_mut().enumerate().for_each(|(id, endpoint)| {
             endpoint.insert_load_pattern(lp.as_ref());
             endpoint.insert_special_tags(id);
@@ -464,13 +471,55 @@ mod tests {
     }
 
     #[test]
-    fn basic() {
+    fn empty() {
+        let input = r#"
+        "#;
+        let err = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LoadTestGenError::YamlParse(_)));
+        assert!(format!("{:?}", err).contains("missing field `endpoints`"));
+    }
+
+    #[test]
+    fn basic_no_endpoints() {
+        let input = r#"
+        config:
+          client: {}
+          general: {}
+        providers: {}
+        loggers: {}
+        vars: {}
+        "#;
+        let err = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LoadTestGenError::YamlParse(_)));
+        assert!(format!("{:?}", err).contains("missing field `endpoints`"));
         let input = r#"
         config:
           client: {}
           general: {}
         providers: {}
         endpoints: []
+        loggers: {}
+        vars: {}
+        "#;
+        let err = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LoadTestGenError::NoEndpoints()));
+    }
+
+    #[test]
+    fn basic() {
+        let input = r#"
+        config:
+          client: {}
+          general: {}
+        providers: {}
+        load_pattern:
+          - !linear
+              to: 50%
+              over: 1m
+        endpoints:
+          - method: GET
+            url: localhost:8000
+            peak_load: 4hps
         loggers: {}
         vars: {}
         "#;
@@ -602,7 +651,10 @@ mod tests {
     fn get_test_duration() {
         use std::time::Duration;
         let input = r#"
-        endpoints: []
+        endpoints:
+          - method: GET
+            url: localhost:8000
+            peak_load: 4hps
         loggers: {}
         vars: {}
         load_pattern: []
@@ -610,7 +662,10 @@ mod tests {
         let lt = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap();
         assert_eq!(lt.get_duration(), Duration::default());
         let input = r#"
-        endpoints: []
+        endpoints:
+          - method: GET
+            url: localhost:8000
+            peak_load: 4hps
         loggers: {}
         vars: {}
         load_pattern:
@@ -620,7 +675,7 @@ mod tests {
               over: 12h
         "#;
         let lt = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap();
-        assert_eq!(lt.get_duration(), Duration::default());
+        assert_eq!(lt.get_duration(), Duration::from_secs(12 * 60 * 60));
         let input = r#"
         endpoints:
           - url: localhost:8080
@@ -668,6 +723,10 @@ mod tests {
           - !linear
             to: '${x:inline2(${v:from_custom})}%'
             over: 1s
+        endpoints:
+          - method: GET
+            url: localhost:8000
+            peak_load: 4hps
         "#;
         let lt = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap();
         let lp0 = lt.load_pattern.unwrap().into_iter().next().unwrap();
@@ -683,6 +742,10 @@ mod tests {
           - !linear
             to: '${x:foo_custom(${v:foo})}%'
             over: 1s
+        endpoints:
+          - method: GET
+            url: localhost:8000
+            peak_load: 4hps
         "#;
         let lt = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap();
         let lp0 = lt.load_pattern.unwrap().into_iter().next().unwrap();

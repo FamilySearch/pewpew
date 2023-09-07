@@ -54,11 +54,16 @@ impl Config {
         bytes: &[u8],
         env_vars: Map,
         log_level: Option<String>,
+        validate_legacy_only: Option<bool>,
     ) -> Result<Config, JsValue> {
         init_logging(log_level);
         let env_vars = serde_wasm_bindgen::from_value(env_vars.into())?;
-        let load_test = LoadTestEither::parse(std::str::from_utf8(bytes).expect("TODO"), &env_vars)
-            .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
+        let load_test = LoadTestEither::parse(
+            std::str::from_utf8(bytes).expect("TODO"),
+            &env_vars,
+            validate_legacy_only,
+        )
+        .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
         Ok(Config(load_test))
     }
 

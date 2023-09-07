@@ -12,6 +12,11 @@ pub enum LoadTestGenError {
     VarsError(#[from] VarsError),
     #[error("error loading external js: {0}")]
     LibLoad(#[from] Arc<io::Error>),
+    #[error("endpoints are required")]
+    NoEndpoints(),
+    // Used by the config-wasm when only passing back a V1 error
+    #[error("error {0}")]
+    OtherErr(String),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

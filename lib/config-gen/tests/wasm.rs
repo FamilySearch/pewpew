@@ -90,9 +90,63 @@ loggers:
 
 #[wasm_bindgen_test]
 fn other_test() {
-    let json_str = "{\"vars\":{\"rampTime\":\"${e:RAMP_TIME}\",\"loadTime\":\"${e:LOAD_TIME}\",\"peakLoad\":\"${e:PEAK_LOAD}\",\"sessionId\":\"${e:SESSIONID}\"},\"config\":{\"client\":{\"headers\":{\"User-Agent\":\"Pewpew Performance Load Test\"}},\"general\":{\"bucket_size\":\"1m\",\"log_provider_stats\":true}},\"load_pattern\":[{\"linear\":{\"from\":\"10%\",\"to\":\"100%\",\"over\":\"15m\"}},{\"linear\":{\"from\":\"100%\",\"to\":\"100%\",\"over\":\"15m\"}}],\"loggers\":{\"httpErrors\":{\"query\":{\"select\":{\"timestamp\":\"epoch(\\\"ms\\\")\",\"rtt\":\"stats.rtt\",\"request\":\"request[\\\"start-line\\\"]\",\"requestHeaders\":\"request.headers\",\"requestBody\":\"request.body\",\"response\":\"response[\\\"start-line\\\"]\",\"status\":\"response.status\",\"responseHeaders\":\"response.headers\"},\"where\":\"response.status >= 400\"},\"to\":\"stderr\",\"limit\":200},\"testEnd\":{\"query\":{\"select\":{\"timestamp\":\"epoch(\\\"ms\\\")\",\"status\":\"response.status\",\"request\":\"request[\\\"start-line\\\"]\",\"response\":\"response[\\\"start-line\\\"]\"},\"where\":\"response.status >= 500\"},\"to\":\"stderr\",\"limit\":50,\"kill\":true}}}";
-    let _lt: LoadTest = serde_json::from_str(json_str).unwrap();
-    let yaml = load_test_yaml_from_js(json_str, None)
+    let json = json!({
+    "vars":{
+        "rampTime":"${e:RAMP_TIME}",
+        "loadTime":"${e:LOAD_TIME}",
+        "peakLoad":"${e:PEAK_LOAD}",
+        "sessionId":"${e:SESSIONID}"},
+        "config":{
+            "client":{"headers":{"User-Agent":"Pewpew Performance Load Test"}},
+            "general":{"bucket_size":"1m","log_provider_stats":true}
+        },
+        "load_pattern":[
+            {"linear":{"from":"10%","to":"100%","over":"15m"}},
+            {"linear":{"from":"100%","to":"100%","over":"15m"}}
+        ],
+        "endpoints": [
+            {
+              "url": "localhost",
+              "peak_load": "1.1hps"
+            }
+        ],
+        "loggers":{
+            "httpErrors":{
+                "query":{
+                    "select":{
+                        "timestamp":"epoch(\"ms\")",
+                        "rtt":"stats.rtt","request":
+                        "request[\"start-line\"]",
+                        "requestHeaders":"request.headers",
+                        "requestBody":"request.body",
+                        "response":"response[\"start-line\"]",
+                        "status":"response.status",
+                        "responseHeaders":"response.headers"
+                    },
+                    "where":"response.status >= 400"
+                },
+                "to":"stderr",
+                "limit":200
+            },
+            "testEnd":{
+                "query":{
+                    "select":{
+                        "timestamp":"epoch(\"ms\")",
+                        "status":"response.status",
+                        "request":"request[\"start-line\"]",
+                        "response":"response[\"start-line\"]"
+                    },
+                    "where":"response.status >= 500"
+                },
+                "to":"stderr",
+                "limit":50,
+                "kill":true
+            }
+        }
+    });
+    let json_str = serde_json::to_string(&json).unwrap();
+    let _lt: LoadTest = serde_json::from_str(&json_str).unwrap();
+    let yaml = load_test_yaml_from_js(&json_str, None)
         .map_err(JsValue::from)
         .unwrap();
 

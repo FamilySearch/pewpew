@@ -15,7 +15,7 @@
     "testonly": "nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
     "integration": "npm run build && nyc mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
     "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
-    "prepare": "npm run buildonly && husky install",
+    "prepare": "npm run buildonly",
     "publish": "npmPublish",
     "lint": "eslint --fix . --ext .ts",
     "linterror": "eslint . --ext .ts --max-warnings 0",

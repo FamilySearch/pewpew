@@ -1,0 +1,26 @@
+vars:
+  rampTime: 1m
+  loadTime: 1m
+  totalTime: 2m
+  serviceUrlAgent: ${SERVICE_URL_AGENT}
+load_pattern:
+  - linear:
+      from: 1%
+      to: 100%
+      over: ${rampTime}
+config:
+  client:
+    # request_timeout: { secs: 10, nanos: 0 }
+    # request_timeout: 10s
+    headers:
+      TestTime: '${epoch("ms")}'
+      Accept: application/json
+      FS-User-Agent-Chain: PPAAS-Agent-Performance Test
+      User-Agent: FS-QA-SystemTest PPAAS Agent Performance Test
+  general:
+    bucket_size: 1m
+    log_provider_stats: 1m
+endpoints:
+  - method: GET
+    url: http://${serviceUrlAgent}/healthcheck
+    peak_load: 30hpm

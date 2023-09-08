@@ -1,0 +1,55 @@
+{
+  "name": "ppaas-agent",
+  "version": "3.0.0",
+  "description": "Agent Service for running pewpew tests",
+  "main": "dist/src/app.js",
+  "scripts": {
+    "fix:start": "rimraf \"node_modules/ppaas-common/node_modules/config-wasm/\"",
+    "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
+    "build": "npm run lint && npm run buildonly",
+    "buildonly": "tsc",
+    "lint": "eslint --fix . --ext .ts",
+    "linterror": "eslint . --ext .ts --max-warnings 0",
+    "test": "npm run linterror && npm run buildonly && nyc mocha ./dist/test -r dotenv-flow/config",
+    "testonly": "nyc mocha ./dist/test -r dotenv-flow/config",
+    "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
+    "coverage": "npm run build && nyc mocha ./dist/test ./dist/createtest --timeout 500000 -r dotenv-flow/config",
+    "createtest": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "clean": "rimraf dist/"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "nyc": {
+    "exclude": "**/*.spec.ts"
+  },
+  "dependencies": {
+    "@fs/config-wasm": "file:../lib/config-wasm/pkg",
+    "@fs/ppaas-common": "file:../common",
+    "bunyan": "^1.8.15",
+    "expiry-map": "^2.0.0",
+    "express": "^4.18.2",
+    "zlib": "^1.0.5"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.363.0",
+    "@aws-sdk/client-sqs": "^3.363.0",
+    "@aws-sdk/util-stream-node": "^3.363.0",
+    "@types/bunyan": "^1.8.8",
+    "@types/chai": "^4.3.5",
+    "@types/express": "^4.17.17",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.1.3",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "axios": "~1.5.0",
+    "chai": "^4.3.7",
+    "dotenv-flow": "^3.2.0",
+    "eslint": "^8.40.0",
+    "husky": "^8.0.3",
+    "mocha": "^10.2.0",
+    "nyc": "^15.1.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.2.0"
+  }
+}

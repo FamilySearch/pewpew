@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "outDir": "build/lib",
+    "module": "commonjs",
+    "target": "es2022",
+    "lib": ["es5", "es6", "es7", "es2017", "es2018","dom"],
+    "sourceMap": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react"
+  },
+  "include": [
+    "../types/**/*.ts",
+    "../components/**/*.ts",
+    "../components/**/*.tsx"
+  ]
+}

@@ -290,20 +290,16 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       if (urls[hostUrl] !== undefined) {
         urls[hostUrl]!.index.push({ iter: i, id });
       } else {
-				if (hostUrl.endsWith(".familysearch.org")) {
-					urls[hostUrl] = { index: [{ iter: i, id }], selected: "yes"};
-				} else {
-					urls[hostUrl] = { index: [{ iter: i, id }], selected: "no" };
-				}
+        urls[hostUrl] = { index: [{ iter: i, id }], selected: "no" };
       }
-			endpoints.push({ selected: hostUrl.endsWith(".familysearch.org") ? "yes" : "no" , url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
+			endpoints.push({ selected: "yes", url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
     }
 
     const typesTemp = types;
     const typeKeys = Object.keys(typesTemp);
     const indices: ParsedEndpoint[] = [...endpoints];
 
-    // Updates the host endpoints with the correct values for their default with only FamilySearch.org endpoints selected
+    // Updates the host endpoints with the correct values for their default
     for (const key of typeKeys ) {
     let typeCheck = 0;
     const type = types[key]!;
@@ -458,7 +454,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           <div>
             <Span>
               <h2>Urls</h2>&nbsp;&nbsp;&nbsp;
-              {/* <p>FamilySearch.org endpoints are preselected by default since those are the urls we most often load test. See all endpoint options below.</p> */}
             </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
               {state.output[name]?.urls && Object.keys(state.output[name]!.urls).map((key, index) => {

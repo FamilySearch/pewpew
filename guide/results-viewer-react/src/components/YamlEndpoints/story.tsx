@@ -45,7 +45,7 @@ const propsLoaded: EndpointsProps = {
   defaultYaml: true,
   authenticated: true,
   urls: [
-    { id: "0", url: "https://www.familysearch.org/", headers: [...getDefaultHeaders(true), { id: "0", name: "header 0", value: "value 0" }], method: "", hitRate: "5hps", authorization: null },
+    { id: "0", url: "https://www.pewpew.org/", headers: [...getDefaultHeaders(true), { id: "0", name: "header 0", value: "value 0" }], method: "", hitRate: "5hps", authorization: null },
     { id: "1", url: "badUrl", headers: [], method: "", hitRate: "10hps", authorization: null }
   ]
 };

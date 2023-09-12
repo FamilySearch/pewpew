@@ -1,0 +1,85 @@
+{
+  "name": "@fs/monorepo",
+  "version": "3.0.0",
+  "description": "Service for running pewpew tests",
+  "private": true,
+  "workspaces": [
+    "./lib/config-wasm/pkg",
+    "./common",
+    "./agent",
+    "./controller"
+  ],
+  "scripts": {
+    "start": "cd controller && next start -p 8081",
+    "dev": "cd controller && next dev",
+    "build": "npm run lint && npm run build:common && npm run build:agent && npm run build:controller",
+    "storybook": "cd controller && storybook dev -s ../public -p 5002",
+    "build-storybook": "cd controller && storybook build -s ../public",
+    "lint": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js --fix . --ext .ts,.tsx",
+    "linterror": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js . --ext .ts,.tsx --max-warnings 0",
+    "fix:install": "rimraf \"node_modules/@types/react-native/\"",
+    "build:common": "cd common && npm run build",
+    "build:agent": "cd agent && npm run build",
+    "build:controller": "cd controller && npm run build",
+    "build:react": "cd controller && npm run build:react",
+    "build:test": "cd controller && npm run build:test",
+    "test": "npm run linterror && npm run test:common && npm run test:agent && npm run test:controller",
+    "test:common": "cd common && npm run test",
+    "test:agent": "cd agent && npm run test",
+    "test:controller": "cd controller && npm run test",
+    "acceptance": "npm run acceptance:agent && npm run acceptance:controller",
+    "acceptance:agent": "cd agent && npm run acceptance",
+    "acceptance:controller": "cd agent && npm run acceptance",
+    "integration": "npm run lint && npm run integration:common && npm run integration:agent && npm run integration:controller",
+    "integration:common": "cd common && npm run integration",
+    "integration:agent": "cd agent && npm run integration",
+    "integration:controller": "cd controller && npm run integration",
+    "coverage": "npm run lint && npm run coverage:common && npm run coverage:agent && npm run coverage:controller",
+    "coverage:common": "cd common && npm run integration",
+    "coverage:agent": "cd agent && npm run integration",
+    "coverage:controller": "cd controller && npm run integration",
+    "testcleanup": "cd controller && npm run testcleanup",
+    "prepare": "husky install",
+    "cleannpm": "rimraf node_modules/ package-lock.json controller/node_modules/ agent/node_modules/ common/node_modules/",
+    "clean": "rimraf common/dist/ agent/dist/ controller/dist/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FamilySearch/pewpew.git"
+  },
+  "author": "trevorm@churchofjesuschrist.org",
+  "bugs": {
+    "url": "https://github.com/FamilySearch/pewpew/issues"
+  },
+  "homepage": "https://github.com/FamilySearch/pewpew#readme",
+  "engines": {
+    "node": "18"
+  },
+  "nyc": {
+    "exclude": "**/*.spec.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.363.0",
+    "@aws-sdk/client-s3": "^3.363.0",
+    "@aws-sdk/client-sqs": "^3.363.0",
+    "@aws-sdk/lib-storage": "^3.363.0",
+    "bunyan": "~1.8.0",
+    "dotenv": "^16.0.0",
+    "dotenv-flow": "^3.2.0",
+    "rimraf": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/bunyan": "~1.8.8",
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "chai": "^4.3.7",
+    "eslint": "^8.40.0",
+    "husky": "^8.0.0",
+    "mocha": "^10.2.0",
+    "nyc": "^15.1.0",
+    "typescript": "~5.2.0"
+  }
+}

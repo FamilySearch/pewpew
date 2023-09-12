@@ -42,7 +42,7 @@ const propsLoaded: UrlProps = {
   ...props,
   data: {
     id: "loaded",
-    url: "https://www.familysearch.org",
+    url: "https://www.pewpew.org",
     hitRate: "1hpm",
     headers: [
       {id: "0", name : "Default Header", value: "Here is where default headers are. These next 3 are the only default. Authorization header only shows up when Authenticated button is selected"},

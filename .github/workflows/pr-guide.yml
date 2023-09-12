@@ -1,14 +1,14 @@
 on:
   pull_request:
     paths:
-      - '**.js*'
-      - '**.ts*'
-      - '**.html'
+      - 'guide/**.js*'
+      - 'guide/**.ts*'
+      - 'guide/**.html'
       - 'guide/src/**/*.md'
-      - '**/package.json'
-      - '**/package-lock.json'
+      - 'guide/**/package.json'
+      - 'guide/**/package-lock.json'
 
-name: Pull Request Javascript
+name: Pull Request Guide
 jobs:
   create-release:
     name: Build guide

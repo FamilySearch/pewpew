@@ -1,0 +1,73 @@
+on:
+  pull_request:
+    paths:
+      - 'common/**.js*'
+      - 'common/**.ts*'
+      - 'common/**/package.json'
+      - 'common/**/package-lock.json'
+      - 'agent/**.js*'
+      - 'agent/**.ts*'
+      - 'agent/**/package.json'
+      - 'agent/**/package-lock.json'
+      - 'controller/**.html'
+      - 'controller/**.js*'
+      - 'controller/**.ts*'
+      - 'controller/**/package.json'
+      - 'controller/**/package-lock.json'
+
+name: Pull Request PPaaS
+jobs:
+  test-release:
+    name: Build project
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+      fail-fast: false
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Add Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: wasm32-unknown-unknown
+          toolchain: stable
+          override: true
+      - name: Add Node.js toolchain ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build Webassemblies ${{ matrix.node-version }}
+        run: |
+          set -x
+          # install mdbook and wasm-pack
+          mkdir ~/bin
+          PATH=$PATH:~/bin
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
+
+          # setup some envs to various paths for convenience
+          PROJECT_ROOT=$PWD
+          CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
+          CONFIG_WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/config-wasm)
+          HDR_WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
+          HDR_WASM_OUTPUT_REACT_DIR=$CONTROLLER_DIR/lib/hdr-histogram-wasm
+
+          # build the hdr-histogram-wasm for the results viewer
+          cd $HDR_WASM_LIB_DIR
+          wasm-pack build --release -t bundler -d $HDR_WASM_OUTPUT_REACT_DIR --scope fs
+
+          # build the config-wasm for the yaml parser
+          cd $CONFIG_WASM_LIB_DIR
+          wasm-pack build --release -t nodejs --scope fs
+
+      - name: Install NPM Dependencies
+        run: npm ci
+      - name: Run Lint
+        run: npm run linterror
+      # - name: Build Controller
+      #   run: npm run build:react
+      - name: Run Tests
+        run: NODE_ENV=test npm test

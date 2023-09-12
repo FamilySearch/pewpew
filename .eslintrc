@@ -2,7 +2,12 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "project": ["./tsconfig.json", "./tsconfig.test.json"]
+    "project": [
+      "./common/tsconfig.json",
+      "./agent/tsconfig.json",
+      "./controller/tsconfig.json",
+      "./controller/tsconfig.test.json"
+    ]
   },
   "plugins": [
     "@typescript-eslint"
@@ -10,10 +15,17 @@
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/stylistic",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:@next/next/recommended"
+    "plugin:@typescript-eslint/recommended"
   ],
-  "ignorePatterns": ["next-env.d.ts", "next.config.js", "setup.js", "lib/hdr-histogram-wasm"],
+  "ignorePatterns": [
+    "guide",
+    "lib",
+    "dist",
+    "next-env.d.ts",
+    "next.config.js",
+    "setup.js",
+    "controller/lib/hdr-histogram-wasm"
+  ],
   "rules": {
     "@typescript-eslint/no-explicit-any": 0,
     "@typescript-eslint/no-non-null-assertion": 0,

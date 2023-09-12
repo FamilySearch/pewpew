@@ -7,5 +7,7 @@
 /*.txt
 /*.dump
 /*.log
-/*.json
+/stats-*.json
+/test-*.json
+/integration.json
 node_modules

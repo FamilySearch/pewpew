@@ -8,6 +8,11 @@ if (process.env.BASE_PATH && !process.env.BASE_PATH.startsWith("/")) {
 }
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
   swcMinify: true,
   // Base path doesn't work because it changes the path on the local server. We actually are running via a proxy base path
   // https://nextjs.org/docs/api-reference/next.config.js/basepath

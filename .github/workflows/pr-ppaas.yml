@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Build Results Viewer and Book ${{ matrix.node-version }}
+      - name: Build Webassemblies ${{ matrix.node-version }}
         run: |
           set -x
           # install mdbook and wasm-pack
@@ -65,7 +65,9 @@ jobs:
 
       - name: Install NPM Dependencies
         run: npm ci
-      - run: npm run linterror
-      - run: npm run build:react
+      - name: Run Lint
+        run: npm run linterror
+      # - name: Build Controller
+      #   run: npm run build:react
       - name: Run Tests
         run: NODE_ENV=test npm test

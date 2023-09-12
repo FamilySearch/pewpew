@@ -33,6 +33,7 @@ async function fetch (
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
+const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew_scripting.zip");
 
 // Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
@@ -170,6 +171,53 @@ describe("PewPew API Integration", () => {
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.include("as latest");
         const version = latestPewPewVersion;
+        // If this runs before the other acceptance tests populate the shared pewpew versions
+        if (!sharedPewPewVersions) {
+          sharedPewPewVersions = [version];
+        } else if (!sharedPewPewVersions.includes(version)) {
+          sharedPewPewVersions.push(version);
+        }
+        log("sharedPewPewVersions: " + sharedPewPewVersions, LogLevel.DEBUG);
+        done();
+      }).catch((error) => {
+        log("POST /pewpew error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("POST /pewpew scripting should respond 200 OK", (done: Mocha.Done) => {
+      const filename: string = path.basename(PEWPEW_SCRIPTING_FILEPATH);
+      const formData: FormDataPewPew = {
+        additionalFiles: {
+          value: createReadStream(PEWPEW_SCRIPTING_FILEPATH),
+          options: { filename }
+        }
+      };
+      const form = convertFormDataPewPewToFormData(formData);
+      const headers = form.getHeaders();
+      log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+      fetch(url, {
+        method: "POST",
+        data: form,
+        headers
+      }).then((res: Response) => {
+        log("POST /pewpew res", LogLevel.DEBUG, res);
+        expect(res.status).to.equal(200);
+        expect(res.data).to.not.equal(undefined);
+        expect(res.data.message).to.not.equal(undefined);
+        expect(typeof res.data.message).to.equal("string");
+        const body: TestManagerError = res.data;
+        log("body: " + body, LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("PewPew uploaded, version");
+        expect(body.message).to.not.include("as latest");
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+        expect(match, "pewpew match").to.not.equal(null);
+        expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
+        const version: string = match![1];
+        expect(semver.valid(version), `semver.valid(${version})`).to.not.equal(null);
         // If this runs before the other acceptance tests populate the shared pewpew versions
         if (!sharedPewPewVersions) {
           sharedPewPewVersions = [version];

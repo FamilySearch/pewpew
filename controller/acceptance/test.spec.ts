@@ -44,6 +44,10 @@ const BASIC_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "basicwithenv.yaml")
 const BASIC_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "basicwithfiles.yaml");
 const BASIC_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "basicnopeakload.yaml");
 const BASIC_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "basicheadersall.yaml");
+export const SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting.yaml");
+const SCRIPTING_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "scriptingwithenv.yaml");
+const SCRIPTING_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "scriptingwithfiles.yaml");
+const SCRIPTING_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "scriptingheadersall.yaml");
 const NOT_YAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "text.txt");
 const NOT_YAML_FILEPATH2 = path.join(UNIT_TEST_FOLDER, "text2.txt");
 const ZIP_TEST_DIR_PATH: string = path.join(UNIT_TEST_FOLDER, "testdir.zip");
@@ -237,6 +241,7 @@ describe("Test API Integration", () => {
   let url: string;
   let queueName: string = "unittests";
   let numberedVersion: string;
+  let scriptingVersion: string;
 
   before(async () => {
     url = integrationUrl + API_TEST;
@@ -249,15 +254,25 @@ describe("Test API Integration", () => {
     log("queueName", LogLevel.DEBUG, { queueName });
     expect(sharedPewPewVersions, "sharedPewPewVersions").to.not.equal(undefined);
     expect(sharedPewPewVersions!.length, "sharedPewPewVersions.length").to.be.greaterThan(0);
-    numberedVersion = sharedPewPewVersions!.find((pewpewVersion: string) => pewpewVersion !== latestPewPewVersion) || "";
+    const scriptingRegex = /^0\.6\./;
+    numberedVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
+      pewpewVersion !== latestPewPewVersion && !scriptingRegex.test(pewpewVersion)) || "";
     expect(numberedVersion).to.not.equal(undefined);
     expect(numberedVersion).to.not.equal("");
+    expect(scriptingRegex.test(numberedVersion), `${scriptingRegex}.test("${numberedVersion}")`).to.equal(false);
     log("numberedVersion", LogLevel.DEBUG, { numberedVersion });
+    scriptingVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
+      scriptingRegex.test(pewpewVersion)) || "";
+    expect(scriptingVersion).to.not.equal(undefined);
+    expect(scriptingVersion).to.not.equal("");
+    expect(scriptingRegex.test(scriptingVersion), `${scriptingRegex}.test("${scriptingVersion}")`).to.equal(true);
+    log("scriptingVersion", LogLevel.DEBUG, { scriptingVersion });
   });
 
   describe("POST /test", () => {
     before(() => getQueueNames());
 
+    describe("legacy tests", () => {
     it("POST /test should respond 200 OK", (done: Mocha.Done) => {
       const filename: string = path.basename(basicFilepath);
       const formData: FormDataPost = {
@@ -403,6 +418,37 @@ describe("Test API Integration", () => {
         done(error);
       });
     });
+
+    // it("POST /test with version scripting should respond 400 Bad Request", (done: Mocha.Done) => {
+    //   const filename: string = path.basename(basicFilepath);
+    //   const formData: FormDataPost = {
+    //     yamlFile: {
+    //       value: createReadStream(basicFilepath),
+    //       options: { filename }
+    //     },
+    //     version: scriptingVersion,
+    //     queueName
+    //   };
+    //   const data = convertFormDataPostToFormData(formData);
+    //   const headers = data.getHeaders();
+    //   log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+    //   fetch(url, {
+    //     method: "POST",
+    //     data,
+    //     headers
+    //   }).then((res: Response) => {
+    //     log("POST /test res", LogLevel.DEBUG, res);
+    //     const bodyText = JSON.stringify(res.data);
+    //       expect(res.status, bodyText).to.equal(400);
+    //       log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+    //       expect(bodyText).to.not.equal(undefined);
+    //       expect(bodyText).to.include("invalid version");
+    //       done();
+    //   }).catch((error) => {
+    //     log("POST /test error", LogLevel.ERROR, error);
+    //     done(error);
+    //   });
+    // });
 
     it("POST /test with extra options should respond 200 OK", (done: Mocha.Done) => {
       const filename: string = path.basename(basicFilepath);
@@ -1522,6 +1568,310 @@ describe("Test API Integration", () => {
       }).catch((error) => {
         log("POST /test error", LogLevel.ERROR, error);
         done(error);
+      });
+    });
+    });
+
+    describe("scripting tests", () => {
+      const scriptingFilepath: string = SCRIPTING_FILEPATH;
+      const scriptingFilepathWithEnv: string = SCRIPTING_FILEPATH_WITH_ENV;
+
+      it("POST /test with version numbered should respond 200 OK", (done: Mocha.Done) => {
+        const filename: string = path.basename(scriptingFilepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(scriptingFilepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(200);
+            const body: TestData = JSON.parse(bodyText);
+            log("body: " + bodyText, LogLevel.DEBUG, body);
+            expect(body).to.not.equal(undefined);
+            expect(body.testId).to.not.equal(undefined);
+            expect(body.s3Folder).to.not.equal(undefined);
+            expect(body.status).to.equal(TestStatus.Created);
+            // We can't use this for shared since it has version different
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      // it("POST /test with version non-scripting should respond 400 Bad Request", (done: Mocha.Done) => {
+      //   const filename: string = path.basename(scriptingFilepath);
+      //   const formData: FormDataPost = {
+      //     yamlFile: {
+      //       value: createReadStream(scriptingFilepath),
+      //       options: { filename }
+      //     },
+      //     version: numberedVersion,
+      //     queueName
+      //   };
+      //   const data = convertFormDataPostToFormData(formData);
+      //   const headers = data.getHeaders();
+      //   log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+      //   fetch(url, {
+      //     method: "POST",
+      //     data,
+      //     headers
+      //   }).then((res: Response) => {
+      //     log("POST /test res", LogLevel.DEBUG, res);
+      //     const bodyText = JSON.stringify(res.data);
+      //       expect(res.status, bodyText).to.equal(400);
+      //       log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+      //       expect(bodyText).to.not.equal(undefined);
+      //       expect(bodyText).to.include("invalid version");
+      //       done();
+      //   }).catch((error) => {
+      //     log("POST /test error", LogLevel.ERROR, error);
+      //     done(error);
+      //   });
+      // });
+
+      it("POST /test with extra options should respond 200 OK", (done: Mocha.Done) => {
+        const filename: string = path.basename(scriptingFilepath);
+        const environmentVariables: EnvironmentVariablesFile = {
+          ...defaultEnvironmentVariables,
+          NOT_NEEDED: { value: "true", hidden: false },
+          ALSO_NOT_NEEDED: { value: "false", hidden: true }
+        };
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(scriptingFilepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName,
+          restartOnFailure: "true",
+          environmentVariables: JSON.stringify(environmentVariables),
+          additionalFiles: [{
+            value: createReadStream(NOT_YAML_FILEPATH),
+            options: { filename: path.basename(NOT_YAML_FILEPATH) }
+          }]
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(200);
+            const body = JSON.parse(bodyText);
+            log("body: " + bodyText, LogLevel.DEBUG, body);
+            expect(body).to.not.equal(undefined);
+            expect(body.testId).to.not.equal(undefined);
+            expect(body.s3Folder).to.not.equal(undefined);
+            expect(body.status).to.equal(TestStatus.Created);
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test missing vars should respond 400 Bad Request", (done: Mocha.Done) => {
+        const filepath: string = scriptingFilepathWithEnv;
+        const filename: string = path.basename(filepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(filepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(400);
+            log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+            expect(bodyText).to.not.equal(undefined);
+            expect(bodyText).to.include("SERVICE_URL_AGENT");
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test missing files should respond 400 Bad Request", (done: Mocha.Done) => {
+        const filepath: string = SCRIPTING_FILEPATH_WITH_FILES;
+        const filename: string = path.basename(filepath);
+        const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
+        const extrafilename2: string = path.basename(NOT_YAML_FILEPATH2);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(filepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName,
+          additionalFiles: [{
+            value: createReadStream(NOT_YAML_FILEPATH),
+            options: { filename: extrafilename }
+          }]
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(400);
+            log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+            expect(bodyText).to.not.equal(undefined);
+            expect(bodyText).to.include(extrafilename2);
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test with vars should respond 200 OK", (done: Mocha.Done) => {
+        const filepath: string = scriptingFilepathWithEnv;
+        const filename: string = path.basename(filepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(filepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName,
+          environmentVariables: JSON.stringify(defaultEnvironmentVariables)
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(200);
+            const body = JSON.parse(bodyText);
+            log("body: " + bodyText, LogLevel.DEBUG, body);
+            expect(body).to.not.equal(undefined);
+            expect(body.testId).to.not.equal(undefined);
+            expect(body.s3Folder).to.not.equal(undefined);
+            expect(body.status).to.equal(TestStatus.Created);
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test with files should respond 200 OK", (done: Mocha.Done) => {
+        const filepath: string = SCRIPTING_FILEPATH_WITH_FILES;
+        const filename: string = path.basename(filepath);
+        const extrafilepath: string = NOT_YAML_FILEPATH;
+        const extrafilename: string = path.basename(extrafilepath);
+        const extrafilepath2: string = NOT_YAML_FILEPATH2;
+        const extrafilename2: string = path.basename(extrafilepath2);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(filepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName,
+          additionalFiles: [{
+            value: createReadStream(extrafilepath),
+            options: { filename: extrafilename }
+          },{
+            value: createReadStream(extrafilepath2),
+            options: { filename: extrafilename2 }
+          }]
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(200);
+            const body = JSON.parse(bodyText);
+            log("body: " + bodyText, LogLevel.DEBUG, body);
+            expect(body).to.not.equal(undefined);
+            expect(body.testId).to.not.equal(undefined);
+            expect(body.s3Folder).to.not.equal(undefined);
+            expect(body.status).to.equal(TestStatus.Created);
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test with headers_all should respond 200 OK", (done: Mocha.Done) => {
+        const filepath: string = SCRIPTING_FILEPATH_HEADERS_ALL;
+        const filename: string = path.basename(filepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(filepath),
+            options: { filename }
+          },
+          version: scriptingVersion,
+          queueName
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(200);
+            const body = JSON.parse(bodyText);
+            log("body: " + bodyText, LogLevel.DEBUG, body);
+            expect(body).to.not.equal(undefined);
+            expect(body.testId).to.not.equal(undefined);
+            expect(body.s3Folder).to.not.equal(undefined);
+            expect(body.status).to.equal(TestStatus.Created);
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
       });
     });
   });

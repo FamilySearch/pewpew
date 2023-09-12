@@ -84,7 +84,7 @@ export class YamlParser {
             // TODO: Add version checker
           );
           yamlValid = true;
-        } catch(error) {
+        } catch (error: unknown) {
           log("Could not parse yaml file: " + filepath, LogLevel.DEBUG, error);
           if (counter > 50) {
             throw error;
@@ -151,7 +151,7 @@ export class YamlParser {
       log(`parseYamlFile(${filepath})`, LogLevel.DEBUG, { bucketSizeMs, testRunTimeMn, inputFiles, loggerFiles });
       const yamlParser = new YamlParser(bucketSizeMs, testRunTimeMn, inputFiles, loggerFiles);
       return yamlParser;
-    } catch (error) {
+    } catch (error: unknown) {
       // We don't want to log a lot of errors to splunk, but it could be helpful to debug
       log("Could not parse yaml file: " + filepath, LogLevel.WARN, error);
       throw error;

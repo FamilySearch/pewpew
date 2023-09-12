@@ -23,6 +23,7 @@ import {
   PutObjectTaggingCommandOutput,
   S3Client,
   _Object as S3Object,
+  S3ServiceException,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
 import { LogLevel, log } from "./log";
@@ -111,7 +112,7 @@ export function init (): void {
         ADDITIONAL_TAGS_ON_ALL.set(split[0], split[1]);
       }
       log("ADDITIONAL_TAGS_ON_ALL", LogLevel.INFO, ADDITIONAL_TAGS_ON_ALL);
-    } catch (error) {
+    } catch (error: unknown) {
       log("Could not parse process.env.ADDITIONAL_TAGS_ON_ALL: " + process.env.ADDITIONAL_TAGS_ON_ALL, LogLevel.WARN, error);
       throw error;
     }
@@ -131,7 +132,7 @@ function callAccessCallback (date: Date) {
     } else {
       log("s3 setAccessCallback has not be set. Cannot call the accessCallback", LogLevel.WARN);
     }
-  } catch(error) {
+  } catch (error: unknown) {
     log("Calling the Access Callback (set last s3 accessed failed", LogLevel.ERROR, error);
   }
 }
@@ -202,9 +203,9 @@ export async function getFile ({ filename, s3Folder, localDirectory, lastModifie
     // Write the file to disk
     await writeFile(localFile, content);
     return result.LastModified;
-  } catch (error) {
+  } catch (error: unknown) {
     // Could be a 304. Swallow it
-    if (error && (error?.name === "304" || error["$metadata"]?.httpStatusCode === 304)) {
+    if (error && ((error as S3ServiceException)?.name === "304" || (error as S3ServiceException)["$metadata"]?.httpStatusCode === 304)) {
       log("getFile not modified: " + filename, LogLevel.DEBUG, error);
       return undefined;
     } else {
@@ -247,9 +248,9 @@ export async function getFileContents ({ filename, s3Folder, lastModified, maxLe
       log(`getFile(${filename}, ${s3Folder}, ${lastModified}) too long, truncating`, LogLevel.WARN, { length: content.length, maxLength, MAX_STRING_LENGTH });
     }
     return content.toString("utf-8", 0, maxLength);
-  } catch (error) {
+  } catch (error: unknown) {
     // Could be a 304. Swallow it
-    if (error && (error?.name === "304" || error["$metadata"]?.httpStatusCode === 304)) {
+    if (error && ((error as S3ServiceException)?.name === "304" || (error as S3ServiceException)["$metadata"]?.httpStatusCode === 304)) {
       log("getFile not modified: " + filename, LogLevel.DEBUG, error);
       return undefined;
     } else {
@@ -400,7 +401,7 @@ export async function getTags ({ filename, s3Folder }: GetTagsOptions): Promise<
       if (tag.Key && tag.Value) { tags.set(tag.Key, tag.Value); }
     }
     return tags;
-  } catch (error) {
+  } catch (error: unknown) {
     log(`getTags(${filename}, ${s3Folder}) ERROR`, LogLevel.ERROR, error);
     throw error;
   }
@@ -420,7 +421,7 @@ export async function putTags ({ filename, s3Folder, tags }: PutTagsOptions): Pr
   const key: string = `${s3Folder}/${filename}`;
   try {
     await putObjectTagging({ key, tags });
-  } catch (error) {
+  } catch (error: unknown) {
     log(`putTags(${filename}, ${s3Folder}) ERROR`, LogLevel.ERROR, error);
     throw error;
   }
@@ -463,7 +464,7 @@ export async function listObjects (options?: string | ListObjectsOptions): Promi
     log("listObjects succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("listObjects failed on prefix: " + prefix, LogLevel.ERROR, error);
     throw error;
   }
@@ -486,9 +487,9 @@ export async function getObject (key: string, lastModified?: Date): Promise<GetO
     log("getObject succeeded", LogLevel.DEBUG, Object.assign({}, result, { Body: undefined })); // Log it without the body
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     // Can return "Not Modified", don't log it
-    if (error && (error?.name === "304" || error["$metadata"]?.httpStatusCode === 304)) {
+    if (error && ((error as S3ServiceException)?.name === "304" || (error as S3ServiceException)["$metadata"]?.httpStatusCode === 304)) {
       callAccessCallback(new Date()); // Update the last timestamp
       log("getObject not modified", LogLevel.DEBUG, error);
     } else {
@@ -552,7 +553,7 @@ export async function uploadObject (file: S3File): Promise<CompleteMultipartUplo
     log("uploadObject succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("uploadObject failed", LogLevel.WARN, error);
     throw error;
   }
@@ -597,7 +598,7 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
     log("copyObject succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("copyObject failed", LogLevel.WARN, error);
     throw error;
   }
@@ -619,7 +620,7 @@ export async function deleteObject (s3FileKey: string): Promise<DeleteObjectComm
     log(`deleteObject ${s3FileKey} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("deleteObject failed", LogLevel.WARN, error);
     throw error;
   }
@@ -640,7 +641,7 @@ export async function getObjectTagging (s3FileKey: string): Promise<GetObjectTag
     log(`getObjectTagging ${s3FileKey} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("getObjectTagging failed", LogLevel.WARN, error);
     throw error;
   }
@@ -677,7 +678,7 @@ export async function putObjectTagging ({ key, tags }: PutObjectTaggingOptions):
     log(`putObjectTagging ${key} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("putObjectTagging failed", LogLevel.WARN, error);
     throw error;
   }

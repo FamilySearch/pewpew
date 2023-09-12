@@ -128,7 +128,7 @@ function callAccessCallback (date: Date) {
     } else {
       log("sqs setAccessCallback has not be set. Cannot call the accessCallback", LogLevel.WARN);
     }
-  } catch(error) {
+  } catch (error: unknown) {
     log("Calling the Access Callback (set last s3 accessed failed", LogLevel.ERROR, error);
   }
 }
@@ -246,7 +246,7 @@ export async function sendNewTestToRun (messageAttributes: Record<string, Messag
     const result: SendMessageCommandOutput = await sendMessage(sqsMessageRequest);
     log(`sendNewTestToRun result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
-  } catch(error) {
+  } catch (error: unknown) {
     log("Could not send new Test to Run Message", LogLevel.ERROR, error);
     throw error;
   }
@@ -274,7 +274,7 @@ export async function sendNewCommunicationsMessage (messageAttributes: Record<st
     const result: SendMessageCommandOutput = await sendMessage(sqsMessageRequest);
     log(`sendNewCommunicationsMessage result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
-  } catch(error) {
+  } catch (error: unknown) {
     log("Could not send communications Message", LogLevel.ERROR, error);
     throw error;
   }
@@ -404,7 +404,7 @@ export async function sendTestScalingMessage (sqsQueueName?: string): Promise<st
     const result: SendMessageCommandOutput = await sendMessage(sqsMessageRequest);
     log(`sendTestScalingMessage result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
-  } catch(error) {
+  } catch (error: unknown) {
     log("Could not send new Test Scaling Message", LogLevel.ERROR, error);
     throw error;
   }
@@ -429,7 +429,7 @@ export async function refreshTestScalingMessage (): Promise<string | undefined> 
       log("refreshTestScalingMessage did not find an existing scaling message", LogLevel.WARN, scalingMessage);
     }
     return messageId;
-  } catch(error) {
+  } catch (error: unknown) {
     log("Could not refresh Test Scaling Message", LogLevel.ERROR, error);
     throw error;
   }
@@ -451,7 +451,7 @@ export async function deleteTestScalingMessage (): Promise<string | undefined> {
       log("deleteTestScalingMessage did not find an existing scaling message", LogLevel.WARN, scalingMessage);
     }
     return scalingMessage && scalingMessage.MessageId;
-  } catch(error) {
+  } catch (error: unknown) {
     log("Could not delete a Test Scaling Message", LogLevel.ERROR, error);
     throw error;
   }
@@ -466,7 +466,7 @@ export async function receiveMessage (params: ReceiveMessageCommandInput): Promi
     log("receiveMessage succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("receiveMessage failed", LogLevel.ERROR, error);
     throw error;
   }
@@ -481,7 +481,7 @@ export async function sendMessage (params: SendMessageCommandInput): Promise<Sen
     log("sendMessage succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("sendMessage failed", LogLevel.ERROR, error);
     throw error;
   }
@@ -496,7 +496,7 @@ export async function deleteMessage (params: DeleteMessageCommandInput): Promise
     log("deleteMessage succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return;
-  } catch (error) {
+  } catch (error: unknown) {
     log("deleteMessage failed", LogLevel.ERROR, error);
     throw error;
   }
@@ -511,7 +511,7 @@ export async function changeMessageVisibility (params: ChangeMessageVisibilityCo
     log("changeMessageVisibility succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return;
-  } catch (error) {
+  } catch (error: unknown) {
     log("changeMessageVisibility failed", LogLevel.ERROR, error);
     throw error;
   }
@@ -525,7 +525,7 @@ export async function getQueueAttributes (params: GetQueueAttributesCommandInput
     log("getQueueAttributes succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     log("getQueueAttributes failed", LogLevel.ERROR, error);
     throw error;
   }
@@ -557,7 +557,7 @@ export async function cleanUpQueue (sqsQueueType: SqsQueueType, sqsQueueName?: s
         }).catch((error) => log(QueueUrl + " deleteMessageByHandle error: " + messageReceived!.ReceiptHandle, LogLevel.WARN, error, { sqsQueueType, sqsQueueName }));
       }
     } while (messageReceived !== undefined);
-  } catch (error) {
+  } catch (error: unknown) {
     log(QueueUrl + ": Error cleaning up the scaling queue", LogLevel.ERROR, error);
   }
   return count;

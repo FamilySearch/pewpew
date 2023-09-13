@@ -67,7 +67,7 @@ jobs:
         run: npm ci
       - name: Run Lint
         run: npm run linterror
-      # - name: Build Controller
-      #   run: npm run build:react
+      - name: Build Controller
+        run: npm run build:react
       - name: Run Tests
         run: NODE_ENV=test npm test

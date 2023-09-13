@@ -51,7 +51,6 @@
     "aws-sdk-client-mock": "^3.0.0",
     "chai": "^4.3.7",
     "eslint": "^8.40.0",
-    "husky": "^8.0.0",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",
     "typescript": "~5.2.0"

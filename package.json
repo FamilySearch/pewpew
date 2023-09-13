@@ -39,7 +39,6 @@
     "coverage:agent": "cd agent && npm run integration",
     "coverage:controller": "cd controller && npm run integration",
     "testcleanup": "cd controller && npm run testcleanup",
-    "prepare": "husky install",
     "cleannpm": "rimraf node_modules/ package-lock.json controller/node_modules/ agent/node_modules/ common/node_modules/",
     "clean": "rimraf common/dist/ agent/dist/ controller/dist/"
   },
@@ -77,7 +76,6 @@
     "@typescript-eslint/parser": "^6.0.0",
     "chai": "^4.3.7",
     "eslint": "^8.40.0",
-    "husky": "^8.0.0",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",
     "typescript": "~5.2.0"

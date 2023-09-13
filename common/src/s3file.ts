@@ -66,7 +66,7 @@ export class PpaasS3File implements S3File {
   public constructor ({ filename, s3Folder, localDirectory, publicRead, tags = defaultTestFileTags() }: PpaasS3FileOptions) {
     try {
       initS3();
-    } catch (error) {
+    } catch (error: unknown) {
       log("Could not initialize s3", LogLevel.ERROR, error);
       throw error;
     }
@@ -114,7 +114,7 @@ export class PpaasS3File implements S3File {
     try {
       const tags = await getTags({ filename, s3Folder });
       return tags;
-    } catch (error) {
+    } catch (error: unknown) {
       log(functionName + " - Could not retrieve tags: " + filename, LogLevel.WARN, error);
     }
     return undefined;
@@ -147,7 +147,7 @@ export class PpaasS3File implements S3File {
         return ppaasS3File;
       }));
       return ppaasFiles;
-    } catch (error) {
+    } catch (error: unknown) {
       log(`getAllFilesInS3(${s3Folder}, ${localDirectory}) failed`, LogLevel.ERROR, error);
       throw error;
     }
@@ -167,7 +167,7 @@ export class PpaasS3File implements S3File {
     try {
       await access(this.localFilePath);
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       return false;
     }
   }
@@ -273,7 +273,7 @@ export class PpaasS3File implements S3File {
         uploaded = true;
         // Update last modified local
         this.lastModifiedLocal = stats.mtimeMs;
-      } catch (error) {
+      } catch (error: unknown) {
         log(`Error uploading ${this.filename}`, LogLevel.ERROR, error);
         caughtError = error;
         // We'll throw it later after all retries

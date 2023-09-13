@@ -35,7 +35,7 @@ export class PpaasTestStatus implements TestStatusMessage {
     testStatusMessage: TestStatusMessage) {
     try {
       initS3();
-    } catch (error) {
+    } catch (error: unknown) {
       log("Could not initialize s3", LogLevel.ERROR, error);
       throw error;
     }
@@ -138,11 +138,11 @@ export class PpaasTestStatus implements TestStatusMessage {
         }
         log(`PpaasTestStatus.getStatus(${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { newMessage: newMessage.sanitizedCopy() });
         return newMessage;
-      } catch (error) {
+      } catch (error: unknown) {
         log(`PpaasTestStatus Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.ERROR, error);
         throw error;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       log(`PpaasTestStatus.getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.ERROR, error);
       throw error;
     }
@@ -181,7 +181,7 @@ export class PpaasTestStatus implements TestStatusMessage {
           const ppaasTestId: PpaasTestId = PpaasTestId.getFromTestId(testId);
           log(`Parsed ppaasTestId from ${testId}`, LogLevel.DEBUG, ppaasTestId);
           return { ppaasTestId, s3File, contents: undefined };
-        } catch (error) {
+        } catch (error: unknown) {
           log(`Could not parse testId from ${s3File.Key}`, LogLevel.ERROR, error);
           return undefined;
         }

@@ -132,7 +132,7 @@ export class PpaasTestMessage implements TestMessage {
           // It's a JSON object stored as a buffer
           temp = JSON.parse(Buffer.from(value.BinaryValue!).toString());
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.DEBUG, temp);
-        } catch (error) {
+        } catch (error: unknown) {
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.ERROR, error);
           throw new Error(`New Test Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`);
         }
@@ -140,7 +140,7 @@ export class PpaasTestMessage implements TestMessage {
           case "TestMessage":
             try {
               parsedTestMessage = temp as TestMessage;
-            } catch(error) {
+            } catch (error: unknown) {
               throw new Error(`messageAttributes[${key}] was not an TestMessage = ${JSON.stringify(temp)}`);
             }
             break;

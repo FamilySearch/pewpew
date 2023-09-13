@@ -36,7 +36,7 @@ export class PpaasS3Message implements CommunicationsMessage {
   }: PpaasS3MessageOptions) {
     try {
       initS3();
-    } catch (error) {
+    } catch (error: unknown) {
       log("Could not initialize s3", LogLevel.ERROR, error);
       throw error;
     }
@@ -44,7 +44,7 @@ export class PpaasS3Message implements CommunicationsMessage {
       try {
         this.ppaasTestId = PpaasTestId.getFromTestId(testId);
         this.testId = this.ppaasTestId.testId;
-      } catch (error) {
+      } catch (error: unknown) {
         log("Could not initialize s3", LogLevel.ERROR, error);
         throw error;
       }
@@ -110,11 +110,11 @@ export class PpaasS3Message implements CommunicationsMessage {
         });
         newMessage.inS3 = true; // Set this so we can delete it later
         return newMessage;
-      } catch (error) {
+      } catch (error: unknown) {
         log(`Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.ERROR, error);
         throw error;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       log(`getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.ERROR, error);
       throw error;
     }

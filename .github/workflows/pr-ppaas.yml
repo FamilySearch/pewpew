@@ -63,11 +63,33 @@ jobs:
           cd $CONFIG_WASM_LIB_DIR
           wasm-pack build --release -t nodejs --scope fs
 
+      - name: Create .env.local file for controller that can be overridden by a .env.production file
+        run: |
+          set -x
+
+          # setup some envs to various paths for convenience
+          PROJECT_ROOT=$PWD
+          CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
+          ENV_FILE=$CONTROLLER_DIR/.env.local
+
+          touch "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_NAME="unit-test-bucket" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_URL="https://unit-test-bucket.s3.amazonaws.com" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_KEYSPACE_PREFIX="unittests/" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_REGION_ENDPOINT="s3-us-east-1.amazonaws.com" >> "$ENV_FILE"
+
+          echo APPLICATION_NAME=pewpewcontroller >> "$ENV_FILE"
+          echo AGENT_ENV="unittests" >> "$ENV_FILE"
+          echo AGENT_DESC="c5n.large" >> "$ENV_FILE"
+          echo PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-out" >> "$ENV_FILE"
+          echo PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-in" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-communication" >> "$ENV_FILE"
+
       - name: Install NPM Dependencies
         run: npm ci
       - name: Run Lint
         run: npm run linterror
-      # - name: Build Controller
-      #   run: npm run build:react
+      - name: Build Controller
+        run: npm run build:react
       - name: Run Tests
         run: NODE_ENV=test npm test

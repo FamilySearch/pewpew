@@ -34,7 +34,7 @@ export async function getInstanceId (): Promise<string> {
       throw new Error("InstanceId did not match regex");
     }
     return instanceId;
-  } catch (error) {
+  } catch (error: unknown) {
     log(`Could not load instanceId file "${INSTANCE_ID_FILE}"`, LogLevel.WARN, error);
   }
   // Then try ec2-metadata command
@@ -51,7 +51,7 @@ export async function getInstanceId (): Promise<string> {
     const instanceId = match[1];
     log(`${INSTANCE_ID_COMMAND} instanceId: [${instanceId}]`, LogLevel.DEBUG, { instanceId, match });
     return instanceId;
-  } catch (error) {
+  } catch (error: unknown) {
     log(`Could not load instanceId command "${INSTANCE_ID_COMMAND}"`, LogLevel.WARN, error);
   }
   // curl http://169.254.169.254/latest/meta-data/instance-id

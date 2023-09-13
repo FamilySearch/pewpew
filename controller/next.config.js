@@ -1,6 +1,9 @@
 // @ts-check
 // These environment variables are exported to the client-side code. Do not put any variables with secure information here.
 
+const { access, symlink } = require('fs/promises');
+const { join } = require('path');
+
 if (process.env.BASE_PATH && !process.env.BASE_PATH.startsWith("/")) {
   const errorMessage = "process.env.BASE_PATH must start with a '/' found " + process.env.BASE_PATH;
   console.error(errorMessage);
@@ -32,7 +35,7 @@ const nextConfig = {
     typedRoutes: true,
     instrumentationHook: true,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer, dir: optionsDir }) => {
     const wasmExtensionRegExp = /\.wasm$/;
 
     config.resolve.extensions.push(".wasm");
@@ -50,6 +53,41 @@ const nextConfig = {
     if (!config.experiments) { config.experiments = {}; }
     config.experiments.asyncWebAssembly = true;
   
+    // https://github.com/vercel/next.js/issues/25852#issuecomment-1057059000
+    config.plugins.push(
+      new (class {
+        apply(compiler) {
+          compiler.hooks.afterEmit.tapPromise(
+            'SymlinkWebpackPlugin',
+            async (compiler) => {
+              if (isServer) {
+                const from = join(compiler.options.output.path, 'config_wasm_bg.wasm');
+                const to = join(optionsDir, '../lib/config-wasm/pkg/config_wasm_bg.wasm');
+                // options.dir /.../pewpew/controller
+                // console.log(`from/to: ${from} -> ${to}`);
+                
+                try {
+                  await access(from);
+                  console.log(`${from} already exists`);
+                  return;
+                } catch (error) {
+                  if (error.code === 'ENOENT') {
+                    // No link exists
+                  } else {
+                    console.error(`access ${from} error ${error}`, error);
+                    throw error;
+                  }
+                }
+    
+                await symlink(to, from, 'junction');
+                console.log(`created symlink ${from} -> ${to}`);
+              }
+            },
+          );
+        }
+      })(),
+    );
+
     return config;
   },
   distDir: "dist",

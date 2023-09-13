@@ -5,8 +5,8 @@ set -x
 PROJECT_ROOT=$(realpath ./)
 CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
 WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
-mkdir -p "$CONTROLLER_DIR/lib/hdr-histogram-wasm"
 WASM_OUTPUT_CONTROLLER_DIR=$CONTROLLER_DIR/lib/hdr-histogram-wasm
+mkdir -p "$WASM_OUTPUT_CONTROLLER_DIR"
 
 cargo build
 # cargo install cross
@@ -57,7 +57,7 @@ cd "$CWD"
 
 npm ci
 npm run linterror
-# npm run build:react
+npm run build:react
 NODE_ENV=test npm test
 
 cargo deny check --hide-inclusion-graph license sources advisories

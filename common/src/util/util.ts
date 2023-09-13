@@ -58,7 +58,7 @@ export const fs = {
 export async function sleep (ms: number): Promise<void> {
   try {
     await new Promise((resolve) => setTimeout(resolve, ms));
-  } catch (error) {
+  } catch (error: unknown) {
     log("sleep Error", LogLevel.ERROR, error); // swallow it
   }
 }

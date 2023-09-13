@@ -1,6 +1,44 @@
 // @ts-check
 // These environment variables are exported to the client-side code. Do not put any variables with secure information here.
 
+const { access, symlink } = require('fs/promises');
+const { join } = require('path');
+
+/**
+ * @param {string} fromDir
+ * @param {string} toDir
+ * @param {string} filename
+ */
+async function createSymlinks (fromDir, toDir, filename) {
+  const from = join(fromDir, filename);
+  const to = join(toDir, '../lib/config-wasm/pkg', filename);
+  // console.log(`fromDir/toDir: ${fromDir} -> ${toDir}`);
+  console.log(`from/to: ${from} -> ${to}`);
+
+  try {
+    await access(from);
+    console.log(`${from} already exists`);
+    return;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // No link exists
+    } else {
+      console.error(`access ${from} error ${error}`, error);
+      throw error;
+    }
+  }
+
+  // created symlink 
+  // /home/mcmaster/pewpew/controller/dist/server/static ->
+  // /home/mcmaster/pewpew/controller/dist/server/chunks/static
+  // created symlink /home/mcmaster/pewpew/controller/dist/server/static -> /home/mcmaster/pewpew/controller/dist/server/chunks/static
+  // created symlink /home/mcmaster/pewpew/controller/dist/static -> /home/mcmaster/pewpew/controller/dist/server/static
+  
+  // /home/mcmaster/pewpew/controller/dist/server/chunks/config_wasm_bg.wasm
+  await symlink(to, from, 'junction');
+  console.log(`created symlink ${from} -> ${to}`);
+}
+
 if (process.env.BASE_PATH && !process.env.BASE_PATH.startsWith("/")) {
   const errorMessage = "process.env.BASE_PATH must start with a '/' found " + process.env.BASE_PATH;
   console.error(errorMessage);
@@ -32,7 +70,7 @@ const nextConfig = {
     typedRoutes: true,
     instrumentationHook: true,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer, ...options }) => {
     const wasmExtensionRegExp = /\.wasm$/;
 
     config.resolve.extensions.push(".wasm");
@@ -50,6 +88,58 @@ const nextConfig = {
     if (!config.experiments) { config.experiments = {}; }
     config.experiments.asyncWebAssembly = true;
   
+    config.plugins.push(
+      new (class {
+        apply(compiler) {
+          compiler.hooks.afterEmit.tapPromise(
+            'SymlinkWebpackPlugin',
+            async (compiler) => {
+              if (isServer) {
+                // options.dir /home/mcmaster/pewpew/controller
+                // config.context /home/mcmaster/pewpew/controller
+                // compiler.options.output.path /home/mcmaster/pewpew/controller/dist/server/chunks
+                // compiler.options.output.path /home/mcmaster/pewpew/controller/dist/server
+                
+                // const from = join(compiler.options.output.path, 'config_wasm_bg.wasm');
+                // const to = join(options.dir, 'lib/config-wasm/config_wasm_bg.wasm');
+                // console.log("compiler.options.output.path", compiler.options.output.path);
+                // console.log("options.dir", options.dir);
+                // console.log("config.context", config.context);
+                await Promise.all(
+                  ["config_wasm_bg.wasm", "config_wasm_bg.js"]
+                  .map((filename) => createSymlinks(compiler.options.output.path, options.dir, filename))
+                );
+                
+                // console.log(`from/to: ${from} -> ${to}`);
+                // try {
+                //   await access(from);
+                //   console.log(`${from} already exists`);
+                //   return;
+                // } catch (error) {
+                //   if (error.code === 'ENOENT') {
+                //     // No link exists
+                //   } else {
+                //     console.error(`access ${from} error ${error}`, error);
+                //     throw error;
+                //   }
+                // }
+    
+                // // created symlink 
+                // // /home/mcmaster/pewpew/controller/dist/server/static ->
+                // // /home/mcmaster/pewpew/controller/dist/server/chunks/static
+                // // created symlink /home/mcmaster/pewpew/controller/dist/server/static -> /home/mcmaster/pewpew/controller/dist/server/chunks/static
+                // // created symlink /home/mcmaster/pewpew/controller/dist/static -> /home/mcmaster/pewpew/controller/dist/server/static
+                
+                // // /home/mcmaster/pewpew/controller/dist/server/chunks/config_wasm_bg.wasm
+                // await symlink(to, from, 'junction');
+                // console.log(`created symlink ${from} -> ${to}`);
+              }
+            },
+          );
+        }
+      })(),
+    );
+
     return config;
   },
   distDir: "dist",

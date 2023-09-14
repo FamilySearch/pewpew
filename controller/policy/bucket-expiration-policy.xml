@@ -1,0 +1,38 @@
+<LifecycleConfiguration>
+  <Rule>
+    <ID>Clean-up aborted uploads</ID>
+    <Filter>
+      <Prefix></Prefix>
+    </Filter>
+    <Status>Enabled</Status>
+    <AbortIncompleteMultipartUpload>
+      <DaysAfterInitiation>7</DaysAfterInitiation>
+    </AbortIncompleteMultipartUpload>
+  </Rule>
+  <Rule>
+    <ID>Expire Test Uploads</ID>
+    <Filter>
+      <Tag>
+        <Key>test</Key>
+        <Value>true</Value>
+      </Tag>
+    </Filter>
+    <Status>Enabled</Status>
+    <Expiration>
+      <Days>180</Days>
+    </Expiration>
+  </Rule>
+  <Rule>
+    <ID>Expire UnitTest Uploads</ID>
+    <Filter>
+      <Tag>
+        <Key>unittest</Key>
+        <Value>true</Value>
+      </Tag>
+    </Filter>
+    <Status>Enabled</Status>
+    <Expiration>
+      <Days>2</Days>
+    </Expiration>
+  </Rule>
+</LifecycleConfiguration>

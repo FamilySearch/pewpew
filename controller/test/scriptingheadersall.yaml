@@ -1,0 +1,32 @@
+load_pattern:
+  - !linear
+      from: 1%
+      to: 100%
+      over: 1m
+  - !linear
+      from: 100%
+      to: 100%
+      over: 1m
+config:
+  client:
+    headers:
+      TestTime: ${x:epoch("ms")}
+      Accept: application/json
+      FS-User-Agent-Chain: PPAAS-Agent-Performance Test
+      User-Agent: FS-QA-SystemTest PPAAS Agent Performance Test
+  general:
+    bucket_size: 1m
+    log_provider_stats: true
+providers:
+  startProvider: !response
+  endProvider: !response
+endpoints:
+  - method: GET
+    url: http://127.0.0.1:8080/healthcheck
+    peak_load: 30hpm
+    provides:
+      startProvider:
+        query:
+          select: response.headers_all
+          where: response.status < 500
+        send: if_not_full

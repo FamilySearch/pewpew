@@ -2,6 +2,12 @@
 set -e
 set -x
 
+PROJECT_ROOT=$(realpath ./)
+CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
+WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
+WASM_OUTPUT_CONTROLLER_DIR=$CONTROLLER_DIR/lib/hdr-histogram-wasm
+mkdir -p "$WASM_OUTPUT_CONTROLLER_DIR"
+
 cargo build
 # cargo install cross
 # cargo build --target x86_64-unknown-linux-musl
@@ -41,11 +47,17 @@ npm test
 
 cd "$CWD/lib/hdr-histogram-wasm"
 wasm-pack build --release -t nodejs --scope fs
+wasm-pack build --release -t bundler -d $WASM_OUTPUT_CONTROLLER_DIR --scope fs
 # ~/.cache/.wasm-pack/wasm-opt-4d7a65327e9363b7/wasm-opt pkg/hdr_histogram_wasm_bg.wasm -o pkg/hdr_histogram_wasm_bg.wasm -Oz
 cd tests/
 npm ci
 npm test
 
 cd "$CWD"
+
+npm ci
+npm run linterror
+npm run build:react
+NODE_ENV=test npm test
 
 cargo deny check --hide-inclusion-graph license sources advisories

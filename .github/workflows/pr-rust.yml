@@ -1,0 +1,191 @@
+on:
+  pull_request:
+    paths:
+      - '**.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+
+name: Pull Request Rust
+jobs:
+  test:
+    name: Test Suite
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all -- -D warnings
+
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-deny
+      - uses: actions-rs/cargo@v1
+        with:
+          command: deny
+          args: check --hide-inclusion-graph license sources advisories
+
+  build:
+    name: Build
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: false
+          - build: arm-v7
+            os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            linker: gcc-arm-linux-gnueabihf
+            cross: true
+          - build: aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            linker: gcc-aarch64-linux-gnu
+            cross: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Linker
+        if: matrix.cross
+        run: |
+          sudo apt update
+          sudo apt install ${{ matrix.linker }}
+
+      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build with cross # ARM builds
+        uses: actions-rs/toolchain@v1
+        if: matrix.cross
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.cross
+        with:
+          use-cross: true
+          command: build
+          args: -q --release --target ${{ matrix.target }}
+
+      - name: Build for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release --bin pewpew --target x86_64-unknown-linux-musl
+
+      - name: Build Test Server for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release --bin test-server --target x86_64-unknown-linux-musl
+
+      - name: Build Config Updater for Linux
+        uses: ./.github/actions/linux-x86_64-musl/
+        if: matrix.build == 'linux'
+        with:
+          args: cargo build -q --release -p pewpew-config-updater --target x86_64-unknown-linux-musl
+
+  wasm-pack:
+    name: Wasm Build
+    strategy:
+      matrix:
+        wasm-dirctory: [config-wasm, hdr-histogram-wasm, config-gen]
+        node-version: [16.x, 18.x, 20.x]
+    runs-on: ubuntu-latest
+    env:
+      WASM_FILE: ${{ matrix.wasm-dirctory }}_bg.wasm
+      wasm-directory: ./lib/${{ matrix.wasm-dirctory }}
+      test-directory: ./lib/${{ matrix.wasm-dirctory }}/tests
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Create the Web Assembly
+        id: wasm_pack
+        run: |
+          set -x
+          # install wasm-pack
+          mkdir ~/bin
+          PATH=$PATH:~/bin
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
+
+          if [ "${{ matrix.wasm-dirctory }}" = "config-gen" ]; then
+            echo "Running wasm-pack test"
+            wasm-pack test --node
+
+            # The npm tests also need the config-wasm built
+            (cd ../config-wasm; wasm-pack build --release -t nodejs --scope fs)
+          fi
+          wasm-pack build --release -t nodejs --scope fs
+        working-directory: ${{env.wasm-directory}}
+        shell: bash
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install Dependencies ${{ matrix.node-version }}
+        run: npm ci
+        working-directory: ${{env.test-directory}}
+      - name: Run Acceptance Tests ${{ matrix.node-version }}
+        run: npm test
+        working-directory: ${{env.test-directory}}

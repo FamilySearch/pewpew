@@ -1,0 +1,92 @@
+on:
+  pull_request:
+    paths:
+      - './package.json'
+      - './package-lock.json'
+      - 'common/**.js*'
+      - 'common/**.ts*'
+      - 'common/**/package.json'
+      - 'agent/**.js*'
+      - 'agent/**.ts*'
+      - 'agent/**/package.json'
+      - 'controller/**.html'
+      - 'controller/**.js*'
+      - 'controller/**.ts*'
+      - 'controller/**/package.json'
+
+name: Pull Request PPaaS
+jobs:
+  test-release:
+    name: Build project
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+      fail-fast: false
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Add Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: wasm32-unknown-unknown
+          toolchain: stable
+          override: true
+      - name: Add Node.js toolchain ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build Webassemblies ${{ matrix.node-version }}
+        run: |
+          set -x
+          # install mdbook and wasm-pack
+          mkdir ~/bin
+          PATH=$PATH:~/bin
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
+
+          # setup some envs to various paths for convenience
+          PROJECT_ROOT=$PWD
+          CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
+          CONFIG_WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/config-wasm)
+          HDR_WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
+          HDR_WASM_OUTPUT_REACT_DIR=$CONTROLLER_DIR/lib/hdr-histogram-wasm
+
+          # build the hdr-histogram-wasm for the results viewer
+          cd $HDR_WASM_LIB_DIR
+          wasm-pack build --release -t bundler -d $HDR_WASM_OUTPUT_REACT_DIR --scope fs
+
+          # build the config-wasm for the yaml parser
+          cd $CONFIG_WASM_LIB_DIR
+          wasm-pack build --release -t nodejs --scope fs
+
+      - name: Create .env file for controller that can be overridden by a .env.production file
+        run: |
+          set -x
+          # setup some envs to various paths that re required for build
+          PROJECT_ROOT=$PWD
+          CONTROLLER_DIR=$(realpath $PROJECT_ROOT/controller)
+          # .env.production will override .env, but NOT .env.local or environment variables passed in
+          ENV_FILE=$CONTROLLER_DIR/.env
+          touch "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_NAME="unit-test-bucket" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_URL="https://unit-test-bucket.s3.amazonaws.com" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_KEYSPACE_PREFIX="unittests/" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_S3_REGION_ENDPOINT="s3-us-east-1.amazonaws.com" >> "$ENV_FILE"
+          echo APPLICATION_NAME=pewpewcontroller >> "$ENV_FILE"
+          echo AGENT_ENV="unittests" >> "$ENV_FILE"
+          echo AGENT_DESC="c5n.large" >> "$ENV_FILE"
+          echo PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-out" >> "$ENV_FILE"
+          echo PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-in" >> "$ENV_FILE"
+          echo PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/unittests/sqs-communication" >> "$ENV_FILE"
+
+      - name: Install NPM Dependencies
+        run: npm ci
+      - name: Run Lint
+        run: npm run linterror
+      - name: Build Controller
+        run: npm run build:react
+      - name: Run Tests
+        run: NODE_ENV=test npm test

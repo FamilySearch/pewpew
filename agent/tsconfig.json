@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "plugins": [{
+      "name": "tslint-language-service"
+    }],
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "jsx": "react",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noImplicitUseStrict": false,
+    "removeComments": false,
+    "noLib": false,
+    "preserveConstEnums": true,
+    "suppressImplicitAnyIndexErrors": false,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "baseUrl": "src",
+    "lib": ["es2020", "esnext.asynciterable", "dom", "dom.iterable"]
+  },
+  "exclude": ["node_modules"],
+  "include": ["src/**/*", "test/**/*", "acceptance/**/*", "createtest/**/*"],
+  "compileOnSave": true,
+  "buildOnSave": false
+}
+  

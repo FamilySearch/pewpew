@@ -7,5 +7,15 @@
 /*.txt
 /*.dump
 /*.log
-/*.json
+/stats-*.json
+/test-*.json
+/integration.json
 node_modules
+.nyc_output/
+coverage/
+testmerge.json
+.env.local*
+.env.development.local*
+.env.test.local*
+.env.production.local*
+

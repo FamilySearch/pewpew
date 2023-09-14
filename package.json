@@ -29,7 +29,7 @@
     "testonly:agent": "cd agent && npm run testonly",
     "testonly:controller": "cd controller && npm run testonly",
     "testonly": "npm-run-all --parallel testonly:common testonly:agent testonly:controller",
-    "testmerge": "mkdir -p .nyc_output && cp common/.nyc_output/*.json .nyc_output/ && cp agent/.nyc_output/*.json .nyc_output/ && cp controller/.nyc_output/*.json .nyc_output/ && nyc merge .nyc_output testmerge.json && nyc report --reporter=lcov --reporter=text",
+    "testmerge": "mkdir -p .nyc_output && rimraf .nyc_output/*.json && cp common/.nyc_output/*.json .nyc_output/ && cp agent/.nyc_output/*.json .nyc_output/ && cp controller/.nyc_output/*.json .nyc_output/ && nyc merge .nyc_output testmerge.json && nyc report --reporter=lcov --reporter=text",
     "test": "npm-run-all --serial linterror build:test testonly && npm run testmerge",
     "testslow": "npm run linterror && npm run test:common && npm run test:agent && npm run test:controller",
     "test:common": "cd common && npm run test",

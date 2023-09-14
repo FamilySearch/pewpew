@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./common/tsconfig.ref.json" },
+    { "path": "./agent/tsconfig.ref.json" },
+    { "path": "./controller/tsconfig.ref.json" }
+  ],
+  "exclude": ["node_modules"]
+}

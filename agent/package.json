@@ -1,0 +1,61 @@
+{
+  "name": "@fs/ppaas-agent",
+  "version": "3.0.0",
+  "description": "Agent Service for running pewpew tests",
+  "main": "dist/src/app.js",
+  "scripts": {
+    "fix:start": "rimraf \"node_modules/ppaas-common/node_modules/config-wasm/\"",
+    "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
+    "build": "npm run buildonly",
+    "buildonly": "tsc",
+    "test": "npm run buildonly && nyc mocha ./dist/test -r dotenv-flow/config",
+    "testonly": "nyc mocha ./dist/test -r dotenv-flow/config",
+    "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
+    "coverage": "npm run build && nyc mocha ./dist/test ./dist/createtest --timeout 500000 -r dotenv-flow/config",
+    "integration": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "clean": "rimraf dist/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FamilySearch/pewpew.git"
+  },
+  "author": "trevorm@churchofjesuschrist.org",
+  "bugs": {
+    "url": "https://github.com/FamilySearch/pewpew/issues"
+  },
+  "homepage": "https://github.com/FamilySearch/pewpew#readme",
+  "engines": {
+    "node": "18"
+  },
+  "nyc": {
+    "exclude": "**/*.spec.ts"
+  },
+  "dependencies": {
+    "@fs/config-wasm": "*",
+    "@fs/ppaas-common": "*",
+    "bunyan": "~1.8.0",
+    "dotenv": "^16.0.0",
+    "dotenv-flow": "^3.2.0",
+    "expiry-map": "^2.0.0",
+    "express": "^4.18.2",
+    "rimraf": "^5.0.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.363.0",
+    "@aws-sdk/client-sqs": "^3.363.0",
+    "@aws-sdk/util-stream-node": "^3.363.0",
+    "@types/bunyan": "~1.8.8",
+    "@types/chai": "^4.3.5",
+    "@types/express": "^4.17.17",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "axios": "~1.5.0",
+    "chai": "^4.3.7",
+    "eslint": "^8.40.0",
+    "mocha": "^10.2.0",
+    "nyc": "^15.1.0",
+    "typescript": "~5.2.0"
+  }
+}

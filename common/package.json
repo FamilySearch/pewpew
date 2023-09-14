@@ -1,0 +1,58 @@
+{
+  "name": "@fs/ppaas-common",
+  "version": "3.0.0",
+  "description": "Common Code for the PewPewController and PewPewAgent",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist/src/**/*",
+    "dist/types/**/*"
+  ],
+  "scripts": {
+    "build": "npm run buildonly",
+    "buildonly": "tsc",
+    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "testonly": "nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "integration": "npm run build && nyc mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "prepare": "npm run buildonly",
+    "clean": "rimraf dist/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FamilySearch/pewpew.git"
+  },
+  "engines": {
+    "node": ">=18.0.0 <21.0.0"
+  },
+  "nyc": {
+    "exclude": "**/*.spec.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.363.0",
+    "@aws-sdk/client-s3": "^3.363.0",
+    "@aws-sdk/client-sqs": "^3.363.0",
+    "@aws-sdk/lib-storage": "^3.363.0",
+    "@fs/config-wasm": "*",
+    "bunyan": "~1.8.0",
+    "dotenv": "^16.0.0",
+    "dotenv-flow": "^3.2.0",
+    "rimraf": "^5.0.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/util-stream-node": "^3.363.0",
+    "@types/bunyan": "~1.8.8",
+    "@types/chai": "^4.3.5",
+    "@types/express": "^4.17.17",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "aws-sdk-client-mock": "^3.0.0",
+    "chai": "^4.3.7",
+    "eslint": "^8.40.0",
+    "mocha": "^10.2.0",
+    "nyc": "^15.1.0",
+    "typescript": "~5.2.0"
+  }
+}

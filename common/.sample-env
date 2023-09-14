@@ -1,0 +1,17 @@
+# https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables
+# Next.js will load these automatically. We use dotenv-flow to load them for mocha
+# Copy this file to .env.local and modify these to your services
+
+# AWS_PROFILE=default
+PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_NAME="my-test-service"
+PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_URL="https://my-test-service.s3.amazonaws.com"
+PEWPEWCONTROLLER_UNITTESTS_S3_KEYSPACE_PREFIX="pewpewcontroller-unittests-s3/"
+PEWPEWCONTROLLER_UNITTESTS_S3_REGION_ENDPOINT="s3-us-east-1.amazonaws.com"
+ADDITIONAL_TAGS_ON_ALL="application=pewpewcontroller"
+
+CONTROLLER_ENV="unittests"
+AGENT_ENV="unittests"
+AGENT_DESC="c5n.large"
+PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewagent-unittests-sqs-scale-out"
+PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewagent-unittests-sqs-scale-in"
+PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewcontroller-unittests-sqs-communication"

@@ -11,7 +11,8 @@
 /test-*.json
 /integration.json
 node_modules
-.nyc_output
+.nyc_output/
+coverage/
 testmerge.json
 .env.local*
 .env.development.local*

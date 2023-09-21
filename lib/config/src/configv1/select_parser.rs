@@ -471,6 +471,23 @@ pub struct Path {
     pub(super) marker: Marker,
 }
 
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.rest.is_empty() {
+            write!(f, "{}", self.start)
+        } else {
+            let rest: Vec<String> = self
+                .rest
+                .clone()
+                .into_iter()
+                .map(|piece| format!("{piece}"))
+                .collect();
+            let rest = rest.join(".");
+            write!(f, "{}.{}", self.start, rest)
+        }
+    }
+}
+
 impl Path {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
@@ -765,12 +782,8 @@ impl std::fmt::Display for Value {
                     }
                 }
             }
-            Self::Json(j) => write!(
-                f,
-                "{}",
-                serde_json::to_string(j).unwrap_or(format!("{j:?}"))
-            ),
-            Self::Template(t) => write!(f, "{:?}", t),
+            Self::Json(j) => write!(f, "{j}"),
+            Self::Template(t) => write!(f, "{}", t),
         }
     }
 }
@@ -904,6 +917,16 @@ pub(super) enum PathStart {
     FunctionCall(FunctionCall),
     Ident(String),
     Value(json::Value),
+}
+
+impl std::fmt::Display for PathStart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            PathStart::Ident(i) => write!(f, "{i}"),
+            PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
+            PathStart::Value(v) => write!(f, "{v}"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1261,11 +1284,32 @@ enum TemplatePiece {
     NotExpression(String),
 }
 
+impl std::fmt::Display for TemplatePiece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TemplatePiece::Expression(x) => write!(f, "{x}"),
+            TemplatePiece::NotExpression(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Template {
     pieces: Vec<TemplatePiece>,
     size_hint: usize,
     no_recoverable_error: bool,
+}
+
+impl std::fmt::Display for Template {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pieces: Vec<String> = self
+            .pieces
+            .clone()
+            .into_iter()
+            .map(|piece| format!("{piece}"))
+            .collect();
+        write!(f, "{}", pieces.join(""))
+    }
 }
 
 impl Template {

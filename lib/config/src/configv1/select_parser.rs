@@ -204,26 +204,24 @@ impl FunctionCall {
         Ok(r)
     }
 
-    fn to_convert (
-        &self,
-    ) -> String {
+    fn to_convert(&self) -> String {
         debug!("FunctionCall::evaluate function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => format!("{c:?}"),
             FunctionCall::Encode(e) => format!("{e}"),
-            FunctionCall::Entries(e) => format!("{e:?}"),
+            FunctionCall::Entries(e) => format!("{e}"),
             FunctionCall::Epoch(e) => format!("{e}"),
-            FunctionCall::If(i) => format!("{i:?}"),
-            FunctionCall::Join(j) => format!("{j:?}"),
-            FunctionCall::JsonPath(j) => format!("{j:?}"),
-            FunctionCall::Match(m) => format!("{m:?}"),
-            FunctionCall::MinMax(m) => format!("{m:?}"),
-            FunctionCall::Pad(p) => format!("{p:?}"),
-            FunctionCall::Range(r) => format!("{r:?}"),
-            FunctionCall::Random(r) => format!("{r:?}"),
-            FunctionCall::Repeat(r) => format!("{r:?}"),
-            FunctionCall::Replace(r) => format!("{r:?}"),
-            FunctionCall::ParseNum(p) => format!("{p:?}"),
+            FunctionCall::If(i) => format!("{}", i.to_convert()),
+            FunctionCall::Join(j) => format!("{j}"),
+            FunctionCall::JsonPath(j) => format!("{j}"),
+            FunctionCall::Match(m) => format!("{m}"),
+            FunctionCall::MinMax(m) => format!("{m}"),
+            FunctionCall::Pad(p) => format!("{p}"),
+            FunctionCall::Range(r) => format!("{r}"),
+            FunctionCall::Random(r) => format!("{}", r.to_convert()),
+            FunctionCall::Repeat(r) => format!("{r}"),
+            FunctionCall::Replace(r) => format!("{r}"),
+            FunctionCall::ParseNum(p) => format!("{p}"),
         }
     }
 
@@ -823,15 +821,32 @@ impl std::fmt::Display for Value {
             Self::Path(p) => {
                 if p.rest.is_empty() {
                     match &p.start {
-                        PathStart::Ident(i) => write!(f, "{}", i),
+                        PathStart::Ident(i) => write!(f, "{i}"),
                         PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
-                        PathStart::Value(v) => write!(f, "{}", v),
+                        PathStart::Value(v) => write!(f, "{v}"),
                     }
                 } else {
-                    write!(f, "{:?}", p)
+                    let rest: Vec<String> = p
+                        .rest
+                        .clone()
+                        .into_iter()
+                        .map(|piece| format!("{piece}"))
+                        .collect();
+                    let rest = rest.join(".");
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{i}.{rest}"),
+                        PathStart::FunctionCall(func) => {
+                            write!(f, "{}.{}", &func.to_convert(), rest)
+                        }
+                        PathStart::Value(v) => write!(f, "{v}.{rest}"),
+                    }
                 }
-            },
-            Self::Json(j) => write!(f, "{}", serde_json::to_string(j).unwrap_or(format!("{j:?}"))),
+            }
+            Self::Json(j) => write!(
+                f,
+                "{}",
+                serde_json::to_string(j).unwrap_or(format!("{j:?}"))
+            ),
             Self::Template(t) => write!(f, "{:?}", t),
         }
     }
@@ -839,9 +854,19 @@ impl std::fmt::Display for Value {
 
 #[derive(Clone, Debug)]
 pub(super) enum PathSegment {
-    Number(usize),
-    String(String),
+    Number(usize),  // [0] ?
+    String(String), // like .body on response.body
     Template(Arc<Template>),
+}
+
+impl std::fmt::Display for PathSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(n) => write!(f, "[{n}]"),
+            Self::String(s) => write!(f, "{s}"),
+            Self::Template(t) => write!(f, "{t:?}"),
+        }
+    }
 }
 
 impl PathSegment {
@@ -2759,22 +2784,39 @@ pub mod template_convert {
         fn template_convert_functions() {
             let tests = BTreeMap::from([
                 // ("${collect(foo, 3, 5)}", "collect(foo, 3, 5)"), Collect is still a placeholder
-                ("${encode(foo, \"percent-userinfo\")}", "encode(foo, \"percent-userinfo\")"),
+                (
+                    "${encode(foo, \"percent-userinfo\")}",
+                    "encode(foo, \"percent-userinfo\")",
+                ),
                 ("${end_pad(foo, 3, \"-\")}", "end_pad(foo, 3, \"-\")"),
                 ("${entries(foo)}", "entries(foo)"),
                 ("${epoch(\"ms\")}", "epoch(\"ms\")"),
-                ("${if(foo, 3, \"-\")}", "if(foo, 3, \"-\")"),
+                ("${if(foo, foo, bar)}", "(foo) ? foo : bar"),
+                ("${if(match(foo, \"test\"), foo, bar)}", "(match(foo, \"test\")) ? foo : bar"),
                 ("${join(foo, \",\")}", "join(foo, \",\")"),
                 ("${join(foo, \":\", \"\\n\")}", "join(foo, \":\", \"\\n\")"),
-                ("${json_path(\"response.body.groups.*.id\")}", "json_path(\"response.body.groups.*.id\")"),
-                ("${match(response.body,\"test\")}", "match(response.body,\"test\")"),
+                (
+                    "${json_path(\"response.body.groups.*.id\")}",
+                    "json_path(\"response.body.groups.*.id\")",
+                ),
+                (
+                    "${match(response.body, \"test\")}",
+                    "match(response.body, \"test\")",
+                ),
                 ("${max(foo, bar)}", "max(foo, bar)"),
                 ("${min(foo, bar)}", "min(foo, bar)"),
                 ("${random(0, 10)}", "random(0, 10, ${p:null})"),
+                ("${random(1, 10)}", "random(1, 10, ${p:null})"),
+                ("${random(1.1, 10.3)}", "random(1.100, 10.300, ${p:null})"),
                 ("${range(0, 10)}", "range(0, 10)"),
+                ("${range(10, 0)}", "range(10, 0)"),
+                ("${range(foo, bar)}", "range(foo, bar)"),
                 ("${repeat(10)}", "repeat(10)"),
                 ("${repeat(5, 10)}", "repeat(5, 10)"),
-                ("${replace(\"abc\", foo, \"123\")}", "replace(\"abc\", foo, \"123\")"),
+                (
+                    "${replace(\"abc\", foo, \"123\")}",
+                    "replace(\"abc\", foo, \"123\")",
+                ),
                 ("${parseInt(foo)}", "parseInt(foo)"),
                 ("${parseFloat(foo)}", "parseFloat(foo)"),
             ]);

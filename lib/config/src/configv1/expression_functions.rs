@@ -214,6 +214,12 @@ impl Encode {
     }
 }
 
+impl std::fmt::Display for Encode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "encode({}, \"{}\")", self.arg, self.encoding)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Entries {
     arg: ValueOrExpression,

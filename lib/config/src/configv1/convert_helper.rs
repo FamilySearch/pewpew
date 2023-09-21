@@ -374,17 +374,81 @@ fn map_query(
     for_each: Vec<WithMarker<String>>,
     where_clause: Option<WithMarker<String>>,
 ) -> Option<Query<False>> {
-    if let Some(w) = where_clause {
+    // Fallback query if we can't parse anything
+    let empty_query = Query::simple("PLEASE_UPDATE_MANUALLY".to_owned(), vec![], None).unwrap();
+
+    // Attempt to parse the where_clause
+    let where_clause = if let Some(w) = where_clause {
         let w = w.destruct().0;
-        log::warn!("query `where` item {w:?} must be updated manually");
+        Some(w)
+    } else {
+        None
     };
-    for_each.into_iter().for_each(|fe| {
-        let fe = fe.destruct().0;
-        log::warn!("query `for_each` item {fe:?} must be updated manually");
-    });
+    // Attempt to parse the for_each
+    let for_each: Vec<String> = for_each
+        .iter()
+        .map(|fe| {
+            let fe2 = (fe.inner.to_string(), fe.marker).0;
+            fe2
+        })
+        .collect();
+
+    // See if we can create a fallback with the where and for_each but without the select
+    let manual_query = match Query::simple(
+        "PLEASE_UPDATE_MANUALLY".to_owned(),
+        for_each.clone(),
+        where_clause.clone(),
+    ) {
+        Ok(q) => q,
+        Err(e) => {
+            log::warn!("query `where` or `for_each` item must be updated manually: {e:?}");
+            empty_query
+        }
+    };
+
+    // Finally attempt to parse the select but fallback to the manual_query or empty_query
     select.map(|s| {
-        log::warn!("query `select` item {s:?} must be updated manually");
-        Query::simple("PLEASE_UPDATE_MANUALLY".to_owned(), vec![], None).unwrap()
+        let select_temp = s.inner();
+        let select_temp_str = s.inner().as_str();
+        log::debug!("select_temp query: {select_temp:?}");
+        let query = if let Some(s) = select_temp_str {
+            log::warn!("old query: {s:?}");
+            // TODO: What to do with objects instead of strings?
+            match select_temp {
+                json::Value::String(value) => {
+                    log::warn!("String query: {value:?}");
+                    Query::simple(s.to_string(), for_each.clone(), where_clause.clone())
+                        .unwrap_or(manual_query.clone())
+                }
+                json::Value::Object(value) => {
+                    log::warn!("Object query: {value:?}");
+                    todo!()
+                }
+                json::Value::Null => {
+                    log::warn!("Null query");
+                    todo!()
+                }
+                json::Value::Bool(value) => {
+                    log::warn!("Bool query: {value:?}");
+                    todo!()
+                }
+                json::Value::Number(value) => {
+                    log::warn!("Number query: {value:?}");
+                    todo!()
+                }
+                json::Value::Array(value) => {
+                    log::warn!("Array query: {value:?}");
+                    todo!()
+                }
+            };
+            Query::simple(s.to_string(), for_each.clone(), where_clause.clone())
+                .unwrap_or(manual_query.clone())
+        } else {
+            manual_query
+        };
+        // let query = Query::simple(s.destruct().0.to_string(), for_each, where_clause).unwrap_or();
+        log::warn!("new query: {query:?}");
+        query
     })
 }
 

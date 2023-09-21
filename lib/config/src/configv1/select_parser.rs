@@ -204,6 +204,29 @@ impl FunctionCall {
         Ok(r)
     }
 
+    fn to_convert (
+        &self,
+    ) -> String {
+        debug!("FunctionCall::evaluate function=\"{:?}\"", self);
+        match self {
+            FunctionCall::Collect(c) => format!("{c:?}"),
+            FunctionCall::Encode(e) => format!("{e}"),
+            FunctionCall::Entries(e) => format!("{e:?}"),
+            FunctionCall::Epoch(e) => format!("{e}"),
+            FunctionCall::If(i) => format!("{i:?}"),
+            FunctionCall::Join(j) => format!("{j:?}"),
+            FunctionCall::JsonPath(j) => format!("{j:?}"),
+            FunctionCall::Match(m) => format!("{m:?}"),
+            FunctionCall::MinMax(m) => format!("{m:?}"),
+            FunctionCall::Pad(p) => format!("{p:?}"),
+            FunctionCall::Range(r) => format!("{r:?}"),
+            FunctionCall::Random(r) => format!("{r:?}"),
+            FunctionCall::Repeat(r) => format!("{r:?}"),
+            FunctionCall::Replace(r) => format!("{r:?}"),
+            FunctionCall::ParseNum(p) => format!("{p:?}"),
+        }
+    }
+
     fn evaluate<'a, 'b: 'a>(
         &'b self,
         d: Cow<'a, json::Value>,
@@ -701,6 +724,15 @@ impl ValueOrExpression {
     }
 }
 
+impl std::fmt::Display for ValueOrExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value(v) => write!(f, "{}", v),
+            Self::Expression(x) => write!(f, "{}", x),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Value {
     Path(Box<Path>),
@@ -782,6 +814,26 @@ impl Value {
         };
         // boxed to prevent recursive impl Stream
         s.boxed()
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(p) => {
+                if p.rest.is_empty() {
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{}", i),
+                        PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
+                        PathStart::Value(v) => write!(f, "{}", v),
+                    }
+                } else {
+                    write!(f, "{:?}", p)
+                }
+            },
+            Self::Json(j) => write!(f, "{}", serde_json::to_string(j).unwrap_or(format!("{j:?}"))),
+            Self::Template(t) => write!(f, "{:?}", t),
+        }
     }
 }
 
@@ -1086,6 +1138,19 @@ impl Expression {
         Ok(self
             .simplify_to_json()?
             .map_a(|v| json_value_to_string(Cow::Owned(v)).into_owned()))
+    }
+}
+
+impl std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.not.is_none() && self.op.is_none() {
+            match &self.lhs {
+                ExpressionLhs::Expression(x) => write!(f, "{}", x),
+                ExpressionLhs::Value(v) => write!(f, "{}", v),
+            }
+        } else {
+            write!(f, "{}", self)
+        }
     }
 }
 
@@ -2531,6 +2596,17 @@ pub mod template_convert {
         /// - `"${port}"`
         /// - `"${sessionId}"`
         SingleSource(String),
+        /// Interpolations where the contents are a single expression.
+        ///
+        /// Whether the source is a Function, (required by Templates in configv2 being
+        /// more explicit) will be inferred later in the conversion at a point when more data is
+        /// available.
+        ///
+        /// # Examples of V1 Template segments that would become this variant.
+        ///
+        /// - `"${epoch('ms')}"`
+        /// - `"${parseInt(response.body)}"`
+        SingleExpression(String),
         /// Any other interpolation segment.
         ///
         /// It's not necessarily "impossible" for this to be autoconverted, but efforts to make it
@@ -2563,7 +2639,7 @@ pub mod template_convert {
                                 ..
                             } if rest.is_empty() => Segment::SingleSource(s),
                             other => {
-                                log::warn!("template path {other:?} must be updated manually");
+                                log::warn!("template value path {other:?} must be updated manually");
                                 Segment::Placeholder
                             }
                         },
@@ -2571,15 +2647,31 @@ pub mod template_convert {
                             not: None,
                             lhs: ExpressionLhs::Value(Value::Path(p)),
                             op: None,
-                        }) => match *p {
-                            Path {
-                                start: PathStart::Ident(s),
-                                rest,
-                                ..
-                            } if rest.is_empty() => Segment::SingleSource(s),
-                            other => {
-                                log::warn!("template path {other:?} must be updated manually");
-                                Segment::Placeholder
+                        }) => {
+                            log::warn!("template expression path {0:?} - {1:?}; is_empty: {2:?}", p.start, p.rest, p.rest.is_empty());
+                            match *p {
+                                Path {
+                                    start: PathStart::Ident(s),
+                                    rest,
+                                    ..
+                                } if rest.is_empty() => Segment::SingleSource(s),
+                                Path {
+                                    start: PathStart::FunctionCall(f),
+                                    rest,
+                                    ..
+                                } if rest.is_empty() => {
+                                    log::warn!("template expression function {f:?}");
+                                    if let FunctionCall::Collect(_) = f {
+                                        log::warn!("template expression path {f:?} must be updated manually");
+                                        Segment::Placeholder
+                                    } else {
+                                        Segment::SingleExpression(f.to_convert())
+                                    }
+                                },
+                                other => {
+                                    log::warn!("template expression path {other:?} must be updated manually");
+                                    Segment::Placeholder
+                                }
                             }
                         },
                         other => {
@@ -2656,11 +2748,49 @@ pub mod template_convert {
                     Segment::SingleSource("port".to_owned()),
                     Segment::Outer("/".to_owned()),
                     // Placeholder because of script expr.
-                    Segment::Placeholder,
+                    Segment::SingleExpression("encode(foo, \"percent-userinfo\")".to_owned()),
                     // Placeholder because of complex path.
                     Segment::Placeholder,
                 ]
             );
+        }
+
+        #[test]
+        fn template_convert_functions() {
+            let tests = BTreeMap::from([
+                // ("${collect(foo, 3, 5)}", "collect(foo, 3, 5)"), Collect is still a placeholder
+                ("${encode(foo, \"percent-userinfo\")}", "encode(foo, \"percent-userinfo\")"),
+                ("${end_pad(foo, 3, \"-\")}", "end_pad(foo, 3, \"-\")"),
+                ("${entries(foo)}", "entries(foo)"),
+                ("${epoch(\"ms\")}", "epoch(\"ms\")"),
+                ("${if(foo, 3, \"-\")}", "if(foo, 3, \"-\")"),
+                ("${join(foo, \",\")}", "join(foo, \",\")"),
+                ("${join(foo, \":\", \"\\n\")}", "join(foo, \":\", \"\\n\")"),
+                ("${json_path(\"response.body.groups.*.id\")}", "json_path(\"response.body.groups.*.id\")"),
+                ("${match(response.body,\"test\")}", "match(response.body,\"test\")"),
+                ("${max(foo, bar)}", "max(foo, bar)"),
+                ("${min(foo, bar)}", "min(foo, bar)"),
+                ("${random(0, 10)}", "random(0, 10, ${p:null})"),
+                ("${range(0, 10)}", "range(0, 10)"),
+                ("${repeat(10)}", "repeat(10)"),
+                ("${repeat(5, 10)}", "repeat(5, 10)"),
+                ("${replace(\"abc\", foo, \"123\")}", "replace(\"abc\", foo, \"123\")"),
+                ("${parseInt(foo)}", "parseInt(foo)"),
+                ("${parseFloat(foo)}", "parseFloat(foo)"),
+            ]);
+
+            for (input, output) in &tests {
+                let t = Template::new(
+                    input,
+                    &BTreeMap::new(),
+                    &mut RequiredProviders::new(),
+                    false,
+                    unsafe { std::mem::zeroed() },
+                )
+                .unwrap();
+                let t = t.dump();
+                assert_eq!(t, vec![Segment::SingleExpression(output.to_string())]);
+            }
         }
     }
 }

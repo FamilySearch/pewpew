@@ -105,3 +105,17 @@ impl FromStr for Encoding {
         }
     }
 }
+
+impl std::fmt::Display for Encoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Base64 => write!(f, "base64"),
+            Self::PercentSimple => write!(f, "percent-simple"),
+            Self::PercentQuery => write!(f, "percent-query"),
+            Self::Percent => write!(f, "percent"),
+            Self::PercentPath => write!(f, "percent-path"),
+            Self::PercentUserinfo => write!(f, "percent-userinfo"),
+            Self::NonAlphanumeric => write!(f, "non-alphanumeric"),
+        }
+    }
+}

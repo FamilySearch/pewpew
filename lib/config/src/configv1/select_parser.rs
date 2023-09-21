@@ -647,6 +647,15 @@ pub enum ValueOrExpression {
     Expression(Expression),
 }
 
+impl std::fmt::Display for ValueOrExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value(v) => write!(f, "{}", v),
+            Self::Expression(x) => write!(f, "{}", x),
+        }
+    }
+}
+
 impl ValueOrExpression {
     pub fn new(
         expr: &str,
@@ -722,20 +731,48 @@ impl ValueOrExpression {
     }
 }
 
-impl std::fmt::Display for ValueOrExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Value(v) => write!(f, "{}", v),
-            Self::Expression(x) => write!(f, "{}", x),
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum Value {
     Path(Box<Path>),
     Json(json::Value),
     Template(Template),
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(p) => {
+                if p.rest.is_empty() {
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{i}"),
+                        PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
+                        PathStart::Value(v) => write!(f, "{v}"),
+                    }
+                } else {
+                    let rest: Vec<String> = p
+                        .rest
+                        .clone()
+                        .into_iter()
+                        .map(|piece| format!("{piece}"))
+                        .collect();
+                    let rest = rest.join(".");
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{i}.{rest}"),
+                        PathStart::FunctionCall(func) => {
+                            write!(f, "{}.{}", &func.to_convert(), rest)
+                        }
+                        PathStart::Value(v) => write!(f, "{v}.{rest}"),
+                    }
+                }
+            }
+            Self::Json(j) => write!(
+                f,
+                "{}",
+                serde_json::to_string(j).unwrap_or(format!("{j:?}"))
+            ),
+            Self::Template(t) => write!(f, "{:?}", t),
+        }
+    }
 }
 
 impl Value {
@@ -812,43 +849,6 @@ impl Value {
         };
         // boxed to prevent recursive impl Stream
         s.boxed()
-    }
-}
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Path(p) => {
-                if p.rest.is_empty() {
-                    match &p.start {
-                        PathStart::Ident(i) => write!(f, "{i}"),
-                        PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
-                        PathStart::Value(v) => write!(f, "{v}"),
-                    }
-                } else {
-                    let rest: Vec<String> = p
-                        .rest
-                        .clone()
-                        .into_iter()
-                        .map(|piece| format!("{piece}"))
-                        .collect();
-                    let rest = rest.join(".");
-                    match &p.start {
-                        PathStart::Ident(i) => write!(f, "{i}.{rest}"),
-                        PathStart::FunctionCall(func) => {
-                            write!(f, "{}.{}", &func.to_convert(), rest)
-                        }
-                        PathStart::Value(v) => write!(f, "{v}.{rest}"),
-                    }
-                }
-            }
-            Self::Json(j) => write!(
-                f,
-                "{}",
-                serde_json::to_string(j).unwrap_or(format!("{j:?}"))
-            ),
-            Self::Template(t) => write!(f, "{:?}", t),
-        }
     }
 }
 
@@ -1018,6 +1018,19 @@ pub struct Expression {
     op: Option<(InfixOperator, Box<Expression>)>,
 }
 
+impl std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.not.is_none() && self.op.is_none() {
+            match &self.lhs {
+                ExpressionLhs::Expression(x) => write!(f, "{}", x),
+                ExpressionLhs::Value(v) => write!(f, "{}", v),
+            }
+        } else {
+            write!(f, "{}", self)
+        }
+    }
+}
+
 impl Expression {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
@@ -1163,19 +1176,6 @@ impl Expression {
         Ok(self
             .simplify_to_json()?
             .map_a(|v| json_value_to_string(Cow::Owned(v)).into_owned()))
-    }
-}
-
-impl std::fmt::Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.not.is_none() && self.op.is_none() {
-            match &self.lhs {
-                ExpressionLhs::Expression(x) => write!(f, "{}", x),
-                ExpressionLhs::Value(v) => write!(f, "{}", v),
-            }
-        } else {
-            write!(f, "{}", self)
-        }
     }
 }
 
@@ -2792,7 +2792,10 @@ pub mod template_convert {
                 ("${entries(foo)}", "entries(foo)"),
                 ("${epoch(\"ms\")}", "epoch(\"ms\")"),
                 ("${if(foo, foo, bar)}", "(foo) ? foo : bar"),
-                ("${if(match(foo, \"test\"), foo, bar)}", "(match(foo, \"test\")) ? foo : bar"),
+                (
+                    "${if(match(foo, \"test\"), foo, bar)}",
+                    "(match(foo, \"test\")) ? foo : bar",
+                ),
                 ("${join(foo, \",\")}", "join(foo, \",\")"),
                 ("${join(foo, \":\", \"\\n\")}", "join(foo, \":\", \"\\n\")"),
                 (

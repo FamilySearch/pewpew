@@ -193,6 +193,12 @@ pub(super) struct Encode {
     encoding: Encoding,
 }
 
+impl std::fmt::Display for Encode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "encode({}, \"{}\")", self.arg, self.encoding)
+    }
+}
+
 impl Encode {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
@@ -258,15 +264,15 @@ impl Encode {
     }
 }
 
-impl std::fmt::Display for Encode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "encode({}, \"{}\")", self.arg, self.encoding)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Entries {
     arg: ValueOrExpression,
+}
+
+impl std::fmt::Display for Entries {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "entries({})", self.arg)
+    }
 }
 
 impl Entries {
@@ -387,12 +393,6 @@ impl Entries {
     }
 }
 
-impl std::fmt::Display for Entries {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "entries({})", self.arg)
-    }
-}
-
 // `Epoch` enum is in the shared module
 impl Epoch {
     pub(super) fn new(
@@ -435,6 +435,12 @@ pub(super) struct If {
     first: ValueOrExpression,
     second: ValueOrExpression,
     third: ValueOrExpression,
+}
+
+impl std::fmt::Display for If {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if({}, {}, {})", self.first, self.second, self.third)
+    }
 }
 
 impl If {
@@ -560,17 +566,21 @@ impl If {
     }
 }
 
-impl std::fmt::Display for If {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "if({}, {}, {})", self.first, self.second, self.third)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(super) struct Join {
     arg: ValueOrExpression,
     sep: String,
     sep2: Option<String>,
+}
+
+impl std::fmt::Display for Join {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(sep2) = &self.sep2 {
+            write!(f, "join({}, \"{}\", \"{}\")", self.arg, self.sep, sep2)
+        } else {
+            write!(f, "join({}, \"{}\")", self.arg, self.sep)
+        }
+    }
 }
 
 impl Join {
@@ -678,16 +688,6 @@ impl Join {
         self.arg
             .into_stream(providers, no_recoverable_error)
             .map_ok(move |(d, returns)| (Join::evaluate_with_arg(&sep, &sep2, &d), returns))
-    }
-}
-
-impl std::fmt::Display for Join {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(sep2) = &self.sep2 {
-            write!(f, "join({}, \"{}\", \"{}\")", self.arg, self.sep, sep2)
-        } else {
-            write!(f, "join({}, \"{}\")", self.arg, self.sep)
-        }
     }
 }
 
@@ -1303,11 +1303,18 @@ impl std::fmt::Display for Range {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Range::Args(args) => write!(f, "range({}, {})", args.0, args.1),
-            Range::Range(range) => if range.reverse {
-                write!(f, "range({}, {})", range.range.end - 1, range.range.start - 1)
-            } else {
-                write!(f, "range({}, {})", range.range.start, range.range.end)
-            },
+            Range::Range(range) => {
+                if range.reverse {
+                    write!(
+                        f,
+                        "range({}, {})",
+                        range.range.end - 1,
+                        range.range.start - 1
+                    )
+                } else {
+                    write!(f, "range({}, {})", range.range.start, range.range.end)
+                }
+            }
         }
     }
 }
@@ -1521,7 +1528,11 @@ pub(super) struct Replace {
 
 impl std::fmt::Display for Replace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "replace({}, {}, {})", self.needle, self.haystack, self.replacer)
+        write!(
+            f,
+            "replace({}, {}, {})",
+            self.needle, self.haystack, self.replacer
+        )
     }
 }
 

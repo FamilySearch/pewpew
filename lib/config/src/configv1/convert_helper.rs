@@ -409,45 +409,22 @@ fn map_query(
     // Finally attempt to parse the select but fallback to the manual_query or empty_query
     select.map(|s| {
         let select_temp = s.inner();
-        let select_temp_str = s.inner().as_str();
-        log::debug!("select_temp query: {select_temp:?}");
-        let query = if let Some(s) = select_temp_str {
-            log::warn!("old query: {s:?}");
-            // TODO: What to do with objects instead of strings?
-            match select_temp {
-                json::Value::String(value) => {
-                    log::warn!("String query: {value:?}");
-                    Query::simple(s.to_string(), for_each.clone(), where_clause.clone())
-                        .unwrap_or(manual_query.clone())
-                }
-                json::Value::Object(value) => {
-                    log::warn!("Object query: {value:?}");
-                    todo!()
-                }
-                json::Value::Null => {
-                    log::warn!("Null query");
-                    todo!()
-                }
-                json::Value::Bool(value) => {
-                    log::warn!("Bool query: {value:?}");
-                    todo!()
-                }
-                json::Value::Number(value) => {
-                    log::warn!("Number query: {value:?}");
-                    todo!()
-                }
-                json::Value::Array(value) => {
-                    log::warn!("Array query: {value:?}");
-                    todo!()
-                }
-            };
-            Query::simple(s.to_string(), for_each.clone(), where_clause.clone())
-                .unwrap_or(manual_query.clone())
-        } else {
-            manual_query
+        log::debug!("select_temp query: {select_temp}");
+        let query = match select_temp {
+            json::Value::Object(_) => {
+                log::info!("Object query: {select_temp}");
+                Query::<False>::complex_json(format!("{select_temp}").as_str(), for_each, where_clause)
+            },
+            _ => Query::simple(format!("{select_temp}"), for_each, where_clause),
         };
-        // let query = Query::simple(s.destruct().0.to_string(), for_each, where_clause).unwrap_or();
-        log::warn!("new query: {query:?}");
+        let query = match query {
+            Ok(q) => q,
+            Err(e) => {
+                log::warn!("query `select` {select_temp} must be updated manually: {e:?}");
+                manual_query
+            }
+        };
+        log::debug!("new query: {query:?}");
         query
     })
 }

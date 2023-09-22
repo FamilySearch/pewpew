@@ -101,15 +101,27 @@ impl<VD: Bool> Query<VD> {
     ///
     /// The json defines the structure of the select, where any terminal string value is an
     /// expression to evaluate.
-    pub fn from_json(json: &str) -> Result<Self, QueryGenError> {
+    pub fn complex_json(
+        json: &str,
+        for_each: Vec<String>,
+        r#where: Option<String>,
+    ) -> Result<Self, QueryGenError> {
         let structure: SelectTmp = serde_json::from_str(json)?;
 
         QueryTmp {
             select: structure,
-            for_each: vec![],
-            r#where: None,
+            for_each,
+            r#where,
         }
         .try_into()
+    }
+
+    /// Create a query from a JSON string.
+    ///
+    /// The json defines the structure of the select, where any terminal string value is an
+    /// expression to evaluate.
+    pub fn from_json(json: &str) -> Result<Self, QueryGenError> {
+        Query::complex_json(json, vec![], None)
     }
 }
 

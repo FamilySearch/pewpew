@@ -1324,13 +1324,18 @@ pub struct Template {
 
 impl std::fmt::Display for Template {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let pieces: Vec<String> = self
-            .pieces
-            .clone()
-            .into_iter()
-            .map(|piece| format!("{piece}"))
-            .collect();
-        write!(f, "{}", pieces.join(""))
+        // Empty strings get turned into empty Templates with no pieces
+        if self.pieces.len() == 0 {
+            write!(f, "\"\"")
+        } else {
+            let pieces: Vec<String> = self
+                .pieces
+                .clone()
+                .into_iter()
+                .map(|piece| format!("{piece}"))
+                .collect();
+            write!(f, "{}", pieces.join(""))
+        }
     }
 }
 
@@ -2716,22 +2721,22 @@ pub mod template_convert {
         pub fn dump(self) -> Vec<Segment> {
             self.pieces
                 .into_iter()
-                .map(|p| match p {
-                    TemplatePiece::NotExpression(s) => Segment::Outer(s),
+                .flat_map(|p| match p.clone() {
+                    TemplatePiece::NotExpression(s) => vec![Segment::Outer(s.to_owned())].into_iter(),
                     TemplatePiece::Expression(e) => match e {
                         ValueOrExpression::Value(Value::Json(j)) => {
                             log::warn!("not sure what this is supposed to be for, so please update manually: {j:?}");
-                            Segment::Placeholder
+                            vec![Segment::Placeholder].into_iter()
                         },
                         ValueOrExpression::Value(Value::Path(p)) => match *p {
                             Path {
                                 start: PathStart::Ident(s),
                                 rest,
                                 ..
-                            } if rest.is_empty() => Segment::SingleSource(s),
+                            } if rest.is_empty() => vec![Segment::SingleSource(s.to_owned())].into_iter(),
                             other => {
                                 log::warn!("template value path {other:?} must be updated manually");
-                                Segment::Placeholder
+                                vec![Segment::Placeholder].into_iter()
                             }
                         },
                         ValueOrExpression::Expression(Expression {
@@ -2745,33 +2750,35 @@ pub mod template_convert {
                                     start: PathStart::Ident(s),
                                     rest,
                                     ..
-                                } if rest.is_empty() => Segment::SingleSource(s),
+                                } if rest.is_empty() => vec![Segment::SingleSource(s)].into_iter(),
+                                    // TODO: Handle !rest.is_empty()
                                 Path {
                                     start: PathStart::FunctionCall(f),
                                     rest,
                                     ..
                                 } if rest.is_empty() => {
+                                    // TODO: Handle !rest.is_empty()
                                     log::debug!("template expression function {f:?}");
                                     if let FunctionCall::Collect(_) = f {
                                         log::warn!("template expression collect {f:?} must be updated manually");
-                                        Segment::Placeholder
+                                        vec![Segment::Placeholder].into_iter()
                                     } else {
-                                        Segment::SingleExpression(f.to_convert())
+                                        vec![Segment::SingleExpression(f.to_convert())].into_iter()
                                     }
                                 },
                                 other => {
-                                    log::warn!("template expression path {other} must be updated manually");
-                                    Segment::Placeholder
+                                    log::warn!("template expression path {other:?} must be updated manually");
+                                    vec![Segment::Placeholder].into_iter()
                                 }
                             }
                         },
                         other => {
                             log::warn!("template segment {other:?} must be updated manually");
-                            Segment::Placeholder
+                            vec![Segment::Placeholder].into_iter()
                         }
                     },
                 })
-                .collect()
+                .collect::<Vec<Segment>>()
         }
     }
 

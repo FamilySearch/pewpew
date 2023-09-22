@@ -946,6 +946,26 @@ enum InfixOperator {
     Subtract = 12,
 }
 
+impl std::fmt::Display for InfixOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InfixOperator::Add => write!(f, "+"),
+            InfixOperator::And => write!(f, "&&"),
+            InfixOperator::Divide => write!(f, "/"),
+            InfixOperator::Eq => write!(f, "=="),
+            InfixOperator::Gt => write!(f, ">"),
+            InfixOperator::Gte => write!(f, ">="),
+            InfixOperator::Lt => write!(f, "<"),
+            InfixOperator::Lte => write!(f, "<="),
+            InfixOperator::Mod => write!(f, "%"),
+            InfixOperator::Multiply => write!(f, "*"),
+            InfixOperator::Ne => write!(f, "!="),
+            InfixOperator::Or => write!(f, "||"),
+            InfixOperator::Subtract => write!(f, "-"),
+        }
+    }
+}
+
 static INFIX_OPERATOR_PRECEDENCE: [u8; 13] = [
     4, // Add
     2, // And
@@ -1037,19 +1057,21 @@ enum ExpressionLhs {
 #[derive(Clone, Debug)]
 pub struct Expression {
     not: Option<bool>,
-    lhs: ExpressionLhs,
-    op: Option<(InfixOperator, Box<Expression>)>,
+    left_hand_side: ExpressionLhs,
+    right_hand_side: Option<(InfixOperator, Box<Expression>)>,
 }
 
 impl std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.not.is_none() && self.op.is_none() {
-            match &self.lhs {
-                ExpressionLhs::Expression(x) => write!(f, "{}", x),
-                ExpressionLhs::Value(v) => write!(f, "{}", v),
-            }
-        } else {
-            write!(f, "{:?}", self)
+        // I can't get a test to even evaluate the not, so I'm not sure if this is working
+        let not = if self.not.unwrap_or(false) {"!"} else {""};
+        let right_hand_side = match &self.right_hand_side {
+            Some((operator, right_hand_side)) => format!(" {operator} {right_hand_side}"),
+            None => "".to_owned(),
+        };
+        match &self.left_hand_side {
+            ExpressionLhs::Expression(x) => write!(f, "{not}{x}{right_hand_side}"),
+            ExpressionLhs::Value(v) => write!(f, "{not}{v}{right_hand_side}"),
         }
     }
 }
@@ -1061,8 +1083,8 @@ impl Expression {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
-        let mut v = if let Some((op, rhs)) = &self.op {
-            let v = match &self.lhs {
+        let mut v = if let Some((op, rhs)) = &self.right_hand_side {
+            let v = match &self.left_hand_side {
                 ExpressionLhs::Expression(e) => {
                     e.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                 }
@@ -1073,7 +1095,7 @@ impl Expression {
             let rhs = rhs.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each);
             Cow::Owned(op.evaluate(&v, rhs)?)
         } else {
-            match &self.lhs {
+            match &self.left_hand_side {
                 ExpressionLhs::Expression(e) => e.evaluate(d, no_recoverable_error, for_each)?,
                 ExpressionLhs::Value(v) => v.evaluate(d, no_recoverable_error, for_each)?,
             }
@@ -1101,7 +1123,7 @@ impl Expression {
         impl Iterator<Item = Result<Cow<'a, json::Value>, ExecutingExpressionError>> + Clone,
         ExecutingExpressionError,
     > {
-        let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.op, &self.not, &self.lhs) {
+        let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.right_hand_side, &self.not, &self.left_hand_side) {
             Either3::A(v.evaluate_as_iter(d, no_recoverable_error, for_each)?)
         } else {
             let value = self.evaluate(d, no_recoverable_error, for_each)?;
@@ -1127,12 +1149,12 @@ impl Expression {
         no_recoverable_error: bool,
     ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> + Send + Unpin
     {
-        let v = match self.lhs {
+        let v = match self.left_hand_side {
             ExpressionLhs::Expression(e) => e.into_stream(providers, no_recoverable_error).a(),
             ExpressionLhs::Value(v) => v.into_stream(providers, no_recoverable_error).b(),
         };
         let not = self.not;
-        let v = if let Some((op, rhs)) = self.op {
+        let v = if let Some((op, rhs)) = self.right_hand_side {
             v.zip(rhs.into_stream(providers, no_recoverable_error))
                 .map(move |(a, b)| {
                     let (lhs, mut returns) = a?;
@@ -1170,8 +1192,8 @@ impl Expression {
     fn simplify_to_json(self) -> Result<Either<json::Value, Self>, CreatingExpressionError> {
         let aorb = match self {
             Expression {
-                lhs: ExpressionLhs::Value(Value::Json(v)),
-                op: None,
+                left_hand_side: ExpressionLhs::Value(Value::Json(v)),
+                right_hand_side: None,
                 ..
             } => {
                 if let Some(not) = self.not {
@@ -1186,8 +1208,8 @@ impl Expression {
                 }
             }
             Expression {
-                lhs: ExpressionLhs::Expression(e),
-                op: None,
+                left_hand_side: ExpressionLhs::Expression(e),
+                right_hand_side: None,
                 ..
             } => return e.simplify_to_json(),
             e => Either::B(e),
@@ -2080,14 +2102,14 @@ fn expression_helper(
             };
             let right = expression_helper(right, level)?;
             let op = Some((operator, right.into()));
-            e = if e.op.is_none() {
-                e.op = op;
+            e = if e.right_hand_side.is_none() {
+                e.right_hand_side = op;
                 e
             } else {
                 Expression {
-                    lhs: ExpressionLhs::Expression(e.into()),
+                    left_hand_side: ExpressionLhs::Expression(e.into()),
                     not: None,
-                    op,
+                    right_hand_side: op,
                 }
             };
             Ok(e)
@@ -2148,8 +2170,8 @@ fn parse_expression_pieces(
                 not_count = 0;
                 let e = Expression {
                     not,
-                    lhs: ExpressionLhs::Value(v),
-                    op: None,
+                    left_hand_side: ExpressionLhs::Value(v),
+                    right_hand_side: None,
                 };
                 let eoo = ExpressionOrOperator::Expression(e);
                 pieces.push(eoo);
@@ -2714,8 +2736,8 @@ pub mod template_convert {
                         },
                         ValueOrExpression::Expression(Expression {
                             not: None,
-                            lhs: ExpressionLhs::Value(Value::Path(p)),
-                            op: None,
+                            left_hand_side: ExpressionLhs::Value(Value::Path(p)),
+                            right_hand_side: None,
                         }) => {
                             log::debug!("template expression path {0:?} - {1:?}; is_empty: {2:?}", p.start, p.rest, p.rest.is_empty());
                             match *p {

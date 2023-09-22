@@ -1049,7 +1049,7 @@ impl std::fmt::Display for Expression {
                 ExpressionLhs::Value(v) => write!(f, "{}", v),
             }
         } else {
-            write!(f, "{}", self)
+            write!(f, "{:?}", self)
         }
     }
 }
@@ -2717,7 +2717,7 @@ pub mod template_convert {
                             lhs: ExpressionLhs::Value(Value::Path(p)),
                             op: None,
                         }) => {
-                            log::warn!("template expression path {0:?} - {1:?}; is_empty: {2:?}", p.start, p.rest, p.rest.is_empty());
+                            log::debug!("template expression path {0:?} - {1:?}; is_empty: {2:?}", p.start, p.rest, p.rest.is_empty());
                             match *p {
                                 Path {
                                     start: PathStart::Ident(s),
@@ -2729,16 +2729,16 @@ pub mod template_convert {
                                     rest,
                                     ..
                                 } if rest.is_empty() => {
-                                    log::warn!("template expression function {f:?}");
+                                    log::debug!("template expression function {f:?}");
                                     if let FunctionCall::Collect(_) = f {
-                                        log::warn!("template expression path {f:?} must be updated manually");
+                                        log::warn!("template expression collect {f:?} must be updated manually");
                                         Segment::Placeholder
                                     } else {
                                         Segment::SingleExpression(f.to_convert())
                                     }
                                 },
                                 other => {
-                                    log::warn!("template expression path {other:?} must be updated manually");
+                                    log::warn!("template expression path {other} must be updated manually");
                                     Segment::Placeholder
                                 }
                             }
@@ -2837,8 +2837,8 @@ pub mod template_convert {
                 ("${epoch(\"ms\")}", "epoch(\"ms\")"),
                 ("${if(foo, foo, bar)}", "(foo) ? foo : bar"),
                 (
-                    "${if(match(foo, \"test\"), foo, bar)}",
-                    "(match(foo, \"test\")) ? foo : bar",
+                    "${if(match(foo, \"test\") != null, foo, bar)}",
+                    "(match(foo, \"test\") != null) ? foo : bar",
                 ),
                 ("${join(foo, \",\")}", "join(foo, \",\")"),
                 ("${join(foo, \":\", \"\\n\")}", "join(foo, \":\", \"\\n\")"),

@@ -28,25 +28,23 @@ fn get_low_high(uniform: String) -> (String, String) {
     // Or Uniform(UniformFloat { low: 1.1, scale: 9.200000000000001 })
     let re_int = Regex::new(r"low: (\d+), range: (\d+),").unwrap();
     let re_float = Regex::new(r"low: ([0-9\.]+), scale: ([0-9\.]+) ").unwrap();
-    match re_int.captures(&uniform.as_str()) {
+    match re_int.captures(uniform.as_str()) {
         Some(caps) => {
             let low = (caps[1]).parse::<i64>();
             let range = (caps[2]).parse::<i64>();
-            if low.is_ok() && range.is_ok() {
-                let low = low.unwrap();
-                let high = range.unwrap() + low;
+            if let (Ok(low), Ok(range)) = (low, range) {
+                let high = range + low;
                 (format!("{low:.0}"), format!("{high:.0}"))
             } else {
                 ((caps[1]).to_owned(), (caps[2]).to_owned())
             }
         }
-        None => match re_float.captures(&uniform.as_str()) {
+        None => match re_float.captures(uniform.as_str()) {
             Some(caps) => {
                 let low = (caps[1]).parse::<f64>();
                 let range = (caps[2]).parse::<f64>();
-                if low.is_ok() && range.is_ok() {
-                    let low = low.unwrap();
-                    let high = range.unwrap() + low;
+                if let (Ok(low), Ok(range)) = (low, range) {
+                    let high = range + low;
                     if low.fract() == 0.0 && high.fract() == 0.0 {
                         (format!("{low:.0}"), format!("{high:.0}"))
                     } else {

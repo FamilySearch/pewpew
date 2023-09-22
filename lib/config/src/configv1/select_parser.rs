@@ -211,14 +211,14 @@ impl FunctionCall {
             FunctionCall::Encode(e) => format!("{e}"),
             FunctionCall::Entries(e) => format!("{e}"),
             FunctionCall::Epoch(e) => format!("{e}"),
-            FunctionCall::If(i) => format!("{}", i.to_convert()),
+            FunctionCall::If(i) => i.to_convert(),
             FunctionCall::Join(j) => format!("{j}"),
             FunctionCall::JsonPath(j) => format!("{j}"),
             FunctionCall::Match(m) => format!("{m}"),
             FunctionCall::MinMax(m) => format!("{m}"),
             FunctionCall::Pad(p) => format!("{p}"),
             FunctionCall::Range(r) => format!("{r}"),
-            FunctionCall::Random(r) => format!("{}", r.to_convert()),
+            FunctionCall::Random(r) => r.to_convert(),
             FunctionCall::Repeat(r) => format!("{r}"),
             FunctionCall::Replace(r) => format!("{r}"),
             FunctionCall::ParseNum(p) => format!("{p}"),
@@ -1327,7 +1327,7 @@ pub struct Template {
 impl std::fmt::Display for Template {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Empty strings get turned into empty Templates with no pieces
-        if self.pieces.len() == 0 {
+        if self.pieces.is_empty() {
             write!(f, "\"\"")
         } else {
             let pieces: Vec<String> = self

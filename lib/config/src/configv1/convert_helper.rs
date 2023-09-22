@@ -387,10 +387,7 @@ fn map_query(
     // Attempt to parse the for_each
     let for_each: Vec<String> = for_each
         .iter()
-        .map(|fe| {
-            let fe2 = (fe.inner.to_string(), fe.marker).0;
-            fe2
-        })
+        .map(|fe| (fe.inner.to_string(), fe.marker).0)
         .collect();
 
     // See if we can create a fallback with the where and for_each but without the select

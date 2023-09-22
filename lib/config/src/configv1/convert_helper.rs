@@ -413,8 +413,12 @@ fn map_query(
         let query = match select_temp {
             json::Value::Object(_) => {
                 log::info!("Object query: {select_temp}");
-                Query::<False>::complex_json(format!("{select_temp}").as_str(), for_each, where_clause)
-            },
+                Query::<False>::complex_json(
+                    format!("{select_temp}").as_str(),
+                    for_each,
+                    where_clause,
+                )
+            }
             json::Value::String(s) => Query::simple(s.to_string(), for_each, where_clause),
             _ => Query::simple(format!("{select_temp}"), for_each, where_clause),
         };

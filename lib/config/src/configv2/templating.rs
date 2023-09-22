@@ -482,6 +482,41 @@ impl<T: TemplateType> TemplatedString<T> {
                 template_convert::Segment::SingleExpression(x) => {
                     Ok(Segment::Expr(vec![Segment::Raw(x)], True))
                 }
+                template_convert::Segment::MultiExpression(template_segments) => {
+                    let mut segments: Vec<Segment<T, helpers::True>> = vec![];
+                    for x in template_segments {
+                        match x {
+                            template_convert::Segment::Outer(s) => segments.push(Segment::Raw(s)),
+                            template_convert::Segment::SingleSource(s) => {
+                                // Assume segment type based on what is allowed, and if there is a var named
+                                // that
+                                match (
+                                    T::EnvsAllowed::try_default(),
+                                    T::VarsAllowed::try_default(),
+                                    T::ProvAllowed::try_default(),
+                                    var_names.contains::<str>(&s),
+                                ) {
+                                    (Some(b), None, None, _) => segments.push(Segment::Env(s, b)),
+                                    (None, Some(b), _, true) => segments.push(Segment::Var(s, b)),
+                                    (None, _, Some(b), _) => segments.push(Segment::Prov(s, b)),
+                                    _ => segments.push(Segment::Raw(
+                                        "PLACEHOLDER__PLEASE_UPDATE_MANUALLY".to_owned(),
+                                    )),
+                                }
+                            }
+                            template_convert::Segment::SingleExpression(x) => {
+                                segments.push(Segment::Raw(x))
+                            }
+                            template_convert::Segment::MultiExpression(_) => {
+                                panic!("Cannot have a MultiExpression inside a MultiExpression")
+                            }
+                            template_convert::Segment::Placeholder => segments.push(Segment::Raw(
+                                "PLACEHOLDER__PLEASE_UPDATE_MANUALLY".to_owned(),
+                            )),
+                        }
+                    }
+                    Ok(Segment::Expr(segments, True))
+                }
                 template_convert::Segment::Placeholder => Ok(Segment::Expr(
                     vec![Segment::Raw(
                         "PLACEHOLDER__PLEASE_UPDATE_MANUALLY".to_owned(),

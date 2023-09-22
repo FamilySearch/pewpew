@@ -875,9 +875,9 @@ pub(super) enum PathSegment {
 impl std::fmt::Display for PathSegment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Number(n) => write!(f, "[{n}]"),
+            Self::Number(n) => write!(f, "[\"{n}\"]"),
             Self::String(s) => write!(f, "{s}"),
-            Self::Template(t) => write!(f, "{t:?}"),
+            Self::Template(t) => write!(f, "{t}"),
         }
     }
 }
@@ -1064,7 +1064,7 @@ pub struct Expression {
 impl std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // I can't get a test to even evaluate the not, so I'm not sure if this is working
-        let not = if self.not.unwrap_or(false) {"!"} else {""};
+        let not = if self.not.unwrap_or(false) { "!" } else { "" };
         let right_hand_side = match &self.right_hand_side {
             Some((operator, right_hand_side)) => format!(" {operator} {right_hand_side}"),
             None => "".to_owned(),
@@ -1123,7 +1123,9 @@ impl Expression {
         impl Iterator<Item = Result<Cow<'a, json::Value>, ExecutingExpressionError>> + Clone,
         ExecutingExpressionError,
     > {
-        let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.right_hand_side, &self.not, &self.left_hand_side) {
+        let i = if let (None, None, ExpressionLhs::Value(v)) =
+            (&self.right_hand_side, &self.not, &self.left_hand_side)
+        {
             Either3::A(v.evaluate_as_iter(d, no_recoverable_error, for_each)?)
         } else {
             let value = self.evaluate(d, no_recoverable_error, for_each)?;
@@ -2701,8 +2703,19 @@ pub mod template_convert {
         /// # Examples of V1 Template segments that would become this variant.
         ///
         /// - `"${epoch('ms')}"`
-        /// - `"${parseInt(response.body)}"`
+        /// - `"${parseInt(TEST_COUNT)}"`
         SingleExpression(String),
+        /// Interpolations where the contents are a multiple expressions.
+        ///
+        /// Whether the source is a Function, (required by Templates in configv2 being
+        /// more explicit) will be inferred later in the conversion at a point when more data is
+        /// available.
+        ///
+        /// # Examples of V1 Template segments that would become this variant.
+        ///
+        /// - `"${match(PROFILE, "[^-]+")["0"]}"`
+        /// - `"${response.status}"`
+        MultiExpression(Vec<Segment>),
         /// Any other interpolation segment.
         ///
         /// It's not necessarily "impossible" for this to be autoconverted, but efforts to make it
@@ -2721,22 +2734,22 @@ pub mod template_convert {
         pub fn dump(self) -> Vec<Segment> {
             self.pieces
                 .into_iter()
-                .flat_map(|p| match p.clone() {
-                    TemplatePiece::NotExpression(s) => vec![Segment::Outer(s.to_owned())].into_iter(),
+                .map(|p| match p.clone() {
+                    TemplatePiece::NotExpression(s) => Segment::Outer(s.to_owned()),
                     TemplatePiece::Expression(e) => match e {
                         ValueOrExpression::Value(Value::Json(j)) => {
                             log::warn!("not sure what this is supposed to be for, so please update manually: {j:?}");
-                            vec![Segment::Placeholder].into_iter()
+                            Segment::Placeholder
                         },
                         ValueOrExpression::Value(Value::Path(p)) => match *p {
                             Path {
                                 start: PathStart::Ident(s),
                                 rest,
                                 ..
-                            } if rest.is_empty() => vec![Segment::SingleSource(s.to_owned())].into_iter(),
+                            } if rest.is_empty() => Segment::SingleSource(s.to_owned()),
                             other => {
                                 log::warn!("template value path {other:?} must be updated manually");
-                                vec![Segment::Placeholder].into_iter()
+                                Segment::Placeholder
                             }
                         },
                         ValueOrExpression::Expression(Expression {
@@ -2750,31 +2763,59 @@ pub mod template_convert {
                                     start: PathStart::Ident(s),
                                     rest,
                                     ..
-                                } if rest.is_empty() => vec![Segment::SingleSource(s)].into_iter(),
-                                    // TODO: Handle !rest.is_empty()
+                                } => if rest.is_empty() {
+                                    Segment::SingleSource(s)
+                                } else {
+                                    // Handle !rest.is_empty()
+                                    // rest: [String("nextPageToken")] is .nextPageToken
+                                    let mut segments = vec![
+                                        Segment::SingleSource(s),
+                                    ];
+                                    for path_segment in rest {
+                                        let mut decimal = "";
+                                        if let PathSegment::String(_) = path_segment {
+                                            decimal = ".";
+                                        }
+                                        segments.push(Segment::Outer(format!("{decimal}{path_segment}")))
+                                    }
+                                    Segment::MultiExpression(segments)
+                                },
                                 Path {
                                     start: PathStart::FunctionCall(f),
                                     rest,
                                     ..
-                                } if rest.is_empty() => {
-                                    // TODO: Handle !rest.is_empty()
-                                    log::debug!("template expression function {f:?}");
-                                    if let FunctionCall::Collect(_) = f {
-                                        log::warn!("template expression collect {f:?} must be updated manually");
-                                        vec![Segment::Placeholder].into_iter()
-                                    } else {
-                                        vec![Segment::SingleExpression(f.to_convert())].into_iter()
-                                    }
+                                } => {
+                                        // TODO: Handle !rest.is_empty()
+                                        // rest: [Number(0)] is ["0"]
+                                        // rest: [String("nextPageToken")] is .nextPageToken
+                                        log::debug!("template expression function {f:?}");
+                                        let segment = if let FunctionCall::Collect(_) = f {
+                                            log::warn!("template expression collect {f:?} must be updated manually");
+                                            Segment::Placeholder
+                                        } else {
+                                            Segment::SingleExpression(f.to_convert())
+                                        };
+                                        if rest.is_empty() {
+                                            segment
+                                        } else {
+                                            let mut segments = vec![
+                                                segment,
+                                            ];
+                                            for path_segment in rest {
+                                                segments.push(Segment::Outer(format!("{path_segment}")))
+                                            }
+                                            Segment::MultiExpression(segments)
+                                        }
                                 },
                                 other => {
                                     log::warn!("template expression path {other:?} must be updated manually");
-                                    vec![Segment::Placeholder].into_iter()
+                                    Segment::Placeholder
                                 }
                             }
                         },
                         other => {
                             log::warn!("template segment {other:?} must be updated manually");
-                            vec![Segment::Placeholder].into_iter()
+                            Segment::Placeholder
                         }
                     },
                 })
@@ -2848,7 +2889,11 @@ pub mod template_convert {
                     // Placeholder because of script expr.
                     Segment::SingleExpression("encode(foo, \"percent-userinfo\")".to_owned()),
                     // Placeholder because of complex path.
-                    Segment::Placeholder,
+                    Segment::MultiExpression(vec![
+                        Segment::SingleSource("response".to_owned()),
+                        Segment::Outer(".body".to_owned()),
+                        Segment::Outer(".a".to_owned()),
+                    ]),
                 ]
             );
         }

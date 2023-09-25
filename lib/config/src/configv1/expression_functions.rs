@@ -17,7 +17,7 @@ use zip_all::zip_all;
 
 use std::{borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt, iter, sync::Arc, task::Poll};
 
-/// Helper function for converting to new config where we use a Uniform Range.
+/// Helper function for converting to new v2 config where we use a Uniform Range.
 /// Takes a format!("{range:?}") and finds the low an high and returns them as strings
 ///
 /// # Panics
@@ -559,7 +559,7 @@ impl If {
         })
     }
 
-    pub(super) fn to_convert(&self) -> String {
+    pub(super) fn convert_to_v2(&self) -> String {
         format!("({}) ? {} : {}", self.first, self.second, self.third)
     }
 }
@@ -1247,6 +1247,12 @@ impl Random {
         }))
     }
 
+    /// Helper function for converting to new v2 config where we use a Uniform Range.
+    /// Takes a format!("{range:?}") and finds the low an high and returns them as strings
+    ///
+    /// # Panics
+    ///
+    /// Panics if .
     pub(super) fn get_low_high(&self) -> (String, String) {
         let uniform = match self {
             Random::Integer(r) => format!("{:?}", r),
@@ -1255,7 +1261,7 @@ impl Random {
         get_low_high(uniform)
     }
 
-    pub(super) fn to_convert(&self) -> String {
+    pub(super) fn convert_to_v2(&self) -> String {
         let (low, high) = self.get_low_high();
         format!("random({}, {}, ${{p:null}})", low, high)
     }

@@ -204,21 +204,21 @@ impl FunctionCall {
         Ok(r)
     }
 
-    fn to_convert(&self) -> String {
+    fn convert_to_v2(&self) -> String {
         debug!("FunctionCall::evaluate function=\"{:?}\"", self);
         match self {
             FunctionCall::Collect(c) => format!("{c:?}"),
             FunctionCall::Encode(e) => format!("{e}"),
             FunctionCall::Entries(e) => format!("{e}"),
             FunctionCall::Epoch(e) => format!("{e}"),
-            FunctionCall::If(i) => i.to_convert(),
+            FunctionCall::If(i) => i.convert_to_v2(),
             FunctionCall::Join(j) => format!("{j}"),
             FunctionCall::JsonPath(j) => format!("{j}"),
             FunctionCall::Match(m) => format!("{m}"),
             FunctionCall::MinMax(m) => format!("{m}"),
             FunctionCall::Pad(p) => format!("{p}"),
             FunctionCall::Range(r) => format!("{r}"),
-            FunctionCall::Random(r) => r.to_convert(),
+            FunctionCall::Random(r) => r.convert_to_v2(),
             FunctionCall::Repeat(r) => format!("{r}"),
             FunctionCall::Replace(r) => format!("{r}"),
             FunctionCall::ParseNum(p) => format!("{p}"),
@@ -762,7 +762,7 @@ impl std::fmt::Display for Value {
                 if p.rest.is_empty() {
                     match &p.start {
                         PathStart::Ident(i) => write!(f, "{i}"),
-                        PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
+                        PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
                         PathStart::Value(v) => write!(f, "{v}"),
                     }
                 } else {
@@ -776,7 +776,7 @@ impl std::fmt::Display for Value {
                     match &p.start {
                         PathStart::Ident(i) => write!(f, "{i}.{rest}"),
                         PathStart::FunctionCall(func) => {
-                            write!(f, "{}.{}", &func.to_convert(), rest)
+                            write!(f, "{}.{}", &func.convert_to_v2(), rest)
                         }
                         PathStart::Value(v) => write!(f, "{v}.{rest}"),
                     }
@@ -867,7 +867,7 @@ impl Value {
 
 #[derive(Clone, Debug)]
 pub(super) enum PathSegment {
-    Number(usize),  // [0] ?
+    Number(usize), // [0]
     String(String), // like .body on response.body
     Template(Arc<Template>),
 }
@@ -875,7 +875,7 @@ pub(super) enum PathSegment {
 impl std::fmt::Display for PathSegment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Number(n) => write!(f, "[\"{n}\"]"),
+            Self::Number(n) => write!(f, "[{n}]"), // [0]
             Self::String(s) => write!(f, "{s}"),
             Self::Template(t) => write!(f, "{t}"),
         }
@@ -923,7 +923,7 @@ impl std::fmt::Display for PathStart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             PathStart::Ident(i) => write!(f, "{i}"),
-            PathStart::FunctionCall(func) => write!(f, "{}", &func.to_convert()),
+            PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
             PathStart::Value(v) => write!(f, "{v}"),
         }
     }
@@ -2793,7 +2793,7 @@ pub mod template_convert {
                                             log::warn!("template expression collect {f:?} must be updated manually");
                                             Segment::Placeholder
                                         } else {
-                                            Segment::SingleExpression(f.to_convert())
+                                            Segment::SingleExpression(f.convert_to_v2())
                                         };
                                         if rest.is_empty() {
                                             segment

@@ -867,7 +867,7 @@ impl Value {
 
 #[derive(Clone, Debug)]
 pub(super) enum PathSegment {
-    Number(usize), // [0]
+    Number(usize),  // [0]
     String(String), // like .body on response.body
     Template(Arc<Template>),
 }

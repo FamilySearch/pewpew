@@ -2754,56 +2754,56 @@ pub mod template_convert {
                         },
                         ValueOrExpression::Expression(Expression {
                             not: None,
-                            left_hand_side: ExpressionLhs::Value(Value::Path(p)),
-                            right_hand_side: None,
+                            left_hand_side: ExpressionLhs::Value(Value::Path(path)),
+                            right_hand_side,
                         }) => {
-                            log::debug!("template expression path {0:?} - {1:?}; is_empty: {2:?}", p.start, p.rest, p.rest.is_empty());
-                            match *p {
+                            log::debug!("template expression path {0:?} - {1:?}; is_empty: {2:?}, right_hand_side: {3:?}", path.start, path.rest, path.rest.is_empty(), right_hand_side);
+                            let mut segments: Vec<Segment> = vec![];
+                            // Handle !rest.is_empty()
+                            // rest: [String("nextPageToken")] is .nextPageToken
+                            for path_segment in &path.rest {
+                                let mut decimal = "";
+                                if let PathSegment::String(_) = path_segment {
+                                    decimal = ".";
+                                }
+                                segments.push(Segment::Outer(format!("{decimal}{path_segment}")))
+                            }
+                            // Hanlde the right_hand_side
+                            if let Some((operator, expression)) = right_hand_side {
+                                log::debug!("{operator} {expression}");
+                                segments.push(Segment::Outer(format!(" {operator} {expression}")))
+                            }
+                            match *path {
                                 Path {
-                                    start: PathStart::Ident(s),
-                                    rest,
+                                    start: PathStart::Ident(ident_path),
+                                    rest: _,
                                     ..
-                                } => if rest.is_empty() {
-                                    Segment::SingleSource(s)
+                                } => if segments.is_empty() {
+                                    Segment::SingleSource(ident_path)
                                 } else {
-                                    // Handle !rest.is_empty()
-                                    // rest: [String("nextPageToken")] is .nextPageToken
-                                    let mut segments = vec![
-                                        Segment::SingleSource(s),
-                                    ];
-                                    for path_segment in rest {
-                                        let mut decimal = "";
-                                        if let PathSegment::String(_) = path_segment {
-                                            decimal = ".";
-                                        }
-                                        segments.push(Segment::Outer(format!("{decimal}{path_segment}")))
-                                    }
+                                    // no unshift, so push then rotate_right(1) to put at start
+                                    segments.push(Segment::SingleSource(ident_path));
+                                    segments.rotate_right(1);
                                     Segment::MultiExpression(segments)
                                 },
                                 Path {
-                                    start: PathStart::FunctionCall(f),
-                                    rest,
+                                    start: PathStart::FunctionCall(function_call),
+                                    rest: _,
                                     ..
                                 } => {
-                                        // TODO: Handle !rest.is_empty()
-                                        // rest: [Number(0)] is ["0"]
-                                        // rest: [String("nextPageToken")] is .nextPageToken
-                                        log::debug!("template expression function {f:?}");
-                                        let segment = if let FunctionCall::Collect(_) = f {
-                                            log::warn!("template expression collect {f:?} must be updated manually");
+                                        log::debug!("template expression function {function_call:?}");
+                                        let segment = if let FunctionCall::Collect(_) = function_call {
+                                            log::warn!("template expression collect {function_call:?} must be updated manually");
                                             Segment::Placeholder
                                         } else {
-                                            Segment::SingleExpression(f.convert_to_v2())
+                                            Segment::SingleExpression(function_call.convert_to_v2())
                                         };
-                                        if rest.is_empty() {
+                                        if segments.is_empty() {
                                             segment
                                         } else {
-                                            let mut segments = vec![
-                                                segment,
-                                            ];
-                                            for path_segment in rest {
-                                                segments.push(Segment::Outer(format!("{path_segment}")))
-                                            }
+                                            // no unshift, so push then rotate_right(1) to put at start
+                                            segments.push(segment);
+                                            segments.rotate_right(1);
                                             Segment::MultiExpression(segments)
                                         }
                                 },

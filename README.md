@@ -25,10 +25,13 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 Changes:
 - Major changes: Javascript scripting!
 - Updated config-wasm to parse legacy and scripting yaml files
+- New binary pewpew-config-updater will attempt to convert legacy config yamls to the new version. If it can't convert the code it will leave in PLACEHOLDERS and TODO
+  - Known issues:
+  - Expressions in vars will not wrap environment variables in the expected `${e:VAR}`
+  - vars in `logs` and `provides` will not have the prepended `_v.` before the var name.
 
 Bugs:
-- Collect returns an array of strings regardless of input type
-- auto-converter removes code templates. Leave in and TODO
+- Collect returns an array of strings regardless of input type. Workaround, use scripting to `.map(parseInt)`.
 - global loggers may not be running in try script
 
 Bug fixes:

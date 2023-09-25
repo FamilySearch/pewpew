@@ -42,7 +42,7 @@ wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR --scope fs
 
 # build the results viewer (which includes putting the output into the book's src)
 cd $RESULTS_VIEWER_REACT_DIR
-npm install
+npm ci
 npm run build
 
 # build the book

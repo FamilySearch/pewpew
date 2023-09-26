@@ -33,6 +33,7 @@ Changes:
 Bugs:
 - Collect returns an array of strings regardless of input type. Workaround, use scripting to `.map(parseInt)`.
 - Declare expressions that create strings will escape out any json/quotes. No workaround currently.
+- Vars cannot be decimal point values. Ex `peakLoad: 0.87`. Workaround: `peakLoad: ${x:0.87}`
 - global loggers may not be running in try script
 
 Bug fixes:

@@ -32,6 +32,7 @@ Changes:
 
 Bugs:
 - Collect returns an array of strings regardless of input type. Workaround, use scripting to `.map(parseInt)`.
+- Declare expressions that create strings will escape out any json/quotes. No workaround currently.
 - global loggers may not be running in try script
 
 Bug fixes:

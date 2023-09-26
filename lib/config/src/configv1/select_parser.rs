@@ -204,6 +204,27 @@ impl FunctionCall {
         Ok(r)
     }
 
+    fn convert_to_v2(&self) -> String {
+        debug!("FunctionCall::evaluate function=\"{:?}\"", self);
+        match self {
+            FunctionCall::Collect(c) => format!("{c:?}"),
+            FunctionCall::Encode(e) => format!("{e}"),
+            FunctionCall::Entries(e) => format!("{e}"),
+            FunctionCall::Epoch(e) => format!("{e}"),
+            FunctionCall::If(i) => i.convert_to_v2(),
+            FunctionCall::Join(j) => format!("{j}"),
+            FunctionCall::JsonPath(j) => format!("{j}"),
+            FunctionCall::Match(m) => format!("{m}"),
+            FunctionCall::MinMax(m) => format!("{m}"),
+            FunctionCall::Pad(p) => format!("{p}"),
+            FunctionCall::Range(r) => format!("{r}"),
+            FunctionCall::Random(r) => r.convert_to_v2(),
+            FunctionCall::Repeat(r) => format!("{r}"),
+            FunctionCall::Replace(r) => format!("{r}"),
+            FunctionCall::ParseNum(p) => format!("{p}"),
+        }
+    }
+
     fn evaluate<'a, 'b: 'a>(
         &'b self,
         d: Cow<'a, json::Value>,
@@ -450,6 +471,23 @@ pub struct Path {
     pub(super) marker: Marker,
 }
 
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.rest.is_empty() {
+            write!(f, "{}", self.start)
+        } else {
+            let rest: Vec<String> = self
+                .rest
+                .clone()
+                .into_iter()
+                .map(|piece| format!("{piece}"))
+                .collect();
+            let rest = rest.join(".");
+            write!(f, "{}.{}", self.start, rest)
+        }
+    }
+}
+
 impl Path {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
@@ -626,6 +664,15 @@ pub enum ValueOrExpression {
     Expression(Expression),
 }
 
+impl std::fmt::Display for ValueOrExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value(v) => write!(f, "{}", v),
+            Self::Expression(x) => write!(f, "{}", x),
+        }
+    }
+}
+
 impl ValueOrExpression {
     pub fn new(
         expr: &str,
@@ -708,6 +755,39 @@ pub enum Value {
     Template(Template),
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(p) => {
+                if p.rest.is_empty() {
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{i}"),
+                        PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
+                        PathStart::Value(v) => write!(f, "{v}"),
+                    }
+                } else {
+                    let rest: Vec<String> = p
+                        .rest
+                        .clone()
+                        .into_iter()
+                        .map(|piece| format!("{piece}"))
+                        .collect();
+                    let rest = rest.join(".");
+                    match &p.start {
+                        PathStart::Ident(i) => write!(f, "{i}.{rest}"),
+                        PathStart::FunctionCall(func) => {
+                            write!(f, "{}.{}", &func.convert_to_v2(), rest)
+                        }
+                        PathStart::Value(v) => write!(f, "{v}.{rest}"),
+                    }
+                }
+            }
+            Self::Json(j) => write!(f, "{j}"),
+            Self::Template(t) => write!(f, "{}", t),
+        }
+    }
+}
+
 impl Value {
     fn evaluate<'a, 'b: 'a>(
         &'b self,
@@ -787,9 +867,19 @@ impl Value {
 
 #[derive(Clone, Debug)]
 pub(super) enum PathSegment {
-    Number(usize),
-    String(String),
+    Number(usize),  // [0]
+    String(String), // like .body on response.body
     Template(Arc<Template>),
+}
+
+impl std::fmt::Display for PathSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(n) => write!(f, "[{n}]"), // [0]
+            Self::String(s) => write!(f, "{s}"),
+            Self::Template(t) => write!(f, "{t}"),
+        }
+    }
 }
 
 impl PathSegment {
@@ -829,6 +919,16 @@ pub(super) enum PathStart {
     Value(json::Value),
 }
 
+impl std::fmt::Display for PathStart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            PathStart::Ident(i) => write!(f, "{i}"),
+            PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
+            PathStart::Value(v) => write!(f, "{v}"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum InfixOperator {
     Add = 0,
@@ -844,6 +944,26 @@ enum InfixOperator {
     Ne = 10,
     Or = 11,
     Subtract = 12,
+}
+
+impl std::fmt::Display for InfixOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InfixOperator::Add => write!(f, "+"),
+            InfixOperator::And => write!(f, "&&"),
+            InfixOperator::Divide => write!(f, "/"),
+            InfixOperator::Eq => write!(f, "=="),
+            InfixOperator::Gt => write!(f, ">"),
+            InfixOperator::Gte => write!(f, ">="),
+            InfixOperator::Lt => write!(f, "<"),
+            InfixOperator::Lte => write!(f, "<="),
+            InfixOperator::Mod => write!(f, "%"),
+            InfixOperator::Multiply => write!(f, "*"),
+            InfixOperator::Ne => write!(f, "!="),
+            InfixOperator::Or => write!(f, "||"),
+            InfixOperator::Subtract => write!(f, "-"),
+        }
+    }
 }
 
 static INFIX_OPERATOR_PRECEDENCE: [u8; 13] = [
@@ -937,8 +1057,23 @@ enum ExpressionLhs {
 #[derive(Clone, Debug)]
 pub struct Expression {
     not: Option<bool>,
-    lhs: ExpressionLhs,
-    op: Option<(InfixOperator, Box<Expression>)>,
+    left_hand_side: ExpressionLhs,
+    right_hand_side: Option<(InfixOperator, Box<Expression>)>,
+}
+
+impl std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // I can't get a test to even evaluate the not, so I'm not sure if this is working
+        let not = if self.not.unwrap_or(false) { "!" } else { "" };
+        let right_hand_side = match &self.right_hand_side {
+            Some((operator, right_hand_side)) => format!(" {operator} {right_hand_side}"),
+            None => "".to_owned(),
+        };
+        match &self.left_hand_side {
+            ExpressionLhs::Expression(x) => write!(f, "{not}{x}{right_hand_side}"),
+            ExpressionLhs::Value(v) => write!(f, "{not}{v}{right_hand_side}"),
+        }
+    }
 }
 
 impl Expression {
@@ -948,8 +1083,8 @@ impl Expression {
         no_recoverable_error: bool,
         for_each: Option<&[Cow<'a, json::Value>]>,
     ) -> Result<Cow<'a, json::Value>, ExecutingExpressionError> {
-        let mut v = if let Some((op, rhs)) = &self.op {
-            let v = match &self.lhs {
+        let mut v = if let Some((op, rhs)) = &self.right_hand_side {
+            let v = match &self.left_hand_side {
                 ExpressionLhs::Expression(e) => {
                     e.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each)?
                 }
@@ -960,7 +1095,7 @@ impl Expression {
             let rhs = rhs.evaluate(Cow::Borrowed(&*d), no_recoverable_error, for_each);
             Cow::Owned(op.evaluate(&v, rhs)?)
         } else {
-            match &self.lhs {
+            match &self.left_hand_side {
                 ExpressionLhs::Expression(e) => e.evaluate(d, no_recoverable_error, for_each)?,
                 ExpressionLhs::Value(v) => v.evaluate(d, no_recoverable_error, for_each)?,
             }
@@ -988,7 +1123,9 @@ impl Expression {
         impl Iterator<Item = Result<Cow<'a, json::Value>, ExecutingExpressionError>> + Clone,
         ExecutingExpressionError,
     > {
-        let i = if let (None, None, ExpressionLhs::Value(v)) = (&self.op, &self.not, &self.lhs) {
+        let i = if let (None, None, ExpressionLhs::Value(v)) =
+            (&self.right_hand_side, &self.not, &self.left_hand_side)
+        {
             Either3::A(v.evaluate_as_iter(d, no_recoverable_error, for_each)?)
         } else {
             let value = self.evaluate(d, no_recoverable_error, for_each)?;
@@ -1014,12 +1151,12 @@ impl Expression {
         no_recoverable_error: bool,
     ) -> impl Stream<Item = Result<(json::Value, Vec<Ar>), ExecutingExpressionError>> + Send + Unpin
     {
-        let v = match self.lhs {
+        let v = match self.left_hand_side {
             ExpressionLhs::Expression(e) => e.into_stream(providers, no_recoverable_error).a(),
             ExpressionLhs::Value(v) => v.into_stream(providers, no_recoverable_error).b(),
         };
         let not = self.not;
-        let v = if let Some((op, rhs)) = self.op {
+        let v = if let Some((op, rhs)) = self.right_hand_side {
             v.zip(rhs.into_stream(providers, no_recoverable_error))
                 .map(move |(a, b)| {
                     let (lhs, mut returns) = a?;
@@ -1057,8 +1194,8 @@ impl Expression {
     fn simplify_to_json(self) -> Result<Either<json::Value, Self>, CreatingExpressionError> {
         let aorb = match self {
             Expression {
-                lhs: ExpressionLhs::Value(Value::Json(v)),
-                op: None,
+                left_hand_side: ExpressionLhs::Value(Value::Json(v)),
+                right_hand_side: None,
                 ..
             } => {
                 if let Some(not) = self.not {
@@ -1073,8 +1210,8 @@ impl Expression {
                 }
             }
             Expression {
-                lhs: ExpressionLhs::Expression(e),
-                op: None,
+                left_hand_side: ExpressionLhs::Expression(e),
+                right_hand_side: None,
                 ..
             } => return e.simplify_to_json(),
             e => Either::B(e),
@@ -1171,11 +1308,37 @@ enum TemplatePiece {
     NotExpression(String),
 }
 
+impl std::fmt::Display for TemplatePiece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TemplatePiece::Expression(x) => write!(f, "{x}"),
+            TemplatePiece::NotExpression(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Template {
     pieces: Vec<TemplatePiece>,
     size_hint: usize,
     no_recoverable_error: bool,
+}
+
+impl std::fmt::Display for Template {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Empty strings get turned into empty Templates with no pieces
+        if self.pieces.is_empty() {
+            write!(f, "\"\"")
+        } else {
+            let pieces: Vec<String> = self
+                .pieces
+                .clone()
+                .into_iter()
+                .map(|piece| format!("{piece}"))
+                .collect();
+            write!(f, "{}", pieces.join(""))
+        }
+    }
 }
 
 impl Template {
@@ -1946,14 +2109,14 @@ fn expression_helper(
             };
             let right = expression_helper(right, level)?;
             let op = Some((operator, right.into()));
-            e = if e.op.is_none() {
-                e.op = op;
+            e = if e.right_hand_side.is_none() {
+                e.right_hand_side = op;
                 e
             } else {
                 Expression {
-                    lhs: ExpressionLhs::Expression(e.into()),
+                    left_hand_side: ExpressionLhs::Expression(e.into()),
                     not: None,
-                    op,
+                    right_hand_side: op,
                 }
             };
             Ok(e)
@@ -2014,8 +2177,8 @@ fn parse_expression_pieces(
                 not_count = 0;
                 let e = Expression {
                     not,
-                    lhs: ExpressionLhs::Value(v),
-                    op: None,
+                    left_hand_side: ExpressionLhs::Value(v),
+                    right_hand_side: None,
                 };
                 let eoo = ExpressionOrOperator::Expression(e);
                 pieces.push(eoo);
@@ -2531,6 +2694,28 @@ pub mod template_convert {
         /// - `"${port}"`
         /// - `"${sessionId}"`
         SingleSource(String),
+        /// Interpolations where the contents are a single expression.
+        ///
+        /// Whether the source is a Function, (required by Templates in configv2 being
+        /// more explicit) will be inferred later in the conversion at a point when more data is
+        /// available.
+        ///
+        /// # Examples of V1 Template segments that would become this variant.
+        ///
+        /// - `"${epoch('ms')}"`
+        /// - `"${parseInt(TEST_COUNT)}"`
+        SingleExpression(String),
+        /// Interpolations where the contents are a multiple expressions.
+        ///
+        /// Whether the source is a Function, (required by Templates in configv2 being
+        /// more explicit) will be inferred later in the conversion at a point when more data is
+        /// available.
+        ///
+        /// # Examples of V1 Template segments that would become this variant.
+        ///
+        /// - `"${match(PROFILE, "[^-]+")["0"]}"`
+        /// - `"${response.status}"`
+        MultiExpression(Vec<Segment>),
         /// Any other interpolation segment.
         ///
         /// It's not necessarily "impossible" for this to be autoconverted, but efforts to make it
@@ -2549,8 +2734,8 @@ pub mod template_convert {
         pub fn dump(self) -> Vec<Segment> {
             self.pieces
                 .into_iter()
-                .map(|p| match p {
-                    TemplatePiece::NotExpression(s) => Segment::Outer(s),
+                .map(|p| match p.clone() {
+                    TemplatePiece::NotExpression(s) => Segment::Outer(s.to_owned()),
                     TemplatePiece::Expression(e) => match e {
                         ValueOrExpression::Value(Value::Json(j)) => {
                             log::warn!("not sure what this is supposed to be for, so please update manually: {j:?}");
@@ -2561,25 +2746,71 @@ pub mod template_convert {
                                 start: PathStart::Ident(s),
                                 rest,
                                 ..
-                            } if rest.is_empty() => Segment::SingleSource(s),
+                            } if rest.is_empty() => Segment::SingleSource(s.to_owned()),
                             other => {
-                                log::warn!("template path {other:?} must be updated manually");
+                                log::warn!("template value path {other:?} must be updated manually");
                                 Segment::Placeholder
                             }
                         },
                         ValueOrExpression::Expression(Expression {
                             not: None,
-                            lhs: ExpressionLhs::Value(Value::Path(p)),
-                            op: None,
-                        }) => match *p {
-                            Path {
-                                start: PathStart::Ident(s),
-                                rest,
-                                ..
-                            } if rest.is_empty() => Segment::SingleSource(s),
-                            other => {
-                                log::warn!("template path {other:?} must be updated manually");
-                                Segment::Placeholder
+                            left_hand_side: ExpressionLhs::Value(Value::Path(path)),
+                            right_hand_side,
+                        }) => {
+                            log::debug!("template expression path {0:?} - {1:?}; is_empty: {2:?}, right_hand_side: {3:?}", path.start, path.rest, path.rest.is_empty(), right_hand_side);
+                            let mut segments: Vec<Segment> = vec![];
+                            // Handle !rest.is_empty()
+                            // rest: [String("nextPageToken")] is .nextPageToken
+                            for path_segment in &path.rest {
+                                let mut decimal = "";
+                                if let PathSegment::String(_) = path_segment {
+                                    decimal = ".";
+                                }
+                                segments.push(Segment::Outer(format!("{decimal}{path_segment}")))
+                            }
+                            // Hanlde the right_hand_side
+                            if let Some((operator, expression)) = right_hand_side {
+                                log::debug!("{operator} {expression}");
+                                segments.push(Segment::Outer(format!(" {operator} {expression}")))
+                            }
+                            match *path {
+                                Path {
+                                    start: PathStart::Ident(ident_path),
+                                    rest: _,
+                                    ..
+                                } => if segments.is_empty() {
+                                    Segment::SingleSource(ident_path)
+                                } else {
+                                    // no unshift, so push then rotate_right(1) to put at start
+                                    segments.push(Segment::SingleSource(ident_path));
+                                    segments.rotate_right(1);
+                                    Segment::MultiExpression(segments)
+                                },
+                                Path {
+                                    start: PathStart::FunctionCall(function_call),
+                                    rest: _,
+                                    ..
+                                } => {
+                                        log::debug!("template expression function {function_call:?}");
+                                        let segment = if let FunctionCall::Collect(_) = function_call {
+                                            log::warn!("template expression collect {function_call:?} must be updated manually");
+                                            Segment::Placeholder
+                                        } else {
+                                            Segment::SingleExpression(function_call.convert_to_v2())
+                                        };
+                                        if segments.is_empty() {
+                                            segment
+                                        } else {
+                                            // no unshift, so push then rotate_right(1) to put at start
+                                            segments.push(segment);
+                                            segments.rotate_right(1);
+                                            Segment::MultiExpression(segments)
+                                        }
+                                },
+                                other => {
+                                    log::warn!("template expression path {other:?} must be updated manually");
+                                    Segment::Placeholder
+                                }
                             }
                         },
                         other => {
@@ -2588,7 +2819,7 @@ pub mod template_convert {
                         }
                     },
                 })
-                .collect()
+                .collect::<Vec<Segment>>()
         }
     }
 
@@ -2656,11 +2887,73 @@ pub mod template_convert {
                     Segment::SingleSource("port".to_owned()),
                     Segment::Outer("/".to_owned()),
                     // Placeholder because of script expr.
-                    Segment::Placeholder,
+                    Segment::SingleExpression("encode(foo, \"percent-userinfo\")".to_owned()),
                     // Placeholder because of complex path.
-                    Segment::Placeholder,
+                    Segment::MultiExpression(vec![
+                        Segment::SingleSource("response".to_owned()),
+                        Segment::Outer(".body".to_owned()),
+                        Segment::Outer(".a".to_owned()),
+                    ]),
                 ]
             );
+        }
+
+        #[test]
+        fn template_convert_functions() {
+            let tests = BTreeMap::from([
+                // ("${collect(foo, 3, 5)}", "collect(foo, 3, 5)"), Collect is still a placeholder
+                (
+                    "${encode(foo, \"percent-userinfo\")}",
+                    "encode(foo, \"percent-userinfo\")",
+                ),
+                ("${end_pad(foo, 3, \"-\")}", "end_pad(foo, 3, \"-\")"),
+                ("${entries(foo)}", "entries(foo)"),
+                ("${epoch(\"ms\")}", "epoch(\"ms\")"),
+                ("${if(foo, foo, bar)}", "(foo) ? foo : bar"),
+                (
+                    "${if(match(foo, \"test\") != null, foo, bar)}",
+                    "(match(foo, \"test\") != null) ? foo : bar",
+                ),
+                ("${join(foo, \",\")}", "join(foo, \",\")"),
+                ("${join(foo, \":\", \"\\n\")}", "join(foo, \":\", \"\\n\")"),
+                (
+                    "${json_path(\"response.body.groups.*.id\")}",
+                    "json_path(\"response.body.groups.*.id\")",
+                ),
+                (
+                    "${match(response.body, \"test\")}",
+                    "match(response.body, \"test\")",
+                ),
+                ("${max(foo, bar)}", "max(foo, bar)"),
+                ("${min(foo, bar)}", "min(foo, bar)"),
+                ("${random(0, 10)}", "random(0, 10, ${p:null})"),
+                ("${random(1, 10)}", "random(1, 10, ${p:null})"),
+                ("${random(1.1, 10.3)}", "random(1.100, 10.300, ${p:null})"),
+                ("${range(0, 10)}", "range(0, 10)"),
+                ("${range(10, 0)}", "range(10, 0)"),
+                ("${range(foo, bar)}", "range(foo, bar)"),
+                ("${repeat(10)}", "repeat(10)"),
+                ("${repeat(5, 10)}", "repeat(5, 10)"),
+                (
+                    "${replace(\"abc\", foo, \"123\")}",
+                    "replace(\"abc\", foo, \"123\")",
+                ),
+                ("${parseInt(foo)}", "parseInt(foo)"),
+                ("${parseFloat(foo)}", "parseFloat(foo)"),
+            ]);
+
+            for (input, output) in &tests {
+                let t = Template::new(
+                    input,
+                    &BTreeMap::new(),
+                    &mut RequiredProviders::new(),
+                    false,
+                    unsafe { std::mem::zeroed() },
+                )
+                .unwrap();
+                let t = t.dump();
+                assert_eq!(t, vec![Segment::SingleExpression(output.to_string())]);
+            }
         }
     }
 }

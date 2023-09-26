@@ -17,6 +17,48 @@ use zip_all::zip_all;
 
 use std::{borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt, iter, sync::Arc, task::Poll};
 
+/// Helper function for converting to new v2 config where we use a Uniform Range.
+/// Takes a format!("{range:?}") and finds the low an high and returns them as strings
+///
+/// # Panics
+///
+/// Panics if .
+fn get_low_high(uniform: String) -> (String, String) {
+    // Will be something like Uniform(UniformInt { low: 0, range: 10, z: 6 })
+    // Or Uniform(UniformFloat { low: 1.1, scale: 9.200000000000001 })
+    let re_int = Regex::new(r"low: (\d+), range: (\d+),").unwrap();
+    let re_float = Regex::new(r"low: ([0-9\.]+), scale: ([0-9\.]+) ").unwrap();
+    match re_int.captures(uniform.as_str()) {
+        Some(caps) => {
+            let low = (caps[1]).parse::<i64>();
+            let range = (caps[2]).parse::<i64>();
+            if let (Ok(low), Ok(range)) = (low, range) {
+                let high = range + low;
+                (format!("{low:.0}"), format!("{high:.0}"))
+            } else {
+                ((caps[1]).to_owned(), (caps[2]).to_owned())
+            }
+        }
+        None => match re_float.captures(uniform.as_str()) {
+            Some(caps) => {
+                let low = (caps[1]).parse::<f64>();
+                let range = (caps[2]).parse::<f64>();
+                if let (Ok(low), Ok(range)) = (low, range) {
+                    let high = range + low;
+                    if low.fract() == 0.0 && high.fract() == 0.0 {
+                        (format!("{low:.0}"), format!("{high:.0}"))
+                    } else {
+                        (format!("{low:.3}"), format!("{high:.3}"))
+                    }
+                } else {
+                    ((caps[1]).to_owned(), (caps[2]).to_owned())
+                }
+            }
+            None => (uniform, "unknown".to_string()),
+        },
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct Collect {
     arg: ValueOrExpression,
@@ -149,6 +191,12 @@ pub(super) struct Encode {
     encoding: Encoding,
 }
 
+impl std::fmt::Display for Encode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "encode({}, \"{}\")", self.arg, self.encoding)
+    }
+}
+
 impl Encode {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
@@ -217,6 +265,12 @@ impl Encode {
 #[derive(Clone, Debug)]
 pub struct Entries {
     arg: ValueOrExpression,
+}
+
+impl std::fmt::Display for Entries {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "entries({})", self.arg)
+    }
 }
 
 impl Entries {
@@ -381,6 +435,12 @@ pub(super) struct If {
     third: ValueOrExpression,
 }
 
+impl std::fmt::Display for If {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if({}, {}, {})", self.first, self.second, self.third)
+    }
+}
+
 impl If {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
@@ -498,6 +558,10 @@ impl If {
             }
         })
     }
+
+    pub(super) fn convert_to_v2(&self) -> String {
+        format!("({}) ? {} : {}", self.first, self.second, self.third)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -505,6 +569,16 @@ pub(super) struct Join {
     arg: ValueOrExpression,
     sep: String,
     sep2: Option<String>,
+}
+
+impl std::fmt::Display for Join {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(sep2) = &self.sep2 {
+            write!(f, "join({}, \"{}\", \"{}\")", self.arg, self.sep, sep2)
+        } else {
+            write!(f, "join({}, \"{}\")", self.arg, self.sep)
+        }
+    }
 }
 
 impl Join {
@@ -620,6 +694,7 @@ pub(super) struct JsonPath {
     provider: String,
     selector: Arc<json_path::Compiled>,
     marker: Marker,
+    args: Vec<ValueOrExpression>, // Save for display
 }
 
 impl fmt::Debug for JsonPath {
@@ -631,6 +706,18 @@ impl fmt::Debug for JsonPath {
             self.marker.line(),
             self.marker.col()
         )
+    }
+}
+
+impl std::fmt::Display for JsonPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args: Vec<String> = self
+            .args
+            .clone()
+            .into_iter()
+            .map(|arg| format!("{}", arg))
+            .collect();
+        write!(f, "json_path({})", args.join(","))
     }
 }
 
@@ -668,6 +755,7 @@ impl JsonPath {
                     provider: provider.into(),
                     selector: json_path.into(),
                     marker,
+                    args: args.clone(),
                 };
                 let v = static_vars.get(provider).cloned();
                 if let Some(v) = v {
@@ -731,6 +819,12 @@ pub(super) struct Match {
     arg: ValueOrExpression,
     capture_names: Vec<String>,
     regex: Regex,
+}
+
+impl std::fmt::Display for Match {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "match({}, \"{}\")", self.arg, self.regex)
+    }
 }
 
 impl Match {
@@ -837,6 +931,22 @@ impl Match {
 pub(super) struct MinMax {
     args: Vec<ValueOrExpression>,
     min: bool,
+}
+
+impl std::fmt::Display for MinMax {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args: Vec<String> = self
+            .args
+            .clone()
+            .into_iter()
+            .map(|arg| format!("{arg}"))
+            .collect();
+        if self.min {
+            write!(f, "min({})", args.join(", "))
+        } else {
+            write!(f, "max({})", args.join(", "))
+        }
+    }
 }
 
 impl MinMax {
@@ -947,6 +1057,24 @@ pub(super) struct Pad {
     arg: ValueOrExpression,
     min_length: usize,
     padding: String,
+}
+
+impl std::fmt::Display for Pad {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.start {
+            write!(
+                f,
+                "start_pad({}, {}, \"{}\")",
+                self.arg, self.min_length, self.padding
+            )
+        } else {
+            write!(
+                f,
+                "end_pad({}, {}, \"{}\")",
+                self.arg, self.min_length, self.padding
+            )
+        }
+    }
 }
 
 impl Pad {
@@ -1066,6 +1194,13 @@ pub enum Random {
     Float(Uniform<f64>),
 }
 
+impl std::fmt::Display for Random {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (low, high) = self.get_low_high();
+        write!(f, "random({}, {})", low, high)
+    }
+}
+
 impl Random {
     pub(super) fn new(
         args: Vec<ValueOrExpression>,
@@ -1111,6 +1246,25 @@ impl Random {
             Ok((self.evaluate().into_owned(), Vec::new()))
         }))
     }
+
+    /// Helper function for converting to new v2 config where we use a Uniform Range.
+    /// Takes a format!("{range:?}") and finds the low an high and returns them as strings
+    ///
+    /// # Panics
+    ///
+    /// Panics if .
+    pub(super) fn get_low_high(&self) -> (String, String) {
+        let uniform = match self {
+            Random::Integer(r) => format!("{:?}", r),
+            Random::Float(r) => format!("{:?}", r),
+        };
+        get_low_high(uniform)
+    }
+
+    pub(super) fn convert_to_v2(&self) -> String {
+        let (low, high) = self.get_low_high();
+        format!("random({}, {}, ${{p:null}})", low, high)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1147,6 +1301,26 @@ impl ReversibleRange {
 pub(super) enum Range {
     Args(Box<(ValueOrExpression, ValueOrExpression, Marker)>),
     Range(ReversibleRange),
+}
+
+impl std::fmt::Display for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Range::Args(args) => write!(f, "range({}, {})", args.0, args.1),
+            Range::Range(range) => {
+                if range.reverse {
+                    write!(
+                        f,
+                        "range({}, {})",
+                        range.range.end - 1,
+                        range.range.start - 1
+                    )
+                } else {
+                    write!(f, "range({}, {})", range.range.start, range.range.end)
+                }
+            }
+        }
+    }
 }
 
 impl Range {
@@ -1269,6 +1443,17 @@ pub(super) struct Repeat {
     random: Option<Uniform<u64>>,
 }
 
+impl std::fmt::Display for Repeat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(uniform) = self.random {
+            let (_, high) = get_low_high(format!("{uniform:?}"));
+            write!(f, "repeat({}, {})", self.min, high)
+        } else {
+            write!(f, "repeat({})", self.min)
+        }
+    }
+}
+
 impl Repeat {
     pub(super) fn new(
         mut args: Vec<ValueOrExpression>,
@@ -1343,6 +1528,16 @@ pub(super) struct Replace {
     needle: ValueOrExpression,
     haystack: ValueOrExpression,
     replacer: ValueOrExpression,
+}
+
+impl std::fmt::Display for Replace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "replace({}, {}, {})",
+            self.needle, self.haystack, self.replacer
+        )
+    }
 }
 
 impl Replace {
@@ -1465,6 +1660,16 @@ impl Replace {
 pub(super) struct ParseNum {
     arg: ValueOrExpression,
     is_float: bool,
+}
+
+impl std::fmt::Display for ParseNum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_float {
+            write!(f, "parseFloat({})", self.arg)
+        } else {
+            write!(f, "parseInt({})", self.arg)
+        }
+    }
 }
 
 impl ParseNum {

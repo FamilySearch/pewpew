@@ -8,10 +8,10 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Logger<VD: Bool = True> {
     pub query: Option<super::query::Query<VD>>,
+    pub limit: Option<u64>,
     pub to: LogTo<VD>,
     #[serde(default)]
     pub pretty: bool,
-    pub limit: Option<u64>,
     #[serde(default)]
     pub kill: bool,
 }

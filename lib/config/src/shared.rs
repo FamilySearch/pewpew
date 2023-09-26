@@ -119,3 +119,14 @@ impl FromStr for Epoch {
         }
     }
 }
+
+impl std::fmt::Display for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Seconds => write!(f, "epoch(\"s\")"),
+            Self::Milliseconds => write!(f, "epoch(\"ms\")"),
+            Self::Microseconds => write!(f, "epoch(\"mu\")"),
+            Self::Nanoseconds => write!(f, "epoch(\"ns\")"),
+        }
+    }
+}

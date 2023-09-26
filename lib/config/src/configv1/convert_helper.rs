@@ -374,17 +374,60 @@ fn map_query(
     for_each: Vec<WithMarker<String>>,
     where_clause: Option<WithMarker<String>>,
 ) -> Option<Query<False>> {
-    if let Some(w) = where_clause {
+    // Fallback query if we can't parse anything
+    let empty_query = Query::simple("PLEASE_UPDATE_MANUALLY".to_owned(), vec![], None).unwrap();
+
+    // Attempt to parse the where_clause
+    let where_clause = if let Some(w) = where_clause {
         let w = w.destruct().0;
-        log::warn!("query `where` item {w:?} must be updated manually");
+        Some(w)
+    } else {
+        None
     };
-    for_each.into_iter().for_each(|fe| {
-        let fe = fe.destruct().0;
-        log::warn!("query `for_each` item {fe:?} must be updated manually");
-    });
+    // Attempt to parse the for_each
+    let for_each: Vec<String> = for_each
+        .iter()
+        .map(|fe| (fe.inner.to_string(), fe.marker).0)
+        .collect();
+
+    // See if we can create a fallback with the where and for_each but without the select
+    let manual_query = match Query::simple(
+        "PLEASE_UPDATE_MANUALLY".to_owned(),
+        for_each.clone(),
+        where_clause.clone(),
+    ) {
+        Ok(q) => q,
+        Err(e) => {
+            log::warn!("query `where` or `for_each` item must be updated manually: {e:?}");
+            empty_query
+        }
+    };
+
+    // Finally attempt to parse the select but fallback to the manual_query or empty_query
     select.map(|s| {
-        log::warn!("query `select` item {s:?} must be updated manually");
-        Query::simple("PLEASE_UPDATE_MANUALLY".to_owned(), vec![], None).unwrap()
+        let select_temp = s.inner();
+        log::debug!("select_temp query: {select_temp}");
+        let query = match select_temp {
+            json::Value::Object(_) => {
+                log::info!("Object query: {select_temp}");
+                Query::<False>::complex_json(
+                    format!("{select_temp}").as_str(),
+                    for_each,
+                    where_clause,
+                )
+            }
+            json::Value::String(s) => Query::simple(s.to_string(), for_each, where_clause),
+            _ => Query::simple(format!("{select_temp}"), for_each, where_clause),
+        };
+        let query = match query {
+            Ok(q) => q,
+            Err(e) => {
+                log::warn!("query `select` {select_temp} must be updated manually: {e:?}");
+                manual_query
+            }
+        };
+        log::debug!("new query: {query:?}");
+        query
     })
 }
 

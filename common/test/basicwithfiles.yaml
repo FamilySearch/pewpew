@@ -1,7 +1,6 @@
 vars:
   rampTime: 1m
   loadTime: 1m
-  totalTime: 2m
   logDir: ${SPLUNK_PATH}
 load_pattern:
   - linear:

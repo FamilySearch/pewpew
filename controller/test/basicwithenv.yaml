@@ -1,7 +1,6 @@
 vars:
   rampTime: 1m
   loadTime: 1m
-  totalTime: 2m
   serviceUrlAgent: ${SERVICE_URL_AGENT}
   test1: ${TEST1}
   test2: ${TEST2}

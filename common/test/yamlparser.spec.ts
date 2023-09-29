@@ -136,44 +136,44 @@ describe("YamlParser", () => {
       })
       .catch((error) => done(error));
     });
-  });
 
-  it(BASIC_FILEPATH_WITH_FILES + " should be valid", (done: Mocha.Done) => {
-    YamlParser.parseYamlFile(BASIC_FILEPATH_WITH_FILES, { SPLUNK_PATH: UNIT_TEST_FOLDER })
-    .then((yamlParser: YamlParser) => {
-      expect(yamlParser).to.not.equal(undefined);
-      expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
-      expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
-      expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(1);
-      expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(2);
-      done();
-    })
-    .catch((error) => done(error));
-  });
+    it(BASIC_FILEPATH_WITH_FILES + " should be valid", (done: Mocha.Done) => {
+      YamlParser.parseYamlFile(BASIC_FILEPATH_WITH_FILES, { SPLUNK_PATH: UNIT_TEST_FOLDER })
+      .then((yamlParser: YamlParser) => {
+        expect(yamlParser).to.not.equal(undefined);
+        expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
+        expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
+        expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(1);
+        expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(2);
+        done();
+      })
+      .catch((error) => done(error));
+    });
 
-  it(BASIC_FILEPATH_NO_PEAK_LOAD + " should be valid", (done: Mocha.Done) => {
-    YamlParser.parseYamlFile(BASIC_FILEPATH_NO_PEAK_LOAD, {})
-    .then((yamlParser: YamlParser) => {
-      expect(yamlParser).to.not.equal(undefined);
-      expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
-      expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
-      expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(0);
-      expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(0);
-      done();
-    })
-    .catch((error) => done(error));
-  });
+    it(BASIC_FILEPATH_NO_PEAK_LOAD + " should be valid", (done: Mocha.Done) => {
+      YamlParser.parseYamlFile(BASIC_FILEPATH_NO_PEAK_LOAD, {})
+      .then((yamlParser: YamlParser) => {
+        expect(yamlParser).to.not.equal(undefined);
+        expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
+        expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
+        expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(0);
+        expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(0);
+        done();
+      })
+      .catch((error) => done(error));
+    });
 
-  it(BASIC_FILEPATH_HEADERS_ALL + " should be valid", (done: Mocha.Done) => {
-    YamlParser.parseYamlFile(BASIC_FILEPATH_HEADERS_ALL, {})
-    .then((yamlParser: YamlParser) => {
-      expect(yamlParser).to.not.equal(undefined);
-      expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
-      expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
-      expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(0);
-      expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(0);
-      done();
-    })
-    .catch((error) => done(error));
+    it(BASIC_FILEPATH_HEADERS_ALL + " should be valid", (done: Mocha.Done) => {
+      YamlParser.parseYamlFile(BASIC_FILEPATH_HEADERS_ALL, {})
+      .then((yamlParser: YamlParser) => {
+        expect(yamlParser).to.not.equal(undefined);
+        expect(yamlParser.getBucketSizeMs(), "getBucketSizeMs").to.equal(60000);
+        expect(yamlParser.getTestRunTimeMn(), "getTestRunTimeMn").to.equal(2);
+        expect(yamlParser.getInputFileNames().length, "getInputFileNames().length").to.equal(0);
+        expect(yamlParser.getLoggerFileNames().length, "getLoggerFileNames().length").to.equal(0);
+        done();
+      })
+      .catch((error) => done(error));
+    });
   });
 });

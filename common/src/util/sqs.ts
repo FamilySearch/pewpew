@@ -1,4 +1,9 @@
-import { AGENT_ENV, SYSTEM_NAME, getPrefix } from "./util";
+import {
+  AGENT_APPLICATION_NAME,
+  AGENT_ENV,
+  SYSTEM_NAME,
+  getPrefix
+} from "./util";
 import {
   ChangeMessageVisibilityCommand,
   ChangeMessageVisibilityCommandInput,
@@ -43,7 +48,7 @@ export function init () {
       // Controller should have this env variable from the deployment
       const systemNames: string[] = AGENT_ENV.split(",");
       for (const systemName of systemNames) {
-        const PREFIX: string = "PEWPEWAGENT_" + systemName.toUpperCase().replace("-", "_");
+        const PREFIX: string = (AGENT_APPLICATION_NAME + "_" + systemName).toUpperCase().replace("-", "_");
         const queueUrlTest: string | undefined = process.env[`${PREFIX}_SQS_SCALE_OUT_QUEUE_URL`];
         log(`${PREFIX}_SQS_SCALE_OUT_QUEUE_URL = ${queueUrlTest}`, LogLevel.DEBUG);
         if (!queueUrlTest) {
@@ -72,7 +77,7 @@ export function init () {
       // Controller should have this env variable from the deployment
       const systemNames: string[] = AGENT_ENV.split(",");
       for (const systemName of systemNames) {
-        const PREFIX: string = "PEWPEWAGENT_" + systemName.toUpperCase().replace("-", "_");
+        const PREFIX: string = (AGENT_APPLICATION_NAME + "_" + systemName).toUpperCase().replace("-", "_");
         const queueUrlTest: string | undefined = process.env[`${PREFIX}_SQS_SCALE_IN_QUEUE_URL`];
         log(`${PREFIX}_SQS_SCALE_IN_QUEUE_URL = ${queueUrlTest}`, LogLevel.DEBUG);
         if (!queueUrlTest) {

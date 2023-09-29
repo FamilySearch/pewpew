@@ -11,7 +11,6 @@ import React from "react";
 const yamlContents = `vars:
 rampTime: 1m
 loadTime: 1m
-totalTime: 2m
 serviceUrlAgent: \${SERVICE_URL_AGENT}
 load_pattern:
 - linear:
@@ -38,7 +37,6 @@ endpoints:
 const yamlContentsLarge = `vars:
 rampTime: 1m
 loadTime: 1m
-totalTime: 2m
 logDir: \${SPLUNK_PATH}
 load_pattern:
 - linear:

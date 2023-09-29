@@ -1,7 +1,6 @@
 vars:
   rampTime: 1m
   loadTime: 1m
-  totalTime: 2m
   serviceUrlAgent: 127.0.0.1:8080
 load_pattern:
   - !linear

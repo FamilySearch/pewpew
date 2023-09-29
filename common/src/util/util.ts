@@ -4,6 +4,7 @@ import { LogLevel, log } from "./log";
 
 export const APPLICATION_NAME: string = process.env.APPLICATION_NAME || "pewpewagent";
 export const CONTROLLER_APPLICATION_NAME: string = process.env.CONTROLLER_APPLICATION_NAME || "pewpewcontroller";
+export const AGENT_APPLICATION_NAME: string = process.env.AGENT_APPLICATION_NAME || "pewpewagent";
 export const CONTROLLER_APPLICATION_PREFIX: string = CONTROLLER_APPLICATION_NAME.toUpperCase().replace(/-/g, "_") + "_";
 export const SYSTEM_NAME: string = process.env.SYSTEM_NAME || "unittests";
 export const CONTROLLER_ENV = process.env.CONTROLLER_ENV;

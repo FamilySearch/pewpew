@@ -1,7 +1,6 @@
 vars:
   rampTime: 1m
   loadTime: 1m
-  totalTime: 2m
   serviceUrlAgent: ${e:SERVICE_URL_AGENT}
 load_pattern:
   - !linear

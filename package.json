@@ -60,7 +60,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": "18"
+    "node": ">=18.0.0 <21.0.0"
   },
   "nyc": {
     "exclude": "**/*.spec.ts"
@@ -71,8 +71,6 @@
     "@aws-sdk/client-sqs": "^3.363.0",
     "@aws-sdk/lib-storage": "^3.363.0",
     "bunyan": "~1.8.0",
-    "dotenv": "^16.0.0",
-    "dotenv-flow": "^3.2.0",
     "rimraf": "^5.0.0"
   },
   "devDependencies": {
@@ -83,6 +81,8 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "chai": "^4.3.7",
+    "dotenv": "^16.0.0",
+    "dotenv-flow": "^3.2.0",
     "eslint": "^8.40.0",
     "jsdom-global": "^3.0.2",
     "mocha": "^10.2.0",

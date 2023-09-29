@@ -241,6 +241,7 @@ export function mockSqs (): AwsStub<SQSServiceInputTypes, SQSServiceOutputTypes,
 export function resetMockSqs (): void {
   if (_mockedSqsInstance !== undefined) {
     _mockedSqsInstance.reset();
+    _mockedSqsInstance.restore();
     sqsConfig.sqsClient = undefined as any;
     _mockedSqsInstance = undefined;
   }

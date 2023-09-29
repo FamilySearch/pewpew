@@ -72,7 +72,6 @@ export function init (): void {
   // Where <prefix> is your application name, system name, and service name concatenated with underscores, capitalized, and all dashes replaced with underscores.
   // The s3 service name is s3 in the application which is then capitalized to _S3_ below
 
-  // We need to error check if we're running on application we don't fall back to the unittests on live
   const PREFIX: string = getPrefix(true); // Use the controller if we have one
   const bucketName: string | undefined = process.env[`${PREFIX}_S3_BUCKET_NAME`];
   log(`${PREFIX}_S3_BUCKET_NAME = ${bucketName}`, LogLevel.DEBUG);

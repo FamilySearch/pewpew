@@ -52,7 +52,7 @@
     "aws-sdk-client-mock": "^3.0.0",
     "chai": "^4.3.7",
     "dotenv": "^16.0.0",
-    "dotenv-flow": "^4.0.0",
+    "dotenv-flow": "^3.2.0",
     "eslint": "^8.40.0",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",

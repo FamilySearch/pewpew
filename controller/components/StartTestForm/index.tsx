@@ -59,14 +59,11 @@ const UploadTestButton = styled.button`
   text-align: center;
 `;
 
-const Alight = styled.a`
-  color: lightblue;
-`;
 const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <Info>
   <Column>
   <p>
     {`'${username}'` || "User"} is not authorized to run tests.<br/>
-    Please use the <Alight target="_blank" href="https://tools.fsdpt.org/portal/userManagement/requestAccess">DPT Tools Portal</Alight>&nbsp;and request 'Performance Test - User' permission if you need to be able to run tests.
+    Please request 'Pewpew - User' permission if you need to be able to run tests.
   </p>
   <Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning>
   </Column>

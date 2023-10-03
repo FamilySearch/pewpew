@@ -1,8 +1,9 @@
 vars:
   rampTime: 1m
-  loadTime: 1m
+  loadTime: ${e:LOAD_TIME}
   serviceUrlAgent: ${e:SERVICE_URL_AGENT}
   test: '${x:parseInt(${e:TEST})}'
+  peak_load: ${e:PEAK_LOAD}
 load_pattern:
   - !linear
       from: 1%
@@ -28,4 +29,4 @@ config:
 endpoints:
   - method: GET
     url: http://${v:serviceUrlAgent}/healthcheck
-    peak_load: 30hpm
+    peak_load: ${v:peak_load}

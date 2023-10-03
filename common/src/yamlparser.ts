@@ -6,11 +6,20 @@ import { readFile } from "fs/promises";
 export function parseEnvVarFromError (error: any): string | undefined {
   if (typeof error === "string") {
     // Format is IndexingIntoJson\("VARIABLE", Null)
-    const match = error.match(/MissingEnvironmentVariable\("([^"]*)", Marker/);
-    log("parseYamlFile match: " + JSON.stringify(match), LogLevel.DEBUG, match);
-    if (match && match.length > 1) {
-      const expectedVariable = match[1];
-      log("parseYamlFile missing variable: " + expectedVariable, LogLevel.DEBUG);
+    // MissingEnvironmentVariable\("VARIABLE", Marker
+    // Envs(MissingVar(MissingEnvVar("VARIABLE"))))
+    const matchLegacy = error.match(/MissingEnvironmentVariable\("([^"]*)", Marker/);
+    log("parseYamlFile match: " + JSON.stringify(matchLegacy), LogLevel.DEBUG, matchLegacy);
+    if (matchLegacy && matchLegacy.length > 1) {
+      const expectedVariable = matchLegacy[1];
+      log("parseYamlFile missing legacy variable: " + expectedVariable, LogLevel.DEBUG);
+      return expectedVariable;
+    }
+    const matchScripting = error.match(/MissingEnvVar\("([^"]*)"\)/);
+    log("parseYamlFile match: " + JSON.stringify(matchScripting), LogLevel.DEBUG, matchScripting);
+    if (matchScripting && matchScripting.length > 1) {
+      const expectedVariable = matchScripting[1];
+      log("parseYamlFile missing scripting variable: " + expectedVariable, LogLevel.DEBUG);
       return expectedVariable;
     }
   }
@@ -19,11 +28,19 @@ export function parseEnvVarFromError (error: any): string | undefined {
 
 export function parseDurationFromError (error: any): string | undefined {
   if (typeof error === "string") {
-    // Format is IndexingIntoJson\("VARIABLE", Null)
-    const match = error.match(/InvalidDuration\("([^"]*)"/);
-    log("parseYamlFile match: " + JSON.stringify(match), LogLevel.DEBUG, match);
-    if (match && match.length > 1) {
-      const duration = match[1];
+    // Format is InvalidDuration\("value"
+    // error: DurationError(\"value\")
+    const matchLegacy = error.match(/InvalidDuration\("([^"]*)"/);
+    log("parseYamlFile match: " + JSON.stringify(matchLegacy), LogLevel.DEBUG, matchLegacy);
+    if (matchLegacy && matchLegacy.length > 1) {
+      const duration = matchLegacy[1];
+      log("parseYamlFile InvalidDuration: " + duration, LogLevel.DEBUG);
+      return duration;
+    }
+    const matchScripting = error.match(/DurationError\("([^"]*)"\)/);
+    log("parseYamlFile match: " + JSON.stringify(matchScripting), LogLevel.DEBUG, matchScripting);
+    if (matchScripting && matchScripting.length > 1) {
+      const duration = matchScripting[1];
       log("parseYamlFile InvalidDuration: " + duration, LogLevel.DEBUG);
       return duration;
     }
@@ -33,11 +50,19 @@ export function parseDurationFromError (error: any): string | undefined {
 
 export function parsePeakLoadFromError (error: any): string | undefined {
   if (typeof error === "string") {
-    // Format is IndexingIntoJson\("VARIABLE", Null)
-    const match = error.match(/InvalidPeakLoad\("([^"]*)"/);
-    log("parseYamlFile match: " + JSON.stringify(match), LogLevel.DEBUG, match);
-    if (match && match.length > 1) {
-      const peakLoad = match[1];
+    // Format is InvalidPeakLoad\("VALUE"
+    // HitsPerMinute\", from: \"VALUE\", error: Invalid
+    const matchLegacy = error.match(/InvalidPeakLoad\("([^"]*)"/);
+    log("parseYamlFile match: " + JSON.stringify(matchLegacy), LogLevel.DEBUG, matchLegacy);
+    if (matchLegacy && matchLegacy.length > 1) {
+      const peakLoad = matchLegacy[1];
+      log("parseYamlFile InvalidPeakLoad: " + peakLoad, LogLevel.DEBUG);
+      return peakLoad;
+    }
+    const matchScripting = error.match(/HitsPerMinute", from: "([^"]*)", error: Invalid/);
+    log("parseYamlFile match: " + JSON.stringify(matchScripting), LogLevel.DEBUG, matchScripting);
+    if (matchScripting && matchScripting.length > 1) {
+      const peakLoad = matchScripting[1];
       log("parseYamlFile InvalidPeakLoad: " + peakLoad, LogLevel.DEBUG);
       return peakLoad;
     }
@@ -61,7 +86,7 @@ export class YamlParser {
     this.loggerFileNames = loggerFileNames;
   }
 
-  public static async parseYamlFile (filepath: string, environmentVariables: EnvironmentVariables): Promise<YamlParser> {
+  public static async parseYamlFile (filepath: string, environmentVariables: EnvironmentVariables, validateLegacyOnly?: boolean): Promise<YamlParser> {
     let config: Config | undefined;
     try {
       const fileBuffer: Buffer = await readFile(filepath);
@@ -80,8 +105,8 @@ export class YamlParser {
           config = new Config(
             fileBuffer,
             varMap,
-            typeof logConfig.LoggingLevel === "number" ? undefined : logConfig.LoggingLevel
-            // TODO: Add version checker
+            typeof logConfig.LoggingLevel === "number" ? undefined : logConfig.LoggingLevel,
+            validateLegacyOnly
           );
           yamlValid = true;
         } catch (error: unknown) {

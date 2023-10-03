@@ -39,9 +39,6 @@ const LoginButton = styled.button`
   height: 50px;
   text-align: center;
 `;
-const Alight = styled.a`
-  color: lightblue;
-`;
 
 // What this returns or calls from the parents
 export interface LoginProps {
@@ -50,8 +47,8 @@ export interface LoginProps {
   errorLoading: string | undefined;
 }
 
-const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please go to&nbsp;<Alight target="_blank" href="https://tools.fsdpt.org/portal/userManagement/requestAccess">https://tools.fsdpt.org/portal/userManagement/requestAccess</Alight>&nbsp;and request 'Performance Test - User' permission if you need to be able to run tests.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
-const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please go to&nbsp;<Alight target="_blank" href="https://tools.fsdpt.org/portal/userManagement/requestAccess">https://tools.fsdpt.org/portal/userManagement/requestAccess</Alight>&nbsp;and request either the 'Performance Test - User' (run tests) or 'Performance Test - Read Only' (view results) permission.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
+const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please request 'Pewpew - User' permission if you need to be able to run tests.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
+const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please request either the 'Pewpew Test - User' (run tests) or 'Pewpew - Read Only' (view results) permission.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
 
 const Login = ({ token, redirectUrl, errorLoading }: LoginProps): JSX.Element => {
   log("redirectUrl: " + redirectUrl, LogLevel.DEBUG);

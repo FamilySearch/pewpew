@@ -13,7 +13,6 @@ export const CNAME_DOMAIN: string = publicRuntimeConfig.CNAME_DOMAIN || ".pewpew
 export const ROUTING_DOMAIN: string = publicRuntimeConfig.ROUTING_DOMAIN || ".pewpew.org";
 export const TEST_LOCALHOST: boolean = publicRuntimeConfig.TEST_LOCALHOST === "true";
 export const LOCALHOST_DOMAIN: string = "localhost";
-export const APPLICATION_NAME: string | undefined = publicRuntimeConfig.APPLICATION_NAME;
 
 export function getBasePath (): string {
   return publicRuntimeConfig.BASE_PATH || "";

@@ -349,7 +349,7 @@ describe("Test API Integration", () => {
       });
     });
 
-    it("POST /test with version numbered should respond 200 OK", (done: Mocha.Done) => {
+    it("POST /test with version legacy should respond 200 OK", (done: Mocha.Done) => {
       const filename: string = path.basename(basicFilepath);
       const environmentVariables: EnvironmentVariablesFile = {
         PROFILE: { value: "version", hidden: false }
@@ -420,36 +420,36 @@ describe("Test API Integration", () => {
       });
     });
 
-    // it("POST /test with version scripting should respond 400 Bad Request", (done: Mocha.Done) => {
-    //   const filename: string = path.basename(basicFilepath);
-    //   const formData: FormDataPost = {
-    //     yamlFile: {
-    //       value: createReadStream(basicFilepath),
-    //       options: { filename }
-    //     },
-    //     version: scriptingVersion,
-    //     queueName
-    //   };
-    //   const data = convertFormDataPostToFormData(formData);
-    //   const headers = data.getHeaders();
-    //   log("POST formData", LogLevel.DEBUG, { test: formData, headers });
-    //   fetch(url, {
-    //     method: "POST",
-    //     data,
-    //     headers
-    //   }).then((res: Response) => {
-    //     log("POST /test res", LogLevel.DEBUG, res);
-    //     const bodyText = JSON.stringify(res.data);
-    //       expect(res.status, bodyText).to.equal(400);
-    //       log("body: " + bodyText, LogLevel.DEBUG, bodyText);
-    //       expect(bodyText).to.not.equal(undefined);
-    //       expect(bodyText).to.include("invalid version");
-    //       done();
-    //   }).catch((error) => {
-    //     log("POST /test error", LogLevel.ERROR, error);
-    //     done(error);
-    //   });
-    // });
+    it("POST /test with version scripting should respond 400 Bad Request", (done: Mocha.Done) => {
+      const filename: string = path.basename(basicFilepath);
+      const formData: FormDataPost = {
+        yamlFile: {
+          value: createReadStream(basicFilepath),
+          options: { filename }
+        },
+        version: scriptingVersion,
+        queueName
+      };
+      const data = convertFormDataPostToFormData(formData);
+      const headers = data.getHeaders();
+      log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+      fetch(url, {
+        method: "POST",
+        data,
+        headers
+      }).then((res: Response) => {
+        log("POST /test res", LogLevel.DEBUG, res);
+        const bodyText = JSON.stringify(res.data);
+          expect(res.status, bodyText).to.equal(400);
+          log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+          expect(bodyText).to.not.equal(undefined);
+          expect(bodyText).to.include("invalid version");
+          done();
+      }).catch((error) => {
+        log("POST /test error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
 
     it("POST /test with extra options should respond 200 OK", (done: Mocha.Done) => {
       const filename: string = path.basename(basicFilepath);
@@ -1578,7 +1578,7 @@ describe("Test API Integration", () => {
       const scriptingFilepathWithEnv: string = SCRIPTING_FILEPATH_WITH_ENV;
 
       // Can't currently test latest since if an agent tries to run it, it will fail
-      it("POST /test with version numbered should respond 200 OK", (done: Mocha.Done) => {
+      it("POST /test with version scripting should respond 200 OK", (done: Mocha.Done) => {
         const filename: string = path.basename(scriptingFilepath);
         const formData: FormDataPost = {
           yamlFile: {
@@ -1613,36 +1613,36 @@ describe("Test API Integration", () => {
         });
       });
 
-      // it("POST /test with version non-scripting should respond 400 Bad Request", (done: Mocha.Done) => {
-      //   const filename: string = path.basename(scriptingFilepath);
-      //   const formData: FormDataPost = {
-      //     yamlFile: {
-      //       value: createReadStream(scriptingFilepath),
-      //       options: { filename }
-      //     },
-      //     version: legacyVersion,
-      //     queueName
-      //   };
-      //   const data = convertFormDataPostToFormData(formData);
-      //   const headers = data.getHeaders();
-      //   log("POST formData", LogLevel.DEBUG, { test: formData, headers });
-      //   fetch(url, {
-      //     method: "POST",
-      //     data,
-      //     headers
-      //   }).then((res: Response) => {
-      //     log("POST /test res", LogLevel.DEBUG, res);
-      //     const bodyText = JSON.stringify(res.data);
-      //       expect(res.status, bodyText).to.equal(400);
-      //       log("body: " + bodyText, LogLevel.DEBUG, bodyText);
-      //       expect(bodyText).to.not.equal(undefined);
-      //       expect(bodyText).to.include("invalid version");
-      //       done();
-      //   }).catch((error) => {
-      //     log("POST /test error", LogLevel.ERROR, error);
-      //     done(error);
-      //   });
-      // });
+      it("POST /test with version legacy should respond 400 Bad Request", (done: Mocha.Done) => {
+        const filename: string = path.basename(scriptingFilepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(scriptingFilepath),
+            options: { filename }
+          },
+          version: legacyVersion,
+          queueName
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(400);
+            log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+            expect(bodyText).to.not.equal(undefined);
+            expect(bodyText).to.include("invalid version");
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
 
       it("POST /test with extra options should respond 200 OK", (done: Mocha.Done) => {
         const filename: string = path.basename(scriptingFilepath);

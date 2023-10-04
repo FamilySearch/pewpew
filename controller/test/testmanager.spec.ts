@@ -17,6 +17,7 @@ import {
   getRecentTests,
   getRequestedTests,
   getRunningTests,
+  getValidateLegacyOnly,
   removeOldest,
   validateYamlfile
 } from "../pages/api/util/testmanager";
@@ -33,9 +34,11 @@ import {
   logger
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
+import { Test as MochaTest } from "mocha";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { expect } from "chai";
+import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -311,6 +314,64 @@ describe("TestManager", () => {
       expect(result.toString(), "result.toString()").to.equal(JSON.stringify(json));
       done();
     }).catch((error) => done(error));
+  });
+
+  const validateLegacyOnlySuite: Mocha.Suite = describe("getValidateLegacyOnly", () => {
+    before (() => {
+      const validateLegacyOnlyArray: [string, boolean][] = [
+        ["0.4.0", true],
+        ["0.5.0", true],
+        ["0.5.12", true],
+        ["0.5.13-preview1", true],
+        ["0.5.14-alpha", true],
+        ["0.5.999", true],
+        ["0.6.0-preview", false],
+        ["0.6.0-preview1", false],
+        ["0.6.0-scripting", false],
+        ["0.6.0-scripting2", false],
+        ["0.6.0", false],
+        ["0.6.1", false],
+        ["0.7.0", false],
+        ["1.0.0", false]
+      ];
+      for (const [version, expected] of validateLegacyOnlyArray) {
+        validateLegacyOnlySuite.addTest(new MochaTest(version + " should return " + expected, (done: Mocha.Done) => {
+          try {
+            expect(getValidateLegacyOnly(version)).to.equal(expected);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }));
+      }
+    });
+
+    it("should return undefined for undefined", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly(undefined)).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
+
+    it("should return undefined for empty string", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly("")).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
+
+    it("should return undefined for latest", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly(latestPewPewVersion)).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
   });
 
   describe("validateYamlfile", () => {

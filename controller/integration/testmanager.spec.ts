@@ -39,11 +39,16 @@ export const UNIT_TEST_FOLDER: string = path.resolve(process.env.UNIT_TEST_FOLDE
 const BASIC_YAML_FILE: string = "basic.yaml";
 const BASIC_FILEPATH = path.join(UNIT_TEST_FOLDER, "basic.yaml");
 const BASIC_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "basicwithenv.yaml");
-export const BASIC_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "basicwithfiles.yaml");
+const BASIC_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "basicwithfiles.yaml");
 const BASIC_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "basicnopeakload.yaml");
 const BASIC_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "basicheadersall.yaml");
-export const BASIC_FILEPATH_NOT_YAML = path.join(UNIT_TEST_FOLDER, "text.txt");
-export const BASIC_FILEPATH_NOT_YAML2 = path.join(UNIT_TEST_FOLDER, "text2.txt");
+// const SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting.yaml");
+// const SCRIPTING_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "scriptingwithenv.yaml");
+// const SCRIPTING_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "scriptingwithfiles.yaml");
+// const SCRIPTING_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "scriptingnopeakload.yaml");
+// const SCRIPTING_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "scriptingheadersall.yaml");
+const NOT_YAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "text.txt");
+const NOT_YAML_FILEPATH2 = path.join(UNIT_TEST_FOLDER, "text2.txt");
 const PEWPEWYAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.yaml");
 const SETTINGSYAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "settings.yaml");
 
@@ -91,7 +96,8 @@ describe("TestManager Integration", () => {
   let testIdWithVersion: string | undefined;
   let testIdMissingEnv: string | undefined;
   let queueName: string = "unittests";
-  let numberedVersion: string | undefined;
+  let legacyVersion: string | undefined;
+  let scriptingVersion: string;
 
   before(async () => {
     try {
@@ -122,9 +128,21 @@ describe("TestManager Integration", () => {
       log("sharedPewPewVersions", LogLevel.DEBUG, sharedPewPewVersions);
       expect(sharedPewPewVersions, "sharedPewPewVersions").to.not.equal(undefined);
       expect(sharedPewPewVersions!.length, "sharedPewPewVersions.length").to.be.greaterThan(0);
-      numberedVersion = sharedPewPewVersions!.find((pewpewVersion: string) => pewpewVersion !== latestPewPewVersion);
-      expect(numberedVersion).to.not.equal(undefined);
-      log("numberedVersion", LogLevel.DEBUG, { numberedVersion });
+
+      const scriptingRegex = /^0\.6\./;
+      legacyVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
+        pewpewVersion !== latestPewPewVersion && !scriptingRegex.test(pewpewVersion)) || "";
+      expect(legacyVersion).to.not.equal(undefined);
+      expect(legacyVersion).to.not.equal("");
+      expect(scriptingRegex.test(legacyVersion), `${scriptingRegex}.test("${legacyVersion}")`).to.equal(false);
+      log("legacyVersion", LogLevel.DEBUG, { legacyVersion });
+      scriptingVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
+        scriptingRegex.test(pewpewVersion)) || "";
+      expect(scriptingVersion).to.not.equal(undefined);
+      expect(scriptingVersion).to.not.equal("");
+      expect(scriptingRegex.test(scriptingVersion), `${scriptingRegex}.test("${scriptingVersion}")`).to.equal(true);
+      log("scriptingVersion", LogLevel.DEBUG, { scriptingVersion });
+
       const basicFilenameWithEnv = path.basename(BASIC_FILEPATH_WITH_ENV);
       const ppaasTestIdWithEnv: PpaasTestId = PpaasTestId.makeTestId(basicFilenameWithEnv);
       await new PpaasS3File({
@@ -211,17 +229,17 @@ describe("TestManager Integration", () => {
       });
     });
 
-    it("postTest with version numbered should respond 200 OK", (done: Mocha.Done) => {
-      expect(numberedVersion).to.not.equal(undefined);
-      log("postTest version, sharedQueueNames, sharedPewPewVersions", LogLevel.DEBUG, { numberedVersion, sharedQueueNames , sharedPewPewVersions });
+    it("postTest with version legacy should respond 200 OK", (done: Mocha.Done) => {
+      expect(legacyVersion).to.not.equal(undefined);
+      log("postTest version, sharedQueueNames, sharedPewPewVersions", LogLevel.DEBUG, { legacyVersion, sharedQueueNames , sharedPewPewVersions });
       const parsedForm: ParsedForm = {
         files: basicFiles,
         fields: {
           ...basicFields,
-          version: numberedVersion!
+          version: legacyVersion!
         }
       };
-      log("postTest parsedForm numbered", LogLevel.DEBUG, { parsedForm });
+      log("postTest parsedForm legacy", LogLevel.DEBUG, { parsedForm });
       TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
         log("postTest res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);
@@ -237,6 +255,30 @@ describe("TestManager Integration", () => {
         sharedTestData = body;
         testIdWithVersion = body.testId;
         sharedPpaasTestId = PpaasTestId.getFromTestId(body.testId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with version scripting should respond 400 Bad Request", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: basicFiles,
+        fields: {
+          ...basicFields,
+          version: scriptingVersion
+        }
+      };
+      log("postTest parsedForm basic as scripting", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("invalid version");
         done();
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
@@ -277,7 +319,7 @@ describe("TestManager Integration", () => {
       const parsedForm: ParsedForm = {
         files: {
           ...basicFiles,
-          additionalFiles: createFileObject(BASIC_FILEPATH_NOT_YAML)
+          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
         },
         fields: {
           ...basicFields,
@@ -348,11 +390,11 @@ describe("TestManager Integration", () => {
     });
 
     it("postTest missing files should respond 400 Bad Request", (done: Mocha.Done) => {
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML2);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {
           yamlFile: createFileObject(BASIC_FILEPATH_WITH_FILES),
-          additionalFiles: createFileObject(BASIC_FILEPATH_NOT_YAML)
+          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
         },
         fields: basicFields
       };
@@ -468,7 +510,7 @@ describe("TestManager Integration", () => {
       const parsedForm: ParsedForm = {
         files: {
           yamlFile: createFileObject(BASIC_FILEPATH_WITH_FILES),
-          additionalFiles: [createFileObject(BASIC_FILEPATH_NOT_YAML), createFileObject(BASIC_FILEPATH_NOT_YAML2)] as any as File
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
         },
         fields: basicFields
       };
@@ -628,7 +670,7 @@ describe("TestManager Integration", () => {
       const parsedForm: ParsedForm = {
         files: {
           yamlFile: createFileObject(BASIC_FILEPATH_WITH_FILES),
-          additionalFiles: [createFileObject(BASIC_FILEPATH_NOT_YAML), createFileObject(BASIC_FILEPATH_NOT_YAML2)] as any as File
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
         },
         fields: {
           ...basicFields,
@@ -1072,8 +1114,8 @@ describe("TestManager Integration", () => {
     // In this case, even though the previous test has the files, if we don't pass them in to the fields it should fail
     it("postTest missing files prior testId should respond 400 Bad Request", (done: Mocha.Done) => {
       expect(testIdWithFiles, "testIdWithFiles").to.not.equal(undefined);
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML);
-      const extrafilename2: string = path.basename(BASIC_FILEPATH_NOT_YAML2);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
+      const extrafilename2: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {},
         fields: {
@@ -1102,7 +1144,7 @@ describe("TestManager Integration", () => {
     // This test the prior test doesn't even need the files, but the new yaml does
     it("postTest missing files prior testId, new yaml needs files should respond 400 Bad Request", (done: Mocha.Done) => {
       expect(sharedPpaasTestId, "sharedPpaasTestId").to.not.equal(undefined);
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
       const parsedForm: ParsedForm = {
         files: { yamlFile: createFileObject(BASIC_FILEPATH_WITH_FILES) },
         fields: {
@@ -1129,8 +1171,8 @@ describe("TestManager Integration", () => {
     // Now we pass in the prior files
     it("postTest with files prior testId should respond 200 Ok", (done: Mocha.Done) => {
       expect(testIdWithFiles, "testIdWithFiles").to.not.equal(undefined);
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML);
-      const extrafilename2: string = path.basename(BASIC_FILEPATH_NOT_YAML2);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
+      const extrafilename2: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {},
         fields: {
@@ -1174,11 +1216,11 @@ describe("TestManager Integration", () => {
     // Now we pass in the prior files
     it("postTest with files prior testId one changed file should respond 200 Ok", (done: Mocha.Done) => {
       expect(testIdWithFiles, "testIdWithFiles").to.not.equal(undefined);
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML);
-      const extrafilename2: string = path.basename(BASIC_FILEPATH_NOT_YAML2);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
+      const extrafilename2: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {
-          additionalFiles: createFileObject(BASIC_FILEPATH_NOT_YAML)
+          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
         },
         fields: {
           ...basicFields,
@@ -1435,8 +1477,8 @@ describe("TestManager Integration", () => {
       const s3Folder: string = sharedScheduledWithFilesTestData!.s3Folder;
       sharedScheduledWithFilesTestData = undefined; // Wipe it out since we're messing with it
       const scheduleDate: number = Date.now() + 600000;
-      const extrafilename: string = path.basename(BASIC_FILEPATH_NOT_YAML);
-      const extrafilename2: string = path.basename(BASIC_FILEPATH_NOT_YAML2);
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH);
+      const extrafilename2: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {},
         fields: {
@@ -1768,7 +1810,7 @@ describe("TestManager Integration", () => {
         expect(test.yamlFile, "yamlFile").to.equal(BASIC_YAML_FILE);
         expect(test.queueName, "queueName").to.equal(queueName);
         expect(test.additionalFiles, "additionalFiles").to.equal(undefined);
-        expect(test.version, "version").to.equal(numberedVersion);
+        expect(test.version, "version").to.equal(legacyVersion);
         expect(test.environmentVariables, "environmentVariables").to.not.equal(undefined);
         expect(Object.keys(test.environmentVariables).length, "environmentVariables.length: " + Object.keys(test.environmentVariables)).to.equal(0);
         expect(test.restartOnFailure, "restartOnFailure").to.equal(undefined);

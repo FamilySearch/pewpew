@@ -33,7 +33,7 @@ async function fetch (
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_LEGACY_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
-const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew_scripting.zip");
+const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting/pewpew.zip");
 
 // Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);

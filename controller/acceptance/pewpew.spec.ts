@@ -94,7 +94,7 @@ describe("PewPew API Integration", () => {
   });
 
   describe("POST /pewpew", () => {
-    it("POST /pewpew should respond 200 OK", (done: Mocha.Done) => {
+    it("POST /pewpew legacy should respond 200 OK", (done: Mocha.Done) => {
       const filename: string = path.basename(PEWPEW_FILEPATH);
       const formData: FormDataPewPew = {
         additionalFiles: {
@@ -121,7 +121,7 @@ describe("PewPew API Integration", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.not.include("as latest");
-        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)/);
         log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
         expect(match, "pewpew match").to.not.equal(null);
         expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
@@ -212,7 +212,7 @@ describe("PewPew API Integration", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.not.include("as latest");
-        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)/);
         log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
         expect(match, "pewpew match").to.not.equal(null);
         expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
@@ -279,7 +279,7 @@ describe("PewPew API Integration", () => {
         expect(typeof body.message).to.equal("string");
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.not.include("as latest");
-        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)/);
         log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
         expect(match, "pewpew match").to.not.equal(null);
         expect(match!.length, "pewpew match.length").to.be.greaterThan(1);

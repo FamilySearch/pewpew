@@ -241,7 +241,7 @@ describe("Test API Integration", () => {
   let testIdWithVersion: string | undefined;
   let url: string;
   let queueName: string = "unittests";
-  let numberedVersion: string;
+  let legacyVersion: string;
   let scriptingVersion: string;
 
   before(async () => {
@@ -256,12 +256,12 @@ describe("Test API Integration", () => {
     expect(sharedPewPewVersions, "sharedPewPewVersions").to.not.equal(undefined);
     expect(sharedPewPewVersions!.length, "sharedPewPewVersions.length").to.be.greaterThan(0);
     const scriptingRegex = /^0\.6\./;
-    numberedVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
+    legacyVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
       pewpewVersion !== latestPewPewVersion && !scriptingRegex.test(pewpewVersion)) || "";
-    expect(numberedVersion).to.not.equal(undefined);
-    expect(numberedVersion).to.not.equal("");
-    expect(scriptingRegex.test(numberedVersion), `${scriptingRegex}.test("${numberedVersion}")`).to.equal(false);
-    log("numberedVersion", LogLevel.DEBUG, { numberedVersion });
+    expect(legacyVersion).to.not.equal(undefined);
+    expect(legacyVersion).to.not.equal("");
+    expect(scriptingRegex.test(legacyVersion), `${scriptingRegex}.test("${legacyVersion}")`).to.equal(false);
+    log("legacyVersion", LogLevel.DEBUG, { legacyVersion });
     scriptingVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
       scriptingRegex.test(pewpewVersion)) || "";
     expect(scriptingVersion).to.not.equal(undefined);
@@ -359,7 +359,7 @@ describe("Test API Integration", () => {
           value: createReadStream(basicFilepath),
           options: { filename }
         },
-        version: numberedVersion,
+        version: legacyVersion,
         environmentVariables: JSON.stringify(environmentVariables),
         queueName
       };
@@ -1620,7 +1620,7 @@ describe("Test API Integration", () => {
       //       value: createReadStream(scriptingFilepath),
       //       options: { filename }
       //     },
-      //     version: numberedVersion,
+      //     version: legacyVersion,
       //     queueName
       //   };
       //   const data = convertFormDataPostToFormData(formData);
@@ -2061,7 +2061,7 @@ describe("Test API Integration", () => {
           expect(test.yamlFile, "yamlFile").to.equal(path.basename(basicFilepath));
           expect(test.queueName, "queueName").to.equal(queueName);
           expect(test.additionalFiles, "additionalFiles").to.equal(undefined);
-          expect(test.version, "version").to.equal(numberedVersion);
+          expect(test.version, "version").to.equal(legacyVersion);
           expect(test.environmentVariables, "environmentVariables").to.not.equal(undefined);
           expect(Object.keys(test.environmentVariables).length, "environmentVariables.keys.length: " + Object.keys(test.environmentVariables)).to.equal(1);
           expect(test.restartOnFailure, "restartOnFailure").to.equal(undefined);

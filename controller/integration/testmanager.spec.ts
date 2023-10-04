@@ -1413,6 +1413,42 @@ describe("TestManager Integration", () => {
       });
     });
 
+    it("postTest editSchedule new date missing hidden vars should respond 400 Bad Request", (done: Mocha.Done) => {
+      expect(sharedScheduledWithVarsTestData, "sharedScheduledWithVarsTestData").to.not.equal(undefined);
+      const testId: string = sharedScheduledWithVarsTestData!.testId;
+      const scheduleDate: number = Date.now() + 1600000;
+      const sameVars: EnvironmentVariablesFile = {
+        ...defaultEnvironmentVariablesFromPrior,
+        TEST2: "true"
+      };
+      const parsedForm: ParsedForm = {
+        files: {},
+        fields: {
+          ...basicFields,
+          testId,
+          yamlFile: path.basename(BASIC_FILEPATH_WITH_ENV),
+          environmentVariables: JSON.stringify(sameVars),
+          scheduleDate: "" + scheduleDate
+        }
+      };
+      log("postTest parsedForm with vars", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER, true).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res missing hidden vars", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("failed to parse");
+        expect(body.error).to.not.equal(undefined);
+        expect(body.error).to.include("missingEnvironmentVariables=TEST1");
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
     it("postTest editSchedule new date with vars should respond 200 OK", (done: Mocha.Done) => {
       expect(sharedScheduledWithVarsTestData, "sharedScheduledWithVarsTestData").to.not.equal(undefined);
       const testId: string = sharedScheduledWithVarsTestData!.testId;

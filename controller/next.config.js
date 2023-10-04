@@ -95,6 +95,7 @@ const nextConfig = {
   publicRuntimeConfig: { // These are sent to the client and the server and are set at run time
     LoggingLevel: process.env.LoggingLevel,
     APPLICATION_NAME: process.env.APPLICATION_NAME,
+    SYSTEM_NAME: process.env.SYSTEM_NAME,
     FS_SITE: process.env.FS_SITE,
     NODE_ENV: process.env.NODE_ENV,
     BASE_PATH: process.env.BASE_PATH,
@@ -125,6 +126,8 @@ const nextConfig = {
     LoggingLevel: process.env.LoggingLevel,
     // @ts-ignore
     APPLICATION_NAME: process.env.APPLICATION_NAME,
+    // @ts-ignore
+    SYSTEM_NAME: process.env.SYSTEM_NAME,
     // @ts-ignore
     FS_SITE: process.env.FS_SITE,
     // @ts-ignore

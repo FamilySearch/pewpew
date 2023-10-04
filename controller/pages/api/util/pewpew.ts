@@ -125,7 +125,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       }
       const { stdout, stderr } = await execFile(`${pewpewVersionBinary.filepath}`, ["--version"]);
       log(`${pewpewVersionBinary.filepath} output`, LogLevel.DEBUG, { stdout, stderr });
-      const match = stdout.match(/pewpew (\d+\.\d+\.\d+[^\s]*)/);
+      const match = stdout.match(/pewpew (\d+\.\d+\.\d+[^\s]*)/); // Need to allow for -preview1, etc.
       log(`${pewpewVersionBinary.originalFilename} version match`, LogLevel.DEBUG, { match });
       if (!match || match.length < 2) {
         return { json: { message: "Could not determine version" }, status: 400 };

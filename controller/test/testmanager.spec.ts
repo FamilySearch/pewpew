@@ -17,6 +17,7 @@ import {
   getRecentTests,
   getRequestedTests,
   getRunningTests,
+  getValidateLegacyOnly,
   removeOldest,
   validateYamlfile
 } from "../pages/api/util/testmanager";
@@ -33,9 +34,11 @@ import {
   logger
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
+import { Test as MochaTest } from "mocha";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { expect } from "chai";
+import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -44,6 +47,9 @@ const localDirectory: string = path.resolve(process.env.UNIT_TEST_FOLDER || "tes
 const BASIC_YAML_FILE: string = "basic.yaml";
 const BASIC_YAML_WITH_ENV = "basicwithenv.yaml";
 const BASIC_YAML_WITH_FILES = "basicwithfiles.yaml";
+const SCRIPTING_YAML_FILE: string = "scripting.yaml";
+const SCRIPTING_YAML_WITH_ENV = "scriptingwithenv.yaml";
+const SCRIPTING_YAML_WITH_FILES = "scriptingwithfiles.yaml";
 const BASIC_TXT_FILE: string = "text.txt";
 const BASIC_TXT_FILE2: string = "text2.txt";
 const environmentVariables: EnvironmentVariables = {
@@ -310,24 +316,117 @@ describe("TestManager", () => {
     }).catch((error) => done(error));
   });
 
+  const validateLegacyOnlySuite: Mocha.Suite = describe("getValidateLegacyOnly", () => {
+    before (() => {
+      const validateLegacyOnlyArray: [string, boolean][] = [
+        ["0.4.0", true],
+        ["0.5.0", true],
+        ["0.5.12", true],
+        ["0.5.13-preview1", true],
+        ["0.5.14-alpha", true],
+        ["0.5.999", true],
+        ["0.6.0-preview", false],
+        ["0.6.0-preview1", false],
+        ["0.6.0-scripting", false],
+        ["0.6.0-scripting2", false],
+        ["0.6.0", false],
+        ["0.6.1", false],
+        ["0.7.0", false],
+        ["1.0.0", false]
+      ];
+      for (const [version, expected] of validateLegacyOnlyArray) {
+        validateLegacyOnlySuite.addTest(new MochaTest(version + " should return " + expected, (done: Mocha.Done) => {
+          try {
+            expect(getValidateLegacyOnly(version)).to.equal(expected);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }));
+      }
+    });
+
+    it("should return undefined for undefined", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly(undefined)).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
+
+    it("should return undefined for empty string", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly("")).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
+
+    it("should return undefined for latest", (done: Mocha.Done) => {
+      try {
+        expect(getValidateLegacyOnly(latestPewPewVersion)).to.equal(undefined);
+        done();
+      } catch (error) {
+        done(error);
+      }
+    });
+  });
+
   describe("validateYamlfile", () => {
     let basicYamlFile: File;
     let basicYamlFileWithEnv: File;
     let basicYamlFileWithFiles: File;
+    let scriptingYamlFile: File;
+    let scriptingYamlFileWithEnv: File;
+    let scriptingYamlFileWithFiles: File;
 
     before(async () => {
       try {
         basicYamlFile = await convertPPaaSFileToFile(new PpaasS3File({ filename: BASIC_YAML_FILE, s3Folder, localDirectory }));
         basicYamlFileWithEnv = await convertPPaaSFileToFile(new PpaasS3File({ filename: BASIC_YAML_WITH_ENV, s3Folder, localDirectory }));
         basicYamlFileWithFiles = await convertPPaaSFileToFile(new PpaasS3File({ filename: BASIC_YAML_WITH_FILES, s3Folder, localDirectory }));
+        scriptingYamlFile = await convertPPaaSFileToFile(new PpaasS3File({ filename: SCRIPTING_YAML_FILE, s3Folder, localDirectory }));
+        scriptingYamlFileWithEnv = await convertPPaaSFileToFile(new PpaasS3File({ filename: SCRIPTING_YAML_WITH_ENV, s3Folder, localDirectory }));
+        scriptingYamlFileWithFiles = await convertPPaaSFileToFile(new PpaasS3File({ filename: SCRIPTING_YAML_WITH_FILES, s3Folder, localDirectory }));
       } catch (error) {
         log("Could not run the validateYamlfile before()", LogLevel.ERROR, error);
         throw error;
       }
     });
 
+    it("should validate basic parsed as any", (done: Mocha.Done) => {
+      validateYamlfile(basicYamlFile, {}, [], false, authUser1, undefined)
+      .then((response: ErrorResponse | ValidateYamlfileResult) => {
+        log("should validate basic parsed as any", LogLevel.DEBUG, response);
+        expect(response, "response").to.not.equal(undefined);
+        expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+        expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+        const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+        expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(60000);
+        expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(2);
+        done();
+      }).catch((error) => done(error));
+    });
+
+    it("should validate scripting parsed as any", (done: Mocha.Done) => {
+      validateYamlfile(scriptingYamlFile, {}, [], false, authUser1, undefined)
+      .then((response: ErrorResponse | ValidateYamlfileResult) => {
+        log("should validate scripting parsed as any", LogLevel.DEBUG, response);
+        expect(response, "response").to.not.equal(undefined);
+        expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+        expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+        const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+        expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(60000);
+        expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(2);
+        done();
+      }).catch((error) => done(error));
+    });
+
+    describe("legacy", () => {
     it("should validate basic", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFile, {}, [], false, authUser1)
+      validateYamlfile(basicYamlFile, {}, [], false, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         log("should validate basic", LogLevel.DEBUG, response);
         expect(response, "response").to.not.equal(undefined);
@@ -340,8 +439,26 @@ describe("TestManager", () => {
       }).catch((error) => done(error));
     });
 
+    it("should fail basic parsed as scripting", (done: Mocha.Done) => {
+      validateYamlfile(basicYamlFile, {}, [], false, authUser1, false)
+      .then((response: ErrorResponse | ValidateYamlfileResult) => {
+        log("should fail basic parsed as scripting", LogLevel.DEBUG, response);
+        expect(response, "response").to.not.equal(undefined);
+        expect(response.hasOwnProperty("json"), "has json").to.equal(true);
+        expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(false);
+        const errorResponse: ErrorResponse = response as ErrorResponse;
+        expect(errorResponse.status, "status").to.equal(400);
+        expect(errorResponse.json, "json").to.not.equal(undefined);
+        expect(errorResponse.json.message, "json.message").to.not.equal(undefined);
+        expect(errorResponse.json.message, "json.message").to.include("failed to parse");
+        expect(errorResponse.json.error).to.not.equal(undefined);
+        expect(errorResponse.json.error).to.include("YamlParse");
+        done();
+      }).catch((error) => done(error));
+    });
+
     it("should fail basic without env", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithEnv, {}, [], false, authUser1)
+      validateYamlfile(basicYamlFileWithEnv, {}, [], false, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         log("should fail basic without env", LogLevel.DEBUG, response);
         expect(response, "response").to.not.equal(undefined);
@@ -359,7 +476,7 @@ describe("TestManager", () => {
     });
 
     it("should validate basic with env", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithEnv, environmentVariables, [], false, authUser1)
+      validateYamlfile(basicYamlFileWithEnv, environmentVariables, [], false, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         log("should validate basic with env", LogLevel.DEBUG, response);
         expect(response, "response").to.not.equal(undefined);
@@ -373,7 +490,7 @@ describe("TestManager", () => {
     });
 
     it("should fail basic without files", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithFiles, {}, [BASIC_TXT_FILE], false, authUser1)
+      validateYamlfile(basicYamlFileWithFiles, {}, [BASIC_TXT_FILE], false, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         log("should fail basic without files", LogLevel.DEBUG, response);
         expect(response, "response").to.not.equal(undefined);
@@ -389,7 +506,7 @@ describe("TestManager", () => {
     });
 
     it("should validate basic with files", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithFiles, {}, [BASIC_TXT_FILE, BASIC_TXT_FILE2], false, authUser1)
+      validateYamlfile(basicYamlFileWithFiles, {}, [BASIC_TXT_FILE, BASIC_TXT_FILE2], false, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         expect(response, "response").to.not.equal(undefined);
         expect(response.hasOwnProperty("json"), "has json").to.equal(false);
@@ -404,7 +521,7 @@ describe("TestManager", () => {
     });
 
     it("user should fail bypass", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFile, {}, [], true, authUser1)
+      validateYamlfile(basicYamlFile, {}, [], true, authUser1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         expect(response, "response").to.not.equal(undefined);
         expect(response.hasOwnProperty("json"), "has json").to.equal(true);
@@ -419,7 +536,7 @@ describe("TestManager", () => {
     });
 
     it("admin should pass bypass", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFile, {}, [], true, authAdmin1)
+      validateYamlfile(basicYamlFile, {}, [], true, authAdmin1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         expect(response, "response").to.not.equal(undefined);
         expect(response.hasOwnProperty("json"), "has json").to.equal(false);
@@ -432,7 +549,7 @@ describe("TestManager", () => {
     });
 
     it("bypassParser shouldn't need variables", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithEnv, {}, [], true, authAdmin1)
+      validateYamlfile(basicYamlFileWithEnv, {}, [], true, authAdmin1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         expect(response, "response").to.not.equal(undefined);
         expect(response.hasOwnProperty("json"), "has json").to.equal(false);
@@ -445,7 +562,7 @@ describe("TestManager", () => {
     });
 
     it("bypassParser shouldn't need files", (done: Mocha.Done) => {
-      validateYamlfile(basicYamlFileWithFiles, {}, [], true, authAdmin1)
+      validateYamlfile(basicYamlFileWithFiles, {}, [], true, authAdmin1, true)
       .then((response: ErrorResponse | ValidateYamlfileResult) => {
         expect(response, "response").to.not.equal(undefined);
         expect(response.hasOwnProperty("json"), "has json").to.equal(false);
@@ -455,6 +572,158 @@ describe("TestManager", () => {
         expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(undefined);
         done();
       }).catch((error) => done(error));
+    });
+    });
+
+    describe("scripting", () => {
+      it("should validate scripting", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFile, {}, [], false, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          log("should validate scripting", LogLevel.DEBUG, response);
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(60000);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(2);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("should fail scripting parsed as legacy", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFile, {}, [], false, authUser1, true)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          log("should fail scripting parsed as legacy", LogLevel.DEBUG, response);
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(true);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(false);
+          const errorResponse: ErrorResponse = response as ErrorResponse;
+          expect(errorResponse.status, "status").to.equal(400);
+          expect(errorResponse.json, "json").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.include("failed to parse");
+          expect(errorResponse.json.error).to.not.equal(undefined);
+          expect(errorResponse.json.error).to.include("UnrecognizedKey");
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("should fail scripting without env", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithEnv, {}, [], false, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          log("should fail scripting without env", LogLevel.DEBUG, response);
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(true);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(false);
+          const errorResponse: ErrorResponse = response as ErrorResponse;
+          expect(errorResponse.status, "status").to.equal(400);
+          expect(errorResponse.json, "json").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.include("failed to parse");
+          expect(errorResponse.json.error).to.not.equal(undefined);
+          expect(errorResponse.json.error).to.include("SERVICE_URL_AGENT");
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("should validate scripting with env", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithEnv, environmentVariables, [], false, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          log("should validate scripting with env", LogLevel.DEBUG, response);
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(60000);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(2);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("should fail scripting without files", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithFiles, {}, [BASIC_TXT_FILE], false, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          log("should fail scripting without files", LogLevel.DEBUG, response);
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(true);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(false);
+          const errorResponse: ErrorResponse = response as ErrorResponse;
+          expect(errorResponse.status, "status").to.equal(400);
+          expect(errorResponse.json, "json").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.include(BASIC_TXT_FILE2);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("should validate scripting with files", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithFiles, {}, [BASIC_TXT_FILE, BASIC_TXT_FILE2], false, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.not.equal(undefined);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.not.equal(undefined);
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(60000);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(2);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("user should fail bypass", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFile, {}, [], true, authUser1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(true);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(false);
+          const errorResponse: ErrorResponse = response as ErrorResponse;
+          expect(errorResponse.status, "status").to.equal(403);
+          expect(errorResponse.json, "json").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.not.equal(undefined);
+          expect(errorResponse.json.message, "json.message").to.include("bypass the config parser");
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("admin should pass bypass", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFile, {}, [], true, authAdmin1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(undefined);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(undefined);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("bypassParser shouldn't need variables", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithEnv, {}, [], true, authAdmin1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(undefined);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(undefined);
+          done();
+        }).catch((error) => done(error));
+      });
+
+      it("bypassParser shouldn't need files", (done: Mocha.Done) => {
+        validateYamlfile(scriptingYamlFileWithFiles, {}, [], true, authAdmin1, false)
+        .then((response: ErrorResponse | ValidateYamlfileResult) => {
+          expect(response, "response").to.not.equal(undefined);
+          expect(response.hasOwnProperty("json"), "has json").to.equal(false);
+          expect(response.hasOwnProperty("testRunTimeMn"), "has testRunTimeMn").to.equal(true);
+          const yamlResult: ValidateYamlfileResult = response as ValidateYamlfileResult;
+          expect(yamlResult.bucketSizeMs, "bucketSizeMs").to.equal(undefined);
+          expect(yamlResult.testRunTimeMn, "testRunTimeMn").to.equal(undefined);
+          done();
+        }).catch((error) => done(error));
+      });
     });
   });
 

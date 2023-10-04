@@ -28,7 +28,7 @@ endpoints:
         query:
           select: response.body
           where: response.status == 200
-        send: if_not_full
+        send: block
   - method: GET
     url: http://127.0.0.1:8080/healthcheck
     headers:

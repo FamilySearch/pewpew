@@ -61,10 +61,6 @@ To start the server, run one of the following commands:
 
  # production start, must be built first with npm run build http://localhost:8081
  $ npm start
-
- # production start, must be built first with npm run build http://localhost:8082
- $ npm run start2
-
  ```
  Use http://localhost:8081/healthcheck/ after running the above command.
 

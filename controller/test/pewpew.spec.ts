@@ -38,27 +38,28 @@ import semver from "semver";
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
+const PEWPEW_LEGACY_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
+const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting/pewpew.zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
   token: "admin1"
 };
 
-const pewpewZipFile: File = createFormidableFile(
-  path.basename(PEWPEW_FILEPATH),
-  PEWPEW_FILEPATH,
+const legacyPewpewZipFile: File = createFormidableFile(
+  path.basename(PEWPEW_LEGACY_FILEPATH),
+  PEWPEW_LEGACY_FILEPATH,
   "unittest",
   1,
   null
 );
 const invalidFiles = {
-  additionalFiles: [pewpewZipFile] as any as File
+  additionalFiles: [legacyPewpewZipFile] as any as File
 };
 
 const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
 const pewpewFilename = PEWPEW_EXECUTABLE_NAME;
-const versions = ["0.5.10", "0.5.11", "0.5.12-preview1", "0.5.12-preview2", "latest"];
+const versions = ["0.5.11", "0.5.12", "0.5.13-preview1", "0.5.13-preview2", "0.6.0-preview1", "0.6.0-preview2", "latest"];
 const s3Object: S3Object = {
   LastModified: new Date(),
   Size: 1,
@@ -78,26 +79,48 @@ class TestSchedulerIntegration extends TestScheduler {
 }
 
 describe("PewPew Util", () => {
-  let files: Files = {};
+  let filesLegacyPewpew: Files = {};
+  let filesScriptingPewpew: Files = {};
   let mixedFiles: Files = {};
 
   before(async () => {
     mockS3();
     mockUploadObject();
     mockGetObjectTagging(new Map([["tagName", "tagValue"]]));
-    const filename: string = pewpewZipFile.originalFilename!;
+
     try {
-      const unzippedFiles: File[] = await unzipFile(pewpewZipFile);
+      const filename: string = legacyPewpewZipFile.originalFilename!;
+      const unzippedFiles: File[] = await unzipFile(legacyPewpewZipFile);
       log("unzipped " + filename, LogLevel.DEBUG, unzippedFiles);
-      files = {
+      filesLegacyPewpew = {
         additionalFiles: unzippedFiles as any as File
       };
-      log("new files " + filename, LogLevel.DEBUG, files);
+      log("legacy files " + filename, LogLevel.DEBUG, filesLegacyPewpew);
       mixedFiles = {
-        additionalFiles: [...unzippedFiles, pewpewZipFile] as any as File
+        additionalFiles: [...unzippedFiles, legacyPewpewZipFile] as any as File
       };
     } catch (error) {
-      log("Error unzipping " + filename, LogLevel.ERROR, error);
+      log("Error unzipping " + legacyPewpewZipFile.originalFilename, LogLevel.ERROR, error);
+      throw error;
+    }
+
+    const scriptingPewpewZipFile: File = createFormidableFile(
+      path.basename(PEWPEW_SCRIPTING_FILEPATH),
+      PEWPEW_SCRIPTING_FILEPATH,
+      "unittest",
+      1,
+      null
+    );
+    try {
+      const filename: string = scriptingPewpewZipFile.originalFilename!;
+      const unzippedFiles: File[] = await unzipFile(scriptingPewpewZipFile);
+      log("unzipped " + filename, LogLevel.DEBUG, unzippedFiles);
+      filesScriptingPewpew = {
+        additionalFiles: unzippedFiles as any as File
+      };
+      log("scripting files " + filename, LogLevel.DEBUG, filesScriptingPewpew);
+    } catch (error) {
+      log("Error unzipping " + scriptingPewpewZipFile.originalFilename, LogLevel.ERROR, error);
       throw error;
     }
   });
@@ -127,10 +150,11 @@ describe("PewPew Util", () => {
   });
 
   describe("postPewPew", () => {
-    it("postPewPew should respond 200 OK", (done: Mocha.Done) => {
+
+    it("postPewPew legacy should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         fields: {},
-        files
+        files: filesLegacyPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
@@ -142,7 +166,7 @@ describe("PewPew Util", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.not.include("as latest");
-        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)/);
         log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
         expect(match, "pewpew match").to.not.equal(null);
         expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
@@ -158,7 +182,7 @@ describe("PewPew Util", () => {
         fields: {
           latest: "true"
         },
-        files
+        files: filesLegacyPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
@@ -170,6 +194,32 @@ describe("PewPew Util", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.include("as latest");
+        done();
+      }).catch((error) => {
+        log("postPewPew error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postPewPew scripting should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        fields: {},
+        files: filesScriptingPewpew
+      };
+      log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
+        log("postPewPew res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestManagerError = res.json;
+        log("body: " + JSON.stringify(body), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("PewPew uploaded, version");
+        expect(body.message).to.not.include("as latest");
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)/);
+        log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+        expect(match, "pewpew match").to.not.equal(null);
+        expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);

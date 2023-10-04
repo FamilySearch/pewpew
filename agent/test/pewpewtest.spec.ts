@@ -139,23 +139,14 @@ describe("PewPewTest", () => {
       done();
     });
 
-    it("compare version cannot be a beta", (done: Mocha.Done) => {
-      try {
-        versionGreaterThan("0.5.5", "0.5.4-beta");
-        done(new Error("Should have failed."));
-      } catch (error) {
-        expect(`${error}`).include("compareVersion cannot be a beta");
-        done();
-      }
+    it("compare version patch greater than", (done: Mocha.Done) => {
+      expect(versionGreaterThan("0.5.5", "0.5.6-preview1")).to.equal(false);
+      done();
     });
 
-    it("compare version cannot be a beta", (done: Mocha.Done) => {
-      try {
-        expect(versionGreaterThan("0.5.10-preview1", "0.5.5")).to.equal(true);
-        done(new Error("Should have failed."));
-      } catch (error) {
-        done();
-      }
+    it("compare version patch less than", (done: Mocha.Done) => {
+      expect(versionGreaterThan("0.5.5", "0.5.5-preview1")).to.equal(true);
+      done();
     });
   });
 

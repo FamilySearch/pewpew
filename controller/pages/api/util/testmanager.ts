@@ -445,7 +445,8 @@ export async function validateYamlfile (
   environmentVariables: EnvironmentVariables,
   additionalFileNames: string[],
   bypassParser: boolean | undefined,
-  authPermissions: AuthPermissions
+  authPermissions: AuthPermissions,
+  validateLegacyOnly?: boolean
 ): Promise<ErrorResponse | ValidateYamlfileResult> {
   let testRunTimeMn: number | undefined;
   let bucketSizeMs: number | undefined;
@@ -466,7 +467,8 @@ export async function validateYamlfile (
       for (const splunkPath of logger.PEWPEW_SPLUNK_INJECTED_VARIABLES) {
         dummyEnvironmentVariables[splunkPath] = dummySplunkPath;
       }
-      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables);
+      // Pass pewpew version legacy/scripting
+      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, validateLegacyOnly);
     } catch(error) {
       return { json: { message: `yamlFile: ${yamlFile.originalFilename || yamlFile.filepath} failed to parse`, error: formatError(error) }, status: 400 };
     }
@@ -1206,7 +1208,8 @@ export abstract class TestManager {
         // Trace level since it might have passwords
         log("environmentVariables", LogLevel.TRACE, environmentVariablesFile);
 
-        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions);
+        // TODO: Pass pewpew version legacy/scripting
+        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions, undefined);
         // eslint-disable-next-line no-prototype-builtins
         if (validateResult.hasOwnProperty("json")) {
           return validateResult as ErrorResponse;

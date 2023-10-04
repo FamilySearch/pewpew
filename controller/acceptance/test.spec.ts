@@ -443,7 +443,7 @@ describe("Test API Integration", () => {
           expect(res.status, bodyText).to.equal(400);
           log("body: " + bodyText, LogLevel.DEBUG, bodyText);
           expect(bodyText).to.not.equal(undefined);
-          expect(bodyText).to.include("invalid version");
+          expect(bodyText).to.include("failed to parse");
           done();
       }).catch((error) => {
         log("POST /test error", LogLevel.ERROR, error);
@@ -1636,7 +1636,7 @@ describe("Test API Integration", () => {
             expect(res.status, bodyText).to.equal(400);
             log("body: " + bodyText, LogLevel.DEBUG, bodyText);
             expect(bodyText).to.not.equal(undefined);
-            expect(bodyText).to.include("invalid version");
+            expect(bodyText).to.include("failed to parse");
             done();
         }).catch((error) => {
           log("POST /test error", LogLevel.ERROR, error);

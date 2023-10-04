@@ -42,11 +42,11 @@ const BASIC_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "basicwithenv.yaml")
 const BASIC_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "basicwithfiles.yaml");
 const BASIC_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "basicnopeakload.yaml");
 const BASIC_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "basicheadersall.yaml");
-// const SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting.yaml");
-// const SCRIPTING_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "scriptingwithenv.yaml");
-// const SCRIPTING_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "scriptingwithfiles.yaml");
-// const SCRIPTING_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "scriptingnopeakload.yaml");
-// const SCRIPTING_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "scriptingheadersall.yaml");
+const SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting.yaml");
+const SCRIPTING_FILEPATH_WITH_ENV = path.join(UNIT_TEST_FOLDER, "scriptingwithenv.yaml");
+const SCRIPTING_FILEPATH_WITH_FILES = path.join(UNIT_TEST_FOLDER, "scriptingwithfiles.yaml");
+const SCRIPTING_FILEPATH_NO_PEAK_LOAD = path.join(UNIT_TEST_FOLDER, "scriptingnopeakload.yaml");
+const SCRIPTING_FILEPATH_HEADERS_ALL = path.join(UNIT_TEST_FOLDER, "scriptingheadersall.yaml");
 const NOT_YAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "text.txt");
 const NOT_YAML_FILEPATH2 = path.join(UNIT_TEST_FOLDER, "text2.txt");
 const PEWPEWYAML_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.yaml");
@@ -97,7 +97,7 @@ describe("TestManager Integration", () => {
   let testIdMissingEnv: string | undefined;
   let queueName: string = "unittests";
   let legacyVersion: string | undefined;
-  let scriptingVersion: string;
+  let scriptingVersion: string | undefined;
 
   before(async () => {
     try {
@@ -158,6 +158,7 @@ describe("TestManager Integration", () => {
   });
 
   describe("POST /test", () => {
+  describe("POST legacy files", () => {
     const basicFiles: Files = { yamlFile: createFileObject(BASIC_FILEPATH) };
     const basicFields: Fields = { queueName };
     const basicParsedForm: ParsedForm = {
@@ -231,7 +232,7 @@ describe("TestManager Integration", () => {
 
     it("postTest with version legacy should respond 200 OK", (done: Mocha.Done) => {
       expect(legacyVersion).to.not.equal(undefined);
-      log("postTest version, sharedQueueNames, sharedPewPewVersions", LogLevel.DEBUG, { legacyVersion, sharedQueueNames , sharedPewPewVersions });
+      log("postTest version, sharedPewPewVersions", LogLevel.DEBUG, { legacyVersion, sharedPewPewVersions });
       const parsedForm: ParsedForm = {
         files: basicFiles,
         fields: {
@@ -263,11 +264,12 @@ describe("TestManager Integration", () => {
     });
 
     it("postTest with version scripting should respond 400 Bad Request", (done: Mocha.Done) => {
+      expect(scriptingVersion).to.not.equal(undefined);
       const parsedForm: ParsedForm = {
         files: basicFiles,
         fields: {
           ...basicFields,
-          version: scriptingVersion
+          version: scriptingVersion!
         }
       };
       log("postTest parsedForm basic as scripting", LogLevel.DEBUG, { parsedForm });
@@ -278,7 +280,9 @@ describe("TestManager Integration", () => {
         const body: TestManagerError = res.json as TestManagerError;
         expect(body).to.not.equal(undefined);
         expect(body.message).to.not.equal(undefined);
-        expect(body.message).to.include("invalid version");
+        expect(body.message).to.include("failed to parse");
+        expect(body.error).to.not.equal(undefined);
+        expect(body.error).to.include("YamlParse");
         done();
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
@@ -1651,6 +1655,534 @@ describe("TestManager Integration", () => {
       });
     });
 
+  });
+  });
+  describe("POST scripting files", () => {
+    const scriptingFiles: Files = { yamlFile: createFileObject(SCRIPTING_FILEPATH) };
+    const scriptingFields: Fields = { queueName };
+    const scriptingParsedForm: ParsedForm = {
+      files: scriptingFiles,
+      fields: scriptingFields
+    };
+    before(() => {
+      if (!queueName) {
+        expect(sharedQueueNames, "sharedQueueNames").to.not.equal(undefined);
+        expect(sharedQueueNames!.length, "sharedQueueNames.length").to.be.greaterThan(0);
+        queueName = sharedQueueNames![0];
+      }
+      scriptingFields.queueName = queueName;
+      expect(scriptingVersion, "scriptingVersion").to.not.equal(undefined);
+      scriptingFields.version = scriptingVersion!;
+      scriptingParsedForm.fields = scriptingFields;
+      log("postTest sharedQueueNames", LogLevel.DEBUG, sharedQueueNames);
+    });
+
+  describe("POST /test new test", () => {
+    it("postTest should respond 200 OK", (done: Mocha.Done) => {
+      log("postTest parsedForm", LogLevel.DEBUG, { scriptingParsedForm });
+      TestManager.postTest(scriptingParsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with version latest should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          version: latestPewPewVersion
+        }
+      };
+      log("postTest parsedForm latest", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with version scripting should respond 200 OK", (done: Mocha.Done) => {
+      expect(scriptingVersion, "scriptingVersion").to.not.equal(undefined);
+      log("postTest version, sharedPewPewVersions", LogLevel.DEBUG, { scriptingVersion, sharedPewPewVersions });
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          version: scriptingVersion!
+        }
+      };
+      log("postTest parsedForm scripting", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with version legacy should respond 400 Bad Request", (done: Mocha.Done) => {
+      expect(legacyVersion, "legacyVersion").to.not.equal(undefined);
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          version: legacyVersion!
+        }
+      };
+      log("postTest parsedForm scripting as scripting", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("failed to parse");
+        expect(body.error).to.not.equal(undefined);
+        expect(body.error).to.include("UnrecognizedKey");
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with version bogus should respond 400 Bad Request", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          version: "bogus"
+        }
+      };
+      log("postTest parsedForm bogus", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("invalid version");
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with extra options should respond 200 OK", (done: Mocha.Done) => {
+      const environmentVariables: EnvironmentVariablesFile = {
+        ...defaultEnvironmentVariables,
+        NOT_NEEDED: { value: "true", hidden: false },
+        ALSO_NOT_NEEDED: { value: "false", hidden: true }
+      };
+      const parsedForm: ParsedForm = {
+        files: {
+          ...scriptingFiles,
+          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
+        },
+        fields: {
+          ...scriptingFields,
+          restartOnFailure: "true",
+          environmentVariables: JSON.stringify(environmentVariables)
+        }
+      };
+      log("postTest parsedForm extra options", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        const s3Folder = PpaasTestId.getFromTestId(body.testId).s3Folder;
+        new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile: undefined }).download(true)
+        .then((ppaasEncryptEnvironmentFile: PpaasEncryptEnvironmentFile) => {
+          const fileContents: string | undefined = ppaasEncryptEnvironmentFile.getFileContents();
+          const expectedEnvironmentVariables = JSON.stringify(PpaasEncryptEnvironmentFile.filterEnvironmentVariables(environmentVariables));
+          expect(fileContents, "PpaasEncryptEnvironmentFile fileContents").to.equal(expectedEnvironmentVariables);
+          const variablesFile: EnvironmentVariablesFile | undefined = ppaasEncryptEnvironmentFile.getEnvironmentVariablesFile();
+          expect(variablesFile).to.not.equal(undefined);
+          if (variablesFile === undefined) { return; }
+          expect(Object.keys(variablesFile).length, "Object.keys(variablesFile).length").to.equal(Object.keys(environmentVariables).length);
+          for (const [variableName, variableValue] of Object.entries(environmentVariables)) {
+            if (typeof variableValue === "string" || variableValue.hidden) {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify({ hidden: true }));
+            } else {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify(variableValue));
+            }
+          }
+          done();
+        }).catch((error) => {
+          log("PpaasEncryptEnvironmentFile download error", LogLevel.ERROR, error);
+          done(error);
+        });
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest missing vars should respond 400 Bad Request", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        fields: scriptingFields
+      };
+      log("postTest parsedForm missing vars", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("failed to parse");
+        expect(body.error).to.not.equal(undefined);
+        expect(body.error).to.include("SERVICE_URL_AGENT");
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest missing files should respond 400 Bad Request", (done: Mocha.Done) => {
+      const extrafilename: string = path.basename(NOT_YAML_FILEPATH2);
+      const parsedForm: ParsedForm = {
+        files: {
+          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
+          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
+        },
+        fields: scriptingFields
+      };
+      log("postTest parsedForm missing files", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
+        expect(body).to.not.equal(undefined);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include(extrafilename);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with vars should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        fields: {
+          ...scriptingFields,
+          environmentVariables: JSON.stringify(defaultEnvironmentVariables)
+        }
+      };
+      log("postTest parsedForm with vars", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        const s3Folder = PpaasTestId.getFromTestId(body.testId).s3Folder;
+        new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile: undefined }).download(true)
+        .then((ppaasEncryptEnvironmentFile: PpaasEncryptEnvironmentFile) => {
+          const fileContents: string | undefined = ppaasEncryptEnvironmentFile.getFileContents();
+          const expectedEnvironmentVariables = JSON.stringify(PpaasEncryptEnvironmentFile.filterEnvironmentVariables(defaultEnvironmentVariables));
+          expect(fileContents, "PpaasEncryptEnvironmentFile fileContents").to.equal(expectedEnvironmentVariables);
+          const variablesFile: EnvironmentVariablesFile | undefined = ppaasEncryptEnvironmentFile.getEnvironmentVariablesFile();
+          expect(variablesFile).to.not.equal(undefined);
+          if (variablesFile === undefined) { return; }
+          expect(Object.keys(variablesFile).length, "Object.keys(variablesFile).length").to.equal(Object.keys(defaultEnvironmentVariables).length);
+          for (const [variableName, variableValue] of Object.entries(defaultEnvironmentVariables)) {
+            if (typeof variableValue === "string" || variableValue.hidden) {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify({ hidden: true }));
+            } else {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify(variableValue));
+            }
+          }
+          done();
+        }).catch((error) => {
+          log("PpaasEncryptEnvironmentFile download error", LogLevel.ERROR, error);
+          done(error);
+        });
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with files should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: {
+          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
+        },
+        fields: scriptingFields
+      };
+      log("postTest parsedForm with files", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with no peak load should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_NO_PEAK_LOAD) },
+        fields: scriptingFields
+      };
+      log("postTest parsedForm no peak load", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest with headers_all should respond 200 OK", (done: Mocha.Done) => {
+      const parsedForm: ParsedForm = {
+        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_HEADERS_ALL) },
+        fields: scriptingFields
+      };
+      log("postTest parsedForm headers_all", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Created);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+  });
+
+  describe("POST /test scheduled", () => {
+    it("postTest scheduled should respond 200 OK", (done: Mocha.Done) => {
+      const scheduleDate: number = Date.now() + 600000;
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          scheduleDate: "" + scheduleDate
+        }
+      };
+      log("postTest parsedForm scheduled", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body, "body").to.not.equal(undefined);
+        expect(body.testId, "testId").to.not.equal(undefined);
+        expect(body.s3Folder, "s3Folder").to.not.equal(undefined);
+        expect(body.status, "status").to.equal(TestStatus.Scheduled);
+        expect(body.userId).to.equal(authAdmin.userId);
+        expect(body.startTime, "startTime").to.equal(scheduleDate);
+        expect(body.endTime, "endTime").to.be.greaterThan(scheduleDate);
+        const ppaasTestId = PpaasTestId.getFromTestId(body.testId);
+        // We can't re-use the schedule date for the testId since we don't want conflicts if you schedule the same test twice
+        expect(ppaasTestId.date.getTime(), "ppaasTestId.date").to.not.equal(scheduleDate);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest scheduled with vars should respond 200 OK", (done: Mocha.Done) => {
+      const scheduleDate: number = Date.now() + 600000;
+      const parsedForm: ParsedForm = {
+        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        fields: {
+          ...scriptingFields,
+          environmentVariables: JSON.stringify(defaultEnvironmentVariables),
+          scheduleDate: "" + scheduleDate
+        }
+      };
+      log("postTest parsedForm scheduled with vars", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Scheduled);
+        expect(body.userId).to.equal(authAdmin.userId);
+        const s3Folder = PpaasTestId.getFromTestId(body.testId).s3Folder;
+        new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile: undefined }).download(true)
+        .then((ppaasEncryptEnvironmentFile: PpaasEncryptEnvironmentFile) => {
+          const fileContents: string | undefined = ppaasEncryptEnvironmentFile.getFileContents();
+          const expectedEnvironmentVariables = JSON.stringify(PpaasEncryptEnvironmentFile.filterEnvironmentVariables(defaultEnvironmentVariables));
+          expect(fileContents, "PpaasEncryptEnvironmentFile fileContents").to.equal(expectedEnvironmentVariables);
+          const variablesFile: EnvironmentVariablesFile | undefined = ppaasEncryptEnvironmentFile.getEnvironmentVariablesFile();
+          expect(variablesFile).to.not.equal(undefined);
+          if (variablesFile === undefined) { return; }
+          expect(Object.keys(variablesFile).length, "Object.keys(variablesFile).length").to.equal(Object.keys(defaultEnvironmentVariables).length);
+          for (const [variableName, variableValue] of Object.entries(defaultEnvironmentVariables)) {
+            if (typeof variableValue === "string" || variableValue.hidden) {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify({ hidden: true }));
+            } else {
+              expect(JSON.stringify(variablesFile[variableName]), `variablesFile[${variableName}]`).to.equal(JSON.stringify(variableValue));
+            }
+          }
+          done();
+        }).catch((error) => {
+          log("PpaasEncryptEnvironmentFile download error", LogLevel.ERROR, error);
+          done(error);
+        });
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest scheduled with files should respond 200 OK", (done: Mocha.Done) => {
+      const scheduleDate: number = Date.now() + 600000;
+      const parsedForm: ParsedForm = {
+        files: {
+          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
+        },
+        fields: {
+          ...scriptingFields,
+          scheduleDate: "" + scheduleDate
+        }
+      };
+      log("postTest parsedForm with files", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body).to.not.equal(undefined);
+        expect(body.testId).to.not.equal(undefined);
+        expect(body.s3Folder).to.not.equal(undefined);
+        expect(body.status).to.equal(TestStatus.Scheduled);
+        expect(body.userId).to.equal(authAdmin.userId);
+        done();
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+    it("postTest scheduled recurring should respond 200 OK", (done: Mocha.Done) => {
+      const scheduleDate: number = Date.now() + 600000;
+      const endDate: number = Date.now() + (7 * 24 * 60 * 60000);
+      const parsedForm: ParsedForm = {
+        files: scriptingFiles,
+        fields: {
+          ...scriptingFields,
+          scheduleDate: "" + scheduleDate,
+          endDate: "" + endDate,
+          daysOfWeek: JSON.stringify(everyDaysOfWeek)
+        }
+      };
+      log("postTest parsedForm scheduled recurring", LogLevel.DEBUG, { parsedForm });
+      TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
+        log("postTest res", LogLevel.DEBUG, res);
+        expect(res.status, JSON.stringify(res.json)).to.equal(200);
+        const body: TestData = res.json as TestData;
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(body, "body").to.not.equal(undefined);
+        expect(body.testId, "testId").to.not.equal(undefined);
+        expect(body.s3Folder, "s3Folder").to.not.equal(undefined);
+        expect(body.status, "status").to.equal(TestStatus.Scheduled);
+        expect(body.userId).to.equal(authAdmin.userId);
+        expect(body.startTime, "startTime").to.equal(scheduleDate);
+        expect(body.endTime, "endTime").to.be.greaterThan(scheduleDate);
+        const ppaasTestId = PpaasTestId.getFromTestId(body.testId);
+        // We can't re-use the schedule date for the testId since we don't want conflicts if you schedule the same test twice
+        expect(ppaasTestId.date.getTime(), "ppaasTestId.date").to.not.equal(scheduleDate);
+        // If this runs before the other acceptance tests populate the shared data
+        TestScheduler.getCalendarEvents().then((calendarEvents: EventInput[]) => {
+
+          const event: EventInput | undefined = calendarEvents.find((value: EventInput) => value.id === body.testId);
+          expect(event, "event found").to.not.equal(undefined);
+          expect(event!.startRecur, "event.startRecur").to.equal(scheduleDate);
+          expect(event!.daysOfWeek, "event.daysOfWeek").to.not.equal(undefined);
+          expect(JSON.stringify(event!.daysOfWeek), "event.daysOfWeek").to.equal(JSON.stringify(everyDaysOfWeek));
+          done();
+        }).catch((error) => done(error));
+      }).catch((error) => {
+        log("postTest error", LogLevel.ERROR, error);
+        done(error);
+      });
+    });
+
+  });
   });
   });
 

@@ -15,21 +15,9 @@ import { formatError, formatPageHref, isTestManagerMessage } from "../../pages/a
 import Div from "../Div";
 import { H3 } from "../Headers";
 import LinkButton from "../LinkButton";
-// Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
-import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import styled from "styled-components";
 import { useRouter } from "next/router";
-
-const pewpewDashboardBaseUrl: string = "https://familysearch.splunkcloud.com/en-US/app/QA/pewpew_dashboard?form.envSelector=";
-const agentDashboardBaseUrl: string = "https://familysearch.splunkcloud.com/en-US/app/QA/pewpew_agent_dashboard?form.envSelector=";
-const hostnameSearchBaseUrl: string = "https://familysearch.splunkcloud.com/en-US/app/QA/search?q=search%20index%3Dproduction%20host%3D";
-const dashboardEarliestQuery: string = "&form.timeSelector.earliest=";
-const dashboardLatestQuery: string = "&form.timeSelector.latest=";
-const dashboardRefreshQuery: string = "&form.autoRefresh=1m";
-const dashboardAgentQuery: string = "&form.agentSelector=";
-const searchEarliestQuery: string = "&earliest=";
-const searchLatestQuery: string = "&latest=";
 
 const StopTestButton = styled.button`
   font-size: 1.25rem;
@@ -88,28 +76,6 @@ export const TestInfo = ({ testData, ...testInfoProps }: TestInfoProps) => {
     split.splice(2, 0, "app");
     testData.hostname = split.join("-");
   }
-
-  let testIdPlusTime: string = testData.testId;
-  let hostnamePlusTime: string = testData.hostname || "";
-  try {
-    const ppaasTestId: PpaasTestId = PpaasTestId.getFromTestId(testData.testId);
-    const startTime: number = Math.floor((testData.startTime || ppaasTestId.date.getTime()) / 1000);
-    testIdPlusTime += dashboardEarliestQuery + startTime;
-    hostnamePlusTime += searchEarliestQuery + startTime;
-    if (testData.endTime) {
-      const endTime: number = Math.floor((testData.endTime) / 1000);
-      testIdPlusTime += dashboardLatestQuery + (endTime + 30); // 30 seconds for the data to upload to Splunk
-      hostnamePlusTime += searchLatestQuery + endTime;
-    }
-  } catch (error) {
-    log("Caught error parsing testId: " + testData.testId, LogLevel.ERROR, error);
-  }
-  if (testIsRunning) {
-    testIdPlusTime += dashboardRefreshQuery;
-  }
-  const pewpewDashboard: string = pewpewDashboardBaseUrl + testIdPlusTime;
-  const agentDashboard: string = agentDashboardBaseUrl + testIdPlusTime + (testData.hostname ? `${dashboardAgentQuery}${testData.hostname}` : "");
-  const hostnameSearch: string = hostnameSearchBaseUrl + hostnamePlusTime;
 
   const onClick = async (event: React.MouseEvent<HTMLButtonElement>, deleteSchedule?: boolean) => {
     event.preventDefault();
@@ -182,15 +148,13 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
           <li key="testId">TestId: {testData.testId}</li>
           <li key="s3Folder">S3 Folder: {testData.s3Folder}</li>
           {testData.instanceId && <li key="instanceId">InstanceId: {testData.instanceId}</li>}
-          {testData.hostname && <li key="hostname">Hostname: <a href={hostnameSearch} target="_blank">{testData.hostname}</a></li>}
+          {testData.hostname && <li key="hostname">Hostname: {testData.hostname}</li>}
           {testData.ipAddress && <li key="ipAddress">IPAddress: {testData.ipAddress}</li>}
           {testData.queueName && <li key="queueName">Test Queue: {testData.queueName}</li>}
           {testData.version && <li key="version">Pewpew Version: {testData.version}</li>}
           {testData.userId && <li key="userId">UserId: <a href={`mailto:${testData.userId}`} >{testData.userId}</a></li>}
           {testData.resultsFileLocation && testData.resultsFileLocation.map((resultsLocation: string, index: number) =>
             <li key={"resultsFileLocation" + index}><a href={resultsLocation} target="_blank">S3 Results Url{index > 0 ? ` ${index + 1}` : ""}</a></li>)}
-          <li key="pewpewDashboard"><a href={pewpewDashboard} target="_blank">PewPew Dashboard</a></li>
-          <li key="agentDashboard"><a href={agentDashboard} target="_blank">PewPew Agent Dashboard</a></li>
           <li key="testStatus">Status: {testData.status === TestStatus.Created ? "Test Uploaded, Waiting for Agent" : testData.status}</li>
           {testData.lastUpdated && <li key="lastUpdated" style={lastUpdatedStyle}>Last Updated: {new Date(testData.lastUpdated).toLocaleString()}</li>}
         </ul>

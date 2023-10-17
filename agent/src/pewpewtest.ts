@@ -23,6 +23,7 @@ import fs from "fs/promises";
 import { getHostname } from "./util/util";
 import { join as pathJoin } from "path";
 import { platform } from "os";
+import semver from "semver";
 
 logger.config.LogFileName = "ppaas-agent";
 const logConfig = logger.config;
@@ -87,18 +88,8 @@ export function versionGreaterThan (currentVersion: string, compareVersion: stri
   if (currentVersion === "latest") { return true; }
   // If the compareVersion is latest, then only currrentVersion=latest is greater
   if (compareVersion === "latest") { return false; }
-  // compareVersion cannot be a beta;
-  if (!/^\d+\.\d+\.\d+$/.test(compareVersion)) {
-    throw new Error("compareVersion cannot be a beta");
-  }
-  const currentMatch: string[] | null = currentVersion.match(/^(\d+\.\d+\.\d+)(.*)/);
-  // If we can't find a version string 0.0.0 at the beginning, we don't know
-  if (!currentMatch) {
-    return false;
-  }
-  const version = currentMatch[1];
-  const beta = currentMatch[2];
-  return beta !== "" ? version > compareVersion : version >= compareVersion;
+
+  return semver.gt(currentVersion, compareVersion);
 }
 
 // Export for testing

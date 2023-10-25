@@ -611,7 +611,7 @@ describe("SqsUtil", () => {
         expect(result.Attributes).to.not.equal(undefined);
         expect(result.Attributes!.QueueArn).to.not.equal(undefined);
         expect(result.Attributes!.ApproximateNumberOfMessages).to.not.equal(undefined);
-        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages, 10))).to.equal(false);
+        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages!, 10))).to.equal(false);
         done();
       }).catch((error) => {
         log("getQueueAttributes() error", LogLevel.ERROR, error);
@@ -631,7 +631,7 @@ describe("SqsUtil", () => {
         expect(result.Attributes).to.not.equal(undefined);
         expect(result.Attributes!.QueueArn).to.not.equal(undefined);
         expect(result.Attributes!.ApproximateNumberOfMessages).to.not.equal(undefined);
-        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages, 10))).to.equal(false);
+        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages!, 10))).to.equal(false);
         done();
       }).catch((error) => {
         log("getQueueAttributes() error", LogLevel.ERROR, error);
@@ -651,7 +651,7 @@ describe("SqsUtil", () => {
         expect(result.Attributes).to.not.equal(undefined);
         expect(result.Attributes!.QueueArn).to.not.equal(undefined);
         expect(result.Attributes!.ApproximateNumberOfMessages).to.not.equal(undefined);
-        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages, 10))).to.equal(false);
+        expect(isNaN(parseInt(result.Attributes!.ApproximateNumberOfMessages!, 10))).to.equal(false);
         done();
       }).catch((error) => {
         log("getQueueAttributes() error", LogLevel.ERROR, error);

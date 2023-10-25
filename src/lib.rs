@@ -973,12 +973,18 @@ fn create_try_run_future(
         let static_tags = endpoint
             .tags
             .iter()
-            .filter_map(|(k, v)| {
-                v.is_simple().then(|| {
-                    v.evaluate(Cow::Owned(json::Value::Null), None)
-                        .map(|v| (k.clone(), v))
-                })
+            .filter(|&(_k, v)| v.is_simple())
+            .map(|(k, v)| {
+                v.evaluate(Cow::Owned(json::Value::Null), None)
+                    .map(|v| (k.clone(), v))
             })
+            // .filter_map(|(k, v)| {
+            //     v.is_simple().then(|| {
+            //         v.evaluate(Cow::Owned(json::Value::Null), None)
+            //             .map(|v| (k.clone(), v))
+            //     })
+            // })
+            //
             .collect::<Result<_, _>>()?;
 
         let builder = request::EndpointBuilder::new(endpoint, None);

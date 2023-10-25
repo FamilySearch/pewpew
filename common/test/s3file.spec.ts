@@ -86,7 +86,7 @@ describe("PpaasS3File", () => {
       contentType: testPpaasS3FileDownload.contentType,
       publicRead: true,
       tags,
-      storageClass: "storageClass"
+      storageClass: "STANDARD"
     };
     fullPpaasS3File = new PpaasS3FileUnitTest({
       filename: UNIT_TEST_FILENAME,

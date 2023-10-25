@@ -88,7 +88,7 @@ impl BodyReader {
                 r.get_mut().0.extend(in_bytes);
                 loop {
                     match r.read(&mut self.buffer) {
-                        Ok(n) if n == 0 => break,
+                        Ok(0) => break,
                         Ok(n) => out_bytes.extend_from_slice(&self.buffer[0..n]),
                         Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => break,
                         Err(e) => return Err(e),
@@ -99,7 +99,7 @@ impl BodyReader {
                 r.as_inner_mut().0.extend(in_bytes);
                 loop {
                     match r.read(&mut self.buffer) {
-                        Ok(n) if n == 0 => break,
+                        Ok(0) => break,
                         Ok(n) => out_bytes.extend_from_slice(&self.buffer[0..n]),
                         Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => break,
                         Err(e) => return Err(e),
@@ -110,7 +110,7 @@ impl BodyReader {
                 r.as_inner_mut().0.extend(in_bytes);
                 loop {
                     match r.read(&mut self.buffer) {
-                        Ok(n) if n == 0 => break,
+                        Ok(0) => break,
                         Ok(n) => out_bytes.extend_from_slice(&self.buffer[0..n]),
                         Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => break,
                         Err(e) => return Err(e),

@@ -136,7 +136,7 @@ jobs:
     strategy:
       matrix:
         wasm-dirctory: [config-wasm, hdr-histogram-wasm]
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [18.x, 20.x]
     runs-on: ubuntu-latest
     env:
       WASM_FILE: ${{ matrix.wasm-dirctory }}_bg.wasm

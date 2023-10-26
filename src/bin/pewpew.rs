@@ -151,15 +151,19 @@ mod args {
         /// Directory to store logs (if enabled with --loggers)
         #[arg(short = 'd', long = "results-directory", value_name = "DIRECTORY")]
         results_dir: Option<PathBuf>,
-        /// Skips request and reponse body from output
-        #[arg(short = 'k', long = "skipBody")]
-        skip_body_on: bool,
+        /// Skips reponse body from output
+        #[arg(short = 'k', long = "skip-response-body")]
+        skip_response_body_on: bool,
+        /// Skips request body from output
+        #[arg(short = 'K', long = "skip-request-body")]
+        skip_request_body_on: bool,
     }
 
     impl From<TryConfigTmp> for TryConfig {
         fn from(value: TryConfigTmp) -> Self {
             let loggers_on = value.loggers_on;
-            let skip_body_on = value.skip_body_on;
+            let skip_response_body_on = value.skip_response_body_on;
+            let skip_request_body_on = value.skip_request_body_on;
             let results_dir = value.results_dir.filter(|_| loggers_on);
             if let Some(d) = &results_dir {
                 create_dir_all(d).unwrap();
@@ -172,7 +176,8 @@ mod args {
                 filters: value.filters,
                 file: value.file,
                 format: value.format,
-                skip_body_on,
+                skip_response_body_on,
+                skip_request_body_on,
             }
         }
     }
@@ -420,7 +425,8 @@ mod tests {
         assert!(try_config.filters.is_none());
         assert!(matches!(try_config.format, TryRunFormat::Human));
         assert!(!try_config.loggers_on);
-        assert!(!try_config.skip_body_on);
+        assert!(!try_config.skip_response_body_on);
+        assert!(!try_config.skip_request_body_on);
         assert!(try_config.results_dir.is_none());
     }
 
@@ -437,6 +443,7 @@ mod tests {
             "_id=0",
             "-l",
             "-k",
+            "-K",
             "-o",
             STATS_FILE,
             YAML_FILE,
@@ -460,7 +467,8 @@ mod tests {
         }
         assert!(matches!(try_config.format, TryRunFormat::Json));
         assert!(try_config.loggers_on);
-        assert!(try_config.skip_body_on);
+        assert!(try_config.skip_response_body_on);
+        assert!(try_config.skip_request_body_on);
         assert!(try_config.results_dir.is_some());
         assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
     }
@@ -477,7 +485,8 @@ mod tests {
             "--include",
             "_id=0",
             "--loggers",
-            "--skipBody",
+            "--skip-response-body",
+            "--skip-request-body",
             "--file",
             STATS_FILE,
             YAML_FILE,
@@ -501,9 +510,36 @@ mod tests {
         }
         assert!(matches!(try_config.format, TryRunFormat::Json));
         assert!(try_config.loggers_on);
-        assert!(try_config.skip_body_on);
+        assert!(try_config.skip_response_body_on);
+        assert!(try_config.skip_request_body_on);
         assert!(try_config.results_dir.is_some());
         assert_eq!(try_config.results_dir.unwrap().to_str().unwrap(), TEST_DIR);
+    }
+
+    #[test]
+    fn cli_try_skip_response_body() {
+        let cli_config =
+            args::try_parse_from(["myprog", TRY_COMMAND, "--skip-response-body", YAML_FILE])
+                .unwrap();
+        let ExecConfig::Try(try_config) = cli_config else {
+            panic!()
+        };
+        assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+        assert!(try_config.skip_response_body_on);
+        assert!(!try_config.skip_request_body_on);
+    }
+
+    #[test]
+    fn cli_try_request_body() {
+        let cli_config =
+            args::try_parse_from(["myprog", TRY_COMMAND, "--skip-request-body", YAML_FILE])
+                .unwrap();
+        let ExecConfig::Try(try_config) = cli_config else {
+            panic!()
+        };
+        assert_eq!(try_config.config_file.to_str().unwrap(), YAML_FILE);
+        assert!(!try_config.skip_response_body_on);
+        assert!(try_config.skip_request_body_on);
     }
 
     #[test]

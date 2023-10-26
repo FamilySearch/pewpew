@@ -121,35 +121,26 @@ const nextConfig = {
     HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT,
   },
   // https://github.com/vercel/next.js/discussions/11493#discussioncomment-14606
-  env: { // These are sent to the client and the server and are set at build time
-    // @ts-ignore
-    LoggingLevel: process.env.LoggingLevel,
+  env: { // These are sent to the client and the server and are set at build time for static pages
+    LoggingLevel: process.env.LoggingLevel || "", // Only checks if debug
     // @ts-ignore
     APPLICATION_NAME: process.env.APPLICATION_NAME,
     // @ts-ignore
     SYSTEM_NAME: process.env.SYSTEM_NAME,
     // @ts-ignore
-    FS_SITE: process.env.FS_SITE,
+    FS_SITE: process.env.FS_SITE, // Used by auth client/Layout
     // @ts-ignore
-    BASE_PATH: process.env.BASE_PATH,
+    BASE_PATH: process.env.BASE_PATH, // client utils/Layout
     // @ts-ignore
-    ASSET_PREFIX: process.env.ASSET_PREFIX,
+    ASSET_PREFIX: process.env.ASSET_PREFIX, // client utils/Layout
     // @ts-ignore
-    TEST_STATUS_REFRESH_DELAY: process.env.TEST_STATUS_REFRESH_DELAY,
+    HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT, // Used by Layout
     // @ts-ignore
-    TEST_ERRORS_MAX_DISPLAYED: process.env.TEST_ERRORS_MAX_DISPLAYED,
+    AUTH_MODE: process.env.AUTH_MODE, // Used by auth client/Layout
     // @ts-ignore
-    TEST_ERRORS_MAX_LINE_LENGTH: process.env.TEST_ERRORS_MAX_LINE_LENGTH,
+    AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME, // Used by auth client/Layout
     // @ts-ignore
-    REDIRECT_TO_S3: process.env.REDIRECT_TO_S3,
-    // @ts-ignore
-    UNZIP_S3_FILES: process.env.UNZIP_S3_FILES,
-    // @ts-ignore
-    AUTH_MODE: process.env.AUTH_MODE,
-    // @ts-ignore
-    AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME,
-    // @ts-ignore
-    AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME,
+    AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME, // Used by auth client/Layout
   }
 };
 

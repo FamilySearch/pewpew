@@ -518,13 +518,9 @@ mod tests {
 
     #[test]
     fn cli_try_skip_response_body() {
-        let cli_config = args::try_parse_from([
-            "myprog",
-            TRY_COMMAND,
-            "--skip-response-body",
-            YAML_FILE,
-        ])
-        .unwrap();
+        let cli_config =
+            args::try_parse_from(["myprog", TRY_COMMAND, "--skip-response-body", YAML_FILE])
+                .unwrap();
         let ExecConfig::Try(try_config) = cli_config else {
             panic!()
         };
@@ -535,13 +531,9 @@ mod tests {
 
     #[test]
     fn cli_try_request_body() {
-        let cli_config = args::try_parse_from([
-            "myprog",
-            TRY_COMMAND,
-            "--skip-request-body",
-            YAML_FILE,
-        ])
-        .unwrap();
+        let cli_config =
+            args::try_parse_from(["myprog", TRY_COMMAND, "--skip-request-body", YAML_FILE])
+                .unwrap();
         let ExecConfig::Try(try_config) = cli_config else {
             panic!()
         };

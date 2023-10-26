@@ -10,9 +10,9 @@
     "./controller"
   ],
   "scripts": {
-    "start": "npm-run-all --parallel startagent startcontroller",
-    "startcontroller": "cd controller && npm run start",
-    "startagent": "cd agent && npm run start",
+    "start": "npm-run-all --parallel start:agent start:controller",
+    "start:controller": "cd controller && npm run start",
+    "start:agent": "cd agent && npm run start",
     "dev": "cd controller && npm run dev",
     "build": "npm run lint && npm run build:common && npm run build:agent && npm run build:controller",
     "storybook": "cd controller && npm run storybook",

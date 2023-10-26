@@ -14,11 +14,8 @@ Commands:
   help   Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help              Prints help information
-  -V, --version           Prints version information
-  -l, --loggers           Enable loggers defined in the config file
-  -d, --results-directory Directory to store logs (if enabled with --loggers)
-  -k, --skipBody          Skips request and reponse body from output (try command)
+  -h, --help       Prints help information
+  -V, --version    Prints version information
 ```
 
 As signified in the above help output, there are two subcommands `run` and `try`.
@@ -72,7 +69,8 @@ Options:
                                        endpoint matching the filter is included in the test
   -l, --loggers                        Enable loggers defined in the config file
   -d, --results-directory <DIRECTORY>  Directory to store logs (if enabled with --loggers)
-  -k, --skipBody                       Skips request and reponse body from output (try command)
+  -k, --skip-response-body             Skips reponse body from output (try command)
+  -K, --skip-request-body              Skips request body from output (try command)
   -h, --help                           Prints help information
 ```
 
@@ -84,7 +82,9 @@ The `-l`, `--loggers` flag specifies that any loggers defined in the config file
 
 The `-d`, `--results-directory` parameter will store any log files (if the `--loggers` flag is used) in the specified directory. If the directory does not exist it is created.
 
-The `-k`, `--skipBody` parameter ensures that during a Try run, the request and response bodies aren't displayed. This can be particularly useful for debugging requests or responses when the body is not crucial for the debugging process.
+The `-k`, `--skip-response-body` parameter ensures that during a Try run, the response bodies aren't displayed. This can be particularly useful for debugging responses when the body is very long and not crucial for the debugging process.
+
+The `-K`, `--skip-request-body` parameter ensures that during a Try run, the request bodies aren't displayed. This can be particularly useful for debugging requests when the body is very long and not crucial for the debugging process.
 <br/><br/>
 
 In both the `run` and `try` subcommands a [config file](./config.md) is required.

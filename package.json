@@ -35,6 +35,8 @@
     "test:common": "cd common && npm run test",
     "test:agent": "cd agent && npm run test",
     "test:controller": "cd controller && npm run test",
+    "acceptance:all": "npm-run-all --parallel start acceptance:sleep",
+    "acceptance:sleep": "sleep 30 && npm run acceptance",
     "acceptance": "npm-run-all --serial acceptance:agent acceptance:controller",
     "acceptance:agent": "cd agent && npm run acceptance",
     "acceptance:controller": "cd controller && npm run acceptance",

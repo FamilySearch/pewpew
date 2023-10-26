@@ -11,10 +11,10 @@ import {
   listFiles,
   uploadFile
 } from "./util/s3";
-import { Body, S3File } from "../types";
 import { LogLevel, log } from "./util/log";
+import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { access, stat } from "fs/promises";
-import { _Object as S3Object } from "@aws-sdk/client-s3";
+import { S3File } from "../types";
 import { Stats } from "fs";
 import { URL } from "url";
 import { sleep } from "./util/util";
@@ -46,9 +46,9 @@ export interface GetAllFilesInS3Options {
 }
 
 export class PpaasS3File implements S3File {
-  public body: Body | undefined;
+  public body: PutObjectCommandInput["Body"] | undefined;
   public key: string;
-  public storageClass?: string;
+  public storageClass?: PutObjectCommandInput["StorageClass"];
   public contentType: string;
   public contentEncoding?: string;
   public publicRead?: boolean;

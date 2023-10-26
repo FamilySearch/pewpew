@@ -47,13 +47,12 @@ pub fn boa_mod(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 (&f.sig.ident, f.sig.inputs.len()),
                 f.attrs
                     .iter()
-                    .filter_map(|a| {
+                    .filter(|&a| {
                         a.path()
                             // only include `#[boa_fn]` functions
                             .is_ident("boa_fn")
-                            .then(|| a.parse_args::<Expr>().ok())
                     })
-                    .flatten()
+                    .filter_map(|a| a.parse_args::<Expr>().ok())
                     .filter_map(|e| match e {
                         Expr::Assign(ea) => match *ea.left {
                             Expr::Path(ExprPath {

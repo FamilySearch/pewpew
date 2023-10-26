@@ -1,6 +1,6 @@
-import { Body, LogLevel, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, log, logger, s3, util } from "@fs/ppaas-common";
+import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { decrypt, encrypt } from "./secrets";
-import { _Object as S3Object } from "@aws-sdk/client-s3";
 
 logger.config.LogFileName = "ppaas-controller";
 
@@ -17,9 +17,9 @@ export interface PpaasEncryptS3FileParams {
 }
 
 export class PpaasEncryptS3File implements s3.S3File {
-  public body: Body | undefined;
+  public body: PutObjectCommandInput["Body"] | undefined;
   public key: string;
-  public storageClass?: string;
+  public storageClass?: PutObjectCommandInput["StorageClass"];
   public contentType: string;
   public contentEncoding?: string;
   public publicRead?: boolean;

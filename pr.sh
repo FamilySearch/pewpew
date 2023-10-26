@@ -60,4 +60,15 @@ npm run linterror
 npm run build:react
 NODE_ENV=test npm test
 
+# terminal 1
+# npm run coverage
+# grab screenshot
+# cd controller/ && npm run testcleanup
+
+# terminal 2
+# cd controller/ && npm start
+# terminal 3
+# cd controller/ && npm run acceptance
+# grab screenshot
+
 cargo deny check --hide-inclusion-graph license sources advisories

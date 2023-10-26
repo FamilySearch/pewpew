@@ -154,7 +154,10 @@ describe("ErrorFile API Integration", function () {
         } else {
           expect(res.status, "status").to.equal(200);
           expect(res.data, "body").to.not.equal(undefined);
-          expect(typeof res.data, "typeof res.data").to.equal("string");
+          // If it's only a single line (that is json) this will be an object like
+          // {"type":"end","msg":"Test killed early by Ctrl-c"}
+          // expect(typeof res.data, "typeof res.data").to.equal("string");
+          expect(["string", "object"].includes(typeof res.data), `["string", "object"].includes("${typeof res.data}")`).to.equal(true);
           done();
         }
       } else {

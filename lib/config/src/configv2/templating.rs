@@ -931,7 +931,7 @@ mod tests {
             ("a".to_owned().into(), VarValue::Bool(true)),
             (
                 "b".to_owned().into(),
-                VarValue::List(vec![VarValue::Num(45), VarValue::Num(23)]),
+                VarValue::List(vec![VarValue::Num(45.0), VarValue::Num(23.0)]),
             ),
             (
                 "c".to_owned().into(),
@@ -941,8 +941,8 @@ mod tests {
                             "d".to_owned().into(),
                             VarValue::Str(Template::new_literal("77".to_owned())),
                         ),
-                        ("e".to_owned().into(), VarValue::Num(12)),
-                        ("e1".to_owned().into(), VarValue::Num(999)),
+                        ("e".to_owned().into(), VarValue::Num(12.0)),
+                        ("e1".to_owned().into(), VarValue::Num(999.0)),
                     ]
                     .into(),
                 ),

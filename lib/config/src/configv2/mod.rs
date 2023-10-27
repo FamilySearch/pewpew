@@ -57,12 +57,12 @@ pub struct LoadTest<VD: Bool = True, ED: Bool = True> {
 
 pub(crate) type Vars<ED> = BTreeMap<Arc<str>, VarValue<ED>>;
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 #[derive(serde::Serialize)]
 pub(crate) enum VarValue<ED: Bool> {
     Map(Vars<ED>),
-    Num(i64),
+    Num(f64),
     Bool(bool),
     Str(Template<String, EnvsOnly, True, ED>),
     List(Vec<Self>),
@@ -72,7 +72,7 @@ impl From<VarValue<True>> for serde_json::Value {
     fn from(value: VarValue<True>) -> Self {
         match value {
             VarValue::Bool(b) => Self::Bool(b),
-            VarValue::Num(n) => Self::Number(n.into()),
+            VarValue::Num(n) => Self::Number(serde_json::Number::from_f64(n).unwrap()),
             VarValue::Str(mut t) => Self::String(std::mem::take(t.get_mut())),
             VarValue::List(l) => l.into_iter().map(Into::into).collect::<Vec<Self>>().into(),
             VarValue::Map(m) => Self::Object(

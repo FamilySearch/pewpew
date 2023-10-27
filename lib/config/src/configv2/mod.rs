@@ -95,9 +95,14 @@ impl Display for VarValue<True> {
             }
             Self::Map(m) => {
                 write!(f, "{{")?;
+                let mut multiple_entries = false;
                 for (k, v) in m.iter() {
+                    if multiple_entries {
+                        // We need to not write a trailing slash, so only add this before the second
+                        write!(f, ",")?;
+                    }
                     write!(f, "\"{}\": {}", k.escape_default(), v)?;
-                    write!(f, ",")?;
+                    multiple_entries = true;
                 }
                 write!(f, "}}")
             }

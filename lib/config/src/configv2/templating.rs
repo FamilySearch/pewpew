@@ -293,12 +293,12 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
                             (
                                 match serde_json::from_str(&s) {
                                     Ok(serde_json::Value::String(s)) => {
-                                        log::debug!("Using literal string {s:?} as the json value");
+                                        log::debug!("Template into_stream_with Using literal string {s:?} as the json value");
                                         serde_json::Value::String(s)
                                     }
                                     Ok(v) => v,
                                     Err(e) => {
-                                        log::debug!("String {s:?} is not valid JSON ({e}); reusing same string value");
+                                        log::debug!("Template into_stream_with String {s:?} is not valid JSON ({e}); reusing same string value");
                                         serde_json::Value::String(s)
                                     }
                                 },

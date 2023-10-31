@@ -174,7 +174,7 @@ impl LoadTest<True, True> {
         use LoadTestGenError::NoEndpoints;
         // TODO: Why isn't this causing errors on empty
         let mut pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
-        log::debug!("from_yaml pre_envs: {:?}", pre_envs);
+        log::debug!("LoadTest::from_yaml pre_envs: {:?}", pre_envs);
         // init lib js
         scripting::set_source(std::mem::take(&mut pre_envs.lib_src))?;
 
@@ -184,34 +184,47 @@ impl LoadTest<True, True> {
             .iter_mut()
             .for_each(|e| e.insert_path(Arc::clone(&file_path)));
         let vars = std::mem::take(&mut pre_vars.vars);
-        let mut lt = pre_vars.insert_vars(&vars)?;
+        let mut loadtest = pre_vars.insert_vars(&vars)?;
 
         // Check if providers all exists for the templates
-        let missing = lt
+        let missing = loadtest
             .get_required_providers()
             .into_iter()
-            .filter(|p| !lt.providers.contains_key::<str>(p))
+            .filter(|p| !loadtest.providers.contains_key::<str>(p))
             .collect::<Vec<_>>();
         if !missing.is_empty() {
-            todo!("error on missing providers: {missing:?}");
+            todo!("LoadTest::from_yaml error on missing providers: {missing:?}");
         }
 
-        let lp = &lt.load_pattern;
-        let ep = &mut lt.endpoints;
-        let headers = &lt.config.client.headers;
+        let loggers = &loadtest.loggers;
+        let load_pattern = &loadtest.load_pattern;
+        let endpoints = &mut loadtest.endpoints;
+        let headers = &loadtest.config.client.headers;
         // Check for no endpoints
-        if ep.is_empty() {
+        if endpoints.is_empty() {
             return Err(NoEndpoints());
         }
-        ep.iter_mut().enumerate().for_each(|(id, endpoint)| {
-            endpoint.insert_load_pattern(lp.as_ref());
+        endpoints.iter_mut().enumerate().for_each(|(id, endpoint)| {
+            endpoint.insert_load_pattern(load_pattern.as_ref());
             endpoint.insert_special_tags(id);
             endpoint.insert_global_headers(headers);
+            // This was done in the `from_config`` in v1.
+            // We need to add all loggers to all endpoints if they have a query/select
+            for (name, logger) in loggers {
+                if let Some(query) = &logger.query {
+                    endpoint.logs.push((
+                        name.clone(),
+                        EndpointLogs {
+                            query: query.clone(),
+                        },
+                    ))
+                }
+            }
         });
 
-        lt.lt_err = lt.make_lt_err();
+        loadtest.lt_err = loadtest.make_lt_err();
 
-        Ok(lt)
+        Ok(loadtest)
     }
 
     fn get_required_providers(&self) -> BTreeSet<Arc<str>> {

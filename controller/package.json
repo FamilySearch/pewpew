@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -48,7 +48,7 @@
     "@fullcalendar/interaction": "~6.1.9",
     "@fullcalendar/react": "~6.1.9",
     "@fullcalendar/timegrid": "~6.1.9",
-    "axios": "~1.5.0",
+    "axios": "~1.6.0",
     "bunyan": "~1.8.0",
     "chart.js": "~4.4.0",
     "chartjs-adapter-date-fns": "^3.0.0",
@@ -65,7 +65,7 @@
     "rc-progress": "^3.4.2",
     "react": "^18.2.0",
     "react-accessible-accordion": "^5.0.0",
-    "react-datepicker": "~4.18.0",
+    "react-datepicker": "~4.21.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",

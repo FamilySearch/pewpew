@@ -171,7 +171,7 @@ impl LoadTest<True, True> {
         file_path: Arc<Path>,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<Self, LoadTestGenError> {
-        use LoadTestGenError::NoEndpoints;
+        use LoadTestGenError::{MissingProviders, NoEndpoints};
         // TODO: Why isn't this causing errors on empty
         let mut pre_envs: LoadTest<False, False> = serde_yaml::from_str(yaml)?;
         log::debug!("LoadTest::from_yaml pre_envs: {:?}", pre_envs);
@@ -193,7 +193,7 @@ impl LoadTest<True, True> {
             .filter(|p| !loadtest.providers.contains_key::<str>(p))
             .collect::<Vec<_>>();
         if !missing.is_empty() {
-            todo!("LoadTest::from_yaml error on missing providers: {missing:?}");
+            return Err(MissingProviders(missing));
         }
 
         let loggers = &loadtest.loggers;

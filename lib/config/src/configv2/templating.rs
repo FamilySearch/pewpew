@@ -97,7 +97,7 @@ where
             } => template,
             Template::PreVars { template, .. } => template,
             // probably won't be needed, as serialization is done with `<VD = False>` templates.
-            Template::NeedsProviders { .. } => todo!(),
+            Template::NeedsProviders { .. } => todo!("TemplatedString FromStr NeedsProviders todo"),
         }
     }
 }

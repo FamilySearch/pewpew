@@ -272,7 +272,7 @@ fn map_vars(v: PreVar) -> Result<VarValue<False>, ConfigUpdaterError> {
         match v {
             json::Value::Null => unimplemented!("null var"),
             json::Value::Bool(b) => Ok(VarValue::Bool(b)),
-            json::Value::Number(n) => Ok(VarValue::Num(n.as_i64().unwrap_or_default())),
+            json::Value::Number(n) => Ok(VarValue::Num(n.as_f64().unwrap_or_default())),
             json::Value::String(s) => {
                 let t = TemplateV1::new(
                     &s,

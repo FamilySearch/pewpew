@@ -1,0 +1,75 @@
+load_pattern:
+  - !linear
+      to: 100%
+      over: 15s
+loggers:
+  l:
+    to: !stdout
+vars:
+  var_string: "foo"
+  var_array: ["foo", "foo", "foo"]
+  port: "${e:PORT}"
+  # a var that is an an object as a string.
+  # Putting this in directly will escape out all the quotes. You must wrap it as  ${x:(${v:var_string_json})} to avoid escaping
+  var_string_json: '{"d":234,"e":"pqr","f":2.34}'
+  # a var that is a an object as an object
+  var_object: {"d":890,"e":"xyz","f":7.89}
+providers:
+  provider_range:
+    !range
+  provider_list_objects: # List of objects
+    !list
+      values:
+      - a: 123
+        b: 'abc'
+        c: 1.23
+      - a: 456
+        b: 'def'
+        c: 4.56
+      - a: 789
+        b: 'ghi'
+        c: 7.89
+      - a: 101112
+        b: 'jkl'
+        c: 10.1112
+      repeat: true
+endpoints:
+  - method: POST
+    declare:
+      # Collects the string into an array
+      collect_strings: !c
+        collects:
+          - take: 3
+            from: '${v:var_string}'
+            as: _b
+        then: ${p:_b}
+      # Collects the objects into an array
+      collect_objects: !c
+        collects:
+          - take: 2
+            from: '${p:provider_list_objects}'
+            as: _c
+        then: ${p:_c}
+      declare_string_json: !x '[{"provider_range": ${p:provider_range}, "var_string": "${v:var_string}","provider_list_objects": ${p:provider_list_objects}, "h": "tuv" }]'
+    url: http://localhost:${v:port}/
+    body: !str >-
+      {
+        "provider_range": ${p:provider_range},
+        "var_string": "${v:var_string}",
+        "provider_list_objects": ${p:provider_list_objects},
+        "collect_objects": ${p:collect_objects},
+        "collect_strings": ${p:collect_strings},
+        "var_array": ${v:var_array},
+        "var_string_json": ${x:(${v:var_string_json})},
+        "var_object": ${v:var_object},
+        "declare_string_json": ${p:declare_string_json},
+        "const_string": "test"
+      }
+    peak_load: 1.1hps
+    headers:
+      Content-Type: application/json
+    logs:
+      l:
+        select:
+          status: response.status
+          body: response.body

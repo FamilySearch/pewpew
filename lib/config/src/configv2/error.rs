@@ -14,6 +14,8 @@ pub enum LoadTestGenError {
     LibLoad(#[from] Arc<io::Error>),
     #[error("endpoints are required")]
     NoEndpoints(),
+    #[error("error missing providers: {0:?}")]
+    MissingProviders(Vec<Arc<str>>),
     // Used by the config-wasm when only passing back a V1 error
     #[error("error {0}")]
     OtherErr(String),

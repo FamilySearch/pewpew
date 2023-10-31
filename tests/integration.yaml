@@ -17,6 +17,8 @@ vars:
   b: "foo"
   e2: ["foo", "foo", "foo"]
   port: "${e:PORT}"
+  int: 12345
+  float: 1.2345 # Make sure these can be parsed
 providers:
   a:
     !range

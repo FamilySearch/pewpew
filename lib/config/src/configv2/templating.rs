@@ -21,6 +21,7 @@ use ether::{Either, Either3};
 use futures::{Stream, TryStreamExt};
 pub use helpers::*;
 use itertools::Itertools;
+use log::debug;
 use serde::Deserialize;
 use std::{
     borrow::Cow,
@@ -96,7 +97,7 @@ where
             } => template,
             Template::PreVars { template, .. } => template,
             // probably won't be needed, as serialization is done with `<VD = False>` templates.
-            Template::NeedsProviders { .. } => todo!(),
+            Template::NeedsProviders { .. } => todo!("TemplatedString FromStr NeedsProviders todo"),
         }
     }
 }
@@ -205,6 +206,11 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
         Ar: Clone + Send + Unpin + 'static,
         E: StdError + Send + Clone + Unpin + 'static + From<EvalExprError>,
     {
+        debug!(
+            "Template into_stream template={:?}, providers={:?}",
+            self,
+            providers.keys()
+        );
         self.into_stream_with(move |p| providers.get(p).map(|p| p.as_stream()))
     }
 
@@ -234,9 +240,18 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
         use futures::stream::repeat;
         Ok(match self {
             Self::Literal { value } => {
+                debug!(
+                    "Template::Literal into_stream_with value='{}', json='{}'",
+                    value,
+                    serde_json::Value::String(value.clone())
+                );
                 Either::A(repeat(Ok((serde_json::Value::String(value), vec![]))))
             }
             Self::NeedsProviders { script, .. } => {
+                debug!(
+                    "Template::NeedsProviders into_stream_with script={:?}",
+                    script
+                );
                 let streams = script
                     .into_iter()
                     .map(|s| match s {
@@ -254,13 +269,42 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
                     .collect::<Result<Vec<_>, _>>()?;
                 Either::B(zip_all::zip_all(streams).map_ok(|js| {
                     js.into_iter()
-                        .map(|(j, ar)| (j.to_string().trim_matches('"').to_owned(), ar))
+                        .map(|(j, ar)| {
+                            match j {
+                                serde_json::Value::String(s) => {
+                                    // We don't want to stringify the json::Value::String or it will escape out quotes, etc.
+                                    // Get the internal string and use it.
+                                    debug!("Template into_stream_with zip_all json::string s={}, to_string={}", s, s.to_string());
+                                    (s.trim_matches('"').to_owned(), ar)
+                                },
+                                other => {
+                                    debug!("Template into_stream_with zip_all json::other j={}, to_string={}", other, other.to_string());
+                                    (other.to_string().trim_matches('"').to_owned(), ar)
+                                },
+                            }
+                        })
                         .reduce(|mut acc, e| {
                             acc.0.push_str(&e.0);
                             acc.1.extend(e.1);
                             acc
                         })
-                        .map(|(s, ar)| (serde_json::Value::String(s), ar))
+                        .map(|(s, ar)| {
+                            // If it's an object we're turning it into a string here
+                            (
+                                match serde_json::from_str(&s) {
+                                    Ok(serde_json::Value::String(s)) => {
+                                        log::debug!("Template into_stream_with Using literal string {s:?} as the json value");
+                                        serde_json::Value::String(s)
+                                    }
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        log::debug!("Template into_stream_with String {s:?} is not valid JSON ({e}); reusing same string value");
+                                        serde_json::Value::String(s)
+                                    }
+                                },
+                                ar,
+                            )
+                        })
                         .unwrap_or_default()
                 }))
             }
@@ -931,7 +975,7 @@ mod tests {
             ("a".to_owned().into(), VarValue::Bool(true)),
             (
                 "b".to_owned().into(),
-                VarValue::List(vec![VarValue::Num(45), VarValue::Num(23)]),
+                VarValue::List(vec![VarValue::Num(45.0), VarValue::Num(23.0)]),
             ),
             (
                 "c".to_owned().into(),
@@ -941,8 +985,8 @@ mod tests {
                             "d".to_owned().into(),
                             VarValue::Str(Template::new_literal("77".to_owned())),
                         ),
-                        ("e".to_owned().into(), VarValue::Num(12)),
-                        ("e1".to_owned().into(), VarValue::Num(999)),
+                        ("e".to_owned().into(), VarValue::Num(12.0)),
+                        ("e1".to_owned().into(), VarValue::Num(999.0)),
                     ]
                     .into(),
                 ),

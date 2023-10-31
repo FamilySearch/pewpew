@@ -6,6 +6,7 @@ use crate::{
 };
 use ether::Either;
 use futures::{Stream, StreamExt, TryStreamExt};
+use log::debug;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -177,6 +178,11 @@ impl Declare<True> {
         Ar: Clone + Send + Unpin + 'static,
         E: StdError + Send + Clone + Unpin + 'static + From<EvalExprError>,
     {
+        debug!(
+            "Declare into_stream declare={:?}, providers={:?}",
+            self,
+            providers.keys()
+        );
         // poll_fn stream is not Clone, so an abstraction is made over a clonable stream vs a
         // function that returns a non-clonable stream
         fn make_stream<S: Clone, F: Fn() -> S2, S2>(e: &Either<S, F>) -> Either<S, S2> {
@@ -193,6 +199,10 @@ impl Declare<True> {
                     .map(|Collect { take, from, r#as }| {
                         let providers = providers.clone();
                         let stream = {
+                            debug!(
+                                "Declare Collects take={:?}, from={:?} as={}",
+                                take, from, r#as
+                            );
                             match from.as_static().map(ToOwned::to_owned) {
                                 // collect does not need providers, so just repeat the same value
                                 // as needed

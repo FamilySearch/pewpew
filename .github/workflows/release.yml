@@ -72,8 +72,13 @@ jobs:
             target: aarch64-unknown-linux-musl
             linker: gcc-aarch64-linux-gnu
             cross: true
-          - build: macos
+          - build: macos-x86
             os: macos-latest
+            cross: false
+          # https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners
+          # macos-latest-xlarge or macos-13-xlarge are running on arm64 (m1)
+          - build: macos-aarch64
+            os: macos-latest-xlarge
             cross: false
           - build: windows
             os: windows-latest
@@ -164,14 +169,21 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          asset_name="pewpew-$VERSION-windows-x86_64.zip"
+          asset_name="pewpew-$VERSION-x86_64-windows.zip"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           7z a -mm=Deflate64 -mfb=258 -mpass=15 $asset_name ./target/release/pewpew.exe
 
-      - name: Compress for macOS
+      - name: Compress for macOS x86
         if: matrix.os == 'macos-latest'
         run: |
-          asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
+          asset_name="pewpew-$VERSION-x86_64-apple-darwin.tar.xz"
+          echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+
+      - name: Compress for macOS aarch64
+        if: matrix.os == 'macos-latest-xlarge'
+        run: |
+          asset_name="pewpew-$VERSION-aarch64-apple-darwin.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
 

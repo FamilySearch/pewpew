@@ -96,12 +96,12 @@ jobs:
             target: aarch64-unknown-linux-musl
             linker: gcc-aarch64-linux-gnu
             cross: true
-          - build: macos
+          - build: macos-x86
             os: macos-latest
             cross: false
           # https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners
           # macos-latest-xlarge or macos-13-xlarge are running on arm64 (m1)
-          - build: macos-m1
+          - build: macos-aarch64
             os: macos-latest-xlarge
             cross: false
           - build: windows

@@ -146,10 +146,6 @@ jobs:
           use-cross: true
           command: build
           args: -q --release --target ${{ matrix.target }}
-        # uses: ./.github/actions/linux-x86_64-musl/
-        # if: matrix.cross
-        # with:
-        #   args: cross build -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/

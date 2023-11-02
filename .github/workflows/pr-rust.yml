@@ -96,6 +96,17 @@ jobs:
             target: aarch64-unknown-linux-musl
             linker: gcc-aarch64-linux-gnu
             cross: true
+          - build: macos-x86
+            os: macos-latest
+            cross: false
+          # https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners
+          # macos-latest-xlarge or macos-13-xlarge are running on arm64 (m1)
+          - build: macos-aarch64
+            os: macos-latest-xlarge
+            cross: false
+          - build: windows
+            os: windows-latest
+            cross: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -105,6 +116,19 @@ jobs:
         run: |
           sudo apt update
           sudo apt install ${{ matrix.linker }}
+
+      - name: Build for non-Linux # Windows and MacOS
+        uses: actions-rs/toolchain@v1
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          command: build
+          args: -q --release
 
       # https://github.com/actions-rs/cargo#cross-compilation
       - name: Build with cross # ARM builds

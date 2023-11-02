@@ -75,6 +75,11 @@ jobs:
           - build: macos
             os: macos-latest
             cross: false
+          # https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners
+          # macos-latest-xlarge or macos-13-xlarge are running on arm64 (m1)
+          - build: macos-m1
+            os: macos-latest-xlarge
+            cross: false
           - build: windows
             os: windows-latest
             cross: false
@@ -172,6 +177,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           asset_name="pewpew-$VERSION-apple-darwin-x86_64.tar.xz"
+          echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
+          XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
+
+      - name: Compress for macOS
+        if: matrix.os == 'macos-latest-xlarge'
+        run: |
+          asset_name="pewpew-$VERSION-apple-darwin-arm64.tar.xz"
           echo "ASSET_NAME=$asset_name" >> $GITHUB_ENV
           XZ_OPT=-9 tar -C ./target/release/ -cJf $asset_name pewpew
 

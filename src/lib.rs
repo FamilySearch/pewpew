@@ -1013,6 +1013,7 @@ fn create_try_run_future(
 
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
     let mut left = try_join_all(endpoint_calls).map(move |r| {
+        debug!("create_try_run_future try_join_all finish {:?}", r);
         let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
     });
     let f = future::poll_fn(move |cx| match left.poll_unpin(cx) {

@@ -14,7 +14,6 @@ providers:
   a: !range
   b: !response
   c: !response
-  d: !response
 
 loggers:
   test:
@@ -41,8 +40,9 @@ endpoints:
 
   - method: POST
     url: http://localhost:${v:port}
-    body: !str '{"b": ${x:${p:b}.value}}'
+    body: !str '{"b": ${x:${p:b}.value}, "counter": ${x:${p:b}.counter}}'
     peak_load: 5hps
+    # on_demand: true # We can't do on_demand due to a bug where it can't figure out that we provider for ourselves
     provides:
       b:
         query:

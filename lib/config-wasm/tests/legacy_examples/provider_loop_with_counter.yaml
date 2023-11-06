@@ -17,8 +17,6 @@ providers:
     response: {}
   c:
     response: {}
-  d:
-    response: {}
 
 loggers:
   test:
@@ -43,8 +41,9 @@ endpoints:
 
   - method: POST
     url: http://localhost:${port}
-    body: '{"b": ${b.value}}'
+    body: '{"b": ${b.value},"counter": ${b.counter}}'
     peak_load: 5hps
+    # on_demand: true # We can't do on_demand due to a bug where it can't figure out that we provider for ourselves
     provides:
       b:
         select:

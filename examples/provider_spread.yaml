@@ -2,7 +2,6 @@
 
 vars:
   port: "${e:PORT}"
-  createName: 'test:loadtest-'
   groupRate: 1
   imagesPerGroup: 10
 
@@ -13,20 +12,18 @@ load_pattern:
       over: 5s
 
 providers:
-  group_range: # Counter for creating groups
+  a: # Counter for creating groups
     !range
-  image_range: # counter for creating images to put in groups
+  x: # counter for creating images to put in groups
     !range
-  group_created: # to continue the group APIs
+  b: # to continue the group APIs
     !response
-  group_created_for_images: # to create images
+  b2: # to create images
     !response
-  image_created: # to continue the image APIs
+  y: # to continue the image APIs
     !response
-  group_create_data: !response
-  image_create_data: !response
-  group_update_data: !response
-  image_update_data: !response
+  c: !response
+  z: !response
 
 loggers:
   test:
@@ -38,18 +35,17 @@ endpoints:
     tags:
       type: create group
     body: !str '{
-        "id":"${v:createName}${x:start_pad(${p:group_range}, 6, "0")}",
-        "name":"TEST-GROUP"
+        "a":"${x:start_pad(${p:a}, 6, "0")}"
       }'
     provides:
-      group_created:
+      b:
         query:
-          select: response.body.id
+          select: response.body.a
           where: response.status == 200 || response.status == 409
         send: if_not_full
-      group_created_for_images:
+      b2:
         query:
-          select: response.body.id
+          select: response.body.a
           for_each:
             - repeat(_v.imagesPerGroup) # We need to create X copies so each image will have one
           where: response.status == 200 || response.status == 409
@@ -61,16 +57,15 @@ endpoints:
     tags:
       type: create image
     body: !str '{
-        "id":"${v:createName}${x:start_pad(${p:image_range}, 8, "0")}",
-        "groupId":"${p:group_created_for_images}",
-        "name":"TEST-IMAGE"
+        "x":"${x:start_pad(${p:x}, 8, "0")}",
+        "b":"${p:b2}"
       }'
     provides:
-      image_created:
+      y:
         query:
           select:
-            id: response.body.id
-            groupId: response.body.groupId
+            x: response.body.x
+            b: response.body.b
           where: response.status == 200 || response.status == 409
         send: if_not_full
     peak_load: ${x:${v:groupRate} * ${v:imagesPerGroup}}hps # Needs to be a higher rate to keep up with groups
@@ -80,15 +75,15 @@ endpoints:
     tags:
       type: create group data
     body: !str '{
-        "id":"${p:group_created}",
+        "b":"${p:b}",
         "data":{
-          "subdata":"TEST-DATA"
+          "subdata":"A-DATA"
         }
       }'
     provides:
-      group_create_data:
+      c:
         query:
-          select: group_created
+          select: response.body.b
           where: response.status == 200
         send: if_not_full
     peak_load: ${v:groupRate}hps
@@ -98,16 +93,16 @@ endpoints:
     tags:
       type: create image
     body: !str '{
-        "id":"${x:${p:image_created}.id}",
-        "groupId":"${x:${p:image_created}.groupId}",
+        "x":"${x:${p:y}.x}",
+        "b":"${x:${p:y}.b}",
         "data":{
-          "subdata":"TEST-DATA"
+          "subdata":"X-DATA"
         }
       }'
     provides:
-      image_create_data:
+      z:
         query:
-          select: image_created # Puts in the whole object (id and groupId)
+          select: y # Puts in the whole object (id and groupId)
           where: response.status == 200
         send: if_not_full
     peak_load: ${x:${v:groupRate} * ${v:imagesPerGroup}}hps # Needs to be a higher rate to keep up with groups
@@ -115,26 +110,26 @@ endpoints:
   - method: PUT
     url: http://localhost:${v:port}
     body: !str '{
-        "id":"${p:group_create_data}",
+        "c":"${p:c}",
         "data":{
-          "subdata":"UPDATED-TEST-DATA"
+          "subdata":"UPDATED-A-DATA"
         }
       }'
     peak_load: ${v:groupRate}hps
     logs:
       test:
-        select: response.body.id
+        select: response.body.c
 
   - method: PUT
     url: http://localhost:${v:port}
     body: !str '{
-        "id":"${x:${p:image_create_data}.id}",
-        "groupId":"${x:${p:image_create_data}.groupId}",
+        "x":"${x:${p:z}.x}",
+        "b":"${x:${p:z}.b}",
         "data":{
-          "subdata":"UPDATED-TEST-DATA"
+          "subdata":"UPDATED-X-DATA"
         }
       }'
     peak_load: ${x:${v:groupRate} * ${v:imagesPerGroup}}hps # Needs to be a higher rate to keep up with groups
     logs:
       test:
-        select: response.body.id
+        select: response.body.x

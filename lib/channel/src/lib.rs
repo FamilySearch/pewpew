@@ -181,6 +181,11 @@ impl<T: Serialize> Channel<T> {
         self.on_demand_events.notify(1);
     }
 
+    /// notify all OnDemand with an event listener
+    fn notify_all_on_demand(&self) {
+        self.on_demand_events.notify(std::usize::MAX);
+    }
+
     /// create a listener so an OnDemand can get notice when demand has been requested
     /// (a receiver tried to receive but the queue was empty)
     fn on_demand_listen(&self) -> EventListener {
@@ -340,7 +345,13 @@ impl<T: Serialize> Sender<T> {
 impl<T: Serialize> Clone for Sender<T> {
     fn clone(&self) -> Self {
         let count = self.channel.increment_sender_count();
-        info!("Sender::clone: {} new count: {}", self.name(), count);
+        let on_demand_count = self.channel.on_demand_count();
+        info!(
+            "Sender::Clone channel {}, new count: {}, on_demand_count: {}",
+            self.name(),
+            count,
+            on_demand_count
+        );
         Sender {
             channel: self.channel.clone(),
             listener: None,
@@ -353,8 +364,15 @@ impl<T: Serialize> Clone for Sender<T> {
 impl<T: Serialize> Drop for Sender<T> {
     fn drop(&mut self) {
         let count = self.channel.decrement_sender_count();
-        info!("Sender::drop: {} new count: {}", self.name(), count);
+        let on_demand_count = self.channel.on_demand_count();
+        info!(
+            "Sender::Drop channel {}, new count: {}, on_demand_count: {}",
+            self.name(),
+            count,
+            on_demand_count
+        );
         if count == 0 {
+            info!("Sender::Drop channel {}, notify_all_receivers", self.name());
             self.channel.notify_all_receivers();
         }
     }
@@ -431,7 +449,7 @@ impl<T: Serialize> Sink<T> for Sender<T> {
             if self.no_receivers() {
                 self.listener = None;
                 debug!(
-                    "Sink for Sender:poll_ready {} no_receivers, length: ${}",
+                    "Sink for Sender:poll_ready {} no_receivers, length: {}",
                     self.name(),
                     self.len()
                 );
@@ -531,9 +549,10 @@ pub struct Receiver<T: Serialize> {
 impl<T: Serialize> Clone for Receiver<T> {
     fn clone(&self) -> Self {
         let count = self.channel.increment_receiver_count();
+        let on_demand_count = self.channel.on_demand_count();
         debug!(
-            "Receiver:Clone cloning channel {}, new count: {}",
-            self.channel.name, count
+            "Receiver:Clone channel {}, new count: {}, on_demand_count: {}",
+            self.channel.name, count, on_demand_count
         );
         Receiver {
             channel: self.channel.clone(),
@@ -547,9 +566,10 @@ impl<T: Serialize> Clone for Receiver<T> {
 impl<T: Serialize> Drop for Receiver<T> {
     fn drop(&mut self) {
         let new_count = self.channel.decrement_receiver_count();
+        let on_demand_count = self.channel.on_demand_count();
         debug!(
-            "Receiver:Drop channel {}, new count: {}",
-            self.channel.name, new_count
+            "Receiver:Drop channel {}, new count: {}, on_demand_count: {}",
+            self.channel.name, new_count, on_demand_count
         );
         if new_count == 0 {
             // notify all senders so they will see there are no more receivers
@@ -558,6 +578,8 @@ impl<T: Serialize> Drop for Receiver<T> {
                 "Receiver:Drop channel {}, notify_all_senders",
                 self.channel.name
             );
+            // When there are no more receivers we need to notify the on_demand in addition to the normal senders
+            self.channel.notify_all_on_demand();
             self.channel.notify_all_senders();
         }
     }
@@ -570,13 +592,26 @@ impl<T: Serialize> Stream for Receiver<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         debug!(
             "Receiver:poll_next channel {}, length: {}",
-            self.channel.name, self.channel.name
+            self.channel.name,
+            self.channel.len()
         );
         loop {
             if let Some(listener) = self.listener.as_mut() {
                 match Pin::new(listener).poll(cx) {
-                    Poll::Ready(()) => self.listener = None,
-                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(()) => {
+                        debug!(
+                            "Receiver:poll_next channel {}, listener Poll::Ready, listener = None",
+                            self.channel.name
+                        );
+                        self.listener = None;
+                    }
+                    Poll::Pending => {
+                        debug!(
+                            "Receiver:poll_next channel {}, listener Poll::Pending",
+                            self.channel.name
+                        );
+                        return Poll::Pending;
+                    }
                 }
             }
 
@@ -674,6 +709,10 @@ impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
                     self.channel.len()
                 );
                 self.listener = None;
+                debug!(
+                    "OnDemandReceiver::poll_next {} listener: None",
+                    self.channel.name
+                );
                 return Poll::Ready(None);
             }
 

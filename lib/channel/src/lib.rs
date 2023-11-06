@@ -592,19 +592,26 @@ impl<T: Serialize> Stream for Receiver<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         debug!(
             "Receiver:poll_next channel {}, length: {}",
-            self.channel.name, self.channel.len()
+            self.channel.name,
+            self.channel.len()
         );
         loop {
             if let Some(listener) = self.listener.as_mut() {
                 match Pin::new(listener).poll(cx) {
                     Poll::Ready(()) => {
-                        debug!("Receiver:poll_next channel {}, listener Poll::Ready, listener = None", self.channel.name);
+                        debug!(
+                            "Receiver:poll_next channel {}, listener Poll::Ready, listener = None",
+                            self.channel.name
+                        );
                         self.listener = None;
-                    },
+                    }
                     Poll::Pending => {
-                        debug!("Receiver:poll_next channel {}, listener Poll::Pending", self.channel.name);
+                        debug!(
+                            "Receiver:poll_next channel {}, listener Poll::Pending",
+                            self.channel.name
+                        );
                         return Poll::Pending;
-                    },
+                    }
                 }
             }
 

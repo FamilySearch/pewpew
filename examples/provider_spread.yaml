@@ -2,7 +2,6 @@
 
 vars:
   port: "${PORT}"
-  createName: 'test:loadtest-'
   groupRate: 1
   imagesPerGroup: 10
 
@@ -13,23 +12,19 @@ load_pattern:
       over: 5s
 
 providers:
-  group_range: # Counter for creating groups
+  a: # Counter for creating groups
     range: {}
-  image_range: # counter for creating images to put in groups
+  x: # counter for creating images to put in groups
     range: {}
-  group_created: # to continue the group APIs
+  b: # to continue the group APIs
     response: {}
-  group_created_for_images: # to create images
+  b2: # to create images
     response: {}
-  image_created: # to continue the image APIs
+  y: # to continue the image APIs
     response: {}
-  group_create_data:
+  c:
     response: {}
-  image_create_data:
-    response: {}
-  group_update_data:
-    response: {}
-  image_update_data:
+  z:
     response: {}
 
 loggers:
@@ -42,15 +37,14 @@ endpoints:
     tags:
       type: create group
     body: '{
-        "id":"${createName}${start_pad(group_range, 6, "0")}",
-        "name":"TEST-GROUP"
+        "a":"${start_pad(a, 6, "0")}"
       }'
     provides:
-      group_created:
-        select: response.body.id
+      b:
+        select: response.body.a
         where: response.status == 200 || response.status == 409
-      group_created_for_images:
-        select: response.body.id
+      b2:
+        select: response.body.a
         for_each:
           - repeat(imagesPerGroup) # We need to create X copies so each image will have one
         where: response.status == 200 || response.status == 409
@@ -61,15 +55,14 @@ endpoints:
     tags:
       type: create image
     body: '{
-        "id":"${createName}${start_pad(image_range, 8, "0")}",
-        "groupId":"${group_created_for_images}",
-        "name":"TEST-IMAGE"
+        "x":"${start_pad(x, 8, "0")}",
+        "b":"${b2}"
       }'
     provides:
-      image_created:
+      y:
         select:
-          id: response.body.id
-          groupId: response.body.groupId
+          x: response.body.x
+          b: response.body.b
         where: response.status == 200 || response.status == 409
     peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
 
@@ -78,14 +71,14 @@ endpoints:
     tags:
       type: create group data
     body: '{
-        "id":"${group_created}",
+        "b":"${b}",
         "data":{
-          "subdata":"TEST-DATA"
+          "subdata":"A-DATA"
         }
       }'
     provides:
-      group_create_data:
-        select: group_created
+      c:
+        select: response.body.b
         where: response.status == 200
     peak_load: ${groupRate}hps
 
@@ -94,41 +87,41 @@ endpoints:
     tags:
       type: create image
     body: '{
-        "id":"${image_created.id}",
-        "groupId":"${image_created.groupId}",
+        "x":"${y.x}",
+        "b":"${y.b}",
         "data":{
-          "subdata":"TEST-DATA"
+          "subdata":"X-DATA"
         }
       }'
     provides:
-      image_create_data:
-        select: image_created # Puts in the whole object (id and groupId)
+      z:
+        select: y # Puts in the whole object (id and groupId)
         where: response.status == 200
     peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
 
   - method: PUT
     url: http://localhost:${port}
     body: '{
-        "id":"${group_create_data}",
+        "c":"${c}",
         "data":{
-          "subdata":"UPDATED-TEST-DATA"
+          "subdata":"UPDATED-A-DATA"
         }
       }'
     peak_load: ${groupRate}hps
     logs:
       test:
-        select: response.body.id
+        select: response.body.c
 
   - method: PUT
     url: http://localhost:${port}
     body: '{
-        "id":"${image_create_data.id}",
-        "groupId":"${image_create_data.groupId}",
+        "x":"${z.x}",
+        "b":"${z.b}",
         "data":{
-          "subdata":"UPDATED-TEST-DATA"
+          "subdata":"UPDATED-X-DATA"
         }
       }'
     peak_load: ${groupRate * imagesPerGroup}hps # Needs to be a higher rate to keep up with groups
     logs:
       test:
-        select: response.body.id
+        select: response.body.x

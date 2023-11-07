@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "body_reader"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "brotli",
  "brotli-decompressor",
@@ -308,7 +308,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "channel"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "ahash",
  "concurrent-queue",
@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "base64 0.21.5",
  "boa_engine",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "config-gen"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "config",
  "console_error_panic_hook",
@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "config-wasm"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "config",
  "getrandom",
@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "ether"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "futures",
 ]
@@ -744,7 +744,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "for_each_parallel"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -962,7 +962,7 @@ checksum = "f93e7192158dbcda357bdec5fb5788eebf8bbac027f3f33e719d29135ae84156"
 
 [[package]]
 name = "hdr-histogram-wasm"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "base64 0.21.5",
  "hdrhistogram",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "mod_interval"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "ether",
  "futures",
@@ -1534,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "pewpew"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "base64 0.21.5",
  "body_reader",
@@ -1580,7 +1580,7 @@ dependencies = [
 
 [[package]]
 name = "pewpew-config-updater"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "clap",
  "config",
@@ -1833,7 +1833,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scripting-macros"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "quote",
  "syn 2.0.38",
@@ -1864,7 +1864,7 @@ dependencies = [
 
 [[package]]
 name = "select_any"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "futures",
 ]
@@ -2164,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "test_common"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "zip_all"
-version = "0.6.0-scripting"
+version = "0.6.0"
 dependencies = [
  "futures",
 ]

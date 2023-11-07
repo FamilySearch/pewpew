@@ -36,13 +36,14 @@ Bug fixes:
 Changes:
 - use IsTerminal trait (Rust 1.70.0), removing (direct) dependency on atty crate. (#130)
 - Added example yaml files under /examples
-- Adds skipBody CLI argument - Skips Request and Response Body in Try Output (#140)
+- Adds skipBody CLI argument - Skips Request and Response Body in Try Output (#140) (#169)
 
 Bug fixes:
 - Updated dependencies and fixed deprecations (#143)
 - Fixed the HDR Histogram build for webpack (#119)
 - Use clap derive, fixing behavior of --include flag. (#121)
 - Fix yaml loggers (#129)
+- Fix try script hang broken in 0.5.8 (#177)
 
 ### v0.5.12
 Changes:

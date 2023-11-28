@@ -382,9 +382,7 @@ export class TestScheduler implements TestSchedulerItem {
     }
     (async () => {
       // We'll never set this to false unless something really bad happens
-      let counter = 0;
       while (global.testSchedulerLoopRunning) {
-        counter++;
         const loopStart = Date.now();
         try {
           await TestScheduler.loadTestsFromS3();
@@ -416,7 +414,7 @@ export class TestScheduler implements TestSchedulerItem {
         const delay = Math.min(nextPollTime - Date.now(), nextStartTime - Date.now(), TEST_SCHEDULER_POLL_INTERVAL_MS);
         log(
           "Test Scheduler Loop: nextPollTime: " + nextPollTime,
-          counter % 10 === 0 ? LogLevel.INFO : LogLevel.DEBUG, // Every 10 minutes log
+          LogLevel.DEBUG,
           { loopStart, nextPollTime, nextStartTime, now: Date.now(), delay, TEST_SCHEDULER_POLL_INTERVAL_MS }
         );
         if (delay > 0) {
@@ -505,7 +503,7 @@ export class TestScheduler implements TestSchedulerItem {
         TestScheduler.nextStart = TestScheduler.nextStart ? Math.min(TestScheduler.nextStart, testItem.nextStart) : testItem.nextStart;
         log("updateNextStart forEach", LogLevel.DEBUG, { nextStart: TestScheduler.nextStart, itemNextStart: testItem.nextStart });
       });
-      log("updateNextStart", TestScheduler.nextStart !== nextStartBefore ? LogLevel.INFO : LogLevel.DEBUG, { nextStart: TestScheduler.nextStart });
+      log("updateNextStart", LogLevel.DEBUG, { nextStart: TestScheduler.nextStart, nextStartBefore });
     }
   }
 

@@ -33,10 +33,10 @@ import {
   s3,
   util
 } from "@fs/ppaas-common";
+import { TestManager, defaultRecurringFileTags } from "./testmanager";
 import { formatError, getHourMinuteFromTimestamp } from "./clientutil";
 import type { EventInput } from "@fullcalendar/core";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
-import TestManager from "./testmanager";
 
 const { sleep } = util;
 logger.config.LogFileName = "ppaas-controller";
@@ -584,6 +584,9 @@ export class TestScheduler implements TestSchedulerItem {
           userId: authPermissions.userId || userId || undefined
         }
       );
+      if (newTest.recurrence) {
+        ppaasTestStatus.tags = defaultRecurringFileTags();
+      }
       const statusUrl = await ppaasTestStatus.writeStatus();
       log(`PpaasTestStatus url: ${statusUrl}`, LogLevel.DEBUG, { statusUrl });
       // Check if the testId already exists. If so, only admin or the original user can update it.

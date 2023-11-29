@@ -9,6 +9,7 @@ import {
 import {
   mockGetObject,
   mockGetObjectError,
+  mockGetObjectTagging,
   mockListObject,
   mockListObjects,
   mockS3,
@@ -34,6 +35,7 @@ describe("PpaasTestStatus", () => {
 
   before(() => {
     mockS3();
+    mockGetObjectTagging(undefined);
     ppaasTestId = PpaasTestId.makeTestId("UnitTest");
     testStatus = {
       instanceId: "i-testinstance",

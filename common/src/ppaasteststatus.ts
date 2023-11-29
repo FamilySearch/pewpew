@@ -3,6 +3,7 @@ import { TestStatus, TestStatusMessage } from "../types";
 import {
   defaultTestFileTags,
   getFileContents as getFileContentsS3,
+  getTags,
   init as initS3,
   listFiles,
   uploadFileContents
@@ -29,6 +30,7 @@ export class PpaasTestStatus implements TestStatusMessage {
   protected ppaasTestId: PpaasTestId;
   protected lastModifiedRemote: Date;
   protected url: string | undefined;
+  public tags: Map<string, string> = defaultTestFileTags();
 
   // The receiptHandle is not in the constructor since sending messages doesn't require it. Assign it separately
   public constructor (ppaasTestId: PpaasTestId,
@@ -129,8 +131,11 @@ export class PpaasTestStatus implements TestStatusMessage {
       log("PpaasTestStatus Status found in s3Folder " + ppaasTestId.s3Folder, LogLevel.DEBUG, { contents });
       try {
         const testStatusMessage: TestStatusMessage = JSON.parse(contents);
-        log(`PpaasTestStatus getFileContents(${s3Filename}, ${s3Filename})`, LogLevel.DEBUG, { testStatusMessage });
+        log(`PpaasTestStatus getFileContents(${s3Filename}, ${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { testStatusMessage });
         const newMessage = new PpaasTestStatus(ppaasTestId, testStatusMessage);
+        const tags = await getTags({ filename: s3Filename, s3Folder: ppaasTestId.s3Folder });
+        log(`PpaasTestStatus getTags(${s3Filename}, ${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { tags });
+        if (tags) { newMessage.tags = tags; }
         const s3File = s3Files[0];
         // We have to return a PpaasTestStatus instead of a TestStatusMessage so we can return the lastModifiedRemote
         if (s3File.LastModified) {
@@ -246,7 +251,7 @@ export class PpaasTestStatus implements TestStatusMessage {
       s3Folder: this.ppaasTestId.s3Folder,
       publicRead: true,
       contentType: "application/json",
-      tags: defaultTestFileTags()
+      tags: this.tags
     });
     this.lastModifiedRemote = newDate; // Update the last modified
     log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.INFO, this.sanitizedCopy());

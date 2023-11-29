@@ -55,6 +55,29 @@ export const testTags = new Map<string, string>([[tagKey, tagValue]]);
 export const defaultTags = new Map<string, string>();
 export const fullTestTags = new Map<string, string>([...testTags]);
 
+export function initTags (): string {
+  let defaultKey: string | undefined;
+  let defaultValue: string | undefined;
+  if (ADDITIONAL_TAGS_ON_ALL.size > 0) {
+    for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
+      if (!defaultKey) {
+        defaultKey = key;
+        defaultValue = value;
+      }
+      defaultTags.set(key, value);
+      fullTestTags.set(key, value);
+    }
+  } else {
+    defaultKey = "application";
+    defaultValue = util.APPLICATION_NAME;
+    defaultTags.set(defaultKey, defaultValue);
+    fullTestTags.set(defaultKey, defaultValue);
+  }
+  log("tags", LogLevel.DEBUG, { defaultKey, tags: Array.from(testTags.entries()), defaultTags: Array.from(defaultTags.entries()), allTags: Array.from(fullTestTags.entries()) });
+  expect(defaultKey, "defaultKey").to.not.equal(undefined);
+  return defaultKey!;
+}
+
 export const validateTagMap = (actual: Map<string, string>, expected: Map<string, string>) => {
   try {
     expect(actual.size, "validateTagMap actual.size").to.equal(expected.size);
@@ -87,29 +110,12 @@ export const validateTagSet = (actual: S3Tag[], expected: Map<string, string>) =
 describe("S3Util Integration", () => {
   let s3FileKey: string | undefined;
   let healthCheckDate: Date | undefined;
-  let tagKey: string;
-  let tagValue: string;
 
   before (async () => {
     // This test was failing until we reset everything. I don't know why and it bothers me.
     s3Config.s3Client = undefined as any;
     initS3();
-    if (ADDITIONAL_TAGS_ON_ALL.size > 0) {
-      for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-        if (!tagKey) {
-          tagKey = key;
-          tagValue = value;
-        }
-        defaultTags.set(key, value);
-        fullTestTags.set(key, value);
-      }
-    } else {
-      tagKey = "application";
-      tagValue = util.APPLICATION_NAME;
-      defaultTags.set(tagKey, tagValue);
-      fullTestTags.set(tagKey, tagValue);
-  }
-    log("tags", LogLevel.DEBUG, { tags: Array.from(testTags.entries()), defaultTags: Array.from(defaultTags.entries()), allTags: Array.from(fullTestTags.entries()) });
+    initTags();
     // Set the access callback to test that healthchecks will be updated
     setAccessCallback((date: Date) => healthCheckDate = date);
     try {
@@ -981,6 +987,7 @@ describe("S3Util Integration", () => {
 
     it("putObjectTagging should put a tag", (done: Mocha.Done) => {
       expectedTags.set("additionalTag", "additionalValue");
+      log("putObjectTagging should put a tag", LogLevel.DEBUG, expectedTags);
       const tags = new Map(expectedTags);
       putObjectTagging({ key: s3FileKey!, tags }).then((result: PutObjectTaggingCommandOutput) => {
         expect(result).to.not.equal(undefined);
@@ -990,6 +997,7 @@ describe("S3Util Integration", () => {
 
     it("putTags should put a tag", (done: Mocha.Done) => {
       expectedTags.set("additionalTag", "additionalValue");
+      log("putTags should put a tag", LogLevel.DEBUG, expectedTags);
       const tags = new Map(expectedTags);
       putTags({ filename, s3Folder, tags }).then(() => {
         done();
@@ -999,6 +1007,7 @@ describe("S3Util Integration", () => {
     it("putObjectTagging should clear tags", (done: Mocha.Done) => {
       const tags = new Map();
       expectedTags = new Map(defaultTags); // default will be set back
+      log("putObjectTagging should clear tags", LogLevel.DEBUG, expectedTags);
       putObjectTagging({ key: s3FileKey!, tags }).then((result: PutObjectTaggingCommandOutput) => {
         expect(result).to.not.equal(undefined);
         done();
@@ -1008,6 +1017,7 @@ describe("S3Util Integration", () => {
     it("putTags should clear tags", (done: Mocha.Done) => {
       const tags = new Map();
       expectedTags = new Map(defaultTags); // default will be set back
+      log("putTags should clear tags", LogLevel.DEBUG, expectedTags);
       putTags({ filename, s3Folder, tags }).then(() => {
         done();
       }).catch((error) => done(error));

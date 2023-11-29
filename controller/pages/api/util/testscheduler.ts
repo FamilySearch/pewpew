@@ -360,6 +360,17 @@ export class TestScheduler implements TestSchedulerItem {
         return await TestScheduler.startNewTest(testToRun, nextStart);
       } else {
         // Not recurring, or the last run for this set, use the same dir and message
+        // If it's the last run of a recurring we need to add the tags to let it be cleaned up
+        if (recurrence) {
+          await PpaasS3File.getAllFilesInS3({ s3Folder: testToRun.scheduledTestData.testMessage.s3Folder, localDirectory })
+          .then((s3Files) => Promise.all(s3Files.map((s3File) => {
+            // Update the tags back to the default for a test to clean-up after bucket expiration
+            const newTags = s3.defaultTestFileTags();
+            log("startScheduledItem last run. Updating Test Tags", LogLevel.WARN, { currentTags: [...(s3File.tags || [])], newTags: [...newTags] });
+            s3File.tags = newTags;
+            return s3File.updateTags();
+          }))).catch((error) => log(`startScheduledItem ${testToRun.scheduledTestData.testMessage.testId} last run could not update tags for files. Please clean-up tags manually`, LogLevel.ERROR, error));
+        }
         return await TestScheduler.startExistingTest(testToRun);
       }
     } catch (error) {

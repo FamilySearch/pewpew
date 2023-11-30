@@ -22,11 +22,11 @@ export interface ProviderMainProps {
   providers: PewPewProvider[];
 }
 
-export const providers = "providers";
-export const providerFile = "providerFile";
-export const providerResponse = "providerResponse";
-export const providerRange = "providerRange";
-export const providerList = "providerList";
+export const PROVIDERS = "providers";
+export const PROVIDER_FILE = "providerFile";
+export const PROVIDER_RESPONSE = "providerResponse";
+export const PROVIDER_RANGE = "providerRange";
+export const PROVIDER_LIST = "providerList";
 
 export const newProviderFile = (providerId: string = uniqueId()): PewPewProvider => ({ id: providerId, type: "file", name: "", file: "", repeat: true, random: false });
 export const newProviderResponse = (providerId: string = uniqueId()): PewPewProvider => ({ id: providerId, type: "response", name: "", response: {} });
@@ -43,11 +43,11 @@ export const newProvider = (providerType: ProviderType) => {
     case ProviderType.list:
       return newProviderList();
     default:
-      throw new Error("Unknown ProviderType: " + providerFile);
+      throw new Error("Unknown ProviderType: " + PROVIDER_FILE);
   }
 };
 
-export default function Providers ({ providers, ...props }: ProviderMainProps) {
+export function Providers ({ providers, ...props }: ProviderMainProps) {
   const providersMap = new Map(providers.map((pewpewPattern) => ([pewpewPattern.id, pewpewPattern])));
 
   const [display, setDisplay] = useState(false);
@@ -125,16 +125,16 @@ export default function Providers ({ providers, ...props }: ProviderMainProps) {
       <Div style={{marginTop: "0px"}}>
         {display &&
           <ProviderInputsDiv>
-              <button id={providerFile} onClick={() => props.addProvider(newProviderFile())}>
+              <button id={PROVIDER_FILE} onClick={() => props.addProvider(newProviderFile())}>
                   File
               </button>
-              <button id={providerResponse} onClick={() => props.addProvider(newProviderResponse())}>
+              <button id={PROVIDER_RESPONSE} onClick={() => props.addProvider(newProviderResponse())}>
                   Response
               </button>
-              <button id={providerRange} onClick={() => props.addProvider(newProviderRange())}>
+              <button id={PROVIDER_RANGE} onClick={() => props.addProvider(newProviderRange())}>
                   Range
               </button>
-              <button id={providerList} onClick={() => props.addProvider(newProviderList())}>
+              <button id={PROVIDER_LIST} onClick={() => props.addProvider(newProviderList())}>
                   List
               </button>&nbsp;&nbsp;
               <QuestionBubble text="Select the type of provider you want to add"></QuestionBubble>
@@ -155,3 +155,5 @@ export default function Providers ({ providers, ...props }: ProviderMainProps) {
     </InputsDiv>
   );
 }
+
+export default Providers;

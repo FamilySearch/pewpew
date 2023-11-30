@@ -1,5 +1,6 @@
 import * as path from "path";
 import {
+  ADDITIONAL_TAGS_ON_ALL,
   BUCKET_URL,
   GetTagsOptions,
   KEYSPACE_PREFIX,
@@ -9,6 +10,7 @@ import {
   getTags,
   init as initS3,
   listFiles,
+  putTags,
   uploadFile
 } from "./util/s3";
 import { LogLevel, log } from "./util/log";
@@ -304,12 +306,38 @@ export class PpaasS3File implements S3File {
       s3Folder: destinationS3Folder,
       localDirectory: this.localDirectory,
       publicRead: publicRead || this.publicRead,
-      tags
+      tags: this.tags || tags
     });
     if (lastModified) {
       copiedS3File.lastModifiedRemote = lastModified;
     }
     return copiedS3File;
+  }
+
+  public async updateTags (): Promise<void> {
+    if (this.tags === undefined) {
+      // No tags to update. Use an empty Map to clear them out
+      return;
+    }
+    const currentTags: Map<string, string> | undefined = await PpaasS3File.getTags("updateTags", { filename: this.filename, s3Folder: this.s3Folder });
+    // All all the ADDITIONAL_TAGS_ON_ALL to make sure we have them all
+    for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
+      if (!this.tags.has(key)) {
+        // If it doesn't have it add it, but don't overwrite an existing value
+        this.tags.set(key, currentTags?.get(key) || value);
+      }
+    }
+    // If we don't currently have tags or the size are different, we need to update
+    if (currentTags && currentTags.size === this.tags.size) {
+      const allEqual = Array.from(currentTags.entries()).every(([key, currentValue]) => this.tags?.get(key) === currentValue);
+      log("updateTags allEqual: " + allEqual, LogLevel.DEBUG, { allEqual, currentTags: [...currentTags], newTags: [...this.tags] });
+      if (allEqual) {
+        return;
+      }
+    } else {
+      log("updateTags tag size different", LogLevel.DEBUG, { currentTags: currentTags ? [...currentTags] : "undefined", newTags: [...this.tags] });
+    }
+    return await putTags({ filename: this.filename, s3Folder: this.s3Folder, tags: this.tags });
   }
 }
 

@@ -1,29 +1,33 @@
 import * as path from "path";
 import {
+  ADDITIONAL_TAGS_ON_ALL,
   BUCKET_URL,
   KEYSPACE_PREFIX,
   deleteObject,
   getObjectTagging,
   listFiles
 } from "../src/util/s3";
+import { GetObjectTaggingCommandOutput, _Object as S3Object } from "@aws-sdk/client-s3";
 import {
   LogLevel,
   PpaasS3File,
   PpaasS3FileOptions,
   PpaasTestId,
-  log
+  log,
+  s3
 } from "../src/index";
 import {
   MAX_POLL_WAIT,
   UNIT_TEST_FILENAME,
   UNIT_TEST_FILEPATH,
   UNIT_TEST_LOCAL_FILE_LOCATION,
+  defaultTags,
   fullTestTags,
+  initTags,
   testTags,
   validateTagMap,
   validateTagSet
 } from "./s3.spec";
-import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { Stats } from "fs";
 import { expect } from "chai";
 import fs from "fs/promises";
@@ -76,6 +80,12 @@ describe("PpaasS3File Integration", () => {
       localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION,
       tags: testTags
     });
+    if (ADDITIONAL_TAGS_ON_ALL.size > 0) {
+      for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
+        defaultTags.set(key, value);
+        fullTestTags.set(key, value);
+      }
+    }
     expectedTags = new Map(fullTestTags);
   });
 
@@ -453,6 +463,58 @@ describe("PpaasS3File Integration", () => {
       } else {
         done("No s3FileKey");
       }
+    });
+  });
+
+  describe("Update Tagging in S3", () => {
+    const clearedTags = new Map<string, string>();
+
+    beforeEach (async () => {
+      try {
+        const defaultTagKey = initTags();
+        const uploadTags = new Map(testTags);
+        // Change it so we verify clearing won't set it back
+        uploadTags.set(defaultTagKey, "pewpewagent");
+        clearedTags.set(defaultTagKey, "pewpewagent");
+        testPpaasS3FileUpload.tags = uploadTags;
+        await testPpaasS3FileUpload.upload(true);
+        log("testPpaasS3FileUpload.upload() succeeded", LogLevel.DEBUG);
+        s3FileKey = testPpaasS3FileUpload.key;
+        // As long as we don't throw, it passes
+        // Need time for eventual consistency to complete
+        await poll(async (): Promise<boolean | undefined> => {
+          const objects = await s3.listObjects(s3FileKey!);
+          return (objects && objects.Contents && objects.Contents.length > 0);
+        }, MAX_POLL_WAIT, (errMsg: string) => `${errMsg} Could not find the ${s3FileKey} in s3`);
+        const expectedObject = await s3.getObject(s3FileKey);
+        expect(expectedObject, "actualObject").to.not.equal(undefined);
+        expect(expectedObject.TagCount, "TagCount").to.equal(uploadTags.size);
+        const tagging: GetObjectTaggingCommandOutput = await getObjectTagging(s3FileKey);
+        expect(tagging.TagSet, "tagging.TagSet").to.not.equal(undefined);
+        validateTagSet(tagging.TagSet!, uploadTags);
+        expectedTags = new Map(uploadTags);
+      } catch (error) {
+        log("updateTags beforeEach error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("updateTags should put a tag", (done: Mocha.Done) => {
+      expectedTags.set("additionalTag", "additionalValue");
+      log("updateTags should put a tag", LogLevel.DEBUG, expectedTags);
+      testPpaasS3FileUpload.tags = new Map(expectedTags);
+      testPpaasS3FileUpload.updateTags().then(() => {
+        done();
+      }).catch((error) => done(error));
+    });
+
+    it("updateTags should clear tags", (done: Mocha.Done) => {
+      testPpaasS3FileUpload.tags = new Map();
+      expectedTags = new Map(clearedTags); // default will be set back
+      log("updateTags should clear tags", LogLevel.DEBUG, expectedTags);
+      testPpaasS3FileUpload.updateTags().then(() => {
+        done();
+      }).catch((error) => done(error));
     });
   });
 });

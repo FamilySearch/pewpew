@@ -108,8 +108,8 @@ describe("Util", () => {
           expect(timeAfter - timeBefore).to.be.greaterThan(298);
           expect(timeAfter - timeBefore).to.be.lessThan(400);
           done();
-        } catch (error) {
-          done(error);
+        } catch (error2) {
+          done(error2);
         }
       });
     });

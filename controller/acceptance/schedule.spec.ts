@@ -1,5 +1,6 @@
 import {
   API_SCHEDULE,
+  API_SEARCH,
   FormDataPost,
   TestData,
   TestManagerError
@@ -188,6 +189,7 @@ describe("Schedule API Integration", () => {
     it("DELETE /schedule?testId=validTestId should respond 200 OK", (done: Mocha.Done) => {
       expect(deletedTestData).to.not.equal(undefined);
       const scheduledTestId: string = deletedTestData!.testId;
+      const s3Folder = deletedTestData!.s3Folder;
       log("scheduled testId: " + scheduledTestId, LogLevel.DEBUG, scheduledTestId);
       fetch(url + "?testId=" + scheduledTestId, { method: "DELETE" }).then((res) => {
         log("DELETE /schedule response", LogLevel.DEBUG, res);
@@ -199,7 +201,13 @@ describe("Schedule API Integration", () => {
         expect(result.message, "result.message").to.not.equal(undefined);
         expect(typeof result.message, "typeof result.message").to.equal("string");
         expect(result.message, "result.message").to.include(scheduledTestId);
-        done();
+        // TODO: Verify that the s3 files are gone
+        log("search deleted s3Folder: " + s3Folder, LogLevel.DEBUG, s3Folder);
+        fetch(integrationUrl + API_SEARCH + "?s3Folder=" + s3Folder).then((searchResponse: Response) => {
+          log ("search deleted response", LogLevel.DEBUG, searchResponse);
+          expect(searchResponse.status, JSON.stringify(searchResponse.data)).to.equal(204);
+          done();
+        }).catch((error) => done(error));
       }).catch((error) => done(error));
     });
 

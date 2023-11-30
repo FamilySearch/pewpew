@@ -490,11 +490,11 @@ describe("S3Util", () => {
             // This won't be set on failures, set it so the afterEach doesn't throw
             healthCheckDate = new Date();
             done();
-          } catch (error2) {
-            done(error2);
+          } catch (error3) {
+            done(error3);
           }
-        } catch (error) {
-          done(error);
+        } catch (error2) {
+          done(error2);
         }
       });
     });

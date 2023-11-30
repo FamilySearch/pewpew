@@ -30,13 +30,13 @@ import {
   TestStatus,
   log,
   logger,
+  s3,
   util
 } from "@fs/ppaas-common";
+import { TestManager, defaultRecurringFileTags } from "./testmanager";
 import { formatError, getHourMinuteFromTimestamp } from "./clientutil";
-import { EventInput } from "@fullcalendar/core";
+import type { EventInput } from "@fullcalendar/core";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
-import TestManager from "./testmanager";
-
 
 const { sleep } = util;
 logger.config.LogFileName = "ppaas-controller";
@@ -360,6 +360,17 @@ export class TestScheduler implements TestSchedulerItem {
         return await TestScheduler.startNewTest(testToRun, nextStart);
       } else {
         // Not recurring, or the last run for this set, use the same dir and message
+        // If it's the last run of a recurring we need to add the tags to let it be cleaned up
+        if (recurrence) {
+          await PpaasS3File.getAllFilesInS3({ s3Folder: testToRun.scheduledTestData.testMessage.s3Folder, localDirectory })
+          .then((s3Files) => Promise.all(s3Files.map((s3File) => {
+            // Update the tags back to the default for a test to clean-up after bucket expiration
+            const newTags = s3.defaultTestFileTags();
+            log("startScheduledItem last run. Updating Test Tags", LogLevel.WARN, { currentTags: [...(s3File.tags || [])], newTags: [...newTags] });
+            s3File.tags = newTags;
+            return s3File.updateTags();
+          }))).catch((error) => log(`startScheduledItem ${testToRun.scheduledTestData.testMessage.testId} last run could not update tags for files. Please clean-up tags manually`, LogLevel.ERROR, error));
+        }
         return await TestScheduler.startExistingTest(testToRun);
       }
     } catch (error) {
@@ -382,9 +393,7 @@ export class TestScheduler implements TestSchedulerItem {
     }
     (async () => {
       // We'll never set this to false unless something really bad happens
-      let counter = 0;
       while (global.testSchedulerLoopRunning) {
-        counter++;
         const loopStart = Date.now();
         try {
           await TestScheduler.loadTestsFromS3();
@@ -416,7 +425,7 @@ export class TestScheduler implements TestSchedulerItem {
         const delay = Math.min(nextPollTime - Date.now(), nextStartTime - Date.now(), TEST_SCHEDULER_POLL_INTERVAL_MS);
         log(
           "Test Scheduler Loop: nextPollTime: " + nextPollTime,
-          counter % 10 === 0 ? LogLevel.INFO : LogLevel.DEBUG, // Every 10 minutes log
+          LogLevel.DEBUG,
           { loopStart, nextPollTime, nextStartTime, now: Date.now(), delay, TEST_SCHEDULER_POLL_INTERVAL_MS }
         );
         if (delay > 0) {
@@ -505,7 +514,7 @@ export class TestScheduler implements TestSchedulerItem {
         TestScheduler.nextStart = TestScheduler.nextStart ? Math.min(TestScheduler.nextStart, testItem.nextStart) : testItem.nextStart;
         log("updateNextStart forEach", LogLevel.DEBUG, { nextStart: TestScheduler.nextStart, itemNextStart: testItem.nextStart });
       });
-      log("updateNextStart", TestScheduler.nextStart !== nextStartBefore ? LogLevel.INFO : LogLevel.DEBUG, { nextStart: TestScheduler.nextStart });
+      log("updateNextStart", LogLevel.DEBUG, { nextStart: TestScheduler.nextStart, nextStartBefore });
     }
   }
 
@@ -575,6 +584,9 @@ export class TestScheduler implements TestSchedulerItem {
           userId: authPermissions.userId || userId || undefined
         }
       );
+      if (newTest.recurrence) {
+        ppaasTestStatus.tags = defaultRecurringFileTags();
+      }
       const statusUrl = await ppaasTestStatus.writeStatus();
       log(`PpaasTestStatus url: ${statusUrl}`, LogLevel.DEBUG, { statusUrl });
       // Check if the testId already exists. If so, only admin or the original user can update it.
@@ -615,7 +627,7 @@ export class TestScheduler implements TestSchedulerItem {
    * @param testId testId to be removed
    * @param authPermissions permissions for the request
    */
-  public static async removeTest (testId: string, authPermissions: AuthPermissions): Promise<ErrorResponse> {
+  public static async removeTest (testId: string, authPermissions: AuthPermissions, deleteS3Files?: boolean): Promise<ErrorResponse> {
     await TestScheduler.loadTestsFromS3();
     await TestScheduler.loadHistoricalFromS3();
     if (!TestScheduler.scheduledTests!.has(testId) && !TestScheduler.historicalTests!.has(testId)) {
@@ -624,6 +636,13 @@ export class TestScheduler implements TestSchedulerItem {
         json: { message: `${testId} not found in the scheduled tests` },
         status: 404
       };
+    }
+    let s3Folder: string;
+    try {
+      s3Folder = PpaasTestId.getFromTestId(testId).s3Folder;
+    } catch (error) {
+      log("Could not parse testId " + testId, LogLevel.WARN, error);
+      return { json: { message: "Could not parse testId " + testId, error: formatError(error) }, status: 400 };
     }
     if (TestScheduler.scheduledTests!.has(testId)) {
       const scheduledTest: TestSchedulerItem = TestScheduler.scheduledTests!.get(testId)!;
@@ -635,7 +654,49 @@ export class TestScheduler implements TestSchedulerItem {
       TestScheduler.scheduledTests!.delete(testId);
       log(`Scheduled Load Test removed testId ${testId} by userId ${authPermissions.userId}`, LogLevel.INFO, { ...getLogAuthPermissions(authPermissions), testId });
       TestScheduler.updateNextStart();
+      if (deleteS3Files) {
+        // Delete schedule needs to delete the files in S3 too.
+        await s3.listFiles({ s3Folder }).then((s3Files) =>
+          Promise.allSettled(
+            s3Files.filter((s3File) => s3File.Key)
+            .map((s3File) => s3.deleteObject(s3File.Key!)
+              .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
+              .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.WARN, error, { s3Folder, s3File }))
+            )
+          )
+        ).catch((error) => log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error));
+      }
       await TestScheduler.saveTestsToS3().catch(() => {/* noop logs itself */});
+      try {
+        if (deleteS3Files) {
+          // Delete schedule needs to delete the files in S3 too.
+          await s3.listFiles({ s3Folder }).then(async (s3Files) => {
+            const results = await Promise.allSettled(
+              s3Files.filter((s3File) => s3File.Key)
+              .map((s3File) => s3.deleteObject(s3File.Key!)
+                .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
+                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.ERROR, error, { s3Folder, s3File }))
+              )
+            );
+            const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+            if (failure) {
+              throw failure.reason;
+            }
+          }
+          ).catch((error) => {
+            log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error);
+            throw error;
+          });
+        }
+      } catch (error) {
+        return {
+          json: {
+            message: `Removed TestId ${testId} Failed`,
+            error: `${error}`
+          },
+          status: 500
+        };
+      }
     } else {
       if (authPermissions.authPermission !== AuthPermission.Admin) {
         log(`Unauthorized modify request for testId ${testId} by userId ${authPermissions.userId}`, LogLevel.WARN, getLogAuthPermissions(authPermissions));

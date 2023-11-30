@@ -150,6 +150,9 @@ describe("TestScheduler Integration", () => {
   let historicalTestId: PpaasTestId;
   let originalScheduledTests: Map<string, TestSchedulerItem> | undefined;
   let originalHistoricalTests: Map<string, EventInput> | undefined;
+  let file: PpaasS3File;
+  let file1: PpaasS3File;
+  let file2: PpaasS3File;
 
   before(async () => {
     let yamlFile: string;
@@ -165,11 +168,11 @@ describe("TestScheduler Integration", () => {
       yamlFile = BASIC_FILEPATH_WITH_FILES;
       ppaasTestId = PpaasTestId.makeTestId(yamlFile);
       const s3Folder: string = ppaasTestId.s3Folder;
-      const file: PpaasS3File = new PpaasS3File({ filename: yamlFile, s3Folder, localDirectory });
+      file = new PpaasS3File({ filename: yamlFile, s3Folder, localDirectory });
       await file.upload();
-      const file1: PpaasS3File = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML, s3Folder, localDirectory });
+      file1 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML, s3Folder, localDirectory });
       await file1.upload();
-      const file2: PpaasS3File = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML2, s3Folder, localDirectory });
+      file2 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML2, s3Folder, localDirectory });
       await file2.upload();
       const testId: string = ppaasTestId.testId;
       const testMessage: Required<TestMessage> = {
@@ -216,6 +219,13 @@ describe("TestScheduler Integration", () => {
         start: historicalStartTime,
         end: historicalStartTime + THIRTY_MINUTES
       };
+
+      await Promise.all([file.existsInS3(), file1.existsInS3(), file2.existsInS3()])
+      .then(([fileExists, file1Exists, file2Exists]) => {
+        expect(fileExists, "fileExists").to.equal(true);
+        expect(file1Exists, "file1Exists").to.equal(true);
+        expect(file2Exists, "file2Exists").to.equal(true);
+      });
     } catch (error) {
       log("TestScheduler before", LogLevel.ERROR, error);
       throw error;
@@ -474,57 +484,6 @@ describe("TestScheduler Integration", () => {
     });
   });
 
-  describe("removeTest", () => {
-    beforeEach(async () => {
-      if (!scheduledTestData) { throw new Error("scheduledTestData not initialized"); }
-      try {
-        await TestSchedulerIntegration.loadTestsFromS3();
-        initialized = true;
-        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
-        const testScheduler: TestSchedulerIntegration = new TestSchedulerIntegration(scheduledTestData, authUser1.userId);
-        scheduledTests.set(scheduledTestData.testMessage.testId, testScheduler);
-        testAdded = true;
-      } catch (error) {
-        log("Error loading tests from s3", LogLevel.ERROR, error);
-        throw error;
-      }
-    });
-
-    afterEach(async () => {
-      try {
-        await TestSchedulerIntegration.loadTestsFromS3();
-        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
-        scheduledTests.clear();
-        testAdded = false;
-      } catch (error) {
-        log("Error clearing scheduledTests", LogLevel.ERROR, error);
-        throw error;
-      }
-    });
-
-    it("should remove a test", (done: Mocha.Done) => {
-      try {
-        expect(initialized, "loadTestsFromS3 failed. Can't run remove").to.equal(true);
-        expect(testAdded, "Test Added failed. Can't run remove").to.equal(true); // Make sure the add succeeded
-        expect(scheduledTestData).to.not.equal(undefined);
-        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
-        const sizeBefore: number = scheduledTests.size;
-        expect(sizeBefore).to.be.greaterThan(0);
-        expect(scheduledTests.has(scheduledTestData!.testMessage.testId)).to.equal(true);
-        TestSchedulerIntegration.removeTest(scheduledTestData!.testMessage.testId, authUser1)
-        .then((errorResponse: ErrorResponse) => {
-          expect(scheduledTests.size, "scheduledTests.size").to.equal(sizeBefore - 1);
-          expect(scheduledTests.has(scheduledTestData!.testMessage.testId)).to.equal(false);
-          expect(errorResponse).to.not.equal(undefined);
-          expect(errorResponse.status).to.equal(200);
-          done();
-        }).catch((error) => done(error));
-      } catch (error) {
-        done(error);
-      }
-    });
-  });
-
   describe("startScheduledItem", () => {
     let lastMinute: number;
 
@@ -691,5 +650,66 @@ describe("TestScheduler Integration", () => {
       done();
     })
     .catch((error) => done(error));
+  });
+
+  // Must be run last since we'll delete the files
+  describe("removeTest", () => {
+    beforeEach(async () => {
+      if (!scheduledTestData) { throw new Error("scheduledTestData not initialized"); }
+      try {
+        await TestSchedulerIntegration.loadTestsFromS3();
+        initialized = true;
+        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
+        if (scheduledTestData.scheduleDate < Date.now()) {
+          scheduledTestData.scheduleDate = Date.now() + 600000;
+        }
+        const testScheduler: TestSchedulerIntegration = new TestSchedulerIntegration(scheduledTestData, authUser1.userId);
+        scheduledTests.set(scheduledTestData.testMessage.testId, testScheduler);
+        testAdded = true;
+      } catch (error) {
+        log("Error loading tests from s3", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    afterEach(async () => {
+      try {
+        await TestSchedulerIntegration.loadTestsFromS3();
+        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
+        scheduledTests.clear();
+        testAdded = false;
+      } catch (error) {
+        log("Error clearing scheduledTests", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should remove a test", (done: Mocha.Done) => {
+      try {
+        expect(initialized, "loadTestsFromS3 failed. Can't run remove").to.equal(true);
+        expect(testAdded, "Test Added failed. Can't run remove").to.equal(true); // Make sure the add succeeded
+        expect(scheduledTestData).to.not.equal(undefined);
+        const scheduledTests: Map<string, TestSchedulerItem> = TestSchedulerIntegration.getScheduledTests()!;
+        const sizeBefore: number = scheduledTests.size;
+        expect(sizeBefore).to.be.greaterThan(0);
+        expect(scheduledTests.has(scheduledTestData!.testMessage.testId)).to.equal(true);
+        TestSchedulerIntegration.removeTest(scheduledTestData!.testMessage.testId, authUser1, true)
+        .then((errorResponse: ErrorResponse) => {
+          expect(scheduledTests.size, "scheduledTests.size").to.equal(sizeBefore - 1);
+          expect(scheduledTests.has(scheduledTestData!.testMessage.testId)).to.equal(false);
+          expect(errorResponse).to.not.equal(undefined);
+          expect(errorResponse.status).to.equal(200);
+          Promise.all([file.existsInS3(), file1.existsInS3(), file2.existsInS3()])
+          .then(([fileExists, file1Exists, file2Exists]) => {
+            expect(fileExists, "fileExists").to.equal(false);
+            expect(file1Exists, "file1Exists").to.equal(false);
+            expect(file2Exists, "file2Exists").to.equal(false);
+            done();
+          }).catch((error) => done(error));
+        }).catch((error) => done(error));
+      } catch (error) {
+        done(error);
+      }
+    });
   });
 });

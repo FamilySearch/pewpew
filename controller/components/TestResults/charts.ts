@@ -315,11 +315,11 @@ const afterBuildTicks = (chart: any) => {
   let currLog = -Infinity;
   chart.ticks.reverse().forEach((tick: number) => {
     // Makes sure value is greater than 0
-    const log = Math.max(0, Math.log(tick));
+    const newLog = Math.max(0, Math.log(tick));
     // If distance between points is greater than min separation, add it to the ticks
-    if (log - currLog > minLogSeparation) {
+    if (newLog - currLog > minLogSeparation) {
       myTicks.push(tick);
-      currLog = log;
+      currLog = newLog;
     }
   });
   // Sets chart ticks to modified ticks

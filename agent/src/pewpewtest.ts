@@ -102,27 +102,27 @@ export function copyTestStatus (ppaasTestStatus: PpaasTestStatus, s3Status: Test
 }
 
 /** instanceId doesn't change, so we'll save it after the first call as the instanceId or an Error */
-let instanceId: string | Error | undefined;
+let globalInstanceId: string | Error | undefined;
 async function getInstanceId (): Promise<string> {
-  if (typeof instanceId === "string") {
-    log("instanceId string: " + instanceId, LogLevel.DEBUG, instanceId);
-    return instanceId;
+  if (typeof globalInstanceId === "string") {
+    log("instanceId string: " + globalInstanceId, LogLevel.DEBUG, globalInstanceId);
+    return globalInstanceId;
   }
-  if (instanceId instanceof Error) {
-    log("instanceId instanceof Error", LogLevel.DEBUG, instanceId);
-    throw instanceId;
+  if (globalInstanceId instanceof Error) {
+    log("instanceId instanceof Error", LogLevel.DEBUG, globalInstanceId);
+    throw globalInstanceId;
   }
 
   try {
-    log("instanceId getInstanceId", LogLevel.DEBUG, instanceId);
-    instanceId = await ec2.getInstanceId();
-    log("instanceId new string: " + instanceId, LogLevel.DEBUG, instanceId);
+    log("instanceId getInstanceId", LogLevel.DEBUG, globalInstanceId);
+    globalInstanceId = await ec2.getInstanceId();
+    log("instanceId new string: " + globalInstanceId, LogLevel.DEBUG, globalInstanceId);
   } catch (error) {
-    instanceId = error;
-    log("instanceId new Error: " + instanceId, LogLevel.DEBUG, instanceId);
-    throw instanceId;
+    globalInstanceId = error;
+    log("instanceId new Error: " + globalInstanceId, LogLevel.DEBUG, globalInstanceId);
+    throw globalInstanceId;
   }
-  return instanceId;
+  return globalInstanceId;
 }
 if (IS_RUNNING_IN_AWS) {
   getInstanceId().catch((error: unknown) => log("Could not retrieve instanceId", LogLevel.ERROR, error));

@@ -36,7 +36,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
   } else if (req.method === "DELETE") {
     if (req.query.testId && !Array.isArray(req.query.testId)) {
       try {
-        const result: ErrorResponse = await TestScheduler.removeTest(req.query.testId, authPermissions);
+        const result: ErrorResponse = await TestScheduler.removeTest(req.query.testId, authPermissions, true);
         res.status(result.status).json(result.json);
       } catch (error) {
         log(`Could not TestScheduler.removeTest(${req.query.testId})`, LogLevel.ERROR, error);

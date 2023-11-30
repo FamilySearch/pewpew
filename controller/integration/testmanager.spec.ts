@@ -21,11 +21,12 @@ import {
   PpaasTestMessage,
   TestStatus,
   log,
-  logger
+  logger,
+  s3
 } from "@fs/ppaas-common";
+import { TestManager, defaultRecurringFileTags} from "../pages/api/util/testmanager";
 import { EventInput } from "@fullcalendar/core";
 import { PpaasEncryptEnvironmentFile } from "../pages/api/util/ppaasencryptenvfile";
-import { TestManager} from "../pages/api/util/testmanager";
 import { TestScheduler } from "../pages/api/util/testscheduler";
 import { expect } from "chai";
 import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
@@ -193,7 +194,24 @@ describe("TestManager Integration", () => {
         // If this runs before the other acceptance tests populate the shared data
         sharedTestData = body;
         sharedPpaasTestId = PpaasTestId.getFromTestId(body.testId);
-        done();
+        PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+        .then((s3Files) => {
+          log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+          expect(s3Files, "s3Files").to.not.equal(undefined);
+          // Should be 3. Yaml, status, vars
+          expect(s3Files.length, "s3Files.length").to.equal(3);
+          // Check that the test=true tag is added
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          expect(typeof tagKey, "typeof tagKey").to.equal("string");
+          for (const s3File of s3Files) {
+            expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+          }
+          done();
+        }).catch((error) => {
+          log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+          done(error);
+        });
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
         done(error);
@@ -530,7 +548,24 @@ describe("TestManager Integration", () => {
         expect(body.status).to.equal(TestStatus.Created);
         expect(body.userId).to.equal(authAdmin.userId);
         testIdWithFiles = body.testId;
-        done();
+        PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+        .then((s3Files) => {
+          log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+          expect(s3Files, "s3Files").to.not.equal(undefined);
+          // Should be 3. Yaml, status, vars
+          expect(s3Files.length, "s3Files.length").to.equal(5);
+          // Check that the test=true tag is added
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          expect(typeof tagKey, "typeof tagKey").to.equal("string");
+          for (const s3File of s3Files) {
+            expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+          }
+          done();
+        }).catch((error) => {
+          log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+          done(error);
+        });
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
         done(error);
@@ -612,7 +647,24 @@ describe("TestManager Integration", () => {
         expect(ppaasTestId.date.getTime(), "ppaasTestId.date").to.not.equal(scheduleDate);
         // If this runs before the other acceptance tests populate the shared data
         sharedScheduledTestData = body;
-        done();
+        PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+        .then((s3Files) => {
+          log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+          expect(s3Files, "s3Files").to.not.equal(undefined);
+          // Should be 3. Yaml, status, vars
+          expect(s3Files.length, "s3Files.length").to.equal(3);
+          // Check that the recurring=true tag is added
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          expect(typeof tagKey, "typeof tagKey").to.equal("string");
+          for (const s3File of s3Files) {
+            expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+          }
+          done();
+        }).catch((error) => {
+          log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+          done(error);
+        });
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
         done(error);
@@ -693,7 +745,24 @@ describe("TestManager Integration", () => {
         expect(body.status).to.equal(TestStatus.Scheduled);
         expect(body.userId).to.equal(authAdmin.userId);
         sharedScheduledWithFilesTestData = body;
-        done();
+        PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+        .then((s3Files) => {
+          log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+          expect(s3Files, "s3Files").to.not.equal(undefined);
+          // Should be 3. Yaml, status, vars
+          expect(s3Files.length, "s3Files.length").to.equal(5);
+          // Check that the recurring=true tag is added
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          expect(typeof tagKey, "typeof tagKey").to.equal("string");
+          for (const s3File of s3Files) {
+            expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+          }
+          done();
+        }).catch((error) => {
+          log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+          done(error);
+        });
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
         done(error);
@@ -783,13 +852,29 @@ describe("TestManager Integration", () => {
         expect(ppaasTestId.date.getTime(), "ppaasTestId.date").to.not.equal(scheduleDate);
         // If this runs before the other acceptance tests populate the shared data
         TestScheduler.getCalendarEvents().then((calendarEvents: EventInput[]) => {
-
           const event: EventInput | undefined = calendarEvents.find((value: EventInput) => value.id === body.testId);
           expect(event, "event found").to.not.equal(undefined);
           expect(event!.startRecur, "event.startRecur").to.equal(scheduleDate);
           expect(event!.daysOfWeek, "event.daysOfWeek").to.not.equal(undefined);
           expect(JSON.stringify(event!.daysOfWeek), "event.daysOfWeek").to.equal(JSON.stringify(everyDaysOfWeek));
-          done();
+          PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+          .then((s3Files) => {
+            log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+            expect(s3Files, "s3Files").to.not.equal(undefined);
+            // Should be 3. Yaml, status, vars
+            expect(s3Files.length, "s3Files.length").to.equal(3);
+            // Check that the recurring=true tag is added
+            const [tagKey, tagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            expect(typeof tagKey, "typeof tagKey").to.equal("string");
+            for (const s3File of s3Files) {
+              expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+              expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            }
+            done();
+          }).catch((error) => {
+            log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+            done(error);
+          });
         }).catch((error) => done(error));
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
@@ -1626,13 +1711,32 @@ describe("TestManager Integration", () => {
         // populate the shared data
         sharedRecurringWithVarsTestData = body;
         TestScheduler.getCalendarEvents().then((calendarEvents: EventInput[]) => {
-
           const event: EventInput | undefined = calendarEvents.find((value: EventInput) => value.id === body.testId);
           expect(event, "event found").to.not.equal(undefined);
           expect(event!.startRecur, "event.startRecur").to.equal(scheduleDate);
           expect(event!.daysOfWeek, "event.daysOfWeek").to.not.equal(undefined);
           expect(JSON.stringify(event!.daysOfWeek), "event.daysOfWeek").to.equal(JSON.stringify(everyDaysOfWeek));
-          done();
+          PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+          .then((s3Files) => {
+            log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+            expect(s3Files, "s3Files").to.not.equal(undefined);
+            // Should be 3. Yaml, status, vars
+            expect(s3Files.length, "s3Files.length").to.equal(3);
+            // Check that the test=true tag is removed and recurring=true is added
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            expect(typeof testTagKey, "typeof tagKey").to.equal("string");
+            for (const s3File of s3Files) {
+              expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+              expect(s3File.tags?.get(testTagKey), `${s3File.filename}.tags?.get("${testTagKey}")`).to.equal(undefined);
+              expect(s3File.tags?.get(recurringTagKey), `${s3File.filename}.tags?.get("${recurringTagKey}")`).to.equal(recurringTagValue);
+            }
+            done();
+          }).catch((error) => {
+            log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+            done(error);
+          });
         }).catch((error) => done(error));
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);
@@ -1683,7 +1787,27 @@ describe("TestManager Integration", () => {
           expect(event!.start, "event.start").to.equal(scheduleDate);
           expect(event!.startRecur, "event.startRecur").to.equal(undefined);
           expect(event!.daysOfWeek, "event.daysOfWeek").to.equal(undefined);
-          done();
+          PpaasS3File.getAllFilesInS3({ s3Folder: body.s3Folder, localDirectory: LOCAL_FILE_LOCATION })
+          .then((s3Files) => {
+            log("getAllFilesInS3 " + body.s3Folder, LogLevel.DEBUG, s3Files);
+            expect(s3Files, "s3Files").to.not.equal(undefined);
+            // Should be 3. Yaml, status, vars
+            expect(s3Files.length, "s3Files.length").to.equal(3);
+            // Check that the test=true tag is added and recurring=true is removed
+            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            expect(typeof testTagKey, "typeof tagKey").to.equal("string");
+            for (const s3File of s3Files) {
+              expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
+              expect(s3File.tags?.get(testTagKey), `${s3File.filename}.tags?.get("${testTagKey}")`).to.equal(testTagValue);
+              expect(s3File.tags?.get(recurringTagKey), `${s3File.filename}.tags?.get("${recurringTagKey}")`).to.equal(undefined);
+            }
+            done();
+          }).catch((error) => {
+            log("getAllFilesInS3 tags error", LogLevel.ERROR, error);
+            done(error);
+          });
         }).catch((error) => done(error));
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);

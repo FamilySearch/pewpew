@@ -342,9 +342,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       }
       // If the item clicked was a type header, make all endpoints with references in given type checked or unchecked
       case "type": {
-        outputName.types[urlTypeIdent]?.index.forEach((type: IndexType) => {
+        outputName.types[urlTypeIdent]?.index.forEach((indexType: IndexType) => {
           indices.forEach(item => {
-            if (type.id === item.id) { item.selected = outputName.types[urlTypeIdent]?.selected === "no" ? "yes" : "no"; }
+            if (indexType.id === item.id) { item.selected = outputName.types[urlTypeIdent]?.selected === "no" ? "yes" : "no"; }
           });
         });
         break;
@@ -381,13 +381,13 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
     for (const key of typeKeys) {
       let typeCheck = 0;
-      const type = outputName.types[key];
+      const outputType = outputName.types[key];
       const typeTemp = typesTemp[key];
-      if (!type || !typeTemp) { continue; }
-      for (const typeIndex of type.index) {
+      if (!outputType || !typeTemp) { continue; }
+      for (const typeIndex of outputType.index) {
         if (indices[typeIndex.iter].selected === "yes") { typeCheck++; }
       }
-      if (typeCheck === type.index.length) { typeTemp.selected = "yes"; }
+      if (typeCheck === outputType.index.length) { typeTemp.selected = "yes"; }
       else if (typeCheck === 0) { typeTemp.selected = "no"; }
       else { typeTemp.selected = "partial"; }
     }

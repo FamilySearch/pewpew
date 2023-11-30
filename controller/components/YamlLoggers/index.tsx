@@ -19,11 +19,11 @@ const EditListButton = styled.button`
   width: 100px;
 `;
 
-export const loggers = "loggers";
-const debugLogger = "debugLogger";
-const errorLogger = "errorLogger";
-const killLogger = "killLogger";
-const defaultLoggers = "defaultLoggers";
+export const LOGGERS = "loggers";
+const DEBUG_LOGGER = "debugLogger";
+const ERROR_LOGGER = "errorLogger";
+const KILL_LOGGER = "killLogger";
+const DEFAULT_LOGGERS = "defaultLoggers";
 
 export type DefaultLoggerTypeAll = DefaultVariablesType | "defaultLoggers";
 export type PewPewLoggerBooleanType = "kill" | "pretty";
@@ -55,7 +55,7 @@ export const newLogger = (loggerId: string = uniqueId()): PewPewLogger => ({
 });
 
 export const debugLoggerVar = (): PewPewLogger => ({
-  id: debugLogger,
+  id: DEBUG_LOGGER,
   name: "httpAll",
   where: "",
   to: "stdout",
@@ -65,7 +65,7 @@ export const debugLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const errorLoggerVar = (): PewPewLogger => ({
-  id: errorLogger,
+  id: ERROR_LOGGER,
   name: "httpErrors",
   where: "response.status >= 400",
   to: "stderr",
@@ -75,7 +75,7 @@ export const errorLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const killLoggerVar = (): PewPewLogger => ({
-  id: killLogger,
+  id: KILL_LOGGER,
   name: "testEnd",
   where: "response.status >= 500",
   to: "stderr",
@@ -87,11 +87,11 @@ export const killLoggerVar = (): PewPewLogger => ({
 
 function getDefaultLogger (loggerName: DefaultVariablesType): PewPewLogger {
   switch (loggerName) {
-    case debugLogger:
+    case DEBUG_LOGGER:
       return debugLoggerVar();
-    case errorLogger:
+    case ERROR_LOGGER:
       return errorLoggerVar();
-    case killLogger:
+    case KILL_LOGGER:
       return killLoggerVar();
     default:
       throw new Error("getDefaultLogger Invalid loggerName: " + loggerName);
@@ -150,7 +150,7 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
     const id = target.id as DefaultLoggerTypeAll;
     const checked = target.checked;
     log("handleClickDefault", LogLevel.DEBUG, { id, checked });
-    if (id === defaultLoggers) {
+    if (id === DEFAULT_LOGGERS) {
       switchAllDefaults(checked);
     } else {
       switchDefault(id, checked);
@@ -230,21 +230,21 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
     </button>&nbsp;&nbsp;
     <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
     &nbsp;&nbsp;
-    <label htmlFor={defaultLoggers}> Default Loggers </label>
+    <label htmlFor={DEFAULT_LOGGERS}> Default Loggers </label>
     <QuestionBubble text="Default loggers include an error logger and a kill logger"></QuestionBubble>
-    <Checkbox type="checkbox" id={defaultLoggers} onChange={handleClickDefault} checked={state.defaultLoggers} />
+    <Checkbox type="checkbox" id={DEFAULT_LOGGERS} onChange={handleClickDefault} checked={state.defaultLoggers} />
     <Div>
-      <Label htmlFor={debugLogger}> Debug Logger </Label>
+      <Label htmlFor={DEBUG_LOGGER}> Debug Logger </Label>
       <QuestionBubble text="http_all logs everything for debugging"></QuestionBubble>
-      <Checkbox type="checkbox" id={debugLogger} onChange={handleClickDefault} checked={state.debugLogger} />
+      <Checkbox type="checkbox" id={DEBUG_LOGGER} onChange={handleClickDefault} checked={state.debugLogger} />
 
-      <Label htmlFor={errorLogger}> Error Logger </Label>
+      <Label htmlFor={ERROR_LOGGER}> Error Logger </Label>
       <QuestionBubble text="http_errors logs everything that includes an error status"></QuestionBubble>
-      <Checkbox type="checkbox" id={errorLogger} onChange={handleClickDefault} checked={state.errorLogger} />
+      <Checkbox type="checkbox" id={ERROR_LOGGER} onChange={handleClickDefault} checked={state.errorLogger} />
 
-      <Label htmlFor={killLogger}> Kill Logger </Label>
+      <Label htmlFor={KILL_LOGGER}> Kill Logger </Label>
       <QuestionBubble text="test_end logs status errors 500 and above and kills test with too many errors"></QuestionBubble>
-      <Checkbox type="checkbox" id={killLogger} onChange={handleClickDefault} checked={state.killLogger} />
+      <Checkbox type="checkbox" id={KILL_LOGGER} onChange={handleClickDefault} checked={state.killLogger} />
     </Div>
     <TransitionGroup className="loadPatter-section_list">
       {Array.from(loggerMap.values()).map((logger: PewPewLogger) => (

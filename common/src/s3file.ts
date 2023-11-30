@@ -306,7 +306,7 @@ export class PpaasS3File implements S3File {
       s3Folder: destinationS3Folder,
       localDirectory: this.localDirectory,
       publicRead: publicRead || this.publicRead,
-      tags
+      tags: this.tags || tags
     });
     if (lastModified) {
       copiedS3File.lastModifiedRemote = lastModified;

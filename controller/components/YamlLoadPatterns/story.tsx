@@ -1,5 +1,5 @@
 import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
-import LoadPatterns, { LoadPatternProps, loadPattern, rampPattern } from ".";
+import { LOAD_PATTERN, LoadPatternProps, LoadPatterns, RAMP_PATTERN } from ".";
 import { GlobalStyle } from "../Layout";
 import { PewPewLoadPattern } from "../../types";
 import React from "react";
@@ -29,8 +29,8 @@ const propsDefault: LoadPatternProps = {
   ...props,
   defaultYaml: true,
   patterns: [
-    { id: rampPattern, from: "10", to: "100", over: "15m" },
-    { id: loadPattern, from: "100", to: "100", over: "15m" }
+    { id: RAMP_PATTERN, from: "10", to: "100", over: "15m" },
+    { id: LOAD_PATTERN, from: "100", to: "100", over: "15m" }
   ]
 };
 

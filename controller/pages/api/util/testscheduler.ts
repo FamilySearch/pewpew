@@ -654,19 +654,37 @@ export class TestScheduler implements TestSchedulerItem {
       TestScheduler.scheduledTests!.delete(testId);
       log(`Scheduled Load Test removed testId ${testId} by userId ${authPermissions.userId}`, LogLevel.INFO, { ...getLogAuthPermissions(authPermissions), testId });
       TestScheduler.updateNextStart();
-      if (deleteS3Files) {
-        // Delete schedule needs to delete the files in S3 too.
-        await s3.listFiles({ s3Folder }).then((s3Files) =>
-          Promise.allSettled(
-            s3Files.filter((s3File) => s3File.Key)
-            .map((s3File) => s3.deleteObject(s3File.Key!)
-              .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
-              .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.WARN, error, { s3Folder, s3File }))
-            )
-          )
-        ).catch((error) => log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error));
-      }
       await TestScheduler.saveTestsToS3().catch(() => {/* noop logs itself */});
+      try {
+        if (deleteS3Files) {
+          // Delete schedule needs to delete the files in S3 too.
+          await s3.listFiles({ s3Folder }).then(async (s3Files) => {
+            const results = await Promise.allSettled(
+              s3Files.filter((s3File) => s3File.Key)
+              .map((s3File) => s3.deleteObject(s3File.Key!)
+                .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
+                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.ERROR, error, { s3Folder, s3File }))
+              )
+            );
+            const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+            if (failure) {
+              throw failure.reason;
+            }
+          }
+          ).catch((error) => {
+            log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error);
+            throw error;
+          });
+        }
+      } catch (error) {
+        return {
+          json: {
+            message: `Removed TestId ${testId} Failed`,
+            error: `${error}`
+          },
+          status: 500
+        };
+      }
     } else {
       if (authPermissions.authPermission !== AuthPermission.Admin) {
         log(`Unauthorized modify request for testId ${testId} by userId ${authPermissions.userId}`, LogLevel.WARN, getLogAuthPermissions(authPermissions));

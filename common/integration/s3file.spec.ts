@@ -471,11 +471,11 @@ describe("PpaasS3File Integration", () => {
 
     beforeEach (async () => {
       try {
-        const defaultKey = initTags();
+        const defaultTagKey = initTags();
         const uploadTags = new Map(testTags);
         // Change it so we verify clearing won't set it back
-        uploadTags.set(defaultKey, "pewpewagent");
-        clearedTags.set(defaultKey, "pewpewagent");
+        uploadTags.set(defaultTagKey, "pewpewagent");
+        clearedTags.set(defaultTagKey, "pewpewagent");
         testPpaasS3FileUpload.tags = uploadTags;
         await testPpaasS3FileUpload.upload(true);
         log("testPpaasS3FileUpload.upload() succeeded", LogLevel.DEBUG);

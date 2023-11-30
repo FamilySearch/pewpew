@@ -117,7 +117,7 @@ async function logQueueSize (sqsQueueType: SqsQueueType, queueName?: string): Pr
   const queueType: string = SqsQueueType[sqsQueueType];
   const queueNameFormatted: string = queueName ? (queueName + " ") : "";
   const result: Record<string, string> | undefined = await getQueueAttributesMap(sqsQueueType, queueName);
-  log(`${queueNameFormatted}${queueType} SQS queue QueueAttributeMap`, LogLevel.INFO, { ...result, queueName, queueType });
+  log(`${queueNameFormatted}${queueType} SQS queue QueueAttributeMap`, LogLevel.DEBUG, { ...result, queueName, queueType });
   // If we have a result, and the ApproximateNumberOfMessages is greater than 0/truthy. undefined will be NaN
 
   if (queueName && sqsQueueType === SqsQueueType.Test && result && parseInt(result.ApproximateNumberOfMessages, 10)) {

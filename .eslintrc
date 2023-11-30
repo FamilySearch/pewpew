@@ -68,6 +68,8 @@
     "camelcase": 1,
     "no-irregular-whitespace": 1,
     "object-shorthand": 1,
+    "no-shadow": "off",
+    "@typescript-eslint/no-shadow": "warn",
     "@typescript-eslint/await-thenable": 1,
     "quotes": ["warn", "double"]
   }

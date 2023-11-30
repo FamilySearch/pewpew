@@ -48,12 +48,35 @@ export const UNIT_TEST_LOCAL_FILE_LOCATION: string = process.env.UNIT_TEST_LOCAL
 export const MAX_POLL_WAIT: number = parseInt(process.env.MAX_POLL_WAIT || "0", 10) || 500;
 // const LARGE_FILE_SIZE: number = parseInt(process.env.LARGE_FILE_SIZE || "0", 10) || 500000000;
 
-export const tagKey: string = "unittest";
-export const tagValue: string = "true";
-export const testTags = new Map<string, string>([[tagKey, tagValue]]);
+export const unittestTagKey: string = "unittest";
+export const unittestTagValue: string = "true";
+export const testTags = new Map<string, string>([[unittestTagKey, unittestTagValue]]);
 // These are set by the before after init()
 export const defaultTags = new Map<string, string>();
 export const fullTestTags = new Map<string, string>([...testTags]);
+
+export function initTags (): string {
+  let defaultKey: string | undefined;
+  let defaultValue: string | undefined;
+  if (ADDITIONAL_TAGS_ON_ALL.size > 0) {
+    for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
+      if (!defaultKey) {
+        defaultKey = key;
+        defaultValue = value;
+      }
+      defaultTags.set(key, value);
+      fullTestTags.set(key, value);
+    }
+  } else {
+    defaultKey = "application";
+    defaultValue = util.APPLICATION_NAME;
+    defaultTags.set(defaultKey, defaultValue);
+    fullTestTags.set(defaultKey, defaultValue);
+  }
+  log("tags", LogLevel.DEBUG, { defaultKey, tags: Array.from(testTags.entries()), defaultTags: Array.from(defaultTags.entries()), allTags: Array.from(fullTestTags.entries()) });
+  expect(defaultKey, "defaultKey").to.not.equal(undefined);
+  return defaultKey!;
+}
 
 export const validateTagMap = (actual: Map<string, string>, expected: Map<string, string>) => {
   try {
@@ -87,29 +110,14 @@ export const validateTagSet = (actual: S3Tag[], expected: Map<string, string>) =
 describe("S3Util Integration", () => {
   let s3FileKey: string | undefined;
   let healthCheckDate: Date | undefined;
-  let tagKey: string;
-  let tagValue: string;
+  let defaultTagKey: string;
 
   before (async () => {
     // This test was failing until we reset everything. I don't know why and it bothers me.
     s3Config.s3Client = undefined as any;
     initS3();
-    if (ADDITIONAL_TAGS_ON_ALL.size > 0) {
-      for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-        if (!tagKey) {
-          tagKey = key;
-          tagValue = value;
-        }
-        defaultTags.set(key, value);
-        fullTestTags.set(key, value);
-      }
-    } else {
-      tagKey = "application";
-      tagValue = util.APPLICATION_NAME;
-      defaultTags.set(tagKey, tagValue);
-      fullTestTags.set(tagKey, tagValue);
-  }
-    log("tags", LogLevel.DEBUG, { tags: Array.from(testTags.entries()), defaultTags: Array.from(defaultTags.entries()), allTags: Array.from(fullTestTags.entries()) });
+    defaultTagKey = initTags();
+    expect(defaultTagKey, "defaultTagKey").to.not.equal(undefined);
     // Set the access callback to test that healthchecks will be updated
     setAccessCallback((date: Date) => healthCheckDate = date);
     try {
@@ -685,7 +693,7 @@ describe("S3Util Integration", () => {
         };
 
         // Change tags
-        expectedTags.set(tagKey, "pewpewagent");
+        expectedTags.set(defaultTagKey, "pewpewagent");
         expectedTags.set("unittest", "false");
         expectedTags.set("additionaltag", "additionalvalue");
         const tags = new Map(expectedTags);
@@ -794,8 +802,8 @@ describe("S3Util Integration", () => {
     it("Copy File should change name", (done: Mocha.Done) => {
       if (s3FileKey) {
         // Change tags
-        expectedTags.set(tagKey, "pewpewagent");
-        expectedTags.set("unittest", "false");
+        expectedTags.set(defaultTagKey, "pewpewagent");
+        expectedTags.set(unittestTagKey, "false");
         expectedTags.set("additionaltag", "additionalvalue");
         const tags = new Map(expectedTags);
         expect(expectedTags.size, "expectedTags.size before").to.equal(3); // Make sure there aren't some others we don't know about
@@ -939,7 +947,7 @@ describe("S3Util Integration", () => {
       try {
         const uploadTags = new Map(testTags);
         // Change it so clearing will set it back
-        uploadTags.set(tagKey, "pewpewagent");
+        uploadTags.set(defaultTagKey, "pewpewagent");
         const url: string = await uploadFile({
           filepath: UNIT_TEST_FILEPATH,
           s3Folder,
@@ -961,7 +969,7 @@ describe("S3Util Integration", () => {
         validateTagSet(tagging.TagSet!, uploadTags);
         expectedTags = new Map(uploadTags);
       } catch (error) {
-        log("copyObject beforeEach error", LogLevel.ERROR, error);
+        log("putObjectTagging beforeEach error", LogLevel.ERROR, error);
         throw error;
       }
     });
@@ -974,13 +982,14 @@ describe("S3Util Integration", () => {
           validateTagSet(tagging.TagSet!, expectedTags);
         }
       } catch (error) {
-        log("copyObject beforeEach error", LogLevel.ERROR, error);
+        log("putObjectTagging beforeEach error", LogLevel.ERROR, error);
         throw error;
       }
     });
 
     it("putObjectTagging should put a tag", (done: Mocha.Done) => {
       expectedTags.set("additionalTag", "additionalValue");
+      log("putObjectTagging should put a tag", LogLevel.DEBUG, expectedTags);
       const tags = new Map(expectedTags);
       putObjectTagging({ key: s3FileKey!, tags }).then((result: PutObjectTaggingCommandOutput) => {
         expect(result).to.not.equal(undefined);
@@ -990,6 +999,7 @@ describe("S3Util Integration", () => {
 
     it("putTags should put a tag", (done: Mocha.Done) => {
       expectedTags.set("additionalTag", "additionalValue");
+      log("putTags should put a tag", LogLevel.DEBUG, expectedTags);
       const tags = new Map(expectedTags);
       putTags({ filename, s3Folder, tags }).then(() => {
         done();
@@ -999,6 +1009,7 @@ describe("S3Util Integration", () => {
     it("putObjectTagging should clear tags", (done: Mocha.Done) => {
       const tags = new Map();
       expectedTags = new Map(defaultTags); // default will be set back
+      log("putObjectTagging should clear tags", LogLevel.DEBUG, expectedTags);
       putObjectTagging({ key: s3FileKey!, tags }).then((result: PutObjectTaggingCommandOutput) => {
         expect(result).to.not.equal(undefined);
         done();
@@ -1008,6 +1019,7 @@ describe("S3Util Integration", () => {
     it("putTags should clear tags", (done: Mocha.Done) => {
       const tags = new Map();
       expectedTags = new Map(defaultTags); // default will be set back
+      log("putTags should clear tags", LogLevel.DEBUG, expectedTags);
       putTags({ filename, s3Folder, tags }).then(() => {
         done();
       }).catch((error) => done(error));

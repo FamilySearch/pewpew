@@ -43,6 +43,7 @@ import {
   YamlParser,
   log,
   logger,
+  s3,
   sqs,
   util
 } from "@fs/ppaas-common";
@@ -67,6 +68,10 @@ const MAX_SEARCH_RESULTS: number = parseInt(process.env.MAX_SEARCH_RESULTS || "0
 const ONE_MINUTE: number = 60000;
 const FIFTEEN_MINUTES: number = 15 * ONE_MINUTE;
 const LEGACY_PEWPEW_VERSION = "<0.6.0-preview";
+// Don't export so that the original can't be modified
+const RECURRING_FILE_TAGS_INTERNAL = new Map<string, string>([["recurring", "true"]]);
+/** Returns a new copy of the Map each time so the original can't be modified */
+export const defaultRecurringFileTags = (): Map<string, string> => new Map(RECURRING_FILE_TAGS_INTERNAL);
 
 // Export for testing
 export enum CacheLocation {
@@ -309,6 +314,11 @@ export async function downloadPriorTestId (
     const file: File = await convertPPaaSFileToFile(ppaasFile);
     return file;
   };
+  // Get them all so we can get their existing tags
+  const priorS3Files = await PpaasS3File.getAllFilesInS3({
+    s3Folder: priorS3Folder,
+    localDirectory
+  });
   if (fieldYamlFile) {
     if (Array.isArray(fieldYamlFile)) {
       // Log the json stringified object here so we can check splunk but don't return it
@@ -333,10 +343,7 @@ export async function downloadPriorTestId (
     }
   } else {
     // We still need to return the prior yaml file name so we can see if the user tried to change it.
-    const yamlFiles: PpaasS3File[] = (await PpaasS3File.getAllFilesInS3({
-      s3Folder: priorS3Folder,
-      localDirectory
-    })).filter((s3File) => isYamlFile(s3File.filename));
+    const yamlFiles: PpaasS3File[] = (priorS3Files).filter((s3File) => isYamlFile(s3File.filename));
     if (yamlFiles.length !== 1) {
       return {
         json: {
@@ -348,51 +355,39 @@ export async function downloadPriorTestId (
     }
     yamlFileName = yamlFiles[0].filename;
   }
-  const downloadFiles: PpaasS3File[] = [];
-  if (fieldAdditionalFiles) {
-    // Even though the docs say that you can have multiple fields, https://github.com/node-formidable/formidable/pull/340
-    // was closed and is not in the IncomingForm we have access to. https://github.com/node-formidable/formidable/pull/380
-    // was merged but is not in the latest "released" code so we don't have access to it either.
-    // The new canary builds of https://github.com/node-formidable/formidable/ support it but they don't have the @types for it yet
-    // We have to JSON.stringify it from the client and parse it here
-    if (!Array.isArray(fieldAdditionalFiles) && fieldAdditionalFiles.startsWith("[") && fieldAdditionalFiles.endsWith("]")) {
-      try {
-        const parsedAdditionalFiles: any = JSON.parse(fieldAdditionalFiles);
-        if (Array.isArray(parsedAdditionalFiles)
-          && parsedAdditionalFiles.every((additionalFile: any) => typeof additionalFile === "string")) {
-          fieldAdditionalFiles = parsedAdditionalFiles as string[];
+  try {
+    if (fieldAdditionalFiles) {
+      // Even though the docs say that you can have multiple fields, https://github.com/node-formidable/formidable/pull/340
+      // was closed and is not in the IncomingForm we have access to. https://github.com/node-formidable/formidable/pull/380
+      // was merged but is not in the latest "released" code so we don't have access to it either.
+      // The new canary builds of https://github.com/node-formidable/formidable/ support it but they don't have the @types for it yet
+      // We have to JSON.stringify it from the client and parse it here
+      if (!Array.isArray(fieldAdditionalFiles) && fieldAdditionalFiles.startsWith("[") && fieldAdditionalFiles.endsWith("]")) {
+        try {
+          const parsedAdditionalFiles: any = JSON.parse(fieldAdditionalFiles);
+          if (Array.isArray(parsedAdditionalFiles)
+            && parsedAdditionalFiles.every((additionalFile: any) => typeof additionalFile === "string")) {
+            fieldAdditionalFiles = parsedAdditionalFiles as string[];
+          }
+        } catch (error) {
+          log("Could not parse fieldAdditionalFiles: " + fieldAdditionalFiles, LogLevel.WARN, fieldAdditionalFiles);
         }
-      } catch (error) {
-        log("Could not parse fieldAdditionalFiles: " + fieldAdditionalFiles, LogLevel.WARN, fieldAdditionalFiles);
+      }
+      fieldAdditionalFiles = Array.isArray(fieldAdditionalFiles) ? fieldAdditionalFiles : [fieldAdditionalFiles];
+      if (Array.isArray(fieldAdditionalFiles)) {
+        additionalFileNames.push(...fieldAdditionalFiles);
+        for (const additionalFile of fieldAdditionalFiles) {
+          const s3File = priorS3Files.find((priorS3File) => priorS3File.filename === additionalFile);
+          if (s3File) {
+            additionalFiles.push(s3File);
+          } else {
+            log("Could not find additionalFile in prior files: " + additionalFile, LogLevel.WARN, { additionalFile, fieldAdditionalFiles, priorS3Files: priorS3Files.map((priorS3File) => priorS3File.filename) });
+            throw new Error(`Could not find ${additionalFile} in prior files ${priorS3Files.map((priorS3File) => priorS3File.filename)}`);
+          }
+        }
       }
     }
-    if (Array.isArray(fieldAdditionalFiles)) {
-      additionalFileNames.push(...(fieldAdditionalFiles));
-      downloadFiles.push(...(fieldAdditionalFiles.map((additionalFile: string) => new PpaasS3File({
-        filename: additionalFile,
-        s3Folder: priorS3Folder,
-        localDirectory: localPath
-      }))));
-    } else {
-      additionalFileNames.push(fieldAdditionalFiles);
-      downloadFiles.push(new PpaasS3File({
-        filename: fieldAdditionalFiles,
-        s3Folder: priorS3Folder,
-        localDirectory: localPath
-      }));
-    }
-  }
-  try {
-    // Don't actually download them, just check that they exist. We'll copy them later
-    const priorFiles = await Promise.all(downloadFiles.map((ppaasFile: PpaasS3File) =>
-      ppaasFile.existsInS3().then((existsInS3: boolean) => {
-        if (!existsInS3) {
-          throw new Error(ppaasFile.filename + " not found in s3");
-        }
-        return { filename: ppaasFile.filename, existsInS3 };
-      })));
-    log("Prior additionalFiles converted for testId: " + priorTestId, LogLevel.DEBUG, priorFiles);
-    additionalFiles.push(...downloadFiles);
+    log("Prior additionalFiles converted for testId: " + priorTestId, LogLevel.DEBUG, additionalFiles);
   } catch (error) {
     return {
       json: {
@@ -1076,6 +1071,7 @@ export abstract class TestManager {
           profile = priorTestIdResult.profile;
 
           // These files weren't downloaded. We'll just copy them to the new s3 location later
+          // Do we need to remove ones that have been updated?
           copyFiles.push(...priorTestIdResult.additionalFiles);
           // We do need the file names to confirm the config/yaml file
           additionalFileNames.push(...priorTestIdResult.additionalFileNames);
@@ -1233,6 +1229,7 @@ export abstract class TestManager {
         let scheduleDate: number | undefined;
         let daysOfWeek: number[] | undefined;
         let endDate: number | undefined;
+        let fileTags: Map<string, string> | undefined;
         if (fieldKeys.includes("scheduleDate")) {
           log("fields.scheduleDate: " + fields.scheduleDate, LogLevel.DEBUG);
           if (Array.isArray(fields.scheduleDate)) {
@@ -1307,7 +1304,10 @@ export abstract class TestManager {
             } else {
               return convertedEndDate;
             }
+              // Add tags test=false? or is recurring=true enough
+              fileTags = defaultRecurringFileTags();
           }
+
           if ((daysOfWeek !== undefined || endDate !== undefined) && !(daysOfWeek !== undefined && endDate !== undefined)) {
             return { json: { message: "Recurring tests must specify both daysOfWeek and endDate" }, status: 400 };
           }
@@ -1347,15 +1347,25 @@ export abstract class TestManager {
         log(`${yamlFile.originalFilename} testId: ${testId}`, LogLevel.INFO);
 
         // Upload files
-        const uploadPromises: Promise<PpaasS3File | void>[] = [uploadFile(yamlFile, s3Folder)];
+        const uploadPromises: Promise<PpaasS3File | void>[] = [uploadFile(yamlFile, s3Folder, fileTags)];
         // additionalFiles - Do this last so we can upload them at the same time
-        uploadPromises.push(...(additionalFiles.map((file: File) => uploadFile(file, s3Folder))));
+        uploadPromises.push(...(additionalFiles.map((file: File) => uploadFile(file, s3Folder, fileTags))));
         if (!editSchedule) {
           // copyFiles, just copy them from the old s3 location to the new one
-          uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => file.copy({ destinationS3Folder: s3Folder }))));
+          uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => {
+            file.tags = fileTags;
+            return file.copy({ destinationS3Folder: s3Folder });
+          })));
+        } else {
+          // If we're changing from non-recurring to recurring or vice-versa we need to edit the existing file tags.
+          const updateTags: Map<string, string> = fileTags || s3.defaultTestFileTags(); // If fileTags is truthy it's recurring
+          uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => {
+            file.tags = updateTags;
+            return file.updateTags();
+          })));
         }
         // Store encrypted environment variables in s3
-        uploadPromises.push(new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile }).upload());
+        uploadPromises.push(new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile, tags: fileTags }).upload());
         // Wait for all uploads to complete
         await Promise.all(uploadPromises);
 

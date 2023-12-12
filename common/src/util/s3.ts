@@ -166,7 +166,7 @@ export async function listFiles (options: string | ListFilesOptions): Promise<S3
   do {
     result = await listObjects({ prefix: s3Folder, maxKeys, continuationToken: result && result.NextContinuationToken});
     if (result.Contents) {
-      if (extension && result.Contents.length > 0) {
+      if (extension && extension.length > 0 && result.Contents.length > 0) {
         const filtered: S3Object[] = result.Contents.filter((s3File: S3Object) => Array.isArray(extension)
           ? extension.findIndex((thisExtension: string) => s3File.Key!.endsWith(thisExtension)) >= 0
           : s3File.Key!.endsWith(extension!)

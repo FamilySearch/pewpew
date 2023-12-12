@@ -34,7 +34,7 @@ export interface PpaasS3FileOptions {
 export interface GetAllFilesInS3Options {
   s3Folder: string;
   localDirectory: string;
-  extension?: string;
+  extension?: string | string[];
   maxFiles?: number;
 }
 
@@ -123,8 +123,9 @@ export class PpaasS3File implements S3File {
   }
 
   public static async getAllFilesInS3 ({ s3Folder, localDirectory, extension, maxFiles }: GetAllFilesInS3Options): Promise<PpaasS3File[]> {
-    log(`Finding in s3Folder: ${s3Folder}, extension: ${extension}, maxFiles: ${maxFiles}`, LogLevel.DEBUG);
+    log(`PpaasS3File Finding in s3Folder: ${s3Folder}, extension: ${extension}, maxFiles: ${maxFiles}`, LogLevel.DEBUG);
     const s3Files: S3Object[] = await listFiles({ s3Folder, maxKeys: maxFiles, extension });
+    log(`Found S3Files: ${s3Folder}, extension: ${extension}, maxFiles: ${maxFiles}`, LogLevel.DEBUG, s3Files.map((s3File) => s3File.Key));
     if (s3Files.length === 0) {
       return [];
     }

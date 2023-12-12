@@ -63,7 +63,7 @@ export class PpaasEncryptS3File implements s3.S3File {
   }
 
   public static async getAllFilesInS3 (s3Folder: string, extension?: string, maxFiles?: number): Promise<PpaasEncryptS3File[]> {
-    log(`Finding in s3Folder: ${s3Folder}, extension: ${extension}, maxFiles: ${maxFiles}`, LogLevel.DEBUG);
+    log(`PpaasEncryptS3File Finding in s3Folder: ${s3Folder}, extension: ${extension}, maxFiles: ${maxFiles}`, LogLevel.DEBUG);
     const s3Files: S3Object[] = await listFiles({ s3Folder, maxKeys: maxFiles, extension });
     if (s3Files.length === 0) {
       return [];

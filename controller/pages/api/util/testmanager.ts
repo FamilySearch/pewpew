@@ -1647,7 +1647,7 @@ export abstract class TestManager {
         const s3YamlFiles: PpaasS3File[] = await PpaasS3File.getAllFilesInS3({
           s3Folder: s3FolderPartial,
           localDirectory,
-          extension: "yaml",
+          extension: [".yaml", ".yml"],
           maxFiles: 1000
         });
         if (s3YamlFiles.length === 0) {

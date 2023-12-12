@@ -76,7 +76,8 @@ export interface TestStatusState {
   error: string | undefined;
 }
 
-const noTestsFoundEror = (searchString: string) => "No s3Folders found starting with: " + searchString;
+const noTestsFoundEror = (searchString: string, searchExtension?: string | string[]) =>
+  `No s3Folders found starting with: "${searchString}"` + (searchExtension ? ` and extension ${JSON.stringify(searchExtension)}` : "");
 
 const TestStatusPage = ({
   testData,
@@ -211,7 +212,7 @@ const TestStatusPage = ({
         });
         return;
       }
-      // PUT /api/search
+      // PUT /api/search - Don't include the extension here. Only on page loads
       const url = formatPageHref(`${API_SEARCH}?s3Folder=${searchString}`);
       const response: AxiosResponse = await axios.get(url);
       // Update the URL to include the search param `?search=${searchString}`
@@ -354,9 +355,10 @@ export const getServerSideProps: GetServerSideProps =
       let searchTestResult: TestData[] | undefined;
       let errorLoading: string | undefined;
       const searchString = typeof ctx.query?.search === "string" ? ctx.query.search : undefined;
-      if (searchString) {
+      const searchExtension = ctx.query.extension;
+      if (searchString || searchExtension) {
         // Check for search param and do search
-        const testManagerResponse: ErrorResponse | TestListResponse = await TestManager.searchTests(searchString, ctx.query.maxResults);
+        const testManagerResponse: ErrorResponse | TestListResponse = await TestManager.searchTests(searchString, ctx.query.maxResults, searchExtension);
         if ("message" in testManagerResponse.json) {
           return {
             props: {
@@ -371,7 +373,7 @@ export const getServerSideProps: GetServerSideProps =
         searchTestResult = testManagerResponse.json;
         if (searchTestResult.length === 0) {
           searchTestResult = undefined;
-          errorLoading = noTestsFoundEror(searchString);
+          errorLoading = noTestsFoundEror(searchString || "", searchExtension);
         }
       }
       return {

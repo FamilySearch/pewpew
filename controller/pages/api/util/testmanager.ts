@@ -1614,7 +1614,11 @@ export abstract class TestManager {
   }
 
   // define the put stop route to put a message on the queue to stop a test
-  public static async searchTests (s3FolderQuery: string | string[] | undefined, maxResultsQuery: string | string[] | undefined): Promise<ErrorResponse | TestListResponse> {
+  public static async searchTests (
+    s3FolderQuery: string | string[] | undefined,
+    maxResultsQuery: string | string[] | undefined,
+    extension: string | string[] = [".yaml", ".yml"]
+  ): Promise<ErrorResponse | TestListResponse> {
     try {
       // Check if either one is empty
       if (s3FolderQuery === undefined) {
@@ -1647,13 +1651,13 @@ export abstract class TestManager {
         const s3YamlFiles: PpaasS3File[] = await PpaasS3File.getAllFilesInS3({
           s3Folder: s3FolderPartial,
           localDirectory,
-          extension: [".yaml", ".yml"],
+          extension,
           maxFiles: 1000
         });
         if (s3YamlFiles.length === 0) {
           return { json: [], status: 204 };
         }
-        log(`Found files for s3FolderSearch: ${s3FolderPartial}`, LogLevel.DEBUG, s3YamlFiles);
+        log(`Found files for s3FolderSearch: ${s3FolderPartial}`, LogLevel.DEBUG, s3YamlFiles.map((s3YamlFile) => s3YamlFile.key));
 
         let tests: TestData[] = [];
         for (const s3YamlFile of s3YamlFiles) {

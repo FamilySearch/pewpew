@@ -105,7 +105,7 @@ export const Layout = ({
     authPermission,
     otherControllers = OTHER_CONTROLLERS
   }: LayoutProps) => {
-    // There seems to be a bug when usling our LinkButton that when the button goes
+    // There seems to be a bug when using our LinkButton that when the button goes
     // to "/" it removes the "/" from the url and refresh breaks if there is a query param
     // Ctrl-click keeps the trailing slash, but the click routing removes it.
     // Two possible fixes. 1) Fix the routing in nginx. I don't think we can fix the routing by

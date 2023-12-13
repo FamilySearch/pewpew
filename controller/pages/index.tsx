@@ -118,7 +118,7 @@ const TestStatusPage = ({
       }
       setState({ error: undefined }); // Force a redraw
     } catch (error) {
-      log("Error loading test data", LogLevel.ERROR, error);
+      log("Error loading test data", LogLevel.WARN, error);
       setState({ error: formatError(error) });
     }
   };
@@ -274,9 +274,10 @@ const TestStatusPage = ({
 
 export const getServerSideProps: GetServerSideProps =
   async (ctx: GetServerSidePropsContext): Promise<GetServerSidePropsResult<TestStatusProps>> => {
+  let authPermissions: AuthPermissions | string | undefined;
   try {
     // Authenticate
-    const authPermissions: AuthPermissions | string = await authPage(ctx, AuthPermission.ReadOnly);
+    authPermissions = await authPage(ctx, AuthPermission.ReadOnly);
     // If we have a authPermissions we're authorized, if we're not, we'l redirect
     if (typeof authPermissions === "string") {
       return {
@@ -389,7 +390,10 @@ export const getServerSideProps: GetServerSideProps =
     }
   } catch (error) {
     const errorLoading = formatError(error);
-    logServer("Error loading test data", LogLevelServer.ERROR, error);
+    logServer(
+      "TestStatusPage Error loading test data", LogLevelServer.WARN, error,
+      typeof authPermissions === "string" ? authPermissions : authPermissions?.userId
+    );
     return {
       props: { testData: undefined, allTests: undefined, errorLoading, authPermission: undefined }
     };

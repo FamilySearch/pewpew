@@ -17,7 +17,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       return;
     }
     try {
-      const testManagerResponse: TestManagerResponse = await TestManager.searchTests(req.query.s3Folder, req.query.maxResults);
+      const testManagerResponse: TestManagerResponse = await TestManager.searchTests(req.query.s3Folder, req.query.maxResults, req.query.extension);
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above

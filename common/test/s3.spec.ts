@@ -166,7 +166,7 @@ describe("S3Util", () => {
         s3Folder: UNIT_TEST_KEY_PREFIX,
         extension: UNIT_TEST_FILENAME.slice(-3)
       }).then((result: S3Object[]) => {
-        log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, ${UNIT_TEST_FILENAME.slice(-3)}) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, "${UNIT_TEST_FILENAME.slice(-3)}") result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
         expect(result.length).to.equal(1);
         done();
@@ -182,6 +182,51 @@ describe("S3Util", () => {
         extension: "bad"
       }).then((result: S3Object[]) => {
         log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, "bad") result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Files with extension array first should return files", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listFiles({
+        s3Folder: UNIT_TEST_KEY_PREFIX,
+        extension: [UNIT_TEST_FILENAME.slice(-3), "bogus"]
+      }).then((result: S3Object[]) => {
+        log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, ["${UNIT_TEST_FILENAME.slice(-3)}", "bogus"]) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(1);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Files with extension array second should return files", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listFiles({
+        s3Folder: UNIT_TEST_KEY_PREFIX,
+        extension: ["bogus", UNIT_TEST_FILENAME.slice(-3)]
+      }).then((result: S3Object[]) => {
+        log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, ["bogus", "${UNIT_TEST_FILENAME.slice(-3)}"]) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(1);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Files with not found extension array should not return files", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listFiles({
+        s3Folder: UNIT_TEST_KEY_PREFIX,
+        extension: ["bad", "bogus"]
+      }).then((result: S3Object[]) => {
+        log(`listFiles("${UNIT_TEST_KEY_PREFIX}", undefined, ["bad", "bogus"]) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
         expect(result.length).to.equal(0);
         done();

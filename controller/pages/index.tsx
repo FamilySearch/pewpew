@@ -76,7 +76,8 @@ export interface TestStatusState {
   error: string | undefined;
 }
 
-const noTestsFoundEror = (searchString: string) => "No s3Folders found starting with: " + searchString;
+const noTestsFoundEror = (searchString: string, searchExtension?: string | string[]) =>
+  `No s3Folders found starting with: "${searchString}"` + (searchExtension ? ` and extension ${JSON.stringify(searchExtension)}` : "");
 
 const TestStatusPage = ({
   testData,
@@ -117,7 +118,7 @@ const TestStatusPage = ({
       }
       setState({ error: undefined }); // Force a redraw
     } catch (error) {
-      log("Error loading test data", LogLevel.ERROR, error);
+      log("Error loading test data", LogLevel.WARN, error);
       setState({ error: formatError(error) });
     }
   };
@@ -211,7 +212,7 @@ const TestStatusPage = ({
         });
         return;
       }
-      // PUT /api/search
+      // PUT /api/search - Don't include the extension here. Only on page loads
       const url = formatPageHref(`${API_SEARCH}?s3Folder=${searchString}`);
       const response: AxiosResponse = await axios.get(url);
       // Update the URL to include the search param `?search=${searchString}`
@@ -273,9 +274,10 @@ const TestStatusPage = ({
 
 export const getServerSideProps: GetServerSideProps =
   async (ctx: GetServerSidePropsContext): Promise<GetServerSidePropsResult<TestStatusProps>> => {
+  let authPermissions: AuthPermissions | string | undefined;
   try {
     // Authenticate
-    const authPermissions: AuthPermissions | string = await authPage(ctx, AuthPermission.ReadOnly);
+    authPermissions = await authPage(ctx, AuthPermission.ReadOnly);
     // If we have a authPermissions we're authorized, if we're not, we'l redirect
     if (typeof authPermissions === "string") {
       return {
@@ -354,9 +356,10 @@ export const getServerSideProps: GetServerSideProps =
       let searchTestResult: TestData[] | undefined;
       let errorLoading: string | undefined;
       const searchString = typeof ctx.query?.search === "string" ? ctx.query.search : undefined;
-      if (searchString) {
+      const searchExtension = ctx.query.extension;
+      if (searchString || searchExtension) {
         // Check for search param and do search
-        const testManagerResponse: ErrorResponse | TestListResponse = await TestManager.searchTests(searchString, ctx.query.maxResults);
+        const testManagerResponse: ErrorResponse | TestListResponse = await TestManager.searchTests(searchString, ctx.query.maxResults, searchExtension);
         if ("message" in testManagerResponse.json) {
           return {
             props: {
@@ -371,7 +374,7 @@ export const getServerSideProps: GetServerSideProps =
         searchTestResult = testManagerResponse.json;
         if (searchTestResult.length === 0) {
           searchTestResult = undefined;
-          errorLoading = noTestsFoundEror(searchString);
+          errorLoading = noTestsFoundEror(searchString || "", searchExtension);
         }
       }
       return {
@@ -387,7 +390,10 @@ export const getServerSideProps: GetServerSideProps =
     }
   } catch (error) {
     const errorLoading = formatError(error);
-    logServer("Error loading test data", LogLevelServer.ERROR, error);
+    logServer(
+      "TestStatusPage Error loading test data", LogLevelServer.WARN, error,
+      typeof authPermissions === "string" ? authPermissions : authPermissions?.userId
+    );
     return {
       props: { testData: undefined, allTests: undefined, errorLoading, authPermission: undefined }
     };

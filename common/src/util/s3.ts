@@ -146,7 +146,7 @@ export interface FileOptions {
 export interface ListFilesOptions {
   s3Folder: string;
   maxKeys?: number;
-  extension?: string;
+  extension?: string | string[];
 }
 
 export async function listFiles ({ s3Folder, extension, maxKeys }: ListFilesOptions): Promise<S3Object[]>;
@@ -154,7 +154,7 @@ export async function listFiles (s3Folder: string): Promise<S3Object[]>;
 export async function listFiles (options: string | ListFilesOptions): Promise<S3Object[]> {
   let s3Folder: string;
   let maxKeys: number | undefined;
-  let extension: string | undefined;
+  let extension: string | string[] | undefined;
   if (typeof options === "string") {
     s3Folder = options;
   } else {
@@ -166,8 +166,12 @@ export async function listFiles (options: string | ListFilesOptions): Promise<S3
   do {
     result = await listObjects({ prefix: s3Folder, maxKeys, continuationToken: result && result.NextContinuationToken});
     if (result.Contents) {
-      if (extension && result.Contents.length > 0) {
-        const filtered: S3Object[] = result.Contents.filter((s3File: S3Object) => s3File.Key!.endsWith(extension!));
+      if (extension && extension.length > 0 && result.Contents.length > 0) {
+        const filtered: S3Object[] = result.Contents.filter((s3File: S3Object) => Array.isArray(extension)
+          ? extension.findIndex((thisExtension: string) => s3File.Key!.endsWith(thisExtension)) >= 0
+          : s3File.Key!.endsWith(extension!)
+        );
+        log(`listFiles(${s3Folder}, ${maxKeys}, ${extension}) results`, LogLevel.DEBUG, { results: result.Contents.length, filtered: filtered.length });
         files.push(...filtered);
       } else {
         files.push(...(result.Contents));

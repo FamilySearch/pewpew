@@ -391,7 +391,7 @@ describe("PpaasS3File", () => {
         localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION,
         extension: UNIT_TEST_FILENAME.slice(-3)
       }).then((result: PpaasS3File[]) => {
-        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}") result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", "${UNIT_TEST_FILENAME.slice(-3)}") result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
         expect(result.length).to.equal(1);
         // getAllFilesInS3 should set the remote date so we can sort
@@ -414,7 +414,70 @@ describe("PpaasS3File", () => {
         extension: "bad",
         maxFiles: 1000
       }).then((result: PpaasS3File[]) => {
-        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", 1000) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", "bad", 1000) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("getAllFilesInS3 partial folder by extension array first should return files", (done: Mocha.Done) => {
+      mockListObject(UNIT_TEST_FILENAME, unitTestKeyPrefix);
+      mockGetObjectTagging(tags);
+      PpaasS3File.getAllFilesInS3({
+        s3Folder: unitTestKeyPrefix.slice(0, -2),
+        localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION,
+        extension: [UNIT_TEST_FILENAME.slice(-3), "bogus"]
+      }).then((result: PpaasS3File[]) => {
+        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", ["${UNIT_TEST_FILENAME.slice(-3)}", "bogus"]) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(1);
+        // getAllFilesInS3 should set the remote date so we can sort
+        expect(result[0].getLastModifiedRemote()).to.be.greaterThan(new Date(0));
+        expect(result[0].tags).to.not.equal(undefined);
+        expect(result[0].tags?.size).to.equal(1);
+        expect(result[0].tags?.has("test")).to.equal(false);
+        expect(result[0].tags?.get("unittest")).to.equal("true");
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("getAllFilesInS3 partial folder by extension array second should return files", (done: Mocha.Done) => {
+      mockListObject(UNIT_TEST_FILENAME, unitTestKeyPrefix);
+      mockGetObjectTagging(tags);
+      PpaasS3File.getAllFilesInS3({
+        s3Folder: unitTestKeyPrefix.slice(0, -2),
+        localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION,
+        extension: ["bogus", UNIT_TEST_FILENAME.slice(-3)]
+      }).then((result: PpaasS3File[]) => {
+        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", ["bogus", "${UNIT_TEST_FILENAME.slice(-3)}"]) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
+        expect(result).to.not.equal(undefined);
+        expect(result.length).to.equal(1);
+        // getAllFilesInS3 should set the remote date so we can sort
+        expect(result[0].getLastModifiedRemote()).to.be.greaterThan(new Date(0));
+        expect(result[0].tags).to.not.equal(undefined);
+        expect(result[0].tags?.size).to.equal(1);
+        expect(result[0].tags?.has("test")).to.equal(false);
+        expect(result[0].tags?.get("unittest")).to.equal("true");
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("getAllFilesInS3 partial folder wrong extension array should not return files", (done: Mocha.Done) => {
+      mockListObjects([]);
+      PpaasS3File.getAllFilesInS3({
+        s3Folder: unitTestKeyPrefix.slice(0, -2),
+        localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION,
+        extension: ["bad", "bogus"],
+        maxFiles: 1000
+      }).then((result: PpaasS3File[]) => {
+        log(`PpaasS3File.getAllFilesInS3("${unitTestKeyPrefix}", "${UNIT_TEST_LOCAL_FILE_LOCATION}", ["bad", "bogus"], 1000) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
         expect(result.length).to.equal(0);
         done();

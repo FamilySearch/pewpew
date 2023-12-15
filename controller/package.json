@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.0.3",
+  "version": "3.1.0",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -105,7 +105,7 @@
     "aws-sdk-client-mock": "^3.0.0",
     "chai": "^4.3.7",
     "dotenv": "^16.0.0",
-    "dotenv-flow": "^3.2.0",
+    "dotenv-flow": "^4.0.1",
     "esbuild": ">=0.17",
     "eslint": "^8.40.0",
     "eslint-config-next": "~14.0.0",

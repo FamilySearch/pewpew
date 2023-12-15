@@ -5,14 +5,14 @@ on:
       - 'package-lock.json'
       - 'common/**.js*'
       - 'common/**.ts*'
-      - 'common/**/package.json'
+      - 'common/package.json'
       - 'agent/**.js*'
       - 'agent/**.ts*'
-      - 'agent/**/package.json'
+      - 'agent/package.json'
       - 'controller/**.html'
       - 'controller/**.js*'
       - 'controller/**.ts*'
-      - 'controller/**/package.json'
+      - 'controller/package.json'
 
 name: Pull Request PPaaS
 jobs:

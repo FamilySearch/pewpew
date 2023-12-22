@@ -15,6 +15,7 @@ import {
   ec2,
   log,
   logger,
+  s3,
   sqs,
   util
 } from "@fs/ppaas-common";
@@ -418,13 +419,15 @@ export class PewPewTest {
       this.pewpewStdOutS3File = new PpaasS3File({
         filename: logger.pewpewStdOutFilename(this.testMessage.testId),
         s3Folder,
-        localDirectory: logConfig.LogFileLocation
+        localDirectory: logConfig.LogFileLocation,
+        tags: s3.defaultTestExtraFileTags()
       });
       this.log(`pewpewStdOutFilename = ${this.pewpewStdOutS3File.localFilePath}`, LogLevel.DEBUG);
       this.pewpewStdErrS3File =  new PpaasS3File({
         filename: logger.pewpewStdErrFilename(this.testMessage.testId),
         s3Folder,
-        localDirectory: logConfig.LogFileLocation
+        localDirectory: logConfig.LogFileLocation,
+        tags: s3.defaultTestExtraFileTags()
       });
       this.log(`pewpewStdErrS3File = ${this.pewpewStdErrS3File.localFilePath}`, LogLevel.DEBUG);
 
@@ -734,7 +737,8 @@ export class PewPewTest {
                 const foundS3File: PpaasS3File = new PpaasS3File({
                   filename: foundFile,
                   s3Folder: this.testMessage.s3Folder,
-                  localDirectory: this.localPath
+                  localDirectory: this.localPath,
+                  tags: s3.defaultTestExtraFileTags()
                 });
                 yamlCreatedFiles.set(foundFile, foundS3File);
               }

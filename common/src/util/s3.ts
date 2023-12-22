@@ -56,10 +56,14 @@ export const config: { s3Client: S3Client } = {
  * has tags passed in of "key2=value3" then only key1=value1 would be added. WARNING: Is only initialized after s3.init() called.
  */
 export const ADDITIONAL_TAGS_ON_ALL = new Map<string, string>();
-// Don't export so that the original can't be modified
+// Don't export so that the original can't be modified,
+// we'll return a new copy of the Map each time so the original can't be modified
 const TEST_FILE_TAGS_INTERNAL = new Map<string, string>([["test", "true"]]);
-/** Returns a new copy of the Map each time so the original can't be modified */
+const TEST_EXTRA_FILE_TAGS_INTERNAL = new Map<string, string>([["test", "false"]]);
+/** Default tags on all test files (yaml, results, status) from the tests */
 export const defaultTestFileTags = (): Map<string, string> => new Map(TEST_FILE_TAGS_INTERNAL);
+/** Default tags on all extra files from the tests */
+export const defaultTestExtraFileTags = (): Map<string, string> => new Map(TEST_EXTRA_FILE_TAGS_INTERNAL);
 
 /**
  * Initializes the S3 object using environment variables. Runs later so it doesn't throw on start-up

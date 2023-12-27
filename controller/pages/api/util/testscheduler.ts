@@ -36,6 +36,7 @@ import {
 import { TestManager, defaultRecurringFileTags } from "./testmanager";
 import { formatError, getHourMinuteFromTimestamp } from "./clientutil";
 import type { EventInput } from "@fullcalendar/core";
+import { IS_RUNNING_IN_AWS } from "./authclient";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
 
 const { sleep } = util;
@@ -397,7 +398,7 @@ export class TestScheduler implements TestSchedulerItem {
       // Start background task to delete old files
       (async () => {
         // Don't start right away, delay to sometime within today
-        let nextLoop: number = Date.now() + Math.floor(Math.random() * ONE_DAY);
+        let nextLoop: number = Date.now() + (IS_RUNNING_IN_AWS ? Math.floor(Math.random() * ONE_DAY) : 0);
         if (nextLoop > Date.now()) {
           const delay = nextLoop - Date.now();
           log("Delete Historical Loop: nextLoop: " + new Date(nextLoop), LogLevel.DEBUG, { delay, nextLoop });

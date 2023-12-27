@@ -14,8 +14,10 @@ import {
   PpaasTestId,
   PpaasTestStatus,
   TestMessage,
+  TestStatus,
   log,
-  logger
+  logger,
+  util
 } from "@fs/ppaas-common";
 import {
   TestScheduler,
@@ -103,6 +105,7 @@ export class TestSchedulerIntegration extends TestScheduler {
   }
 
   public static getScheduledTests (): Map<string, TestSchedulerItem> {
+    TestScheduler.loadTestsFromS3();
     return TestScheduler.scheduledTests!;
   }
 
@@ -111,6 +114,7 @@ export class TestSchedulerIntegration extends TestScheduler {
   }
 
   public static getHistoricalTests (): Map<string, EventInput> {
+    TestScheduler.loadHistoricalFromS3();
     return TestScheduler.historicalTests!;
   }
 
@@ -136,6 +140,11 @@ export class TestSchedulerIntegration extends TestScheduler {
   /** public so we can set the value before calling updateNextStart */
   public static setNextStart (nextStart: number | undefined) {
     TestScheduler.nextStart = nextStart;
+  }
+
+  /** public so we can call it for testing */
+  public static runHistoricalDelete (deleteOldFilesDays?: number) {
+    return TestScheduler.runHistoricalDelete(deleteOldFilesDays);
   }
 }
 
@@ -1276,6 +1285,82 @@ describe("TestScheduler", () => {
       } catch (error) {
         log("getNextStart error", LogLevel.ERROR, error);
         done(error);
+      }
+    });
+  });
+
+  describe("runHistoricalDelete", () => {
+    const deleteOldFilesDays = 7;
+
+    // Empty
+    it("should succeed even if empty", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        historicalTests.clear();
+        const deletedCount: number = await TestSchedulerIntegration.runHistoricalDelete(deleteOldFilesDays);
+        expect(deletedCount).to.equal(0);
+        expect(historicalTests.size, "historicalTests.size").to.equal(0);
+      } catch (error) {
+        log("should succeed even if empty error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    // One today should not be deleted
+    it("should not remove new", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        historicalTests.clear();
+        const startTime = Date.now() - (2 * ONE_HOUR);
+        const endTime = Date.now() - ONE_HOUR;
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Finished);
+        const deletedCount: number = await TestSchedulerIntegration.runHistoricalDelete(deleteOldFilesDays);
+        expect(deletedCount, "deletedCount").to.equal(0);
+        expect(historicalTests.size, "historicalTests.size").to.equal(1);
+      } catch (error) {
+        log("should not remove new error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    // One last week should be deleted
+    it("should remove old", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        historicalTests.clear();
+        const startTime = Date.now() - (2 * ONE_HOUR + ONE_WEEK);
+        const endTime = Date.now() - (ONE_HOUR + ONE_WEEK);
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Finished);
+        const deletedCount: number = await TestSchedulerIntegration.runHistoricalDelete(deleteOldFilesDays);
+        expect(deletedCount, "deletedCount").to.equal(1);
+        expect(historicalTests.size, "historicalTests.size").to.equal(0);
+      } catch (error) {
+        log("should remove old error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    // One today, one yesterday, one 1 week ago, delete one week
+    it("should remove old, but not new", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        historicalTests.clear();
+        const startTime = Date.now() - (2 * ONE_HOUR);
+        const endTime = Date.now() - ONE_HOUR;
+        // Today
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Finished);
+        // Yesterday
+        await TestSchedulerIntegration.addHistoricalTest(PpaasTestId.makeTestId(yamlFile).testId, yamlFile, startTime - ONE_DAY, endTime - ONE_DAY, TestStatus.Finished);
+        await util.sleep(5); // Need to get a different timestamp for this next test.
+        // Last week
+        await TestSchedulerIntegration.addHistoricalTest(PpaasTestId.makeTestId(yamlFile).testId, yamlFile, startTime - ONE_WEEK, endTime - ONE_WEEK, TestStatus.Finished);
+        expect(historicalTests.size, "historicalTests.size before").to.equal(3);
+        const deletedCount: number = await TestSchedulerIntegration.runHistoricalDelete(deleteOldFilesDays);
+        expect(deletedCount, "deletedCount").to.equal(1);
+        expect(historicalTests.size, "historicalTests.size").to.equal(2);
+      } catch (error) {
+        log("should remove old, but not new error", LogLevel.ERROR, error);
+        throw error;
       }
     });
   });

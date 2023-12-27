@@ -42,8 +42,10 @@ const { sleep } = util;
 logger.config.LogFileName = "ppaas-controller";
 
 const TEST_SCHEDULER_POLL_INTERVAL_MS: number = parseInt(process.env.TEST_SCHEDULER_POLL_INTERVAL_MS || "0", 10) || 60000;
-const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH === "true";
+const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH?.toLowerCase() === "true";
 const HISTORICAL_SEARCH_MAX_FILES: number = parseInt(process.env.HISTORICAL_SEARCH_MAX_FILES || "0", 10) || 100000;
+const RUN_HISTORICAL_DELETE: boolean = process.env.RUN_HISTORICAL_DELETE?.toLowerCase() === "true";
+const DELETE_OLD_FILES_DAYS: number = parseInt(process.env.DELETE_OLD_FILES_DAYS || "0") || 365;
 const ONE_DAY: number = 24 * 60 * 60000;
 export const AUTH_PERMISSIONS_SCHEDULER: AuthPermissions = { authPermission: AuthPermission.Admin, token: "startTestSchedulerLoop", userId: "controller" };
 export const TEST_HISTORY_FILENAME = "testhistory.json";
@@ -391,6 +393,37 @@ export class TestScheduler implements TestSchedulerItem {
     if (RUN_HISTORICAL_SEARCH) {
       TestScheduler.runHistoricalSearch().catch(() => { /* already logs error, swallow */ });
     }
+    if (RUN_HISTORICAL_DELETE) {
+      // Start background task to delete old files
+      (async () => {
+        // Don't start right away, delay to sometime within today
+        let nextLoop: number = Date.now() + Math.floor(Math.random() * ONE_DAY);
+        if (nextLoop > Date.now()) {
+          const delay = nextLoop - Date.now();
+          log("Delete Historical Loop: nextLoop: " + new Date(nextLoop), LogLevel.DEBUG, { delay, nextLoop });
+          await sleep(delay);
+        }
+        while (global.testSchedulerLoopRunning) {
+          const loopStart = Date.now();
+          try {
+            await TestScheduler.runHistoricalDelete();
+          } catch (error) {
+            log("Delete Historical Loop: Error running runHistoricalDelete", LogLevel.ERROR, error);
+          }
+          // If Date.now() is exactly the same time we need to check the next one
+          nextLoop += ONE_DAY;
+          const delay = nextLoop - Date.now();
+          log("Delete Historical Loop: nextLoop: " + new Date(nextLoop), LogLevel.DEBUG, { loopStart, delay, nextLoop });
+          if (delay > 0) {
+            await sleep(delay);
+          }
+        }
+        // We'll only reach here if we got some kind of sigterm message or an unhandled exception. Shut down this loop so we can be restarted or replaced
+        log("Shutting Down Delete Historical Loop.", LogLevel.INFO);
+      })().catch((err) => {
+        log("Error during Delete Historical Loop", LogLevel.ERROR, err);
+      });
+    }
     (async () => {
       // We'll never set this to false unless something really bad happens
       while (global.testSchedulerLoopRunning) {
@@ -424,9 +457,9 @@ export class TestScheduler implements TestSchedulerItem {
         const nextStartTime = TestScheduler.nextStart || Number.MAX_VALUE;
         const delay = Math.min(nextPollTime - Date.now(), nextStartTime - Date.now(), TEST_SCHEDULER_POLL_INTERVAL_MS);
         log(
-          "Test Scheduler Loop: nextPollTime: " + nextPollTime,
+          "Test Scheduler Loop: nextPollTime: " + new Date(nextPollTime),
           LogLevel.DEBUG,
-          { loopStart, nextPollTime, nextStartTime, now: Date.now(), delay, TEST_SCHEDULER_POLL_INTERVAL_MS }
+          { loopStart, nextPollTime, nextStartTime, delay, TEST_SCHEDULER_POLL_INTERVAL_MS }
         );
         if (delay > 0) {
           await sleep(delay);
@@ -824,6 +857,33 @@ export class TestScheduler implements TestSchedulerItem {
       log("Finished Test Historical Search", LogLevel.INFO, { sizeAfter: TestScheduler.historicalTests!.size });
     } catch (error) {
       log("Error running historical search", LogLevel.ERROR, error);
+      throw error; // Throw for testing, but the loop will catch and noop
+    }
+  }
+
+  protected static async runHistoricalDelete (deleteOldFilesDays: number = DELETE_OLD_FILES_DAYS): Promise<number> {
+    try {
+      let deletedCount: number = 0;
+      // Load existing ones
+      await TestScheduler.loadHistoricalFromS3();
+      const oldDatetime: number = Date.now() - (deleteOldFilesDays * ONE_DAY);
+      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore: TestScheduler.historicalTests!.size, oldDatetime: new Date(oldDatetime), deleteOldFilesDays });
+
+      // Delete old ones off the historical Calendar. These will be cleaned up in S3 by Bucket Expiration Policy
+      for (const [testId, eventInput] of TestScheduler.historicalTests!) {
+        if ((typeof eventInput.end === "number" && eventInput.end < oldDatetime)
+          || (eventInput.end instanceof Date && (eventInput as Date).getTime() < oldDatetime)) {
+          log("Deleting Historical Test " + testId, LogLevel.INFO, eventInput);
+          // Delete
+          TestScheduler.historicalTests!.delete(testId);
+          deletedCount++;
+        }
+      }
+      await TestScheduler.saveHistoricalToS3();
+      log("Finished Test Historical Delete", LogLevel.INFO, { sizeAfter: TestScheduler.historicalTests!.size });
+      return deletedCount;
+    } catch (error) {
+      log("Error running Historical Delete", LogLevel.ERROR, error);
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }

@@ -862,12 +862,13 @@ export class TestScheduler implements TestSchedulerItem {
   }
 
   protected static async runHistoricalDelete (deleteOldFilesDays: number = DELETE_OLD_FILES_DAYS): Promise<number> {
+    let deletedCount: number = 0;
     try {
-      let deletedCount: number = 0;
       // Load existing ones
       await TestScheduler.loadHistoricalFromS3();
       const oldDatetime: number = Date.now() - (deleteOldFilesDays * ONE_DAY);
-      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore: TestScheduler.historicalTests!.size, oldDatetime: new Date(oldDatetime), deleteOldFilesDays });
+      const sizeBefore = TestScheduler.historicalTests!.size;
+      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore, oldDatetime: new Date(oldDatetime), deleteOldFilesDays });
 
       // Delete old ones off the historical Calendar. These will be cleaned up in S3 by Bucket Expiration Policy
       for (const [testId, eventInput] of TestScheduler.historicalTests!) {
@@ -880,10 +881,10 @@ export class TestScheduler implements TestSchedulerItem {
         }
       }
       await TestScheduler.saveHistoricalToS3();
-      log("Finished Test Historical Delete", LogLevel.INFO, { sizeAfter: TestScheduler.historicalTests!.size });
+      log("Finished Test Historical Delete", LogLevel.INFO, { deletedCount, sizeBefore, sizeAfter: TestScheduler.historicalTests!.size });
       return deletedCount;
     } catch (error) {
-      log("Error running Historical Delete", LogLevel.ERROR, error);
+      log("Error running Historical Delete", LogLevel.ERROR, error, { deletedCount });
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }

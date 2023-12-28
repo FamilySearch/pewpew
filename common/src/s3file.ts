@@ -135,7 +135,7 @@ export class PpaasS3File implements S3File {
         .map(async (s3File: S3Object) => {
         // find the part after the s3Folder. We may have a prefix added to us so it may not be at the beginning
         // If s3Folder is part of a folder we need to split on the / not on the folder name
-        const key: string = s3File.Key!.startsWith(KEYSPACE_PREFIX) ? s3File.Key!.slice(KEYSPACE_PREFIX.length) : s3File.Key!;
+        const key: string = KEYSPACE_PREFIX && s3File.Key!.startsWith(KEYSPACE_PREFIX) ? s3File.Key!.slice(KEYSPACE_PREFIX.length) : s3File.Key!;
         const s3KeySplit = key.split("/");
         const realFolder = s3KeySplit.slice(0, -1).join("/");
         const filename = s3KeySplit[s3KeySplit.length - 1];

@@ -1349,23 +1349,28 @@ export abstract class TestManager {
         // Upload files
         const uploadPromises: Promise<PpaasS3File | void>[] = [uploadFile(yamlFile, s3Folder, fileTags)];
         // additionalFiles - Do this last so we can upload them at the same time
-        uploadPromises.push(...(additionalFiles.map((file: File) => uploadFile(file, s3Folder, fileTags))));
+        uploadPromises.push(...(additionalFiles.map((file: File) => uploadFile(file, s3Folder, fileTags || s3.defaultTestExtraFileTags()))));
         if (!editSchedule) {
           // copyFiles, just copy them from the old s3 location to the new one
           uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => {
-            file.tags = fileTags;
+            file.tags = fileTags || s3.defaultTestExtraFileTags();
             return file.copy({ destinationS3Folder: s3Folder });
           })));
         } else {
-          // If we're changing from non-recurring to recurring or vice-versa we need to edit the existing file tags.
-          const updateTags: Map<string, string> = fileTags || s3.defaultTestFileTags(); // If fileTags is truthy it's recurring
+          const s3StatusFilename: string = createS3StatusFilename(ppaasTestId);
           uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => {
-            file.tags = updateTags;
+            // If we're changing from non-recurring to recurring or vice-versa we need to edit the existing file tags.
+            // yaml and status files need defaultTestFileTags, all others should be defaultTestExtraFileTags
+            file.tags = fileTags
+              ? fileTags
+              : isYamlFile(file.filename) || file.filename === s3StatusFilename // yaml and status files are test files
+                ? s3.defaultTestFileTags()
+                : s3.defaultTestExtraFileTags();
             return file.updateTags();
           })));
         }
         // Store encrypted environment variables in s3
-        uploadPromises.push(new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile, tags: fileTags }).upload());
+        uploadPromises.push(new PpaasEncryptEnvironmentFile({ s3Folder, environmentVariablesFile, tags: fileTags || s3.defaultTestExtraFileTags() }).upload());
         // Wait for all uploads to complete
         await Promise.all(uploadPromises);
 

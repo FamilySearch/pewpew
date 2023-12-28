@@ -25,12 +25,12 @@ import {
   s3
 } from "@fs/ppaas-common";
 import { TestManager, defaultRecurringFileTags} from "../pages/api/util/testmanager";
+import { isYamlFile, latestPewPewVersion } from "../pages/api/util/clientutil";
 import { EventInput } from "@fullcalendar/core";
 import { PpaasEncryptEnvironmentFile } from "../pages/api/util/ppaasencryptenvfile";
 import { TestScheduler } from "../pages/api/util/testscheduler";
 import { expect } from "chai";
 import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -202,10 +202,15 @@ describe("TestManager Integration", () => {
           expect(s3Files.length, "s3Files.length").to.equal(3);
           // Check that the test=true tag is added
           const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
-            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            if (isYamlFile(s3File.filename) || s3File.filename.endsWith(".info")) {
+              expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            } else {
+              expect(s3File.tags?.get(tagKeyExtra), `${s3File.filename}.tags?.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+            }
           }
           done();
         }).catch((error) => {
@@ -556,10 +561,15 @@ describe("TestManager Integration", () => {
           expect(s3Files.length, "s3Files.length").to.equal(5);
           // Check that the test=true tag is added
           const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
-            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            if (isYamlFile(s3File.filename) || s3File.filename.endsWith(".info")) {
+              expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            } else {
+              expect(s3File.tags?.get(tagKeyExtra), `${s3File.filename}.tags?.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+            }
           }
           done();
         }).catch((error) => {
@@ -655,10 +665,15 @@ describe("TestManager Integration", () => {
           expect(s3Files.length, "s3Files.length").to.equal(3);
           // Check that the recurring=true tag is added
           const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
-            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            if (isYamlFile(s3File.filename) || s3File.filename.endsWith(".info")) {
+              expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            } else {
+              expect(s3File.tags?.get(tagKeyExtra), `${s3File.filename}.tags?.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+            }
           }
           done();
         }).catch((error) => {
@@ -753,10 +768,15 @@ describe("TestManager Integration", () => {
           expect(s3Files.length, "s3Files.length").to.equal(5);
           // Check that the recurring=true tag is added
           const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
-            expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            if (isYamlFile(s3File.filename) || s3File.filename.endsWith(".info")) {
+              expect(s3File.tags?.get(tagKey), `${s3File.filename}.tags?.get("${tagKey}")`).to.equal(tagValue);
+            } else {
+              expect(s3File.tags?.get(tagKeyExtra), `${s3File.filename}.tags?.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+            }
           }
           done();
         }).catch((error) => {
@@ -1795,12 +1815,17 @@ describe("TestManager Integration", () => {
             expect(s3Files.length, "s3Files.length").to.equal(3);
             // Check that the test=true tag is added and recurring=true is removed
             const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
             expect(typeof testTagKey, "typeof tagKey").to.equal("string");
             for (const s3File of s3Files) {
               expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
-              expect(s3File.tags?.get(testTagKey), `${s3File.filename}.tags?.get("${testTagKey}")`).to.equal(testTagValue);
+              if (isYamlFile(s3File.filename) || s3File.filename.endsWith(".info")) {
+                expect(s3File.tags?.get(testTagKey), `${s3File.filename}.tags?.get("${testTagKey}")`).to.equal(testTagValue);
+              } else {
+                expect(s3File.tags?.get(tagKeyExtra), `${s3File.filename}.tags?.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+              }
               expect(s3File.tags?.get(recurringTagKey), `${s3File.filename}.tags?.get("${recurringTagKey}")`).to.equal(undefined);
             }
             done();

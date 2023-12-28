@@ -19,6 +19,19 @@
     </Filter>
     <Status>Enabled</Status>
     <Expiration>
+      <Days>730</Days>
+    </Expiration>
+  </Rule>
+  <Rule>
+    <ID>Expire Extra File Uploads</ID>
+    <Filter>
+      <Tag>
+        <Key>test</Key>
+        <Value>false</Value>
+      </Tag>
+    </Filter>
+    <Status>Enabled</Status>
+    <Expiration>
       <Days>180</Days>
     </Expiration>
   </Rule>

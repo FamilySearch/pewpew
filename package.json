@@ -72,17 +72,11 @@
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-sqs": "^3.363.0",
     "@aws-sdk/lib-storage": "^3.363.0",
-    "bunyan": "~1.8.0",
     "rimraf": "^5.0.0"
   },
   "devDependencies": {
-    "@types/bunyan": "~1.8.8",
-    "@types/chai": "^4.3.5",
-    "@types/mocha": "^10.0.0",
-    "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "chai": "^4.3.7",
     "dotenv": "^16.0.0",
     "dotenv-flow": "^4.0.1",
     "eslint": "^8.40.0",

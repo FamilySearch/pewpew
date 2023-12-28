@@ -134,6 +134,7 @@ Changes:
 - Add a `days` unit to durations.
 - Expand cases when an endpoint can have no `peak_load` to include the case when the endpoint depends upon a `response` provider.
 - Swap out the JSONPath library for one that supports more JSONPath expressions.
+
 Bug fixes:
 - Raise an error if `for_each` is referenced but not defined.
 - Fix bug where the config parser would erroneously say there was a recursive `for_each`.

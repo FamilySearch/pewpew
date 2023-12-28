@@ -31,7 +31,7 @@
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
     "chart.js": "~4.4.0",
     "chartjs-adapter-date-fns": "^3.0.0",
-    "date-fns": "^2.29.3",
+    "date-fns": "^3.0.0",
     "file-saver": "^2.0.5",
     "immutability-helper": "^3.1.1",
     "js-yaml": "^4.1.0",

@@ -11,6 +11,7 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  logger,
   s3,
   sqs,
   util
@@ -149,11 +150,21 @@ describe("PewPewTest Create Test", () => {
             // Validate S3
           const filename: string = basename(test!.getResultsFile()!);
           const result = await s3.getObject(`${ppaasTestId!.s3Folder}/${filename}`);
-            expect(result).to.not.equal(undefined);
-            expect(result.ContentType).to.equal("application/json");
-            done();
-      })
-      .catch((error) => {
+          expect(result, "result").to.not.equal(undefined);
+          expect(result.ContentType, "result.ContentType").to.equal("application/json");
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const stdoutFilename = logger.pewpewStdOutFilename(ppaasTestId!.testId);
+          const stderrFilename = logger.pewpewStdErrFilename(ppaasTestId!.testId);
+          const stdouttags = await s3.getTags({ s3Folder: ppaasTestId!.s3Folder, filename: stdoutFilename });
+          expect(stdouttags, "stdouttags").to.not.equal(undefined);
+          expect(stdouttags!.size, "stdouttags.size").to.be.greaterThan(0);
+          expect(stdouttags!.get(tagKeyExtra), `stdouttags!.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+          const stderrtags = await s3.getTags({ s3Folder: ppaasTestId!.s3Folder, filename: stderrFilename });
+          expect(stderrtags, "stderrtags").to.not.equal(undefined);
+          expect(stderrtags!.size, "stderrtags.size").to.be.greaterThan(0);
+          expect(stderrtags!.get(tagKeyExtra), `stderrtags!.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
+          done();
+      }).catch((error) => {
         done(error);
       });
     });

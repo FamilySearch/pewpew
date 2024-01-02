@@ -19,6 +19,7 @@ import {
   TestStatusMessage,
   log,
   logger,
+  s3,
   util
 } from "@fs/ppaas-common";
 import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
@@ -169,11 +170,9 @@ describe("TestScheduler Integration", () => {
       ppaasTestId = PpaasTestId.makeTestId(yamlFile);
       const s3Folder: string = ppaasTestId.s3Folder;
       file = new PpaasS3File({ filename: yamlFile, s3Folder, localDirectory });
-      await file.upload();
-      file1 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML, s3Folder, localDirectory });
-      await file1.upload();
-      file2 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML2, s3Folder, localDirectory });
-      await file2.upload();
+      file1 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML, s3Folder, localDirectory, tags: s3.defaultTestExtraFileTags() });
+      file2 = new PpaasS3File({ filename: BASIC_FILEPATH_NOT_YAML2, s3Folder, localDirectory, tags: s3.defaultTestExtraFileTags() });
+      await Promise.all([file.upload(), file1.upload(), file2.upload()]);
       const testId: string = ppaasTestId.testId;
       const testMessage: Required<TestMessage> = {
         testId,

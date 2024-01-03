@@ -586,6 +586,15 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
     destinationFile.key = KEYSPACE_PREFIX + (destinationFile.key || "");
   }
   let taggingString: string = "";
+  if (tags) {
+    // Create a copy so we don't modify the original if we add more tags
+    tags = new Map<string, string>(tags);
+    for (const [tagKey, tagValue] of ADDITIONAL_TAGS_ON_ALL) {
+      if (!tags.has(tagKey)) {
+        tags.set(tagKey, tagValue);
+      }
+    }
+  }
   for (const [key, value] of (tags || [])) {
     const formattedPair = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
     taggingString += (taggingString.length > 0 ? "&" : "") + formattedPair;

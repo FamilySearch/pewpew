@@ -1,7 +1,7 @@
 import { CommunicationsMessage, MessageType } from "../types";
 import { LogLevel, log } from "./util/log";
 import {
-  defaultTestFileTags,
+  defaultTestExtraFileTags,
   deleteObject,
   getFileContents,
   init as initS3,
@@ -138,7 +138,7 @@ export class PpaasS3Message implements CommunicationsMessage {
       s3Folder: this.ppaasTestId.s3Folder,
       publicRead: false,
       contentType: "application/json",
-      tags: defaultTestFileTags()
+      tags: defaultTestExtraFileTags()
     });
     this.inS3 = true;
     log(`PpaasS3Message.send url: ${url}`, LogLevel.INFO, this.sanitizedCopy());

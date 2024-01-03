@@ -67,6 +67,7 @@ export async function buildTest ({
         filename: yamlFile,
         s3Folder,
         publicRead: false,
+        tags: s3.defaultTestFileTags(),
         contentType: "text/x-yaml"
       }),
       s3.uploadFile({

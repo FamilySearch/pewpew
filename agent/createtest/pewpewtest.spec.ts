@@ -438,6 +438,7 @@ describe("PewPewTest Create Test", () => {
       const pewpewS3File = new PpaasS3File({
         filename: pewpewFilename,
         s3Folder,
+        tags: s3.defaultTestExtraFileTags(),
         localDirectory: PEWPEW_SCRIPTING_FILEDIR
       });
       await Promise.all([s3File.upload(), pewpewS3File.upload()]);

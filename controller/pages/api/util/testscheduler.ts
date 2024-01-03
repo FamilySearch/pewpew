@@ -869,7 +869,7 @@ export class TestScheduler implements TestSchedulerItem {
       await TestScheduler.loadHistoricalFromS3();
       const oldDatetime: number = Date.now() - (deleteOldFilesDays * ONE_DAY);
       const sizeBefore = TestScheduler.historicalTests!.size;
-      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore, oldDatetime: new Date(oldDatetime), deleteOldFilesDays });
+      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore, oldDatetime: new Date(oldDatetime), oldDatetimeTs: oldDatetime, deleteOldFilesDays });
 
       // Delete old ones off the historical Calendar. These will be cleaned up in S3 by Bucket Expiration Policy
       for (const [testId, eventInput] of TestScheduler.historicalTests!) {

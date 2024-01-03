@@ -105,6 +105,10 @@ class TestSchedulerIntegration extends TestScheduler {
     return await TestScheduler.runHistoricalSearch();
   }
 
+  public static async runHistoricalDelete (deleteOldFilesDays?: number): Promise<number> {
+    return await TestScheduler.runHistoricalDelete(deleteOldFilesDays);
+  }
+
   public static async loadHistoricalFromS3 (): Promise<void> {
     return await TestScheduler.loadHistoricalFromS3();
   }
@@ -613,6 +617,36 @@ describe("TestScheduler Integration", () => {
         done();
       })
       ).catch((error) => done(error));
+    })
+    .catch((error) => done(error));
+  });
+
+  it("should runHistoricalDelete and remove old HistoricalTests", (done: Mocha.Done) => {
+    const historicalTests: Map<string, EventInput> = new Map<string, EventInput>();
+    TestSchedulerIntegration.setHistoricalTests(historicalTests);
+    const yamlFile = historicalEvent.title!;
+    const historicalStartTime: number = Date.now() - ONE_WEEK;
+    const oldHistoricalTestId = PpaasTestId.makeTestId(yamlFile).testId;
+    const oldHistoricalEvent = {
+      id: oldHistoricalTestId,
+      title: yamlFile,
+      start: historicalStartTime,
+      end: historicalStartTime + THIRTY_MINUTES
+    };
+    const testId: string = historicalEvent.id!;
+    expect(typeof testId, "typeof testId").to.equal("string");
+    historicalTests.set(testId, historicalEvent);
+    historicalTests.set(oldHistoricalTestId, oldHistoricalEvent);
+    TestSchedulerIntegration.runHistoricalDelete(1)
+    .then((historicalDeleted: number) => {
+      log("runHistoricalDelete result: " + historicalDeleted, LogLevel.WARN, { historicalDeleted });
+      expect(historicalDeleted).to.equal(1); // Should be just the one week ago removed
+      const newHistoricalTests: Map<string, EventInput> | undefined = TestSchedulerIntegration.getHistoricalTests();
+      expect(newHistoricalTests, "newHistoricalTests").to.not.equal(undefined);
+      expect(newHistoricalTests!.size, "newHistoricalTests.size").to.equal(1);
+      expect(newHistoricalTests!.has(testId), "newHistoricalTests.has(testId)").to.equal(true);
+      expect(JSON.stringify(newHistoricalTests!.get(testId))).to.equal(JSON.stringify(historicalEvent!));
+      done();
     })
     .catch((error) => done(error));
   });

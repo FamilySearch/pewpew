@@ -2963,7 +2963,7 @@ impl LoadTest {
 
     pub fn ok_for_loadtest(&self) -> Result<(), Error> {
         self.load_test_errors
-            .get(0)
+            .first()
             .cloned()
             .map(Err::<(), _>)
             .transpose()

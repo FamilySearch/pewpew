@@ -36,6 +36,16 @@
     </Expiration>
   </Rule>
   <Rule>
+    <ID>Expire Environment Uploads</ID>
+    <Filter>
+      <Prefix>s3-environment/</Prefix>
+    </Filter>
+    <Status>Enabled</Status>
+    <Expiration>
+      <Days>2</Days>
+    </Expiration>
+  </Rule>
+  <Rule>
     <ID>Expire UnitTest Uploads</ID>
     <Filter>
       <Tag>

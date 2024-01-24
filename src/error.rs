@@ -49,6 +49,7 @@ pub enum TestError {
     InvalidConfigFilePath(Arc<Path>),
     #[error("invalid url `{0}`")]
     InvalidUrl(String),
+    #[allow(clippy::enum_variant_names)]
     #[error("invalid config for full test: {0}")]
     LoadTestError(#[from] config::error::InvalidForLoadTest),
     #[error("recoverable error: {0}")]

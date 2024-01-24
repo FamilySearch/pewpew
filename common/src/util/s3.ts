@@ -76,7 +76,8 @@ export function init (): void {
   // Where <prefix> is your application name, system name, and service name concatenated with underscores, capitalized, and all dashes replaced with underscores.
   // The s3 service name is s3 in the application which is then capitalized to _S3_ below
 
-  const PREFIX: string = getPrefix(true); // Use the controller if we have one
+  // process.env.CONTROLLER_ENV_S3 will override process.env.CONTROLLER_ENV is provided. Used for the build environment
+  const PREFIX: string = getPrefix(process.env.CONTROLLER_ENV_S3 || true); // Use the controller if we have one
   const bucketName: string | undefined = process.env[`${PREFIX}_S3_BUCKET_NAME`];
   log(`${PREFIX}_S3_BUCKET_NAME = ${bucketName}`, LogLevel.DEBUG);
   if (!bucketName) {
@@ -90,7 +91,9 @@ export function init (): void {
     throw new Error(`Could not load the environment variable ${PREFIX}_S3_BUCKET_URL`);
   }
   // Empty string should be allowed on a private bucket
-  const keyspacePrefix: string = process.env[`${PREFIX}_S3_KEYSPACE_PREFIX`] || "";
+  // KEYSPACE_PREFIX_OVERRIDE will override all (for the build environment)
+  const keyspacePrefix: string = process.env["KEYSPACE_PREFIX_OVERRIDE"]
+      || process.env[`${PREFIX}_S3_KEYSPACE_PREFIX`] || "";
   log(`${PREFIX}_S3_KEYSPACE_PREFIX = ${keyspacePrefix}`, LogLevel.DEBUG);
   BUCKET_NAME = bucketName;
   BUCKET_URL = bucketUrl;

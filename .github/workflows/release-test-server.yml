@@ -104,34 +104,21 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
-      - name: Build for non-Linux # Windows and MacOS
-        uses: actions-rs/toolchain@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          command: build
-          args: -q --release --bin test-server
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      # TODO: Consider https://github.com/Swatinem/rust-cache for caching of dependencies
 
-      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build for non-Linux # Windows and MacOS
+        if: matrix.os != 'ubuntu-latest'
+        run: cargo build -q --release --bin test-server
+
+      - run: rustup target add ${{ matrix.target }} --toolchain stable
+        if: matrix.cross
+      - run: cargo install cross
+        if: matrix.cross
+
       - name: Build with cross # ARM builds
-        uses: actions-rs/toolchain@v1
         if: matrix.os == 'ubuntu-latest'
-        with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.os == 'ubuntu-latest'
-        with:
-          use-cross: true
-          command: build
-          args: -q --release --target ${{ matrix.target }} --bin test-server
+        run: cross build -q --release --target ${{ matrix.target }} --bin test-server
 
       - name: Compress for Linux/Arm
         if: matrix.os == 'ubuntu-latest'

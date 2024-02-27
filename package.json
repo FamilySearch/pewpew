@@ -45,9 +45,9 @@
     "integration:agent": "cd agent && npm run integration",
     "integration:controller": "cd controller && npm run integration",
     "coverage": "npm-run-all --serial lint coverage:common coverage:agent coverage:controller testmerge",
-    "coverage:common": "cd common && npm run integration",
-    "coverage:agent": "cd agent && npm run integration",
-    "coverage:controller": "cd controller && npm run integration",
+    "coverage:common": "cd common && npm run coverage",
+    "coverage:agent": "cd agent && npm run coverage",
+    "coverage:controller": "cd controller && npm run coverage",
     "testcleanup": "cd controller && npm run testcleanup",
     "cleannpm": "rimraf node_modules/ package-lock.json controller/node_modules/ agent/node_modules/ common/node_modules/",
     "clean": "rimraf common/dist/ agent/dist/ controller/dist/"

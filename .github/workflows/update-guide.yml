@@ -11,12 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Add Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          target: wasm32-unknown-unknown
-          toolchain: stable
-          override: true
+        run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: rustup target add wasm32-unknown-unknown --toolchain stable
       - name: Add Node.js toolchain
         uses: actions/setup-node@v4
         with:

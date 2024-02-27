@@ -1,5 +1,5 @@
 # Modified from https://github.com/emk/rust-musl-builder/blob/a980e27da6c6b629301844637e6139053a49e842/Dockerfile
-# Use Ubuntu 18.04 LTS as our base image.
+# Use Ubuntu 20.04 LTS as our base image.
 FROM ubuntu:20.04
 
 # for libressl

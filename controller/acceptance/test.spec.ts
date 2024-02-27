@@ -902,7 +902,7 @@ describe("Test API Integration", () => {
           expect(res.status, bodyText).to.equal(400);
           log("body: " + bodyText, LogLevel.DEBUG, bodyText);
           expect(bodyText).to.not.equal(undefined);
-          expect(bodyText).to.include("end of central directory record signature not found");
+          expect(bodyText).to.include("End of central directory record signature not found");
           done();
       }).catch((error) => {
         log("POST /test error", LogLevel.ERROR, error);

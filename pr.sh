@@ -45,6 +45,7 @@ cd "$CWD"
 
 npm ci
 npm run linterror
+npm run build:common
 npm run build:react
 NODE_ENV=test npm test
 

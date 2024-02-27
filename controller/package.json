@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -65,7 +65,7 @@
     "rc-progress": "^3.4.2",
     "react": "^18.2.0",
     "react-accessible-accordion": "^5.0.0",
-    "react-datepicker": "~4.25.0",
+    "react-datepicker": "~6.1.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",
@@ -73,7 +73,7 @@
     "semver": "^7.5.2",
     "styled-components": "^6.0.2",
     "stylis": "^4.3.0",
-    "yauzl": "^2.10.0"
+    "yauzl": "^3.1.0"
   },
   "devDependencies": {
     "@aws-sdk/client-sqs": "^3.363.0",
@@ -95,13 +95,13 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.12",
-    "@types/react-datepicker": "^4.11.2",
+    "@types/react-datepicker": "^6.0.0",
     "@types/react-dom": "^18.2.5",
     "@types/react-transition-group": "^4.4.6",
     "@types/semver": "^7.5.0",
     "@types/yauzl": "^2.10.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
     "aws-sdk-client-mock": "^3.0.0",
     "chai": "^4.3.7",
     "dotenv": "^16.0.0",
@@ -112,7 +112,7 @@
     "form-data": "^4.0.0",
     "glob-parent": "^6.0.2",
     "immer": "^10.0.2",
-    "jsdom": "~23.0.0",
+    "jsdom": ">=23.0.0",
     "jsdom-global": "^3.0.2",
     "mocha": "^10.2.0",
     "nyc": "^15.1.0",

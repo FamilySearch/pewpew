@@ -9,7 +9,7 @@ jobs:
     name: Create release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/44937/highlight/true#M5978
       - name: Get the version
@@ -47,7 +47,7 @@ jobs:
           echo $VERSION | tee artifacts/release-version
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: artifacts
@@ -91,10 +91,10 @@ jobs:
             cross: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: artifacts
           path: artifacts
@@ -213,9 +213,9 @@ jobs:
     env:
       working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: artifacts
           path: artifacts
@@ -295,9 +295,9 @@ jobs:
     env:
       working-directory: ./lib/${{ matrix.wasm-dirctory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: artifacts
           path: artifacts

@@ -103,8 +103,13 @@ describe("Util", () => {
         done(new Error(ZIP_TEST_INVALID + " should not unzip"));
       }).catch((error) => {
         log("should not unzip invalid zip files error", LogLevel.DEBUG, error);
-        expect(`${error}`).to.include("end of central directory record signature not found");
-        done();
+        try {
+          expect(`${error}`).to.include("End of central directory record signature not found");
+          done();
+        } catch (error2) {
+          log("should not unzip invalid zip files error", LogLevel.ERROR, error2);
+          done(error2);
+        }
       });
     });
   });

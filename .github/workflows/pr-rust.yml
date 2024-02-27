@@ -16,15 +16,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      #     toolchain: stable
+      #     override: true
+      - run: rustup toolchain install stable --profile minimal
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: test
+      #     args: --all
+      - run: cargo test --all
 
   fmt:
     name: Rustfmt
@@ -32,15 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        # with:
+        #   profile: minimal
+        #   toolchain: stable
+        #   override: true
+        #   components: rustfmt
+      - run: rustup toolchain install stable --profile minimal
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: fmt
+      #     args: --all -- --check
+      - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
@@ -48,34 +52,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all -- -D warnings
+        # with:
+        #   profile: minimal
+        #   toolchain: stable
+        #   override: true
+        #   components: clippy
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup component add clippy
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: clippy
+      #     args: --all -- -D warnings
+      - run: cargo clippy --all -- -D warnings
 
   deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-deny
-      - uses: actions-rs/cargo@v1
-        with:
-          command: deny
-          args: check --hide-inclusion-graph license sources advisories
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      #     toolchain: stable
+      #     override: true
+      - run: rustup toolchain install stable --profile minimal
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: install
+      #     args: cargo-deny
+      - run: cargo install cargo-deny
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: deny
+      #     args: check --hide-inclusion-graph license sources advisories
+      - run: cargo deny check --hide-inclusion-graph license sources advisories
 
   build:
     name: Build
@@ -117,38 +127,46 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
+      # - uses: actions-rs/toolchain@v1
+      #   if: matrix.os != 'ubuntu-latest'
+      #   with:
+      #     profile: minimal
+      #     toolchain: stable
+      #     override: true
+      - run: rustup toolchain install stable --profile minimal
+      # TODO: Consider https://github.com/Swatinem/rust-cache for caching of dependencies
+
       - name: Build for non-Linux # Windows and MacOS
-        uses: actions-rs/toolchain@v1
+        # uses: actions-rs/cargo@v1
         if: matrix.os != 'ubuntu-latest'
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          command: build
-          args: -q --release
+        # with:
+        #   command: build
+        #   args: -q --release
+        run: cargo build -q --release
 
       # https://github.com/actions-rs/cargo#cross-compilation
+      # - uses: actions-rs/toolchain@v1
+      #   if: matrix.cross
+      #   with:
+      #     profile: minimal
+      #     toolchain: stable
+      #     target: ${{ matrix.target }}
+      #     override: true
+      - run: rustup target add ${{ matrix.target }} --toolchain stable
+        if: matrix.cross
+
       - name: Build with cross # ARM builds
-        uses: actions-rs/toolchain@v1
+        # uses: actions-rs/cargo@v1
         if: matrix.cross
-        with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.cross
-        with:
-          use-cross: true
-          command: build
-          args: -q --release --target ${{ matrix.target }}
+        # with:
+        #   use-cross: true
+        #   command: build
+        #   args: -q --release --target ${{ matrix.target }}
         # uses: ./.github/actions/linux-x86_64-musl/
         # if: matrix.cross
         # with:
         #   args: cross build -q --release --target ${{ matrix.target }}
+        run: cross build -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
@@ -169,11 +187,12 @@ jobs:
       test-directory: ./lib/${{ matrix.wasm-dirctory }}/tests
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      #     toolchain: stable
+      #     override: true
+      - run: rustup toolchain install stable --profile minimal
 
       - name: Create the Web Assembly
         id: wasm_pack

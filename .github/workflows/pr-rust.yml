@@ -94,6 +94,8 @@ jobs:
 
       - run: rustup target add ${{ matrix.target }} --toolchain stable
         if: matrix.cross
+      - run: cargo install cross
+        if: matrix.cross
 
       - name: Build with cross # ARM builds
         if: matrix.cross

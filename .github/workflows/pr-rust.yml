@@ -16,66 +16,34 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: cargo test --all
 
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-          components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all -- -D warnings
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: rustup component add clippy
+      - run: cargo clippy --all -- -D warnings
 
   deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-deny
-      - uses: actions-rs/cargo@v1
-        with:
-          command: deny
-          args: check --hide-inclusion-graph license sources advisories
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: cargo install cargo-deny --locked
+      - run: cargo deny check --hide-inclusion-graph license sources advisories
 
   build:
     name: Build
@@ -117,34 +85,21 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
-      - name: Build for non-Linux # Windows and MacOS
-        uses: actions-rs/toolchain@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          command: build
-          args: -q --release
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      # TODO: Consider https://github.com/Swatinem/rust-cache for caching of dependencies
 
-      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build for non-Linux # Windows and MacOS
+        if: matrix.os != 'ubuntu-latest'
+        run: cargo build -q --release
+
+      - run: rustup target add ${{ matrix.target }} --toolchain stable
+        if: matrix.cross
+      - run: cargo install cross
+        if: matrix.cross
+
       - name: Build with cross # ARM builds
-        uses: actions-rs/toolchain@v1
         if: matrix.cross
-        with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.cross
-        with:
-          use-cross: true
-          command: build
-          args: -q --release --target ${{ matrix.target }}
+        run: cross build -q --release --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
@@ -177,11 +132,7 @@ jobs:
       test-directory: ./lib/${{ matrix.wasm-dirctory }}/tests
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - run: rustup toolchain install stable --profile minimal --no-self-update
 
       - name: Create the Web Assembly
         id: wasm_pack

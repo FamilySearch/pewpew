@@ -124,34 +124,21 @@ jobs:
           sudo apt update
           sudo apt install ${{ matrix.linker }}
 
-      - name: Build for non-Linux # Windows and MacOS
-        uses: actions-rs/toolchain@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          command: build
-          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary }}
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      # TODO: Consider https://github.com/Swatinem/rust-cache for caching of dependencies
 
-      # https://github.com/actions-rs/cargo#cross-compilation
+      - name: Build for non-Linux # Windows and MacOS
+        if: matrix.os != 'ubuntu-latest'
+        run: cargo build -q --release ${{ matrix.build_param }} ${{ matrix.binary }}
+
+      - run: rustup target add ${{ matrix.target }} --toolchain stable
+        if: matrix.cross
+      - run: cargo install cross
+        if: matrix.cross
+
       - name: Build with cross # ARM builds
-        uses: actions-rs/toolchain@v1
         if: matrix.cross
-        with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        if: matrix.cross
-        with:
-          use-cross: true
-          command: build
-          args: -q --release ${{ matrix.build_param }} ${{ matrix.binary }} --target ${{ matrix.target }}
+        run: cross build -q --release ${{ matrix.build_param }} ${{ matrix.binary }} --target ${{ matrix.target }}
 
       - name: Build for Linux
         uses: ./.github/actions/linux-x86_64-musl/
@@ -242,11 +229,9 @@ jobs:
           echo "Cargo $(grep "^version =" Cargo.toml )"
         working-directory: ${{env.working-directory}}
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: rustup target add wasm32-unknown-unknown --toolchain stable
+
       - name: Create the Web Assembly
         id: wasm_pack
         run: |
@@ -324,11 +309,9 @@ jobs:
           echo "Cargo $(grep "^version =" Cargo.toml )"
         working-directory: ${{env.working-directory}}
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - run: rustup target add wasm32-unknown-unknown --toolchain stable
+
       - name: Create the Web Assembly
         id: wasm_pack
         run: |

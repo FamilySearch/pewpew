@@ -22,6 +22,8 @@ import { latestPewPewVersion, versionSort } from "./clientutil";
 import { TestScheduler } from "./testscheduler";
 import { execFile as _execFile } from "child_process";
 import { chmod } from "fs/promises";
+import fs from "fs"
+import { latestPewPewInFile } from "../../../.latestpewpewversionfile"
 import os from "os";
 import { promisify } from "util";
 import semver from "semver";
@@ -134,7 +136,17 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       if (version === null) {
         return { json: { message: `${match[1]} is not a valid semver version: ${version}` }, status: 400 };
       }
-
+      // If latest version is being updated, write it to file:
+      if(latest){
+        const filename = "./.latestpewpewversionfile.ts";
+        const data = "export const latestPewPewInFile = {\"version\": \"" + version + "\"}; // " + new Date() + ";";
+        try {
+          fs.writeFileSync(filename, data);
+          log("Sucessfully saved PewPew's latest version to file. ", LogLevel.INFO);
+        } catch (error) {
+          log("Writing latest PewPew's latest version to file failed: ", LogLevel.ERROR, error);
+        }
+      }
       const uploadPromises: Promise<PpaasS3File>[] = [];
       const versionLogDisplay = latest ? `${version} as latest` : version;
       const versionFolder = latest ? latestPewPewVersion : version;
@@ -212,6 +224,16 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
   } catch (error) {
     // If we get here it's a 500. All the "bad requests" are handled above
     log(`deletePewPew failed: ${error}`, LogLevel.ERROR, error);
+    throw error;
+  }
+}
+
+export function getPewPewVersionInFile (): string {
+  try {
+    const latestVersion: string = latestPewPewInFile.version;
+    return latestVersion;
+  } catch (error) {
+    log("Could not load latest pewpew in file", LogLevel.ERROR, error);
     throw error;
   }
 }

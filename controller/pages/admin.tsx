@@ -329,7 +329,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
 
 export const getServerSideProps: GetServerSideProps =
   async (ctx: GetServerSidePropsContext): Promise<GetServerSidePropsResult<AdminProps>> => {
-  let versionInitalProps: VersionInitalProps = { pewpewVersion: "", loading: false, pewpewVersions: [], error: true };
+  let versionInitalProps: VersionInitalProps = { pewpewVersion: "", loading: false, pewpewVersions: [], latestInFile: "", error: true };
   try {
     // Authenticate
     const authPermissions: AuthPermissions | string = await authPage(ctx, AuthPermission.Admin);

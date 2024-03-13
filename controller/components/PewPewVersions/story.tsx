@@ -15,6 +15,7 @@ const props: VersionProps = {
     console.log("newVal: ", newVal);
   },
   pewpewVersions: ["0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", latestPewPewVersion, "0.1.6"],
+  latestInFile : "latestVersion",
   loading: false,
   error: false
 };

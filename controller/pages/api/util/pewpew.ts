@@ -22,8 +22,8 @@ import { latestPewPewVersion, versionSort } from "./clientutil";
 import { TestScheduler } from "./testscheduler";
 import { execFile as _execFile } from "child_process";
 import { chmod } from "fs/promises";
-import fs from "fs"
-import { latestPewPewInFile } from "../../../.latestpewpewversionfile"
+import fs from "fs";
+import { latestPewPewInFile } from "../../../.latestpewpewversionfile";
 import os from "os";
 import { promisify } from "util";
 import semver from "semver";

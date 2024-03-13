@@ -1,7 +1,7 @@
 import { Danger } from "../Alert";
 import Div from "../Div";
 import React from "react";
-import Toaster  from "../Toaster"
+import Toaster  from "../Toaster";
 import styled from "styled-components";
 
 const VersionDiv = styled(Div)`
@@ -25,7 +25,7 @@ const VersionDivSelect = styled(Div)`
 export interface VersionInitalProps {
   pewpewVersion: string;
   pewpewVersions: string[];
-  latestInFile: string; 
+  latestInFile: string;
   loading: boolean;
   error: boolean;
 }

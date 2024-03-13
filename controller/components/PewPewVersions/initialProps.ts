@@ -1,7 +1,7 @@
 import { LogLevel, log } from "@fs/ppaas-common";
+import { getPewPewVersionInFile, getPewPewVersionsInS3 } from "../../pages/api/util/pewpew";
 import { API_PEWPEW } from "../../types";
 import { VersionInitalProps } from ".";
-import { getPewPewVersionInFile, getPewPewVersionsInS3 } from "../../pages/api/util/pewpew";
 import { latestPewPewVersion } from "../../pages/api/util/clientutil";
 
 export const getServerSideProps = async (): Promise<VersionInitalProps> => {

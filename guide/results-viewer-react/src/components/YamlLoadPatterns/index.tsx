@@ -20,15 +20,15 @@ interface LoadPatternState {
   defaultPatterns: boolean;
 }
 
-export const overReg = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$");
-export const numReg = new RegExp("^[+]?([0-9]+(?:[\\.][0-9]*)?|\\.[0-9]+)$");
-export const patterns = "patterns";
-export const rampPattern = "rampPattern";
-export const loadPattern = "loadPattern";
+export const OVER_REGEX = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$");
+export const NUMBER_REGEX = new RegExp("^[+]?([0-9]+(?:[\\.][0-9]*)?|\\.[0-9]+)$");
+export const PATTERNS = "patterns";
+export const RAMP_PATTERN = "rampPattern";
+export const LOAD_PATTERN = "loadPattern";
 
 export const newLoadPattern = (patternId: string = uniqueId()): PewPewLoadPattern => ({ id: patternId, from: "", to: "", over: "" });
-export const newRampLoadPattern = (): PewPewLoadPattern => ({ id: rampPattern, from: "10", to: "100", over: "15m" });
-export const newLoadLoadPattern = (): PewPewLoadPattern => ({ id: loadPattern, from: "100", to: "100", over: "15m" });
+export const newRampLoadPattern = (): PewPewLoadPattern => ({ id: RAMP_PATTERN, from: "10", to: "100", over: "15m" });
+export const newLoadLoadPattern = (): PewPewLoadPattern => ({ id: LOAD_PATTERN, from: "100", to: "100", over: "15m" });
 
 
 const errorColor: React.CSSProperties = { color: "red" };
@@ -52,19 +52,19 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
   };
 
   const switchDefault = (newChecked: boolean) => {
-    if (newChecked && !loadPatternsMap.has(rampPattern)) {
+    if (newChecked && !loadPatternsMap.has(RAMP_PATTERN)) {
       // Add it (will update the map when it comes back in via props)
       props.addPattern(newRampLoadPattern());
-    } else if (!newChecked && loadPatternsMap.has(rampPattern)) {
+    } else if (!newChecked && loadPatternsMap.has(RAMP_PATTERN)) {
       // Remove it (will update the map when it comes back in via props)
-      props.deletePattern(rampPattern);
+      props.deletePattern(RAMP_PATTERN);
     }
-    if (newChecked && !loadPatternsMap.has(loadPattern)) {
+    if (newChecked && !loadPatternsMap.has(LOAD_PATTERN)) {
       // Add it (will update the map when it comes back in via props)
       props.addPattern(newLoadLoadPattern());
-    } else if (!newChecked && loadPatternsMap.has(loadPattern)) {
+    } else if (!newChecked && loadPatternsMap.has(LOAD_PATTERN)) {
       // Remove it (will update the map when it comes back in via props)
-      props.deletePattern(loadPattern);
+      props.deletePattern(LOAD_PATTERN);
     }
     updateState({ defaultPatterns: newChecked });
   };
@@ -75,7 +75,7 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
   };
 
   const deletePattern = (patternId: string) => {
-    if (patternId === rampPattern || patternId === loadPattern) {
+    if (patternId === RAMP_PATTERN || patternId === LOAD_PATTERN) {
       updateState({ defaultPatterns: false });
     }
     props.deletePattern(patternId);
@@ -104,9 +104,9 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
     <TransitionGroup className="loadPatter-section_list">
       {Array.from(loadPatternsMap.values()).map((pewpewPattern: PewPewLoadPattern) => {
         // TODO: Do we want to check if they're greater than 0?
-        const validFrom: boolean = !pewpewPattern.from || numReg.test(pewpewPattern.from);
-        const validTo: boolean = numReg.test(pewpewPattern.to);
-        const validOver: boolean = overReg.test(pewpewPattern.over);
+        const validFrom: boolean = !pewpewPattern.from || NUMBER_REGEX.test(pewpewPattern.from);
+        const validTo: boolean = NUMBER_REGEX.test(pewpewPattern.to);
+        const validOver: boolean = OVER_REGEX.test(pewpewPattern.over);
         return <CSSTransition key={pewpewPattern.id} timeout={300} classNames="load">
           <Div>
             <Span>

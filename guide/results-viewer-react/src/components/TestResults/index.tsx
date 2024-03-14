@@ -301,13 +301,13 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
 
-  const updateResultsData = async (resultsText: string): Promise<void> => {
+  const updateResultsData = async (resultsPath: string): Promise<void> => {
     updateState({
       defaultMessage: "Results Loading..."
     });
     try {
       // if there are multiple jsons (new format), split them up and parse them separately
-      const results = resultsText.replace(/}{/g, "}\n{")
+      const results = resultsPath.replace(/}{/g, "}\n{")
         .split("\n")
         .map((s) => JSON.parse(s));
       const model = await import("./model");

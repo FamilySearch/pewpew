@@ -476,7 +476,7 @@ export async function validateYamlfile (
       }
       // Pass pewpew version legacy/scripting
       yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, validateLegacyOnly);
-    } catch(error) {
+    } catch (error) {
       return { json: { message: `yamlFile: ${yamlFile.originalFilename || yamlFile.filepath} failed to parse`, error: formatError(error) }, status: 400 };
     }
 
@@ -1155,7 +1155,7 @@ export abstract class TestManager {
               }
             }
             log("parsed environmentVariables", LogLevel.DEBUG, Object.keys(environmentVariablesFile));
-          } catch(error) {
+          } catch (error) {
             log("Could not parse environmentVariables", LogLevel.TRACE, error, fields.environmentVariables);
             // Don't log the actual error or environmentVariables since it could include passwords
             return { json: { message: "Could not parse environmentVariables", error: formatError(error) }, status: 400 };
@@ -1557,7 +1557,7 @@ export abstract class TestManager {
           }
           try {
             await YamlParser.parseYamlFile(yamlFile.filepath, environmentVariables);
-          } catch(error) {
+          } catch (error) {
             return { json: { message: `yamlFile: ${yamlFile.originalFilename || yamlFile.filepath} failed to parse`, error: formatError(error) }, status: 400 };
           }
         }

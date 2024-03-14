@@ -526,7 +526,7 @@ describe("PpaasEncryptEnvironmentFile", () => {
         await testPpaasEncryptEnvironmentFileUpload.upload(true);
         lastModified = testPpaasEncryptEnvironmentFileUpload.getLastModifiedRemote();
         log("testPpaasEncryptEnvironmentFileUpload.upload() succeeded", LogLevel.DEBUG);
-      } catch(error) {
+      } catch (error) {
         throw error;
       }
     });

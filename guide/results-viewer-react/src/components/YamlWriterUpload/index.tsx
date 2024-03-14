@@ -14,7 +14,6 @@ import DropFile from "../DropFile";
 import { Span } from "../YamlStyles";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
-import update from "immutability-helper";
 
 export const HeaderMain = styled.div`
   width: 100%;
@@ -173,8 +172,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     output: {}
   };
 
-  const fileName: string = "";
-  const [name, setName] = useState(fileName);
+  const defaultFilename: string = "";
+  const [filename, setFilename] = useState(defaultFilename);
   const [state, setState] = useState(defaultState);
   const fileModalRef = useRef<ModalObject| null>(null);
   useEffectModal(fileModalRef);
@@ -235,7 +234,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   // Sends endpoints to App.js to send to Content.js
   const finalizeEndpoints = () => {
     props.sendEndpoints(
-      (state.output[name]?.endpoints || [])
+      (state.output[filename]?.endpoints || [])
       // Convert a ParsedEndpoint to a HarEndpoint
       .map(({ url, ...parsedEndpoint }: ParsedEndpoint): HarEndpoint => ({ ...parsedEndpoint, url: url.href }))
     );
@@ -245,7 +244,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   // Used if file is removed from upload list
   const clearFile = () => {
     setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, file: undefined }));
-    setName("");
+    setFilename("");
   };
 
   // Checks both current state, and parent state to see if file has already been uploaded
@@ -290,7 +289,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       if (urls[hostUrl] !== undefined) {
         urls[hostUrl]!.index.push({ iter: i, id });
       } else {
-        urls[hostUrl] = { index: [{ iter: i, id }], selected: "no" };
+        urls[hostUrl] = { index: [{ iter: i, id }], selected: "yes"};
       }
 			endpoints.push({ selected: "yes", url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
     }
@@ -311,7 +310,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
        else { typesTemp[key]!.selected = "partial"; }
     }
     const output: Record<string, Output | undefined> = {
-      [name]: {
+      [filename]: {
         types,
         urls,
         endpoints
@@ -322,11 +321,12 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   // This is in the Cutomize HAR File pop up window
   // Any time an item is clicked in the choose endpoints, update all objects for if they are selected
   const handleChange = (type: string, ident: string | ParsedEndpoint) => {
-    const outputName: Output | undefined = state.output[name];
+    const outputName: Output | undefined = state.output[filename];
     if (!outputName) {
-      log("No output found for " + name, LogLevel.WARN, state.output);
+      log("No output found for " + filename, LogLevel.WARN, state.output);
       return;
     }
+    // TODO: Should all of this be inside the setState() function?
     const indices = [...outputName.endpoints];
     const urlTypeIdent = ident as string;
     switch (type) {
@@ -341,9 +341,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       }
       // If the item clicked was a type header, make all endpoints with references in given type checked or unchecked
       case "type": {
-        outputName.types[urlTypeIdent]?.index.forEach((type: IndexType) => {
+        outputName.types[urlTypeIdent]?.index.forEach((indexType: IndexType) => {
           indices.forEach(item => {
-            if (type.id === item.id) { item.selected = outputName.types[urlTypeIdent]?.selected === "no" ? "yes" : "no"; }
+            if (indexType.id === item.id) { item.selected = outputName.types[urlTypeIdent]?.selected === "no" ? "yes" : "no"; }
           });
         });
         break;
@@ -380,27 +380,28 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
     for (const key of typeKeys) {
       let typeCheck = 0;
-      const type = outputName.types[key];
+      const outputType = outputName.types[key];
       const typeTemp = typesTemp[key];
-      if (!type || !typeTemp) { continue; }
-      for (const typeIndex of type.index) {
+      if (!outputType || !typeTemp) { continue; }
+      for (const typeIndex of outputType.index) {
         if (indices[typeIndex.iter].selected === "yes") { typeCheck++; }
       }
-      if (typeCheck === type.index.length) { typeTemp.selected = "yes"; }
+      if (typeCheck === outputType.index.length) { typeTemp.selected = "yes"; }
       else if (typeCheck === 0) { typeTemp.selected = "no"; }
       else { typeTemp.selected = "partial"; }
     }
 
-    const newState: YamlWriterUploadState = update(state, {
-      output: {
-        [name]: {
-          types: { $set: typesTemp },
-          urls: { $set: urlsTemp },
-          endpoints: { $set: indices }
-        }
-      }
+    const newOutput: Output = {
+        types: typesTemp,
+        urls: urlsTemp,
+        endpoints: indices
+    };
+    setState(({ output, ...prevState }: YamlWriterUploadState) => {
+      return {
+        ...prevState,
+        output: { ...output, [filename]: newOutput }
+      };
     });
-    setState(newState);
   };
 
   return (
@@ -456,8 +457,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
               <h2>Urls</h2>&nbsp;&nbsp;&nbsp;
             </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
-              {state.output[name]?.urls && Object.keys(state.output[name]!.urls).map((key, index) => {
-                const url: OutputRecord = state.output[name]!.urls[key]!;
+              {state.output[filename]?.urls && Object.keys(state.output[filename]!.urls).map((key, index) => {
+                const url: OutputRecord = state.output[filename]!.urls[key]!;
                 return (
                   <AccordionItem key={index}>
                     <AccHeadingDiv>
@@ -482,8 +483,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                       </AccordionItemHeading>
                     </AccHeadingDiv>
                     <AccordionItemPanel>
-                      {state.output[name] && url.index.map((inx: IndexType, i: number) => {
-                        const point = state.output[name]!.endpoints.find((obj: ParsedEndpoint) => obj.id === inx.id);
+                      {state.output[filename] && url.index.map((inx: IndexType, i: number) => {
+                        const point = state.output[filename]!.endpoints.find((obj: ParsedEndpoint) => obj.id === inx.id);
                         return (
                           point && <p
                             key={i}
@@ -504,8 +505,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           <div style={{marginTop: "25px"}}>
             <h2>Return Types</h2>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
-              {state.output[name]?.types && Object.keys(state.output[name]!.types).map((key, index) => {
-                const type = state.output[name]!.types[key];
+              {state.output[filename]?.types && Object.keys(state.output[filename]!.types).map((key, index) => {
+                const type = state.output[filename]!.types[key];
                 return (
                   type && <AccordionItem key={index}>
                     <AccHeadingDiv>
@@ -529,7 +530,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                     </AccHeadingDiv>
                     <AccordionItemPanel>
                       {type.index.map((inx: IndexType, i: number) => {
-                        const point = state.output[name]?.endpoints.find((obj: ParsedEndpoint) => obj.id === inx.id);
+                        const point = state.output[filename]?.endpoints.find((obj: ParsedEndpoint) => obj.id === inx.id);
                         return (
                           point && <p
                             key={i}

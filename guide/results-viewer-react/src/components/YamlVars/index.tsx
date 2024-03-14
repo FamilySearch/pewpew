@@ -51,32 +51,32 @@ interface VarsState extends DefaultVariables {
   defaultVars: boolean;
   environment: string;
 }
-export const vars = "vars";
-const sessionId = "sessionId";
-const rampTime = "rampTime";
-const loadTime = "loadTime";
-const peakLoad = "peakLoad";
-const devKey = "devKey";
-const defaultVars = "defaultVars";
+export const VARS = "vars";
+const SESSION_ID = "sessionId";
+const RAMP_TIME = "rampTime";
+const LOAD_TIME = "loadTime";
+const PEAK_LOAD = "peakLoad";
+const DEV_KEY = "devKey";
+const DEFAULT_VARS = "defaultVars";
 
-export const newVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
-export const devKeyVar = (environment: string): PewPewVars => ({ id: devKey, name: devKey, value: environment });
-export const rampTimeVar = (): PewPewVars => ({ id: rampTime, name: rampTime, value: RAMP_TIME_DEFAULT });
-export const loadTimeVar = (): PewPewVars => ({ id: loadTime, name: loadTime, value: LOAD_TIME_DEFAULT });
-export const peakLoadVar = (): PewPewVars => ({ id: peakLoad, name: peakLoad, value: PEAK_LOAD_DEFAULT });
-export const sessionIdVar = (): PewPewVars => ({ id: sessionId, name: sessionId, value: SESSION_ID_DEFAULT });
+export const emptyVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
+export const devKeyVar = (environment: string): PewPewVars => ({ id: DEV_KEY, name: DEV_KEY, value: environment });
+export const rampTimeVar = (): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: RAMP_TIME_DEFAULT });
+export const loadTimeVar = (): PewPewVars => ({ id: LOAD_TIME, name: LOAD_TIME, value: LOAD_TIME_DEFAULT });
+export const peakLoadVar = (): PewPewVars => ({ id: PEAK_LOAD, name: PEAK_LOAD, value: PEAK_LOAD_DEFAULT });
+export const sessionIdVar = (): PewPewVars => ({ id: SESSION_ID, name: SESSION_ID, value: SESSION_ID_DEFAULT });
 
 function getDefaultVar (varName: DefaultVariablesType, environment: string): PewPewVars {
   switch (varName) {
-    case sessionId:
+    case SESSION_ID:
       return sessionIdVar();
-    case rampTime:
+    case RAMP_TIME:
       return rampTimeVar();
-    case loadTime:
+    case LOAD_TIME:
       return loadTimeVar();
-    case peakLoad:
+    case PEAK_LOAD:
       return peakLoadVar();
-    case devKey:
+    case DEV_KEY:
       return devKeyVar(environment);
     default:
       throw new Error("getDefaultVar Invalid varName: " + varName);
@@ -125,15 +125,15 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
   };
 
   const switchSessionId = (newChecked: boolean) => {
-    switchDefault(sessionId, newChecked);
+    switchDefault(SESSION_ID, newChecked);
   };
 
   // Switching the default should remove the vars or add all of them to the vars
   // Can be called via a click, or via a prop from the defaultYaml checkbox from the parent
   const switchAllDefaults = (newChecked: boolean) => {
-    switchDefault(loadTime, newChecked);
-    switchDefault(rampTime, newChecked);
-    switchDefault(peakLoad, newChecked);
+    switchDefault(LOAD_TIME, newChecked);
+    switchDefault(RAMP_TIME, newChecked);
+    switchDefault(PEAK_LOAD, newChecked);
     updateState({ defaultVars: newChecked });
   };
 
@@ -142,8 +142,8 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     // Add/delete from varsMap/vars
     if (newChecked && !varsMap.has(varsType)) {
       // Add it (will update the map when it comes back in via props)
-      const newVar = getDefaultVar(varsType, state.environment);
-      props.addVar(newVar);
+      const defaultVar = getDefaultVar(varsType, state.environment);
+      props.addVar(defaultVar);
     } else if (!newChecked && varsMap.has(varsType)) {
       // Remove it (will update the map when it comes back in via props)
       props.deleteVar(varsType);
@@ -171,10 +171,10 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
 
   const changeEnvironment = (event: React.ChangeEvent<HTMLSelectElement>) => {
     updateState({ environment: event.target.value });
-    const devKeyVar = varsMap.get(devKey);
-    if (devKeyVar) {
-      devKeyVar.value = event.target.value;
-      props.changeVar(devKeyVar);
+    const devKey = varsMap.get(DEV_KEY);
+    if (devKey) {
+      devKey.value = event.target.value;
+      props.changeVar(devKey);
     } else {
       log("Environment changed without devKey variable existing", LogLevel.WARN);
     }
@@ -182,7 +182,7 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
 
   return (
     <InputsDiv>
-      <button onClick={() => props.addVar(newVar())}>
+      <button onClick={() => props.addVar(emptyVar())}>
         Add Vars
       </button>
       <button onClick={clearAllVars}>
@@ -191,36 +191,36 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
       <QuestionBubble text="Click here for more information about Variables" href="https://familysearch.github.io/pewpew/config/vars-section.html"></QuestionBubble>
       &nbsp;&nbsp;
 
-      <label htmlFor={defaultVars}> Default Vars </label>
+      <label htmlFor={DEFAULT_VARS}> Default Vars </label>
       <QuestionBubble text="Default Vars include ramptime, loadtime, and peakload"></QuestionBubble>
-      <Checkbox type="checkbox" id={defaultVars} onChange={handleClickDefault} checked={state.defaultVars} />
+      <Checkbox type="checkbox" id={DEFAULT_VARS} onChange={handleClickDefault} checked={state.defaultVars} />
 
       <Div>
         <Span>
-          <Label htmlFor={sessionId}> sessionId: </Label>
+          <Label htmlFor={SESSION_ID}> sessionId: </Label>
           <QuestionBubble text="sessionId included"></QuestionBubble>
-          <Checkbox type="checkbox" id={sessionId} onChange={(event) => switchDefault(sessionId, event.target.checked)} checked={state.sessionId}/>
+          <Checkbox type="checkbox" id={SESSION_ID} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(SESSION_ID, event.target.checked)} checked={state.sessionId}/>
         </Span>
         <Span>
-          <Label htmlFor={rampTime}> ramptime: </Label>
+          <Label htmlFor={RAMP_TIME}> ramptime: </Label>
           <QuestionBubble text="rampTime included"></QuestionBubble>
-          <Checkbox type="checkbox" id={rampTime} onChange={(event) => switchDefault(rampTime, event.target.checked)} checked={state.rampTime}/>
+          <Checkbox type="checkbox" id={RAMP_TIME} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(RAMP_TIME, event.target.checked)} checked={state.rampTime}/>
         </Span>
         <Span>
-          <Label htmlFor={loadTime}> loadtime: </Label>
+          <Label htmlFor={LOAD_TIME}> loadtime: </Label>
           <QuestionBubble text="loadTime included"></QuestionBubble>
-          <Checkbox type="checkbox" id={loadTime} onChange={(event) => switchDefault(loadTime, event.target.checked)} checked={state.loadTime}/>
+          <Checkbox type="checkbox" id={LOAD_TIME} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(LOAD_TIME, event.target.checked)} checked={state.loadTime}/>
         </Span>
         <Span>
-          <Label htmlFor={peakLoad}> peakload: </Label>
+          <Label htmlFor={PEAK_LOAD}> peakload: </Label>
           <QuestionBubble text="peakLoad included"></QuestionBubble>
-          <Checkbox type="checkbox" id={peakLoad} onChange={(event) => switchDefault(peakLoad, event.target.checked)} checked={state.peakLoad}/>
+          <Checkbox type="checkbox" id={PEAK_LOAD} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(PEAK_LOAD, event.target.checked)} checked={state.peakLoad}/>
         </Span>
         <div>
           <Span>
-            <Label htmlFor={devKey}> devkey: </Label>
+            <Label htmlFor={DEV_KEY}> devkey: </Label>
             <QuestionBubble text="devKey included"></QuestionBubble>
-            <input type="checkbox" id={devKey} onChange={(event) => switchDefault(devKey, event.target.checked)} checked={state.devKey}/>
+            <input type="checkbox" id={DEV_KEY} onChange={(event) => switchDefault(DEV_KEY, event.target.checked)} checked={state.devKey}/>
           </Span>
           <VarsDropDown display={state.devKey} onChange={changeEnvironment} />
         </div>

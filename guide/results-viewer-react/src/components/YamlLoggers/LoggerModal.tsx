@@ -35,10 +35,10 @@ interface LoggerModalProps {
   data: PewPewLogger;
 }
 
-const loggerType = "loggerSelect";
-const request = "request";
-const response = "response";
-const timing = "timing";
+const LOGGER_SELECT = "loggerSelect";
+const REQUEST = "request";
+const RESPONSE = "response";
+const TIMING = "timing";
 
 type HeaderLoggerType = "request" | "response" | "timing";
 type RequestLoggerName = "request" | "method" | "url" | "requestHeaders" | "requestHeadersAll" | "requestBody";
@@ -71,14 +71,14 @@ const timingLoggers: TimingLogger = {
   "rtt": { display: "stats.rtt", name: "rtt", value: "stats.rtt" }
 };
 
-const getLoggerSelectEntryByName = (name: LoggerName): LoggerSelectEntry => {
+const getLoggerSelectEntryByName = (loggerName: LoggerName): LoggerSelectEntry => {
   let displayLogger: LoggerSelectEntryDisplay | undefined;
-  if (name in requestLoggers) {
-    displayLogger = requestLoggers[name as RequestLoggerName];
-  } else if (name in responseLoggers) {
-    displayLogger = responseLoggers[name as ResponseLoggerName];
-  } else if (name in timingLoggers) {
-    displayLogger = timingLoggers[name as TimingLoggerName];
+  if (loggerName in requestLoggers) {
+    displayLogger = requestLoggers[loggerName as RequestLoggerName];
+  } else if (loggerName in responseLoggers) {
+    displayLogger = responseLoggers[loggerName as ResponseLoggerName];
+  } else if (loggerName in timingLoggers) {
+    displayLogger = timingLoggers[loggerName as TimingLoggerName];
   }
   if (displayLogger) {
     const { name, value } = displayLogger;
@@ -86,8 +86,8 @@ const getLoggerSelectEntryByName = (name: LoggerName): LoggerSelectEntry => {
     log("getLoggerSelectEntryByName", LogLevel.DEBUG, { name, loggerEntry });
     return loggerEntry;
   } else {
-    log("Unknown LoggerSelectEntry name " + name, LogLevel.ERROR);
-    throw new Error("Unknown LoggerSelectEntry name " + name);
+    log("Unknown LoggerSelectEntry name " + loggerName, LogLevel.ERROR);
+    throw new Error("Unknown LoggerSelectEntry name " + loggerName);
   }
 };
 
@@ -108,19 +108,19 @@ export const loggerOptions: {
 }[] = [
   // Here is all of the Request information (loggerOptions[0])
   {
-    type: request,
+    type: REQUEST,
     stateVariable: "defaultRequest",
     returnTypeArray: Object.values(requestLoggers)
   },
   // Here is all of the Response information (loggerOptions[1])
   {
-    type: response,
+    type: RESPONSE,
     stateVariable: "defaultResponse",
     returnTypeArray: Object.values(responseLoggers)
   },
   // Here is all of the Timing information (loggerOptions[2])
   {
-    type: timing,
+    type: TIMING,
     stateVariable: "defaultTiming",
     returnTypeArray: Object.values(timingLoggers)
   }
@@ -318,9 +318,9 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
   const listClick = (headerType: HeaderLoggerType, name: LoggerName, value: string, newChecked: boolean, dontDelete?: boolean) => {
     let stateType: RequestState | ResponseState | TimingState | undefined;
     let stateValue: boolean | undefined;
-    if (headerType === request) { stateType = state.request; stateValue = state.request[name as RequestLoggerName]; }
-    if (headerType === response) { stateType = state.response; stateValue = state.response[name as ResponseLoggerName]; }
-    if (headerType === timing) { stateType = state.timing; stateValue = state.timing[name as TimingLoggerName]; }
+    if (headerType === REQUEST) { stateType = state.request; stateValue = state.request[name as RequestLoggerName]; }
+    if (headerType === RESPONSE) { stateType = state.response; stateValue = state.response[name as ResponseLoggerName]; }
+    if (headerType === TIMING) { stateType = state.timing; stateValue = state.timing[name as TimingLoggerName]; }
     if (stateValue === undefined || stateValue === newChecked) {
       // Nothing needed
       log("listClick no change", LogLevel.DEBUG, { headerType, name, value, newChecked, stateValue, current: stateType });
@@ -338,11 +338,11 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
 
   return (
     <Modal ref={ref} title="Select Loggers" closeText="Close" onClose={onClose}>
-      {loggerOptions.map((header, index: number) => {
-        const stateVariable = header.type === request ? state.defaultRequest : header.type === response ? state.defaultResponse : state.defaultTiming;
-        const itemType = header.type === request ? state.request : header.type === response ? state.response : state.timing;
+      {loggerOptions.map((header, optionsIndex: number) => {
+        const stateVariable = header.type === REQUEST ? state.defaultRequest : header.type === RESPONSE ? state.defaultResponse : state.defaultTiming;
+        const itemType = header.type === REQUEST ? state.request : header.type === RESPONSE ? state.response : state.timing;
         return (
-          <ColumnBlockDiv key={index}>
+          <ColumnBlockDiv key={optionsIndex}>
             <LabelHeader>
               {header.type}
               <input
@@ -354,9 +354,9 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
                 checked={stateVariable}
               />
             </LabelHeader>
-            {header.returnTypeArray.map((item, index: number) => {
+            {header.returnTypeArray.map((item, returnTypeIndex: number) => {
               return (
-                <LabelBody key={index}>
+                <LabelBody key={returnTypeIndex}>
                   {item.display}&nbsp;&nbsp;&nbsp;&nbsp;
                   <input
                     key={item.name}
@@ -382,7 +382,7 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
         <input style={{ width: "170px" }} name={data.id} onChange={handleChangeName} value={state.name} />&nbsp;&nbsp;
         <Label>Value:</Label>
         <input style={{ width: "170px" }} name={data.id} onChange={handleChangeValue} value={state.value} onKeyPress={onKeyUp} />&nbsp;&nbsp;
-        <button id={loggerType} name={data.id} onClick={addInputUser} >
+        <button id={LOGGER_SELECT} name={data.id} onClick={addInputUser} >
           Add
         </button>
       </Span>

@@ -85,7 +85,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
         continue;
       } else if (value.DataType === "String") { // "Number" also is stored as StringValue
         log(`messageAttributes[${key}].StringValue = ${value.StringValue}`, LogLevel.DEBUG);
-        switch(key) {
+        switch (key) {
           // If this is set, it isn't a real message and should be swallowed. It was from an integration test
           case "UnitTestMessage":
             unittestMessage = true;

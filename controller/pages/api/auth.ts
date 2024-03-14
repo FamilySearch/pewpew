@@ -24,7 +24,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         log(`${req.method} ${req.url} response: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
         res.status(200).json(authPermissions);
       } else if (req.query.refreshToken && !Array.isArray(req.query.refreshToken)) {
-        try{
+        try {
           const tokenResponse: TokenResponse = await getTokenFromRefreshToken(req.query.refreshToken);
           log(`${req.method} ${req.url} returning token: ${JSON.stringify(tokenResponse)}`);
           res.status(200).json(tokenResponse);
@@ -34,7 +34,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       } else {
         res.status(400).json({ message: `method ${req.method} must have a code or token queryparam` });
       }
-    } catch(error) {
+    } catch (error) {
       log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }

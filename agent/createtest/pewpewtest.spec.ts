@@ -229,7 +229,7 @@ describe("PewPewTest Create Test", () => {
         await test!.launch();
           // Should have thrown
           done(new Error("test.launch() should have failed with pewpew exited with kill"));
-        } catch(error) {
+        } catch (error) {
           // Kill should throw
           log("'Retrieve Test and launch, then kill should succeed' result", LogLevel.DEBUG, error);
           try {
@@ -587,7 +587,7 @@ describe("PewPewTest Create Test", () => {
         await test!.launch();
           // Should have thrown
           done(new Error("test.launch() should have failed with pewpew exited with kill"));
-        } catch(error) {
+        } catch (error) {
           // Kill should throw
           log("'Retrieve Test and launch, then kill should succeed' result", LogLevel.DEBUG, error);
           try {

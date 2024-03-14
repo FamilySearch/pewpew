@@ -1,3 +1,11 @@
+import {
+  AUTHENTICATED,
+  HIT_RATE_REGEX,
+  URLS,
+  getAuthorizationHeader,
+  getDefaultHeaders,
+  isValidUrl
+} from "../YamlUrls";
 import { Checkbox, Div, InputsDiv, Label } from "../YamlStyles";
 import {
   HarEndpoint,
@@ -9,21 +17,27 @@ import {
   PewPewProvider,
   PewPewVars
 } from "../../util/yamlwriter";
-import { LoadPatterns, loadPattern, numReg, overReg, patterns, rampPattern } from "../YamlLoadPatterns";
-import { LogLevel, log } from "../../util/log";
-import { Loggers, getDefaultLoggers, loggers } from "../YamlLoggers";
-import { Modal, ModalObject, useEffectModal } from "../Modal";
-import Providers, { providerFile, providerList, providerRange, providerResponse, providers } from "../YamlProviders";
-import React, { useEffect, useRef, useState } from "react";
-import { Vars, getDefaultVars, vars } from "../YamlVars";
 import {
-  authenticated,
-  getAuthorizationHeader,
-  getDefaultHeaders,
-  hitReg,
-  isValidUrl,
-  urls
-} from "../YamlUrls";
+  LOAD_PATTERN,
+  LoadPatterns,
+  NUMBER_REGEX,
+  OVER_REGEX,
+  PATTERNS,
+  RAMP_PATTERN
+} from "../YamlLoadPatterns";
+import { LOGGERS, Loggers, getDefaultLoggers } from "../YamlLoggers";
+import { LogLevel, log } from "../../util/log";
+import { Modal, ModalObject, useEffectModal } from "../Modal";
+import {
+  PROVIDERS,
+  PROVIDER_FILE,
+  PROVIDER_LIST,
+  PROVIDER_RANGE,
+  PROVIDER_RESPONSE,
+  Providers
+} from "../YamlProviders";
+import React, { useEffect, useRef, useState } from "react";
+import { VARS, Vars, getDefaultVars } from "../YamlVars";
 import { createYamlString, writeFile } from "./writeyaml";
 import { Endpoints } from "../YamlEndpoints";
 import { QuestionBubble } from "../YamlQuestionBubble";
@@ -79,10 +93,10 @@ export interface YamlWriterFormState {
     authenticated: boolean
 }
 
-const nameReg = new RegExp("^[A-Za-z_-].*$");
-const valueReg = new RegExp("^[A-Za-z0-9_-{}$].*$");
+const NAME_REGEX = new RegExp("^[A-Za-z_-].*$");
+const VALUE_REGEX = new RegExp("^[A-Za-z0-9_-{}$].*$");
 
-const defaults = "default";
+const DEFAULT = "default";
 type YamlWriterBooleanState = "default" | "filterHeaders" | "authenticated";
 
 export const YamlWriterForm = (props: YamlWriterFormProps) => {
@@ -175,9 +189,9 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
       return;
     }
     setState(({ urls, ...oldState }: YamlWriterFormState): YamlWriterFormState => {
-      const url = urls.find((url) => url.id === urlId);
+      const url = urls.find((temp) => temp.id === urlId);
       if (url) {
-        url.headers = newHeaders[0].id === authenticated // Authenticated needs to be first
+        url.headers = newHeaders[0].id === AUTHENTICATED // Authenticated needs to be first
           ? [...newHeaders, ...(url.headers)]
           : [...(url.headers), ...newHeaders];
         return { ...oldState, urls: [...urls] };
@@ -194,7 +208,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
     // Removing header when X button is pressed in urls modal
     log("YamlWriterForm deleteHeader " + headerId, LogLevel.DEBUG, { urlId, headerId });
     setState(({ urls, ...oldState }: YamlWriterFormState): YamlWriterFormState => {
-      const url = urls.find((url) => url.id === urlId);
+      const url = urls.find((temp) => temp.id === urlId);
       if (url) {
         url.headers = url.headers.filter((header) => header.id !== headerId);
         return { ...oldState, urls: [...urls] };
@@ -208,25 +222,25 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
   // Removes a pattern, vars, or provider from the array. Activated by clicking X button.
   const removeInput = (id: string, inputType: string) => {
     switch (inputType) {
-      case urls:
+      case URLS:
         setState((prevState) => ({...prevState, urls: prevState.urls.filter((item) => item.id !== id) }));
         break;
-      case patterns:
-      case rampPattern:
-      case loadPattern:
+      case PATTERNS:
+      case RAMP_PATTERN:
+      case LOAD_PATTERN:
         setState((prevState) => ({...prevState, patterns: prevState.patterns.filter((item) => item.id !== id) }));
         break;
-      case vars:
+      case VARS:
         setState((prevState) => ({...prevState, vars: prevState.vars.filter((item) => item.id !== id) }));
         break;
-      case providers:
-      case providerFile:
-      case providerResponse:
-      case providerRange:
-      case providerList:
+      case PROVIDERS:
+      case PROVIDER_FILE:
+      case PROVIDER_RESPONSE:
+      case PROVIDER_RANGE:
+      case PROVIDER_LIST:
         setState((prevState) => ({...prevState, providers: prevState.providers.filter((item) => item.id !== id) }));
         break;
-      case loggers:
+      case LOGGERS:
         setState((prevState) => ({...prevState, loggers: prevState.loggers.filter((item) => item.id !== id) }));
         break;
     }
@@ -234,7 +248,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
 
   // Clears all of the urls, patterns, vars, or providers depending on the click of the Clear All buttons. (for url, clears Urls from parent)
   const clearInput = (inputType: string) => {
-    if (inputType === urls ) { props.clearParentEndpoints(); }
+    if (inputType === URLS ) { props.clearParentEndpoints(); }
     setState((prevState) => ({...prevState, [inputType]: []}));
   };
 
@@ -339,26 +353,26 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
         problems.push(<li key="patterns">Please add at least 1 load pattern</li>);
       }
     } else {
-      const validUrl: boolean = state.urls.every((url: PewPewAPI) => isValidUrl(url.url) && hitReg.test(url.hitRate));
+      const validUrl: boolean = state.urls.every((url: PewPewAPI) => isValidUrl(url.url) && HIT_RATE_REGEX.test(url.hitRate));
       if (!validUrl) {
         problems.push(<li key="urls">At least one url has an invalid url or hitRate</li>);
       }
-      const validPatterns = state.patterns.every((pattern: PewPewLoadPattern) => overReg.test(pattern.over) && numReg.test(pattern.to) && (!pattern.from || numReg.test(pattern.from)));
+      const validPatterns = state.patterns.every((pattern: PewPewLoadPattern) => OVER_REGEX.test(pattern.over) && NUMBER_REGEX.test(pattern.to) && (!pattern.from || NUMBER_REGEX.test(pattern.from)));
       if (!validPatterns) {
         problems.push(<li key="patterns">At least one pattern is invalid</li>);
       }
       const validVars = state.vars.every((variable: PewPewVars) =>
-        nameReg.test(variable.name) && variable.name.length > 0 && valueReg.test(variable.value) && variable.value.length > 0
+        NAME_REGEX.test(variable.name) && variable.name.length > 0 && VALUE_REGEX.test(variable.value) && variable.value.length > 0
       );
       if (!validVars) {
         problems.push(<li key="vars">At least one variable has an invalid name or value</li>);
       }
-      const validProviders = state.providers.every((provider: PewPewProvider) => nameReg.test(provider.name) && provider.name.length > 0
+      const validProviders = state.providers.every((provider: PewPewProvider) => NAME_REGEX.test(provider.name) && provider.name.length > 0
         && (provider.type !== "list" || (provider.list && provider.list.length > 0)));
       if (!validProviders) {
         problems.push(<li key="providers">At least one provider has invalid data</li>);
       }
-      const validLoggers = state.loggers.every((logger: PewPewLogger) => nameReg.test(logger.name) && logger.name.length > 0);
+      const validLoggers = state.loggers.every((logger: PewPewLogger) => NAME_REGEX.test(logger.name) && logger.name.length > 0);
       if (!validLoggers) {
         problems.push(<li key="loggers">At least one logger has invalid data</li>);
       }
@@ -402,20 +416,20 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           <button id="createYaml" onClick={openPreviewModal}>
             Preview Yaml
           </button>
-          <label htmlFor={defaults}> Default Yaml </label>
+          <label htmlFor={DEFAULT}> Default Yaml </label>
           <QuestionBubble text="Includes default, easy to use values for Variables, Load Patterns, and Loggers. Also includes authenticated headers"></QuestionBubble>
-          <Checkbox type="checkbox" id={defaults} onChange={(event) => handleClick(defaults, event.target.checked)} checked={state.default} />
+          <Checkbox type="checkbox" id={DEFAULT} onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleClick(DEFAULT, event.target.checked)} checked={state.default} />
 
-          <label htmlFor={authenticated}> Authenticated </label>
+          <label htmlFor={AUTHENTICATED}> Authenticated </label>
           <QuestionBubble text="Creates sessionId variable and adds authentication header to every endpoint"></QuestionBubble>
-          <Checkbox type="checkbox" id={authenticated} onChange={(event) => handleClick(authenticated, event.target.checked)} checked={state.authenticated} />
+          <Checkbox type="checkbox" id={AUTHENTICATED} onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleClick(AUTHENTICATED, event.target.checked)} checked={state.authenticated} />
         </InputsDiv>
       </DisplayDivBody>
       <DisplayDivBody>
         <Endpoints
           addUrl={addUrl}
-          clearAllUrls={() => clearInput(urls)}
-          deleteUrl={(urlId: string) => removeInput(urlId, urls)}
+          clearAllUrls={() => clearInput(URLS)}
+          deleteUrl={(urlId: string) => removeInput(urlId, URLS)}
           changeUrl={changeUrl}
           addHeaders={addHeaders}
           deleteHeader={deleteHeader}
@@ -425,8 +439,8 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
         />
         <Vars
           addVar={addVar}
-          clearAllVars={() => clearInput(vars)}
-          deleteVar={(varId: string) => removeInput(varId, vars)}
+          clearAllVars={() => clearInput(VARS)}
+          deleteVar={(varId: string) => removeInput(varId, VARS)}
           changeVar={changeVars}
           defaultYaml={state.default}
           authenticated={state.authenticated}
@@ -434,23 +448,23 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
         />
         <LoadPatterns
           addPattern={addPattern}
-          clearAllPatterns={() => clearInput(patterns)}
-          deletePattern={(patternId: string) => removeInput(patternId, patterns)}
+          clearAllPatterns={() => clearInput(PATTERNS)}
+          deletePattern={(patternId: string) => removeInput(patternId, PATTERNS)}
           changePattern={changePattern}
           defaultYaml={state.default}
           patterns={state.patterns}
         />
         <Providers
           addProvider={addProvider}
-          clearAllProviders={() => clearInput(providers)}
-          deleteProvider={(patternId: string) => removeInput(patternId, providers)}
+          clearAllProviders={() => clearInput(PROVIDERS)}
+          deleteProvider={(patternId: string) => removeInput(patternId, PROVIDERS)}
           changeProvider={changeProvider}
           providers={state.providers}
         />
         <Loggers
           addLogger={addLogger}
-          clearAllLoggers={() => clearInput(loggers)}
-          deleteLogger={(loggerId: string) => removeInput(loggerId, loggers)}
+          clearAllLoggers={() => clearInput(LOGGERS)}
+          deleteLogger={(loggerId: string) => removeInput(loggerId, LOGGERS)}
           changeLogger={changeLogger}
           defaultYaml={state.default}
           loggers={state.loggers}

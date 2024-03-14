@@ -166,7 +166,7 @@ describe("PpaasS3File Integration", () => {
         testPpaasS3FileUpload.setLastModifiedLocal(0);
         testPpaasS3FileUpload.remoteUrl = "";
         // As long as we don't throw, it passes
-      } catch(error) {
+      } catch (error) {
         throw error;
       }
     });
@@ -238,7 +238,7 @@ describe("PpaasS3File Integration", () => {
         log("testPpaasS3FileUpload.upload() succeeded", LogLevel.DEBUG);
         s3FileKey = testPpaasS3FileUpload.key;
         // As long as we don't throw, it passes
-      } catch(error) {
+      } catch (error) {
         throw error;
       }
     });
@@ -361,7 +361,7 @@ describe("PpaasS3File Integration", () => {
 
     afterEach (async () => {
       // Delete the local file
-      if(localFile) {
+      if (localFile) {
         await fs.unlink(localFile)
         .catch((error) => log("Could not delete " + localFile, LogLevel.WARN, error));
       }

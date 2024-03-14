@@ -76,7 +76,7 @@ describe("PpaasTestStatus", () => {
     // should have all the TestStatus + lastModifiedRemote && testId && url
     expect(Object.keys(actualTestMessage).length, `Actual Keys: ${Object.keys(actualTestMessage).toString()}\nExpected Keys: ${Object.keys(testStatus).toString()}\nMessage keys length`).to.equal(Object.keys(testStatus).length + 3);
     for (const key in actualTestMessage) {
-      switch(key) {
+      switch (key) {
         case "lastModifiedRemote":
           expect(JSON.stringify(actualTestMessage.lastModifiedRemote), key).to.equal(JSON.stringify(new Date(0)));
           break;

@@ -243,7 +243,7 @@ describe("S3Util Integration", () => {
           const objects = await listObjects(s3FileKey!);
           return (objects && objects.Contents && objects.Contents.length > 0);
         }, MAX_POLL_WAIT, (errMsg: string) => `${errMsg} Could not find the ${s3FileKey} in s3`);
-      } catch(error) {
+      } catch (error) {
         log(`beforeEach error uploadFile(${UNIT_TEST_FILEPATH}, ${UNIT_TEST_KEY_PREFIX})`, LogLevel.ERROR, error);
         throw error;
       }
@@ -416,7 +416,7 @@ describe("S3Util Integration", () => {
 
     afterEach (async () => {
       // Delete the local file
-      if(localFile) {
+      if (localFile) {
         await fs.unlink(localFile)
         .catch((error) => log("Could not delete " + localFile, LogLevel.WARN, error));
       }

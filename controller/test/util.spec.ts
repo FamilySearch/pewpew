@@ -34,7 +34,7 @@ describe("Util", () => {
             await fs.unlink(filepath).catch((error) => log("Could not delete unzipped file " + filename, LogLevel.ERROR, error));
           }
         }
-      } catch(error) {
+      } catch (error) {
         log("Could not clean-up unzipped files", LogLevel.ERROR, error);
       }
     });
@@ -135,7 +135,7 @@ describe("Util", () => {
             await fs.unlink(filepath).catch((error) => log("Could not delete unzipped file " + filename, LogLevel.ERROR, error));
           }
         }
-      } catch(error) {
+      } catch (error) {
         log("Could not clean-up unzipped files", LogLevel.ERROR, error);
       }
     });

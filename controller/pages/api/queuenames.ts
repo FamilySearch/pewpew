@@ -8,7 +8,7 @@ export default (req: NextApiRequest, res: NextApiResponse): void => {
   try {
     const queueNames: string[] = PpaasTestMessage.getAvailableQueueNames();
     res.status(200).json({ queueNames });
-  } catch(error) {
+  } catch (error) {
     log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
     res.status(500).json(createErrorResponse(req, error));
   }

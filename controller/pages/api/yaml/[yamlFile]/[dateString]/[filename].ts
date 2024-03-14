@@ -32,7 +32,7 @@ export default async (request: NextApiRequest, response: NextApiResponse<GetObje
       } else {
         response.status(400).json({ message: `method ${request.method} must have a yaml file` });
       }
-    } catch(error) {
+    } catch (error) {
       log(`${request.method} ${request.url} failed: ${error}`, LogLevel.ERROR, error);
       response.status(500).json(createErrorResponse(request, error));
     }

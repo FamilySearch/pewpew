@@ -305,7 +305,7 @@ export class PewPewTest {
   protected async writeTestStatus () {
     try {
       await this.ppaasTestStatus.writeStatus();
-    } catch(error) {
+    } catch (error) {
       this.log("Could not write ppaasTestStatus", LogLevel.ERROR, error, { ppaasTestStatus: this.ppaasTestStatus });
     }
   }
@@ -316,7 +316,7 @@ export class PewPewTest {
       const { testId } = this.testMessage;
       const messageId = await new PpaasCommunicationsMessage({ testId, messageType, messageData }).send();
       this.log(`Sent testStatus ${messageType}: " ${messageId}`, LogLevel.DEBUG, { messageData, messageId });
-    } catch(error) {
+    } catch (error) {
       this.log("Could not send TestStatus", LogLevel.ERROR, error, { messageData });
     }
   }
@@ -325,7 +325,7 @@ export class PewPewTest {
     try {
       const messageId = await refreshTestScalingMessage();
       this.log(`Sent refreshTestScalingMessage: " ${messageId}`, LogLevel.DEBUG, {  messageId });
-    } catch(error) {
+    } catch (error) {
       this.log("Error calling refreshTestScalingMessage", LogLevel.ERROR, error);
     }
   }
@@ -334,7 +334,7 @@ export class PewPewTest {
     try {
       const messageId = await deleteTestScalingMessage();
       this.log(`deleteTestScalingMessage: " ${messageId}`, LogLevel.DEBUG, {  messageId });
-    } catch(error) {
+    } catch (error) {
       this.log("Error calling deleteTestScalingMessage", LogLevel.ERROR, error);
     }
   }
@@ -594,7 +594,7 @@ export class PewPewTest {
       this.log(errorMessage, LogLevel.ERROR, error);
       try {
         await this.internalStop();
-      } catch(err) {
+      } catch (err) {
         this.log("Could not stop the pewpew process", LogLevel.ERROR, err);
       }
       // Send failed communications message and update teststatus
@@ -758,7 +758,7 @@ export class PewPewTest {
           await this.sendTestStatus();
           // Keep alive every loop
           await this.refreshTestScalingMessage();
-        } catch(error) {
+        } catch (error) {
           this.log(`Polling PewPew Results Error. iteration: ${iteration}`, LogLevel.ERROR, error);
         }
         if (Date.now() < endLoop) {
@@ -915,7 +915,7 @@ export class PewPewTest {
             this.writeTestStatus(),
             this.internalStop()
           ]);
-        } catch(err) {
+        } catch (err) {
           this.log("Could not stop the pewpew process", LogLevel.ERROR, err);
         }
         // Keep trying to check and kill the pewpew process?
@@ -928,7 +928,7 @@ export class PewPewTest {
             if (this.pewpewRunning) {
               await sleep(10000);
             }
-          } catch(err) {
+          } catch (err) {
             this.log("Could not stop the pewpew process", LogLevel.ERROR, err);
           }
         }

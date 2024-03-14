@@ -1,6 +1,15 @@
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { Checkbox, InputsDiv, Label, NonFlexSpan } from "../YamlStyles";
 import {
+  HIT_RATE_REGEX,
+  UrlProps,
+  Urls,
+  getAuthorizationHeader,
+  getDefaultHeaders,
+  getHitRateStyle,
+  getHitRateTitle
+} from "../YamlUrls";
+import {
   HarEndpoint,
   HarHeader,
   InputEvent,
@@ -9,15 +18,6 @@ import {
 } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import React, { useEffect, useState } from "react";
-import {
-  UrlProps,
-  Urls,
-  getAuthorizationHeader,
-  getDefaultHeaders,
-  getHitRateStyle,
-  getHitRateTitle,
-  hitReg
-} from "../YamlUrls";
 import { QuestionBubble } from "../YamlQuestionBubble";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -73,15 +73,15 @@ export interface EndpointsState {
 }
 
 export const newUrl = (deaultHeaders: boolean, authenticated: boolean, point?: HarEndpoint): PewPewAPI => {
-  const headers: PewPewHeader[] = point?.headers.map(({ name, value }: HarHeader): PewPewHeader => ({ id: uniqueId(), name, value })) || [];
-  const defaultHeaders: PewPewHeader[] = deaultHeaders
+  const pointHeaders: PewPewHeader[] = point?.headers.map(({ name, value }: HarHeader): PewPewHeader => ({ id: uniqueId(), name, value })) || [];
+  const pewpewHeaders: PewPewHeader[] = deaultHeaders
     ? getDefaultHeaders(authenticated)
     : (authenticated ? [getAuthorizationHeader()] : []);
   return {
     id: uniqueId(),
     url: point?.url || "",
     hitRate: "1hpm",
-    headers: [...defaultHeaders, ...headers],
+    headers: [...pewpewHeaders, ...pointHeaders],
     method: point?.method || "GET",
     authorization: null
   };
@@ -139,7 +139,7 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
     }
   };
 
-  const invalidHitRate = !hitReg.test(state.hitRate);
+  const invalidHitRate = !HIT_RATE_REGEX.test(state.hitRate);
   const hitRateStyle: React.CSSProperties = getHitRateStyle(invalidHitRate);
   const hitRateTitle: string | undefined = state.hitRate === "" ? "Please enter a Hit Rate" : (getHitRateTitle(invalidHitRate) || "Update all hit rates");
   return (

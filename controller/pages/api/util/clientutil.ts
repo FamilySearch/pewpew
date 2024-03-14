@@ -77,7 +77,7 @@ export function formatError (error: unknown): string {
     const methodText = `${axiosError.config?.method?.toUpperCase() || ""} ${axiosError.config?.url || "request"} failed`;
     if (axiosError.response) {
       let errorText: string;
-      if (typeof axiosError.response.data === "string"){
+      if (typeof axiosError.response.data === "string") {
         // It's a string
         errorText = axiosError.response.data;
       } else if (typeof (axiosError.response.data as TestManagerError)?.message === "string") {

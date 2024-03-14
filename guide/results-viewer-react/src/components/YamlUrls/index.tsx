@@ -43,37 +43,36 @@ export interface UrlState {
   passed: boolean;
 }
 
-export const hitReg: RegExp = new RegExp("^(\\d+)hp(h|m|s)$");
-export const urls = "urls";
-// export const authenticated = "authenticated";
-const emptyHeader = "emptyHeader";
-const defaultHeaders = "defaultHeaders";
-export const authenticated = "authenticated";
-const acceptLanguage = "acceptLanguage";
-const contentType = "contentType";
+export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$");
+export const URLS = "urls";
+const EMPTY_HEADER = "emptyHeader";
+const DEFAULT_HEADERS = "defaultHeaders";
+export const AUTHENTICATED = "authenticated";
+const ACCEPT_LANGUAGE = "acceptLanguage";
+const CONTENT_TYPE = "contentType";
 type HeaderType = "defaultHeaders" | "authenticated" | "acceptLanguage" | "contentType";
 type PewPewApiStringType = "url" | "method" | "hitRate";
 type PewPewHeaderStringType = "name" | "value";
 
 export const newHeader = () => ({ id: uniqueId(), name: "", value: "" });
-export const getAuthorizationHeader = (): PewPewHeader => ({ id: authenticated, name: "Authorization", value: "Bearer ${sessionId}" });
-const getAcceptLanguageHeader = (): PewPewHeader => ({ id: acceptLanguage, name: "Accept-Language", value: "en-us"});
-const getContentTypedHeader = (): PewPewHeader => ({ id: contentType, name: "Content-Type", value: "application/json"});
+export const getAuthorizationHeader = (): PewPewHeader => ({ id: AUTHENTICATED, name: "Authorization", value: "Bearer ${sessionId}" });
+const getAcceptLanguageHeader = (): PewPewHeader => ({ id: ACCEPT_LANGUAGE, name: "Accept-Language", value: "en-us"});
+const getContentTypedHeader = (): PewPewHeader => ({ id: CONTENT_TYPE, name: "Content-Type", value: "application/json"});
 export const getDefaultHeaders = (authenticated?: boolean): PewPewHeader[] => [
   ...(authenticated ? [getAuthorizationHeader()] : []),
   getAcceptLanguageHeader(),
   getContentTypedHeader()
 ];
 
-function getHeader (headerType: HeaderType | "emptyHeader" = emptyHeader): PewPewHeader {
+function getHeader (headerType: HeaderType | "emptyHeader" = EMPTY_HEADER): PewPewHeader {
   switch (headerType) {
-    case authenticated:
+    case AUTHENTICATED:
       return getAuthorizationHeader();
-    case acceptLanguage:
+    case ACCEPT_LANGUAGE:
       return getAcceptLanguageHeader();
-    case contentType:
+    case CONTENT_TYPE:
       return getContentTypedHeader();
-    case emptyHeader:
+    case EMPTY_HEADER:
       return newHeader();
     default:
       throw new Error("getHeader Invalid headerType: " + headerType);
@@ -110,31 +109,31 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   // Changes the state of authenticated button when default is checked or unchecked
   useEffect(() => {
     // Add/delete from headersMap/headers
-    if (props.authenticated && !headersMap.has(authenticated)) {
+    if (props.authenticated && !headersMap.has(AUTHENTICATED)) {
       // Add it (will update the map when it comes back in via props)
-      addHeader(authenticated);
-    } else if (!props.authenticated && headersMap.has(authenticated)) {
+      addHeader(AUTHENTICATED);
+    } else if (!props.authenticated && headersMap.has(AUTHENTICATED)) {
       // Remove it (will update the map when it comes back in via props)
-      removeHeader(authenticated);
+      removeHeader(AUTHENTICATED);
     }
   }, [props.authenticated]);
 
   useEffect(() => {
     // Add/delete from headersMap/headers
-    const hasAcceptLanguage = headersMap.has(acceptLanguage);
-    const hasContentType = headersMap.has(contentType);
+    const hasAcceptLanguage = headersMap.has(ACCEPT_LANGUAGE);
+    const hasContentType = headersMap.has(CONTENT_TYPE);
     // If we need to change both, we need to group them into a single "defaultHeaders" transaction
     if (props.defaultHeaders && (!hasAcceptLanguage || !hasContentType)) {
       // Add it (will update the map when it comes back in via props)
       const headerToAdd: HeaderType = !hasAcceptLanguage && !hasContentType
-        ? defaultHeaders
-        : !hasAcceptLanguage ? acceptLanguage : contentType;
+        ? DEFAULT_HEADERS
+        : !hasAcceptLanguage ? ACCEPT_LANGUAGE : CONTENT_TYPE;
       addHeader(headerToAdd);
     } else if (!props.defaultHeaders && (hasAcceptLanguage || hasAcceptLanguage)) {
       // Remove it (will update the map when it comes back in via props)
       const headerToRemove: HeaderType = hasAcceptLanguage && hasContentType
-        ? defaultHeaders
-        : hasAcceptLanguage ? acceptLanguage : contentType;
+        ? DEFAULT_HEADERS
+        : hasAcceptLanguage ? ACCEPT_LANGUAGE : CONTENT_TYPE;
       removeHeader(headerToRemove);
     }
   }, [props.defaultHeaders]);
@@ -204,7 +203,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const addHeader = (headerType?: HeaderType) => {
     log("addHeader " + headerType, LogLevel.DEBUG);
     // Adding header when Authenticated option is checked
-    if (headerType === defaultHeaders) {
+    if (headerType === DEFAULT_HEADERS) {
       // add all
       props.addHeaders(data.id, getDefaultHeaders());
     } else {
@@ -218,10 +217,10 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const removeHeader = (headerId: string) => {
     // Removing header when X button is pressed in urls modal
     log("removeHeader " + headerId, LogLevel.DEBUG);
-    if (headerId === defaultHeaders) {
+    if (headerId === DEFAULT_HEADERS) {
       // Remove both!
-      props.deleteHeader(data.id, acceptLanguage);
-      props.deleteHeader(data.id, contentType);
+      props.deleteHeader(data.id, ACCEPT_LANGUAGE);
+      props.deleteHeader(data.id, CONTENT_TYPE);
     } else {
       props.deleteHeader(data.id, headerId);
     }
@@ -245,7 +244,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const invalidUrl: boolean = !isValidUrl(data.url);
   const urlStyle: React.CSSProperties = getUrlStyle(invalidUrl);
   const urlTitle: string | undefined = getUrlTitle(invalidUrl);
-  const invalidHitRate = !hitReg.test(data.hitRate);
+  const invalidHitRate = !HIT_RATE_REGEX.test(data.hitRate);
   return (
     <Div>
       <EndpointDisplay style={urlStyle} title={urlTitle}>

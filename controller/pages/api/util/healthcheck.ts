@@ -99,7 +99,7 @@ export async function pingS3 (): Promise<boolean> {
     await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
     log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
     return true;
-  } catch(error) {
+  } catch (error) {
     log("pingS3 failed", LogLevel.ERROR, error);
     // DO NOT REJECT. Just return false
     return false;

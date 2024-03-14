@@ -65,7 +65,7 @@ export async function pingS3 (): Promise<boolean> {
     config.lastS3Access = new Date();
     log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
     return true;
-  } catch(error) {
+  } catch (error) {
     log("pingS3 failed}", LogLevel.ERROR, error);
     // DO NOT REJECT. Just return false
     return false;

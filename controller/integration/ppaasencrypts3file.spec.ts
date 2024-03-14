@@ -128,7 +128,7 @@ describe("PpaasEncryptS3File Integration", () => {
         log("testPpaasEncryptS3FileUpload.upload() succeeded", LogLevel.DEBUG);
         s3FileKey = testPpaasEncryptS3FileUpload.key;
         // As long as we don't throw, it passes
-      } catch(error) {
+      } catch (error) {
         throw error;
       }
     });

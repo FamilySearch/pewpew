@@ -547,7 +547,7 @@ describe("TestScheduler", () => {
         TestSchedulerIntegration.getCalendarEvents().then((events: EventInput[]) => {
           expect(events).to.not.equal(undefined);
           expect(events.length, "events.length").to.equal(sizeBefore);
-          for(const event of events) {
+          for (const event of events) {
             expect(event.id).to.equal(testId);
             expect(event.title).to.equal(yamlFile);
             expect(event.start).to.equal(scheduledTestData.scheduleDate);

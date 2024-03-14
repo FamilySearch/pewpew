@@ -14,7 +14,7 @@
     "start:controller": "cd controller && npm run start",
     "start:agent": "cd agent && npm run start",
     "dev": "cd controller && npm run dev",
-    "build": "npm run lint && npm run build:common && npm run build:agent && npm-run-all --parallel build:agent build:controller",
+    "build": "npm run lint && npm run build:common && npm-run-all --parallel build:agent build:controller",
     "storybook": "cd controller && npm run storybook",
     "build-storybook": "cd controller && npm run build-storybook",
     "lint": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js --fix . --ext .ts,.tsx",

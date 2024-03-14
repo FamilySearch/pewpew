@@ -51,7 +51,7 @@ export default async (req: NextApiRequest, res: NextApiResponse<GetObjectCommand
       } else {
         res.status(400).json({ message: `method ${req.method} must have a json file` });
       }
-    } catch(error) {
+    } catch (error) {
       log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error));
     }

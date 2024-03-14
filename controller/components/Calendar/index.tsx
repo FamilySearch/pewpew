@@ -48,7 +48,7 @@ export const PPaaSCalendar = ({ ...calendarProps}: CalendarProps) => {
   // It has to be client rendered so we get the local browser time zone
   if (Array.isArray(calendarProps.events)) {
     for (const event of calendarProps.events) {
-      if(typeof event.startRecur === "number") {
+      if (typeof event.startRecur === "number") {
         event.startTime = getHourMinuteFromTimestamp(event.startRecur);
         event.endTime = typeof event.testRunTimeMn === "number"
           ? getHourMinuteFromTimestamp(event.startRecur + (60000 * event.testRunTimeMn))

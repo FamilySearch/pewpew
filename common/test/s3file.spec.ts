@@ -496,7 +496,7 @@ describe("PpaasS3File", () => {
         testPpaasS3FileUpload.setLastModifiedLocal(0);
         testPpaasS3FileUpload.remoteUrl = "";
         // As long as we don't throw, it passes
-      } catch(error) {
+      } catch (error) {
         throw error;
       }
     });
@@ -564,7 +564,7 @@ describe("PpaasS3File", () => {
 
     afterEach (async () => {
       // Delete the local file
-      if(localFile) {
+      if (localFile) {
         await fs.unlink(localFile)
         .catch((error) => log("Could not delete " + localFile, LogLevel.WARN, error));
       }

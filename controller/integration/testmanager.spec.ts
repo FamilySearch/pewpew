@@ -2422,7 +2422,7 @@ describe("TestManager Integration", () => {
           expect(Array.isArray(tests.recentTests)).to.equal(true);
           // Requested should have at least one now
           expect(tests.runningTests.length + tests.recentTests.length, "tests.runningTests.length + tests.recentTests.length").to.be.greaterThan(0);
-        } catch(error) {
+        } catch (error) {
           log("afterEach error", LogLevel.ERROR, error);
           throw error;
         }

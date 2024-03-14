@@ -9,8 +9,8 @@
   ],
   "extends": [
     "eslint:recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:@typescript-eslint/stylistic"
+    "plugin:@typescript-eslint/stylistic",
+    "plugin:@typescript-eslint/recommended"
   ],
   "ignorePatterns": ["lib/", "webpack.config.js"],
   "rules": {
@@ -48,6 +48,8 @@
     "space-before-function-paren": 1,
     "spaced-comment": ["error", "always", { "block": { "balanced": true } }],
     "space-infix-ops":"warn",
+    "space-before-blocks": "warn",
+    "keyword-spacing": "warn",
     "strict": 1,
     "comma-dangle": 1,
     "triple-equals": 0,
@@ -55,6 +57,8 @@
     "camelcase": 1,
     "no-irregular-whitespace": 1,
     "object-shorthand": 1,
+    "no-shadow": "off",
+    "@typescript-eslint/no-shadow": "warn",
     "@typescript-eslint/await-thenable": 1,
     "quotes": ["warn", "double"]
   }

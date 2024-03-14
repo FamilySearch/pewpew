@@ -151,7 +151,7 @@ export class PpaasTestMessage implements TestMessage {
         continue;
       } else if (value.DataType === "String") {
         log(`messageAttributes[${key}].StringValue = ${value.StringValue}`, LogLevel.DEBUG);
-        switch(key) {
+        switch (key) {
           // If this is set, it isn't a real message and should be swallowed. It was from an integration test
           case "UnitTestMessage":
             unittestMessage = true;

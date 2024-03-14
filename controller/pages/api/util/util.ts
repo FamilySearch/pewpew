@@ -300,7 +300,7 @@ export async function parseZip (formFiles: Files): Promise<void> {
       formFiles.yamlFile = yamlFiles.length > 1 ? yamlFiles : yamlFiles[0];
     }
     // return formFiles;
-  } catch(error: any) {
+  } catch (error: any) {
     log ("Error parsing files in incoming test form files for zips: " + (error?.msg || error?.message || `${error}`), LogLevel.WARN, error);
     if (error instanceof Error && error.stack) {
       // eslint-disable-next-line no-console

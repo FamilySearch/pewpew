@@ -236,7 +236,7 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
   }
 }
 
-export async function getCurrentPewPewLatestVersion (): Promise<string | undefined>{
+export async function getCurrentPewPewLatestVersion (): Promise<string | undefined> {
   if (global.currentLatestVersion) {
     return global.currentLatestVersion;
   }

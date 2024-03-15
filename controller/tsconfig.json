@@ -31,6 +31,5 @@
   "include": [
     "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx"
-, ".latestpewpewversionfile.ts", "pages/api/util/.latestpewpewversionfile.ts"  ]
+    "**/*.tsx"]
 }

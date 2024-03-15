@@ -160,7 +160,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       }
       await Promise.all(uploadPromises);
       // If latest version is being updated:
-      if(latest){
+      if (latest) {
         global.currentLatestVersion = version;
         try {
 
@@ -237,7 +237,7 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
 }
 
 export async function getCurrentPewPewLatestVersion (): Promise<string | undefined>{
-  if(global.currentLatestVersion){
+  if (global.currentLatestVersion) {
     return global.currentLatestVersion;
   }
   try {

@@ -33,7 +33,7 @@ logger.config.LogFileName = "ppaas-controller";
 const deleteS3 = s3.deleteObject;
 export const PEWPEW_EXECUTABLE_NAME: string = "pewpew";
 const PEWPEW_EXECUTABLE_NAME_WINDOWS: string = "pewpew.exe";
-const VERSION_TAG_NAME: string = "version";
+export const VERSION_TAG_NAME: string = "version";
 
 /**
  * Queries S3 for all objects in the pewpew/ folder that end with pewpew (not pewpew.exe).

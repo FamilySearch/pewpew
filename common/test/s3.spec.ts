@@ -374,7 +374,7 @@ describe("S3Util", () => {
 
     afterEach (async () => {
       // Delete the local file
-      if(localFile) {
+      if (localFile) {
         await fs.unlink(localFile)
         .catch((error) => log("Could not delete " + localFile, LogLevel.WARN, error));
       }

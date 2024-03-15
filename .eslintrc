@@ -61,6 +61,8 @@
     "space-before-function-paren": 1,
     "spaced-comment": ["error", "always", { "block": { "balanced": true } }],
     "space-infix-ops":"warn",
+    "space-before-blocks": "warn",
+    "keyword-spacing": "warn",
     "strict": 1,
     "comma-dangle": 1,
     "triple-equals": 0,

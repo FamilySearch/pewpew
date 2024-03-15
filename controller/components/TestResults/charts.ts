@@ -331,7 +331,7 @@ const afterBuildTicks = (chart: any) => {
   let lastLegendClick: [number, number, Chart] | undefined;
 
   Chart.defaults.plugins.legend.onClick = function (
-    e: ChartEvent,
+    _e: ChartEvent,
     legendItem: LegendItem,
     legend: LegendElement<keyof ChartTypeRegistry>
   ) {

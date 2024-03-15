@@ -247,7 +247,7 @@ export const StartTestForm = ({
                 ({ ...prevState, environmentVariables: [...environmentVariables, ...newEnvironmentVariables] })
               );
             }
-          } catch(error) {
+          } catch (error) {
             log(`Could not parse file: ${file.name}`, LogLevel.ERROR, error);
             setState({ error: `Could not parse file: ${file.name} - ${formatError(error)}` });
           }

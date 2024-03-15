@@ -27,7 +27,7 @@ describe("Tests Integration", () => {
         done(new Error("Should have returned a 404"));
       }).catch((error: unknown) => {
         log(integrationUrl + "/tests/ error", LogLevel.DEBUG, error, { status: (error as AxiosError)?.response?.status });
-        if ((error as AxiosError)?.response?.status === 404){
+        if ((error as AxiosError)?.response?.status === 404) {
           done();
         } else {
           done(error);

@@ -47,8 +47,6 @@ export async function getPewPewVersionsInS3 (): Promise<string[]> {
       localDirectory: LOCAL_FILE_LOCATION,
       extension: PEWPEW_EXECUTABLE_NAME
     });
-    console.log("PEWPEW FILES FROM S3")
-    console.log(pewpewFiles)
     if (pewpewFiles.length === 0) {
       throw new Error("No pewpew binaries found in s3");
     }
@@ -82,8 +80,8 @@ export async function getPewpew (): Promise<ErrorResponse | PewPewVersionsRespon
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {
   // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
-  // eslint-disable-next-line no-var
   /** The pewpew version that 'latest' is currently set to */
+  // eslint-disable-next-line no-var
   var currentLatestVersion: string | undefined;
 }
 
@@ -165,7 +163,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       if(latest){
         global.currentLatestVersion = version;
         try {
-          
+
           log("Sucessfully saved PewPew's latest version to file. ", LogLevel.INFO);
         } catch (error) {
           log("Writing latest PewPew's latest version to file failed: ", LogLevel.ERROR, error);

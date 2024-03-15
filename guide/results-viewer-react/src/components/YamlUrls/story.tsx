@@ -45,9 +45,9 @@ const propsLoaded: UrlProps = {
     url: "https://www.pewpew.org",
     hitRate: "1hpm",
     headers: [
-      {id: "0", name : "Default Header", value: "Here is where default headers are. These next 3 are the only default. Authorization header only shows up when Authenticated button is selected"},
+      {id: "0", name: "Default Header", value: "Here is where default headers are. These next 3 are the only default. Authorization header only shows up when Authenticated button is selected"},
       ...getDefaultHeaders(true),
-      {id: "1", name : "Har Header", value: "Here is where har headers would be"}
+      {id: "1", name: "Har Header", value: "Here is where har headers would be"}
     ],
     method: "GET", authorization: null
   },

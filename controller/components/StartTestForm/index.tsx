@@ -174,7 +174,7 @@ export const StartTestForm = ({
     allDays: defaultDaysOfWeek.every((dayOfWeek: DayValue) => dayOfWeek.value),
     queueName: previousTestData?.queueName || queueInitialProps.queueName,
     pewpewVersion: previousTestData?.version || (recurringTest ? maxPewPewVersion : versionInitalProps.pewpewVersion),
-    environmentVariables:  previousTestData?.environmentVariables
+    environmentVariables: previousTestData?.environmentVariables
       ? Object.entries(previousTestData.environmentVariables).map(([variableName, variableValue]: [string, string | null], index: number) => ({
         // Map these to the placeholder values
         name: "previousVar" + index, // We can't use the date or we'll get constant redraws, use the index

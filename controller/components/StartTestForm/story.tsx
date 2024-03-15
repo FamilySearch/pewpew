@@ -38,7 +38,7 @@ const versionInitalPropsEmpty: VersionInitalProps = {
   pewpewVersion: "",
   loading: false,
   pewpewVersions: [],
-  latestInFile: "",
+  latestPewPewVersion: "",
   error: true
 };
 const queueInitialProps: QueueInitialProps = {
@@ -51,7 +51,7 @@ const versionInitalProps: VersionInitalProps = {
   pewpewVersion: "",
   loading: false,
   pewpewVersions: [latestPewPewVersion, "0.5.10", "0.5.11", "0.5.12"],
-  latestInFile: "latest",
+  latestPewPewVersion: "latest",
   error: false
 };
 let ppaasTestId: PpaasTestId;

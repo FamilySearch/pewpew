@@ -22,8 +22,6 @@ import { latestPewPewVersion, versionSort } from "./clientutil";
 import { TestScheduler } from "./testscheduler";
 import { execFile as _execFile } from "child_process";
 import { chmod } from "fs/promises";
-import fs from "fs";
-import { latestPewPewInFile } from "../../../.latestpewpewversionfile";
 import os from "os";
 import { promisify } from "util";
 import semver from "semver";
@@ -35,6 +33,7 @@ logger.config.LogFileName = "ppaas-controller";
 const deleteS3 = s3.deleteObject;
 export const PEWPEW_EXECUTABLE_NAME: string = "pewpew";
 const PEWPEW_EXECUTABLE_NAME_WINDOWS: string = "pewpew.exe";
+const VERSION_TAG_NAME: string = "version";
 
 /**
  * Queries S3 for all objects in the pewpew/ folder that end with pewpew (not pewpew.exe).
@@ -48,6 +47,8 @@ export async function getPewPewVersionsInS3 (): Promise<string[]> {
       localDirectory: LOCAL_FILE_LOCATION,
       extension: PEWPEW_EXECUTABLE_NAME
     });
+    console.log("PEWPEW FILES FROM S3")
+    console.log(pewpewFiles)
     if (pewpewFiles.length === 0) {
       throw new Error("No pewpew binaries found in s3");
     }
@@ -74,6 +75,16 @@ export async function getPewpew (): Promise<ErrorResponse | PewPewVersionsRespon
     log(`getPewpew failed: ${error}`, LogLevel.ERROR, error);
     throw error;
   }
+}
+
+// Store these as maps for fast lookup oldest can be found by lastRequested, lastUpdated, and lastChecked
+// We can't use static variables since the memory spaces aren't shared between api and getServerSideProps
+// https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
+declare global {
+  // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
+  // eslint-disable-next-line no-var
+  /** The pewpew version that 'latest' is currently set to */
+  var currentLatestVersion: string | undefined;
 }
 
 /**
@@ -136,23 +147,12 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       if (version === null) {
         return { json: { message: `${match[1]} is not a valid semver version: ${version}` }, status: 400 };
       }
-      // If latest version is being updated, write it to file:
-      if(latest){
-        const filename = "./.latestpewpewversionfile.ts";
-        const data = "export const latestPewPewInFile = {\"version\": \"" + version + "\"}; // " + new Date() + ";";
-        try {
-          fs.writeFileSync(filename, data);
-          log("Sucessfully saved PewPew's latest version to file. ", LogLevel.INFO);
-        } catch (error) {
-          log("Writing latest PewPew's latest version to file failed: ", LogLevel.ERROR, error);
-        }
-      }
       const uploadPromises: Promise<PpaasS3File>[] = [];
       const versionLogDisplay = latest ? `${version} as latest` : version;
       const versionFolder = latest ? latestPewPewVersion : version;
       log(PEWPEW_EXECUTABLE_NAME + " only upload, version: " + versionLogDisplay, LogLevel.DEBUG, files);
       // Pass in an override Map to override the default tags and not set a "test" tag
-      const tags = new Map<string, string>([["pewpew", "true"]]);
+      const tags = new Map<string, string>([[PEWPEW_BINARY_FOLDER, "true"], [VERSION_TAG_NAME, version]]);
       if (Array.isArray(files.additionalFiles)) {
         for (const file of files.additionalFiles) {
           uploadPromises.push(uploadFile(file, `${PEWPEW_BINARY_FOLDER}/${versionFolder}`, tags));
@@ -161,6 +161,16 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
         uploadPromises.push(uploadFile(files.additionalFiles, `${PEWPEW_BINARY_FOLDER}/${versionFolder}`, tags));
       }
       await Promise.all(uploadPromises);
+      // If latest version is being updated:
+      if(latest){
+        global.currentLatestVersion = version;
+        try {
+          
+          log("Sucessfully saved PewPew's latest version to file. ", LogLevel.INFO);
+        } catch (error) {
+          log("Writing latest PewPew's latest version to file failed: ", LogLevel.ERROR, error);
+        }
+      }
       log(PEWPEW_EXECUTABLE_NAME + " only uploaded, version: " + versionLogDisplay, LogLevel.INFO, { files, authPermissions: getLogAuthPermissions(authPermissions) });
       return { json: { message: "PewPew uploaded, version: " + versionLogDisplay }, status: 200 };
     } else {
@@ -228,10 +238,14 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
   }
 }
 
-export function getPewPewVersionInFile (): string {
+export async function getCurrentPewPewLatestVersion (): Promise<string | undefined>{
+  if(global.currentLatestVersion){
+    return global.currentLatestVersion;
+  }
   try {
-    const latestVersion: string = latestPewPewInFile.version;
-    return latestVersion;
+    const pewpewTags = await s3.getTags({s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`, filename: PEWPEW_EXECUTABLE_NAME});
+    global.currentLatestVersion = pewpewTags && pewpewTags.get(VERSION_TAG_NAME); // <- change to get the tag here
+    return global.currentLatestVersion;
   } catch (error) {
     log("Could not load latest pewpew in file", LogLevel.ERROR, error);
     throw error;

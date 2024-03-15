@@ -25,7 +25,7 @@ const VersionDivSelect = styled(Div)`
 export interface VersionInitalProps {
   pewpewVersion: string;
   pewpewVersions: string[];
-  latestInFile: string;
+  latestPewPewVersion: string;
   loading: boolean;
   error: boolean;
 }
@@ -40,14 +40,14 @@ export const PewPewVersions = ({
   name,
   pewpewVersion,
   onChange,
-  latestInFile,
+  latestPewPewVersion: latestPewPewTag,
   pewpewVersions = [],
   loading,
   error
 }: VersionProps) => {
   // console.log("PewPewVersions state", { pewpewVersions, loading, error });
   let optionItems: JSX.Element[] | undefined;
-  const toasterMessage: string = "IMPORTANT: Please configure your YAML properly!!! The latest version of Pewpew is set to: " + latestInFile;
+  const toasterMessage: string = "IMPORTANT: Please configure your YAML properly!!! The latest version of Pewpew is set to: " + latestPewPewTag;
   if (pewpewVersions && pewpewVersions.length > 0) {
     optionItems = pewpewVersions.map((version: string) => (<option value={version} key={version}>{version}</option>));
   }

@@ -112,7 +112,7 @@ describe("PewPew Util Integration", () => {
         } catch (error) {
           log("postPewPew error while checking latest tag: ", LogLevel.ERROR, error);
           throw error;
-        }        
+        }
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);

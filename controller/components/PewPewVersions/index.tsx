@@ -1,6 +1,7 @@
 import { Danger } from "../Alert";
 import Div from "../Div";
 import React from "react";
+import Toaster  from "../Toaster";
 import styled from "styled-components";
 
 const VersionDiv = styled(Div)`
@@ -24,6 +25,7 @@ const VersionDivSelect = styled(Div)`
 export interface VersionInitalProps {
   pewpewVersion: string;
   pewpewVersions: string[];
+  latestPewPewVersion: string;
   loading: boolean;
   error: boolean;
 }
@@ -38,12 +40,14 @@ export const PewPewVersions = ({
   name,
   pewpewVersion,
   onChange,
+  latestPewPewVersion: latestPewPewTag,
   pewpewVersions = [],
   loading,
   error
 }: VersionProps) => {
   // console.log("PewPewVersions state", { pewpewVersions, loading, error });
   let optionItems: JSX.Element[] | undefined;
+  const toasterMessage: string = "IMPORTANT: Please configure your YAML properly!!! The latest version of Pewpew is set to: " + latestPewPewTag;
   if (pewpewVersions && pewpewVersions.length > 0) {
     optionItems = pewpewVersions.map((version: string) => (<option value={version} key={version}>{version}</option>));
   }
@@ -53,6 +57,7 @@ export const PewPewVersions = ({
       {loading && <VersionDivSelect>Loading...</VersionDivSelect>}
       {!loading && !error && <VersionDivSelect><select name={name} value={pewpewVersion} onChange={onChange}>{optionItems} </select></VersionDivSelect>}
       {error && <VersionDivSelect><Danger>Could not load the current PewPew Versions</Danger></VersionDivSelect>}
+      <Toaster id="toaster" message={toasterMessage}/>
     </VersionDiv>
   );
 };

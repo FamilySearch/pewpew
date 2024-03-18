@@ -1,12 +1,13 @@
 import { LogLevel, log } from "@fs/ppaas-common";
+import { getCurrentPewPewLatestVersion, getPewPewVersionsInS3 } from "../../pages/api/util/pewpew";
 import { API_PEWPEW } from "../../types";
 import { VersionInitalProps } from ".";
-import { getPewPewVersionsInS3 } from "../../pages/api/util/pewpew";
 import { latestPewPewVersion } from "../../pages/api/util/clientutil";
 
 export const getServerSideProps = async (): Promise<VersionInitalProps> => {
   try {
     const pewpewVersions: string[] = await getPewPewVersionsInS3();
+    const currentPewPewLatestVersion: string | undefined = await getCurrentPewPewLatestVersion();
     log("getPewPewVersionsInS3", LogLevel.DEBUG, pewpewVersions);
     // Grab the response
     // console.log("PewPewVersions pewpewVersions: " + JSON.stringify(pewpewVersions), pewpewVersions);
@@ -16,6 +17,7 @@ export const getServerSideProps = async (): Promise<VersionInitalProps> => {
     return {
       pewpewVersion: latestPewPewVersion, // We always want to default to latest
       pewpewVersions,
+      latestPewPewVersion: currentPewPewLatestVersion || "unknown",
       loading: false,
       error: false
     };
@@ -25,6 +27,7 @@ export const getServerSideProps = async (): Promise<VersionInitalProps> => {
     return {
       pewpewVersion: "",
       pewpewVersions: [],
+      latestPewPewVersion: "unknown",
       loading: false,
       error: true
     };

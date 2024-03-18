@@ -1,8 +1,8 @@
 import { AuthPermission, AuthPermissions, ErrorResponse, PewPewVersionsResponse, TestManagerError } from "../types";
 import type { File, Files } from "formidable";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
-import { ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
-import { deletePewPew, getPewPewVersionsInS3, getPewpew, postPewPew } from "../pages/api/util/pewpew";
+import { LogLevel, PpaasS3File, log, logger } from "@fs/ppaas-common";
+import { PEWPEW_BINARY_FOLDER, ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
+import { VERSION_TAG_NAME, deletePewPew, getCurrentPewPewLatestVersion, getPewPewVersionsInS3, getPewpew, postPewPew } from "../pages/api/util/pewpew";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
@@ -28,6 +28,7 @@ const pewpewZipFile: File = createFormidableFile(
 );
 let sharedPewPewVersions: string[] | undefined;
 let uploadedPewPewVersion: string | undefined; // Used for delete
+let currentPewPewLatestVersion: string | undefined;
 
 describe("PewPew Util Integration", () => {
   let files: Files = {};
@@ -75,7 +76,7 @@ describe("PewPew Util Integration", () => {
         files
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
-      postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
+      postPewPew(parsedForm, authAdmin).then(async (res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);
         const body: TestManagerError = res.json;
@@ -97,6 +98,21 @@ describe("PewPew Util Integration", () => {
           sharedPewPewVersions.push(version);
         }
         log("sharedPewPewVersions: " + sharedPewPewVersions, LogLevel.DEBUG);
+        try {
+          const pewpewFiles = await PpaasS3File.getAllFilesInS3({
+            s3Folder: `${PEWPEW_BINARY_FOLDER}/${version}`,
+            localDirectory: process.env.TEMP || "/tmp"
+          });
+          expect(pewpewFiles).to.not.equal(undefined);
+          expect(pewpewFiles.length).to.be.greaterThan(0);
+          const pewpewFile = pewpewFiles.find( (file) => file.filename === "pewpew");
+          expect(pewpewFile).to.not.equal(undefined);
+          expect(pewpewFile?.tags).to.not.equal(undefined);
+          expect(pewpewFile?.tags?.get(VERSION_TAG_NAME)).to.equal(version);
+        } catch (error) {
+          log("postPewPew error while checking latest tag: ", LogLevel.ERROR, error);
+          throw error;
+        }
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);
@@ -112,7 +128,7 @@ describe("PewPew Util Integration", () => {
         files
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
-      postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
+      postPewPew(parsedForm, authAdmin).then(async (res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);
         const body: TestManagerError = res.json;
@@ -121,14 +137,34 @@ describe("PewPew Util Integration", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.include("as latest");
-        const version = latestPewPewVersion;
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+        expect(match, "pewpew match").to.not.equal(null);
+        expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
+        const version: string = match![1];
         // If this runs before the other acceptance tests populate the shared pewpew versions
         if (!sharedPewPewVersions) {
-          sharedPewPewVersions = [version];
-        } else if (!sharedPewPewVersions.includes(version)) {
-          sharedPewPewVersions.push(version);
+          sharedPewPewVersions = [latestPewPewVersion];
+        } else if (!sharedPewPewVersions.includes(latestPewPewVersion)) {
+          sharedPewPewVersions.push(latestPewPewVersion);
         }
         log("sharedPewPewVersions: " + sharedPewPewVersions, LogLevel.DEBUG);
+        try {
+          const pewpewFiles = await PpaasS3File.getAllFilesInS3({
+            s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+            localDirectory: process.env.TEMP || "/tmp"
+          });
+          expect(pewpewFiles).to.not.equal(undefined);
+          expect(pewpewFiles.length).to.be.greaterThan(0);
+          const pewpewFile = pewpewFiles.find( (file) => file.filename === "pewpew");
+          expect(pewpewFile).to.not.equal(undefined);
+          expect(pewpewFile?.tags).to.not.equal(undefined);
+          expect(pewpewFile?.tags?.get(VERSION_TAG_NAME)).to.equal(version);
+        } catch (error) {
+          log("postPewPew error while checking latest tag: ", LogLevel.ERROR, error);
+          throw error;
+        }
+        currentPewPewLatestVersion = version;
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);
@@ -138,6 +174,20 @@ describe("PewPew Util Integration", () => {
   });
 
   describe("getPewpew", () => {
+    before(async () => {
+      try {
+        const pewpewFiles = await PpaasS3File.getAllFilesInS3({
+          s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+          localDirectory: process.env.TEMP || "/tmp"
+        });
+        expect(pewpewFiles).to.not.equal(undefined);
+        const pewpewFile = pewpewFiles.find( (file) => file.filename === "pewpew");
+        expect(pewpewFile).to.not.equal(undefined);
+      } catch (error) {
+        log("getCurrentPewPewLatest Version failed: ", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
     it("getPewpew should respond 200 OK", (done: Mocha.Done) => {
       expect(sharedPewPewVersions, "sharedPewPewVersions").to.not.equal(undefined);
       getPewpew().then((res: ErrorResponse | PewPewVersionsResponse) => {
@@ -152,6 +202,12 @@ describe("PewPew Util Integration", () => {
         }
         done();
       }).catch((error) => done(error));
+    });
+
+    it("getCurrentPewPewLatestVersion", async () => {
+      expect(currentPewPewLatestVersion, "currentPewPewLatestVersion").to.not.equal(undefined);
+      const result = await getCurrentPewPewLatestVersion();
+      expect(result, "result").to.equal(currentPewPewLatestVersion);
     });
   });
 

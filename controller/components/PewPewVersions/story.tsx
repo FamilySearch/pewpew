@@ -15,11 +15,12 @@ const props: VersionProps = {
     console.log("newVal: ", newVal);
   },
   pewpewVersions: ["0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", latestPewPewVersion, "0.1.6"],
+  latestPewPewVersion: "0.1.6",
   loading: false,
   error: false
 };
-const propsLoading: VersionProps = { ...props, pewpewVersions: [], loading: true };
-const propsError: VersionProps = { ...props, error: true };
+const propsLoading: VersionProps = { ...props, pewpewVersions: [], latestPewPewVersion: "unknown", loading: true };
+const propsError: VersionProps = { ...props, error: true, latestPewPewVersion: "unknown" };
 
 export default {
   title: "PewPewVersions"

@@ -431,7 +431,7 @@ export async function downloadPriorTestId (
   };
 }
 
-// / Export for testing
+// Export for testing
 export async function getValidateLegacyOnly (version: string | undefined): Promise<boolean | undefined> {
   // undefined or "latest" parse as anything (reutrn undefined)
   if (!version || version === latestPewPewVersion) {
@@ -1221,8 +1221,8 @@ export abstract class TestManager {
         log("environmentVariables", LogLevel.TRACE, environmentVariablesFile);
 
         // Pass pewpew version legacy/scripting
-        const validateLegacyOnly = getValidateLegacyOnly(version);
-        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions, await validateLegacyOnly);
+        const validateLegacyOnly = await getValidateLegacyOnly(version);
+        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions, validateLegacyOnly);
         // eslint-disable-next-line no-prototype-builtins
         if (validateResult.hasOwnProperty("json")) {
           return validateResult as ErrorResponse;

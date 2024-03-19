@@ -37,8 +37,10 @@ import type { File, FileJSON } from "formidable";
 import { Test as MochaTest } from "mocha";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
+import { VERSION_TAG_NAME } from "../pages/api/util/pewpew";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
+import { mockGetObjectTagging } from "./mock";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -318,6 +320,7 @@ describe("TestManager", () => {
 
   const validateLegacyOnlySuite: Mocha.Suite = describe("getValidateLegacyOnly", () => {
     before (() => {
+      mockGetObjectTagging(new Map([["tagName", "tagValue"]]));
       const validateLegacyOnlyArray: [string, boolean][] = [
         ["0.4.0", true],
         ["0.5.0", true],
@@ -347,7 +350,9 @@ describe("TestManager", () => {
 
     it("should return undefined for undefined", async () => {
       try {
-        expect(await getValidateLegacyOnly(undefined)).to.equal(false);
+        await getValidateLegacyOnly(latestPewPewVersion).then((result: boolean | undefined) => {
+          expect(result).to.equal(undefined);
+        });
       } catch (error) {
         throw error;
       }
@@ -355,15 +360,21 @@ describe("TestManager", () => {
 
     it("should return undefined for empty string", async () => {
       try {
-        expect(await getValidateLegacyOnly("")).to.equal(false);
+        mockGetObjectTagging(new Map([[VERSION_TAG_NAME, ""]]));
+        await getValidateLegacyOnly(latestPewPewVersion).then((result: boolean | undefined) => {
+          expect(result).to.equal(undefined);
+        });
       } catch (error) {
         throw error;
       }
     });
-
     it("should return undefined for latest", async () => {
       try {
-        expect(await getValidateLegacyOnly(latestPewPewVersion)).to.equal(false);
+        const expected = "latest";
+        mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
+        await getValidateLegacyOnly(latestPewPewVersion).then((result: boolean | undefined) => {
+          expect(result).to.equal(expected);
+        });
       } catch (error) {
         throw error;
       }

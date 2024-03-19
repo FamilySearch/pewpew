@@ -357,7 +357,7 @@ describe("TestManager", () => {
       try {
         expect(await getValidateLegacyOnly("")).to.equal(false);
       } catch (error) {
-        throw error; 
+        throw error;
       }
     });
 

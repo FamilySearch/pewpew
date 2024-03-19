@@ -53,6 +53,7 @@ import { formatError, isYamlFile, latestPewPewVersion } from "./clientutil";
 import { createS3Filename as createS3MessageFilename } from "@fs/ppaas-common/dist/src/ppaass3message";
 import { createS3Filename as createS3StatusFilename } from "@fs/ppaas-common/dist/src/ppaasteststatus";
 import fs from "fs/promises";
+import { getCurrentPewPewLatestVersion } from "./pewpew";
 import semver from "semver";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -430,11 +431,14 @@ export async function downloadPriorTestId (
   };
 }
 
-// Export for testing
-export function getValidateLegacyOnly (version: string | undefined): boolean | undefined {
+// / Export for testing
+export async function getValidateLegacyOnly (version: string | undefined): Promise<boolean | undefined> {
   // undefined or "latest" parse as anything (reutrn undefined)
   if (!version || version === latestPewPewVersion) {
-    return undefined;
+    version = await getCurrentPewPewLatestVersion();
+    if (!version) { // If it's still undefined, we don't know what version latest is, parse as either
+      return undefined;
+    }
   }
   // This needs to create the validateLegacyOnly, so anything less than 0.6.0
   return semver.satisfies(version, LEGACY_PEWPEW_VERSION, { includePrerelease: true });
@@ -1218,7 +1222,7 @@ export abstract class TestManager {
 
         // Pass pewpew version legacy/scripting
         const validateLegacyOnly = getValidateLegacyOnly(version);
-        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions, validateLegacyOnly);
+        const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions, await validateLegacyOnly);
         // eslint-disable-next-line no-prototype-builtins
         if (validateResult.hasOwnProperty("json")) {
           return validateResult as ErrorResponse;

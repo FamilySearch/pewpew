@@ -335,41 +335,37 @@ describe("TestManager", () => {
         ["1.0.0", false]
       ];
       for (const [version, expected] of validateLegacyOnlyArray) {
-        validateLegacyOnlySuite.addTest(new MochaTest(version + " should return " + expected, (done: Mocha.Done) => {
+        validateLegacyOnlySuite.addTest(new MochaTest(version + " should return " + expected, async () => {
           try {
-            expect(getValidateLegacyOnly(version)).to.equal(expected);
-            done();
+            expect(await getValidateLegacyOnly(version)).to.equal(expected);
           } catch (error) {
-            done(error);
+            throw error;
           }
         }));
       }
     });
 
-    it("should return undefined for undefined", (done: Mocha.Done) => {
+    it("should return undefined for undefined", async () => {
       try {
-        expect(getValidateLegacyOnly(undefined)).to.equal(undefined);
-        done();
+        expect(await getValidateLegacyOnly(undefined)).to.equal(false);
       } catch (error) {
-        done(error);
+        throw error;
       }
     });
 
-    it("should return undefined for empty string", (done: Mocha.Done) => {
+    it("should return undefined for empty string", async () => {
       try {
-        expect(getValidateLegacyOnly("")).to.equal(undefined);
-        done();
+        expect(await getValidateLegacyOnly("")).to.equal(false);
       } catch (error) {
-        done(error);
+        throw error; 
       }
     });
 
-    it("should return undefined for latest", (done: Mocha.Done) => {
+    it("should return undefined for latest", async () => {
       try {
-        expect(getValidateLegacyOnly(latestPewPewVersion)).to.equal(undefined);
-        done();
+        expect(await getValidateLegacyOnly(latestPewPewVersion)).to.equal(false);
       } catch (error) {
-        done(error);
+        throw error;
       }
     });
   });

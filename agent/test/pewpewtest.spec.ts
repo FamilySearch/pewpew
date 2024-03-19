@@ -190,7 +190,7 @@ describe("PewPewTest", () => {
       endTime: now + 2,
       resultsFilename: ["test2"],
       status: TestStatus.Failed,
-      version:"version3",
+      version: "version3",
       userId: "user3"
     };
 

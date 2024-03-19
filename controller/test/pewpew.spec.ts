@@ -15,7 +15,9 @@ import {
 } from "../pages/api/util/util";
 import {
   PEWPEW_EXECUTABLE_NAME,
+  VERSION_TAG_NAME,
   deletePewPew,
+  getCurrentPewPewLatestVersion,
   getPewPewVersionsInS3,
   getPewpew,
   postPewPew
@@ -127,6 +129,18 @@ describe("PewPew Util", () => {
 
   after(() => {
     resetMockS3();
+  });
+
+  describe("getCurrentPewPewLatestVersion", () => {
+    it("getCurrentPewPewLatestVersion should return version with latest tag from S3", (done: Mocha.Done) => {
+      const expected = "0.5.13";
+      mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
+      getCurrentPewPewLatestVersion().then((result: string | undefined)  => {
+        log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
+        expect(result).to.equal(expected);
+        done();
+      }).catch((error) => done(error));
+    });
   });
 
   describe("getPewPewVersionsInS3", () => {

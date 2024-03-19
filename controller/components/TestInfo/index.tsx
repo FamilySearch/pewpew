@@ -54,7 +54,7 @@ export const TestInfo = ({ testData, ...testInfoProps }: TestInfoProps) => {
   const defaultState: TestInfoState = {
     message: testInfoProps.message || undefined,
     messageId: testInfoProps.messageId || undefined,
-    killTest : testInfoProps.killTest || undefined,
+    killTest: testInfoProps.killTest || undefined,
     error: testInfoProps.error || undefined
   };
   const [state, setState] = useState(defaultState);

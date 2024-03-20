@@ -457,7 +457,7 @@ export async function validateYamlfile (
   additionalFileNames: string[],
   bypassParser: boolean | undefined,
   authPermissions: AuthPermissions,
-  validateLegacyOnly?: boolean
+  validateLegacyOnly?: boolean | undefined
 ): Promise<ErrorResponse | ValidateYamlfileResult> {
   let testRunTimeMn: number | undefined;
   let bucketSizeMs: number | undefined;
@@ -479,7 +479,7 @@ export async function validateYamlfile (
         dummyEnvironmentVariables[splunkPath] = dummySplunkPath;
       }
       // Pass pewpew version legacy/scripting
-      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, validateLegacyOnly);
+      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, await validateLegacyOnly);
     } catch (error) {
       return { json: { message: `yamlFile: ${yamlFile.originalFilename || yamlFile.filepath} failed to parse`, error: formatError(error) }, status: 400 };
     }

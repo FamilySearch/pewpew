@@ -34,12 +34,13 @@ import {
   logger
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
-import { mockGetObjectTagging, mockS3, mockUploadObject, resetMockS3 } from "./mock";
+import { mockGetObjectTagging, mockS3, resetMockS3 } from "./mock";
 import { Test as MochaTest } from "mocha";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { VERSION_TAG_NAME } from "../pages/api/util/pewpew";
 import { expect } from "chai";
+import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -320,8 +321,7 @@ describe("TestManager", () => {
   const validateLegacyOnlySuite: Mocha.Suite = describe("getValidateLegacyOnly", () => {
     before (() => {
       mockS3();
-      mockUploadObject();
-      mockGetObjectTagging(new Map([["tagName", "tagValue"]]));
+      mockGetObjectTagging(new Map([["pewpew", "true"]]));
       const validateLegacyOnlyArray: [string, boolean][] = [
         ["0.4.0", true],
         ["0.5.0", true],
@@ -346,10 +346,10 @@ describe("TestManager", () => {
             throw error;
           }
         }));
-        validateLegacyOnlySuite.addTest(new MochaTest(version + " should return tags for that version", async () => {
+        validateLegacyOnlySuite.addTest(new MochaTest(`latest should return ${expected} for pewpew tagged with version ${version}` , async () => {
           try {
             mockGetObjectTagging(new Map([[VERSION_TAG_NAME, version]]));
-            await getValidateLegacyOnly(version).then((result: boolean | undefined) => {
+            await getValidateLegacyOnly(latestPewPewVersion).then((result: boolean | undefined) => {
               log("getValidateLegacyOnly()", LogLevel.INFO, result);
               expect(result).to.equal(expected);
             });
@@ -360,13 +360,17 @@ describe("TestManager", () => {
       }
     });
 
+    beforeEach(() => {
+      mockGetObjectTagging(new Map([["pewpew", "true"]]));
+      global.currentLatestVersion = undefined;
+    });
+
     after(() => {
       resetMockS3();
+      global.currentLatestVersion = undefined;
     });
     it("should return undefined for undefined", async () => {
       try {
-        const expected = "";
-        mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
         await getValidateLegacyOnly(undefined).then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
           expect(result).to.equal(undefined);
@@ -378,9 +382,7 @@ describe("TestManager", () => {
 
     it("should return undefined for empty string", async () => {
       try {
-        const expected = "";
-        mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
-        await getValidateLegacyOnly(expected).then((result: boolean | undefined) => {
+        await getValidateLegacyOnly("").then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
           expect(result).to.equal(undefined);
         });
@@ -389,11 +391,9 @@ describe("TestManager", () => {
       }
     });
 
-    it("should return undefined for latest", async () => {
+    it("should return undefined for latest when no version tagged", async () => {
       try {
-        const expected = "latest";
-        mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
-        await getValidateLegacyOnly(expected).then((result: boolean | undefined) => {
+        await getValidateLegacyOnly(latestPewPewVersion).then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
           expect(result).to.equal(undefined);
         });

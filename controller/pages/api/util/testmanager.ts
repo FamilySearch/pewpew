@@ -479,7 +479,7 @@ export async function validateYamlfile (
         dummyEnvironmentVariables[splunkPath] = dummySplunkPath;
       }
       // Pass pewpew version legacy/scripting
-      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, await validateLegacyOnly);
+      yamlParser = await YamlParser.parseYamlFile(yamlFile.filepath, dummyEnvironmentVariables, validateLegacyOnly);
     } catch (error) {
       return { json: { message: `yamlFile: ${yamlFile.originalFilename || yamlFile.filepath} failed to parse`, error: formatError(error) }, status: 400 };
     }

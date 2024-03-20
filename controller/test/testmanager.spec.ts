@@ -34,13 +34,12 @@ import {
   logger
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
+import { mockGetObjectTagging, mockS3, mockUploadObject, resetMockS3 } from "./mock";
 import { Test as MochaTest } from "mocha";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { VERSION_TAG_NAME } from "../pages/api/util/pewpew";
 import { expect } from "chai";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
-import { mockGetObjectTagging, mockS3, mockUploadObject, resetMockS3 } from "./mock";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -347,33 +346,31 @@ describe("TestManager", () => {
             throw error;
           }
         }));
-        // Tags 
         validateLegacyOnlySuite.addTest(new MochaTest(version + " should return tags for that version", async () => {
           try {
             mockGetObjectTagging(new Map([[VERSION_TAG_NAME, version]]));
             await getValidateLegacyOnly(version).then((result: boolean | undefined) => {
               log("getValidateLegacyOnly()", LogLevel.INFO, result);
-              expect(result).to.equal(expected)
+              expect(result).to.equal(expected);
             });
           } catch (error) {
-            throw error; 
+            throw error;
           }
-        }))
+        }));
       }
     });
 
     after(() => {
       resetMockS3();
-    });    
-
+    });
     it("should return undefined for undefined", async () => {
       try {
         const expected = "";
         mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
         await getValidateLegacyOnly(undefined).then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
-          expect(result).to.equal(undefined)
-        })
+          expect(result).to.equal(undefined);
+        });
       } catch (error) {
         throw error;
       }
@@ -385,8 +382,8 @@ describe("TestManager", () => {
         mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
         await getValidateLegacyOnly(expected).then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
-          expect(result).to.equal(undefined)
-        })
+          expect(result).to.equal(undefined);
+        });
       } catch (error) {
         throw error;
       }
@@ -398,9 +395,8 @@ describe("TestManager", () => {
         mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
         await getValidateLegacyOnly(expected).then((result: boolean | undefined) => {
           log("getValidateLegacyOnly()", LogLevel.INFO, result);
-          expect(result).to.equal(undefined)
-        })
-        
+          expect(result).to.equal(undefined);
+        });
       } catch (error) {
         throw error;
       }

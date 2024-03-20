@@ -457,7 +457,7 @@ export async function validateYamlfile (
   additionalFileNames: string[],
   bypassParser: boolean | undefined,
   authPermissions: AuthPermissions,
-  validateLegacyOnly?: boolean | undefined
+  validateLegacyOnly: boolean | undefined
 ): Promise<ErrorResponse | ValidateYamlfileResult> {
   let testRunTimeMn: number | undefined;
   let bucketSizeMs: number | undefined;

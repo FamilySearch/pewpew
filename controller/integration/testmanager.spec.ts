@@ -30,7 +30,7 @@ import { EventInput } from "@fullcalendar/core";
 import { PpaasEncryptEnvironmentFile } from "../pages/api/util/ppaasencryptenvfile";
 import { TestScheduler } from "../pages/api/util/testscheduler";
 import { expect } from "chai";
-import { getCurrentPewPewLatestVersion, getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
+import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
 import path from "path";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -1882,7 +1882,7 @@ describe("TestManager Integration", () => {
       });
     });
 
-    it("postTest with version latest should respond 400 Bad Request, because latest is legacy", (done: Mocha.Done) => {
+    it("postTest with version latest should respond 400 Bad Request, because latest is Legacy", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         files: scriptingFiles,
         fields: {

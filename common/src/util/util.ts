@@ -10,6 +10,23 @@ export const SYSTEM_NAME: string = process.env.SYSTEM_NAME || "unittests";
 export const CONTROLLER_ENV = process.env.CONTROLLER_ENV;
 export const AGENT_ENV = process.env.AGENT_ENV;
 
+export const PEWPEW_BINARY_FOLDER: string = "pewpew";
+export const PEWPEW_BINARY_EXECUTABLE_LINUX = "pewpew";
+export const PEWPEW_BINARY_EXECUTABLE_WINDOWS = "pewpew.exe";
+export const PEWPEW_BINARY_EXECUTABLE_MAC = "pewpew.mac";
+export const PEWPEW_BINARY_EXECUTABLE = process.env.PEWPEW_BINARY_EXECUTABLE
+  || os.platform() === "win32"
+  ? PEWPEW_BINARY_EXECUTABLE_WINDOWS
+  : os.platform() === "darwin"
+    ? PEWPEW_BINARY_EXECUTABLE_MAC
+    : PEWPEW_BINARY_EXECUTABLE_LINUX;
+export const PEWPEW_BINARY_EXECUTABLE_NAMES = [
+  PEWPEW_BINARY_EXECUTABLE_LINUX,
+  PEWPEW_BINARY_EXECUTABLE_WINDOWS,
+  PEWPEW_BINARY_EXECUTABLE_MAC
+];
+
+
 /** This applications PREFIX. No overrides */
 export const PREFIX_DEFAULT: string = `${APPLICATION_NAME}-${SYSTEM_NAME}`.toUpperCase().replace(/-/g, "_");
 let PREFIX_CONTROLLER_ENV: string | undefined;

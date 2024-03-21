@@ -14,12 +14,12 @@ import {
   uploadFile
 } from "./util/s3";
 import { LogLevel, log } from "./util/log";
+import { PEWPEW_BINARY_EXECUTABLE_NAMES, sleep } from "./util/util";
 import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { access, stat } from "fs/promises";
 import { S3File } from "../types";
 import { Stats } from "fs";
 import { URL } from "url";
-import { sleep } from "./util/util";
 
 const RESULTS_UPLOAD_RETRY: number = parseInt(process.env.RESULTS_UPLOAD_RETRY || "0", 10) || 5;
 
@@ -105,7 +105,7 @@ export class PpaasS3File implements S3File {
         this.contentType = "text/plain";
         break;
     }
-    if (filename === "pewpew" || filename === "pewpew.exe") {
+    if (PEWPEW_BINARY_EXECUTABLE_NAMES.includes(filename)) {
       this.contentType = "application/octet-stream";
     }
     log(`contentType: ${this.contentType}`, LogLevel.DEBUG);

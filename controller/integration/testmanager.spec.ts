@@ -1882,7 +1882,7 @@ describe("TestManager Integration", () => {
       });
     });
 
-    it("postTest with version latest should respond 200 OK", (done: Mocha.Done) => {
+    it("postTest with version latest should respond 400 Bad Request, because latest is Legacy", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         files: scriptingFiles,
         fields: {
@@ -1893,14 +1893,14 @@ describe("TestManager Integration", () => {
       log("postTest parsedForm latest", LogLevel.DEBUG, { parsedForm });
       TestManager.postTest(parsedForm, authAdmin, UNIT_TEST_FOLDER).then((res: ErrorResponse | TestDataResponse) => {
         log("postTest res", LogLevel.DEBUG, res);
-        expect(res.status, JSON.stringify(res.json)).to.equal(200);
-        const body: TestData = res.json as TestData;
-        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, body);
+        expect(res.status, JSON.stringify(res.json)).to.equal(400);
+        log("body: " + JSON.stringify(res.json), LogLevel.DEBUG, res.json);
+        const body: TestManagerError = res.json as TestManagerError;
         expect(body).to.not.equal(undefined);
-        expect(body.testId).to.not.equal(undefined);
-        expect(body.s3Folder).to.not.equal(undefined);
-        expect(body.status).to.equal(TestStatus.Created);
-        expect(body.userId).to.equal(authAdmin.userId);
+        expect(body.message).to.not.equal(undefined);
+        expect(body.message).to.include("failed to parse");
+        expect(body.error).to.not.equal(undefined);
+        expect(body.error).to.include("UnrecognizedKey");
         done();
       }).catch((error) => {
         log("postTest error", LogLevel.ERROR, error);

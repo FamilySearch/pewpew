@@ -6,15 +6,14 @@ import {
   TestManagerError
 } from "../types";
 import type { File, Files } from "formidable";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log, logger, util } from "@fs/ppaas-common";
 import {
-  PEWPEW_BINARY_FOLDER,
   ParsedForm,
   createFormidableFile,
   unzipFile
 } from "../pages/api/util/util";
+import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
-  PEWPEW_EXECUTABLE_NAME,
   VERSION_TAG_NAME,
   deletePewPew,
   getCurrentPewPewLatestVersion,
@@ -22,7 +21,6 @@ import {
   getPewpew,
   postPewPew
 } from "../pages/api/util/pewpew";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
   mockGetObjectTagging,
   mockListObject,
@@ -40,7 +38,7 @@ import semver from "semver";
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
+const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
@@ -48,8 +46,8 @@ const authAdmin: AuthPermissions = {
 };
 
 const pewpewZipFile: File = createFormidableFile(
-  path.basename(PEWPEW_FILEPATH),
-  PEWPEW_FILEPATH,
+  path.basename(PEWPEW_ZIP_FILEPATH),
+  PEWPEW_ZIP_FILEPATH,
   "unittest",
   1,
   null
@@ -58,8 +56,8 @@ const invalidFiles = {
   additionalFiles: [pewpewZipFile] as any as File
 };
 
-const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
-const pewpewFilename = PEWPEW_EXECUTABLE_NAME;
+const pewpewS3Folder = util.PEWPEW_BINARY_FOLDER;
+const pewpewFilename = util.PEWPEW_BINARY_EXECUTABLE;
 const versions = ["0.5.10", "0.5.11", "0.5.12-preview1", "0.5.12-preview2", "latest"];
 const s3Object: S3Object = {
   LastModified: new Date(),

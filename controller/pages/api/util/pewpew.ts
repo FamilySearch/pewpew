@@ -6,7 +6,6 @@ import {
 import type { Fields, File, Files } from "formidable";
 import {
   LOCAL_FILE_LOCATION,
-  PEWPEW_BINARY_FOLDER,
   ParsedForm,
   getLogAuthPermissions,
   uploadFile
@@ -16,7 +15,8 @@ import {
   PpaasS3File,
   log,
   logger,
-  s3
+  s3,
+  util
 } from "@fs/ppaas-common";
 import { latestPewPewVersion, versionSort } from "./clientutil";
 import { TestScheduler } from "./testscheduler";
@@ -31,8 +31,12 @@ const execFile = promisify(_execFile);
 logger.config.LogFileName = "ppaas-controller";
 
 const deleteS3 = s3.deleteObject;
-export const PEWPEW_EXECUTABLE_NAME: string = "pewpew";
-const PEWPEW_EXECUTABLE_NAME_WINDOWS: string = "pewpew.exe";
+// TODO: Add Mac/Windows support
+const {
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER
+} = util;
 export const VERSION_TAG_NAME: string = "version";
 
 /**
@@ -45,7 +49,7 @@ export async function getPewPewVersionsInS3 (): Promise<string[]> {
     const pewpewFiles: PpaasS3File[] = await PpaasS3File.getAllFilesInS3({
       s3Folder: PEWPEW_BINARY_FOLDER,
       localDirectory: LOCAL_FILE_LOCATION,
-      extension: PEWPEW_EXECUTABLE_NAME
+      extension: PEWPEW_BINARY_EXECUTABLE
     });
     if (pewpewFiles.length === 0) {
       throw new Error("No pewpew binaries found in s3");
@@ -103,9 +107,9 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
     if (!files || fileKeys.length === 0 || !fileKeys.includes("additionalFiles")) {
       return { json: { message: "Must provide a additionalFiles minimally" }, status: 400 };
     } else if (
-        ((Array.isArray(files.additionalFiles) && files.additionalFiles.every((file: File) => file && (file.originalFilename === PEWPEW_EXECUTABLE_NAME || file.originalFilename === PEWPEW_EXECUTABLE_NAME_WINDOWS)))
-        || (!Array.isArray(files.additionalFiles) && (files.additionalFiles.originalFilename === PEWPEW_EXECUTABLE_NAME || files.additionalFiles.originalFilename === PEWPEW_EXECUTABLE_NAME_WINDOWS)))
-        ) {
+      ((Array.isArray(files.additionalFiles) && files.additionalFiles.every((file: File) => file && file.originalFilename && PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)))
+      || (!Array.isArray(files.additionalFiles) && (files.additionalFiles.originalFilename && PEWPEW_BINARY_EXECUTABLE_NAMES.includes(files.additionalFiles.originalFilename))))
+    ) {
       // Everything here is just pepew
       if (Array.isArray(fields.latest)) {
         return { json: { message: "Only one 'latest' is allowed" }, status: 400 };
@@ -116,7 +120,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       const latest: boolean = fields.latest === "true";
 
       // Run pewpew --version and parse the version
-      const pewpewVersionBinaryName = os.platform() === "win32" ? PEWPEW_EXECUTABLE_NAME_WINDOWS : PEWPEW_EXECUTABLE_NAME;
+      const pewpewVersionBinaryName = PEWPEW_BINARY_EXECUTABLE;
       log(`os.platform(): ${os.platform()}`, LogLevel.DEBUG, { platform: os.platform(), pewpewVersionBinary: pewpewVersionBinaryName });
 
       // Find the binary for our platform.
@@ -148,7 +152,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       const uploadPromises: Promise<PpaasS3File>[] = [];
       const versionLogDisplay = latest ? `${version} as latest` : version;
       const versionFolder = latest ? latestPewPewVersion : version;
-      log(PEWPEW_EXECUTABLE_NAME + " only upload, version: " + versionLogDisplay, LogLevel.DEBUG, files);
+      log(PEWPEW_BINARY_EXECUTABLE + " only upload, version: " + versionLogDisplay, LogLevel.DEBUG, files);
       // Pass in an override Map to override the default tags and not set a "test" tag
       const tags = new Map<string, string>([[PEWPEW_BINARY_FOLDER, "true"], [VERSION_TAG_NAME, version]]);
       if (Array.isArray(files.additionalFiles)) {
@@ -162,14 +166,9 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       // If latest version is being updated:
       if (latest) {
         global.currentLatestVersion = version;
-        try {
-
-          log("Sucessfully saved PewPew's latest version to file. ", LogLevel.INFO);
-        } catch (error) {
-          log("Writing latest PewPew's latest version to file failed: ", LogLevel.ERROR, error);
-        }
+        log("Sucessfully updated currentLatestVersion. ", LogLevel.INFO, version);
       }
-      log(PEWPEW_EXECUTABLE_NAME + " only uploaded, version: " + versionLogDisplay, LogLevel.INFO, { files, authPermissions: getLogAuthPermissions(authPermissions) });
+      log(PEWPEW_BINARY_EXECUTABLE + " only uploaded, version: " + versionLogDisplay, LogLevel.INFO, { files, authPermissions: getLogAuthPermissions(authPermissions) });
       return { json: { message: "PewPew uploaded, version: " + versionLogDisplay }, status: 200 };
     } else {
       // We're missing pewpew uploads
@@ -241,7 +240,10 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
     return global.currentLatestVersion;
   }
   try {
-    const pewpewTags = await s3.getTags({s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`, filename: PEWPEW_EXECUTABLE_NAME});
+    const pewpewTags = await s3.getTags({
+      s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+      filename: PEWPEW_BINARY_EXECUTABLE
+    });
     global.currentLatestVersion = pewpewTags && pewpewTags.get(VERSION_TAG_NAME); // <- change to get the tag here
     return global.currentLatestVersion;
   } catch (error) {

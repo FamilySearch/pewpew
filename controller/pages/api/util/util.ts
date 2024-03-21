@@ -32,7 +32,6 @@ logger.config.LogFileName = "ppaas-controller";
 export const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || tmpdir() || "/tmp";
 const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || "0") || 500;
 const MAX_ZIP_FILE_COUNT = 10;
-export const PEWPEW_BINARY_FOLDER: string = "pewpew";
 export const ENCRYPTED_TEST_SCHEDULER_FOLDERNAME = "settings";
 export const ENCRYPTED_TEST_SCHEDULER_FILENAME = "testscheduler.json";
 

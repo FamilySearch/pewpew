@@ -19,7 +19,6 @@ import {
 } from "../../../types";
 import {
   ENCRYPTED_TEST_SCHEDULER_FOLDERNAME,
-  PEWPEW_BINARY_FOLDER,
   ParsedForm,
   createFormidableFile,
   getLogAuthPermissions,
@@ -57,7 +56,11 @@ import fs from "fs/promises";
 logger.config.LogFileName = "ppaas-controller";
 
 const sendTestScalingMessage = sqs.sendTestScalingMessage;
-const createStatsFileName = util.createStatsFileName;
+const {
+  createStatsFileName,
+  PEWPEW_BINARY_FOLDER,
+  PEWPEW_BINARY_EXECUTABLE_NAMES
+} = util;
 export const MAX_SAVED_TESTS_RECENT: number = parseInt(process.env.MAX_SAVED_TESTS_RECENT || "0", 10) || 10;
 export const MAX_SAVED_TESTS_CACHED: number = parseInt(process.env.MAX_SAVED_TESTS_CACHED || "0", 10) || 1000;
 const MIN_SEARCH_LENGTH: number = parseInt(process.env.MIN_SEARCH_LENGTH || "0", 10) || 0;
@@ -1166,7 +1169,7 @@ export abstract class TestManager {
             }
             Object.assign(environmentVariablesFile, parsedEnv);
 
-          } else if (file.originalFilename === "pewpew" || file.originalFilename === "pewpew.exe") {
+          } else if (PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)) {
             if (authPermission < AuthPermission.Admin) {
               log("Unauthorized User attempted to use custom pewpew binary.", LogLevel.WARN, { yamlFile });
               return { json: { message: "User is not authorized to use custom pewpew binaries. If you think this is an error, please contact the PerformanceQA team." }, status: 403 };
@@ -1310,7 +1313,7 @@ export abstract class TestManager {
           return { json: { message: "Invalid Yaml filename", error: `${error}` }, status: 400 };
         }
         // Check for pewpew/ and settings/ and reject
-        if ((ppaasTestId.yamlFile) === PEWPEW_BINARY_FOLDER || ppaasTestId.yamlFile === ENCRYPTED_TEST_SCHEDULER_FOLDERNAME) {
+        if (ppaasTestId.yamlFile.startsWith(PEWPEW_BINARY_FOLDER) || ppaasTestId.yamlFile.startsWith(ENCRYPTED_TEST_SCHEDULER_FOLDERNAME)) {
           return { json: { message: ppaasTestId.yamlFile + " is a reserved word and cannot be used for a yaml file. Please change your yaml filename" }, status: 400 };
         }
         const testId = ppaasTestId.testId;

@@ -5,7 +5,8 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
-  logger
+  logger,
+  util
 } from "@fs/ppaas-common";
 import {
   copyTestStatus,
@@ -32,7 +33,7 @@ describe("PewPewTest", () => {
       if (unitTestFound >= 0) {
         localFiles.splice(unitTestFound, 1);
       }
-      const pewpewFound = localFiles.indexOf("pewpew");
+      const pewpewFound = localFiles.indexOf(util.PEWPEW_BINARY_EXECUTABLE);
       if (pewpewFound >= 0) {
         localFiles.splice(pewpewFound, 1);
       }

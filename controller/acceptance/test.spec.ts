@@ -1577,7 +1577,6 @@ describe("Test API Integration", () => {
       const scriptingFilepath: string = SCRIPTING_FILEPATH;
       const scriptingFilepathWithEnv: string = SCRIPTING_FILEPATH_WITH_ENV;
 
-      // Can't currently test latest since if an agent tries to run it, it will fail
       it("POST /test with version scripting should respond 200 OK", (done: Mocha.Done) => {
         const filename: string = path.basename(scriptingFilepath);
         const formData: FormDataPost = {
@@ -1606,6 +1605,37 @@ describe("Test API Integration", () => {
             expect(body.s3Folder).to.not.equal(undefined);
             expect(body.status).to.equal(TestStatus.Created);
             // We can't use this for shared since it has version different
+            done();
+        }).catch((error) => {
+          log("POST /test error", LogLevel.ERROR, error);
+          done(error);
+        });
+      });
+
+      it("POST /test with version latest should respond 400 Bad Request, because latest is Legacy", (done: Mocha.Done) => {
+        const filename: string = path.basename(scriptingFilepath);
+        const formData: FormDataPost = {
+          yamlFile: {
+            value: createReadStream(scriptingFilepath),
+            options: { filename }
+          },
+          version: latestPewPewVersion,
+          queueName
+        };
+        const data = convertFormDataPostToFormData(formData);
+        const headers = data.getHeaders();
+        log("POST formData", LogLevel.DEBUG, { test: formData, headers });
+        fetch(url, {
+          method: "POST",
+          data,
+          headers
+        }).then((res: Response) => {
+          log("POST /test res", LogLevel.DEBUG, res);
+          const bodyText = JSON.stringify(res.data);
+            expect(res.status, bodyText).to.equal(400);
+            log("body: " + bodyText, LogLevel.DEBUG, bodyText);
+            expect(bodyText).to.not.equal(undefined);
+            expect(bodyText).to.include("failed to parse");
             done();
         }).catch((error) => {
           log("POST /test error", LogLevel.ERROR, error);
@@ -1849,6 +1879,7 @@ describe("Test API Integration", () => {
             value: createReadStream(filepath),
             options: { filename }
           },
+          version: scriptingVersion,
           queueName
         };
         const data = convertFormDataPostToFormData(formData);

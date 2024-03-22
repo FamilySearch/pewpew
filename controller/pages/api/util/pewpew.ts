@@ -207,7 +207,7 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
       }
 
       const pewpewFiles: PpaasS3File[] = await PpaasS3File.getAllFilesInS3({
-        s3Folder: `${PEWPEW_BINARY_FOLDER}/${pewpewVersion}`,
+        s3Folder: `${PEWPEW_BINARY_FOLDER}/${pewpewVersion}/`,
         localDirectory: LOCAL_FILE_LOCATION
       });
       log(`pewpewFiles version: ${query.version}`, LogLevel.DEBUG, pewpewFiles);
@@ -237,7 +237,7 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
   }
   try {
     const pewpewTags = await s3.getTags({
-      s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+      s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}/`,
       filename: PEWPEW_BINARY_EXECUTABLE
     });
     global.currentLatestVersion = pewpewTags && pewpewTags.get(VERSION_TAG_NAME); // <- change to get the tag here

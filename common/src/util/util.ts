@@ -1,6 +1,4 @@
-import * as _fs from "fs/promises";
 import * as os from "os";
-import { LogLevel, log } from "./log";
 
 export const APPLICATION_NAME: string = process.env.APPLICATION_NAME || "pewpewagent";
 export const CONTROLLER_APPLICATION_NAME: string = process.env.CONTROLLER_APPLICATION_NAME || "pewpewcontroller";
@@ -51,33 +49,12 @@ export const getPrefix = (controllerEnv?: boolean | string): string => {
   return PREFIX_DEFAULT;
 };
 
-/** @deprecated Use `fs/promises` */
-export const fs = {
-  /** @deprecated Use `fs/promises` */
-  access: _fs.access,
-  /** @deprecated Use `fs/promises` */
-  chmod: _fs.chmod,
-  /** @deprecated Use `fs/promises` */
-  mkdir: _fs.mkdir,
-  /** @deprecated Use `fs/promises` */
-  readdir: _fs.readdir,
-  /** @deprecated Use `fs/promises` */
-  readFile: _fs.readFile,
-  /** @deprecated Use `fs/promises` */
-  rename: _fs.rename,
-  /** @deprecated Use `fs/promises` */
-  unlink: _fs.unlink,
-  /** @deprecated Use `rimraf` or `fs/promises` */
-  rmdir: _fs.rmdir,
-  /** @deprecated Use `fs/promises` */
-  stat: _fs.stat
-};
-
 export async function sleep (ms: number): Promise<void> {
   try {
     await new Promise((resolve) => setTimeout(resolve, ms));
   } catch (error: unknown) {
-    log("sleep Error", LogLevel.ERROR, error); // swallow it
+    // eslint-disable-next-line no-console
+    console.error("sleep Error", error); // swallow it
   }
 }
 

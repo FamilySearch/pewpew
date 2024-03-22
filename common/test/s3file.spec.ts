@@ -1,11 +1,11 @@
 import {
   LogLevel,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
   PpaasS3File,
   PpaasTestId,
   S3File,
   log,
-  s3,
-  util
+  s3
 } from "../src/index";
 import {
   UNIT_TEST_BUCKET_NAME,
@@ -150,7 +150,7 @@ describe("PpaasS3File", () => {
 
     it("pewpew should be octet-stream", (done: Mocha.Done) => {
       try {
-        for (const pewpewExecutable of util.PEWPEW_BINARY_EXECUTABLE_NAMES) {
+        for (const pewpewExecutable of PEWPEW_BINARY_EXECUTABLE_NAMES) {
           const ppaasS3File: PpaasS3File = new PpaasS3File({
             filename: pewpewExecutable,
             s3Folder: unitTestKeyPrefix,

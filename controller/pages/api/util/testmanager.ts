@@ -31,6 +31,8 @@ import {
   EnvironmentVariables,
   LogLevel,
   MessageType,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   PpaasS3Message,
   PpaasTestId,
@@ -56,11 +58,7 @@ import fs from "fs/promises";
 logger.config.LogFileName = "ppaas-controller";
 
 const sendTestScalingMessage = sqs.sendTestScalingMessage;
-const {
-  createStatsFileName,
-  PEWPEW_BINARY_FOLDER,
-  PEWPEW_BINARY_EXECUTABLE_NAMES
-} = util;
+const createStatsFileName = util.createStatsFileName;
 export const MAX_SAVED_TESTS_RECENT: number = parseInt(process.env.MAX_SAVED_TESTS_RECENT || "0", 10) || 10;
 export const MAX_SAVED_TESTS_CACHED: number = parseInt(process.env.MAX_SAVED_TESTS_CACHED || "0", 10) || 1000;
 const MIN_SEARCH_LENGTH: number = parseInt(process.env.MIN_SEARCH_LENGTH || "0", 10) || 0;
@@ -198,7 +196,7 @@ async function getUpdatedTestDataFromStoredData (storedTestData: StoredTestData)
       ppaasTestStatus.status = TestStatus.Failed;
       ppaasTestStatus.errors = [...(ppaasTestStatus.errors || []), "End time or last status update were more than fifteen minutes ago, status manually changed to Failed"];
       storedTestData.lastChecked = new Date();
-      ppaasTestStatus.writeStatus().catch((error) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.ERROR, error));
+      ppaasTestStatus.writeStatus().catch((error: unknown) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.ERROR, error));
       TestScheduler.addHistoricalTest(ppaasTestStatus.getTestId(), undefined, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status)
       .catch(() => { /* noop */ });
     }

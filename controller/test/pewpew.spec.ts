@@ -6,7 +6,14 @@ import {
   TestManagerError
 } from "../types";
 import type { File, Files } from "formidable";
-import { LogLevel, PpaasTestId, log, logger, util } from "@fs/ppaas-common";
+import {
+  LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_FOLDER,
+  PpaasTestId,
+  log,
+  logger
+} from "@fs/ppaas-common";
 import {
   ParsedForm,
   createFormidableFile,
@@ -38,7 +45,7 @@ import semver from "semver";
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE + ".zip");
+const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
@@ -56,8 +63,8 @@ const invalidFiles = {
   additionalFiles: [pewpewZipFile] as any as File
 };
 
-const pewpewS3Folder = util.PEWPEW_BINARY_FOLDER;
-const pewpewFilename = util.PEWPEW_BINARY_EXECUTABLE;
+const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
+const pewpewFilename = PEWPEW_BINARY_EXECUTABLE;
 const versions = ["0.5.10", "0.5.11", "0.5.12-preview1", "0.5.12-preview2", "latest"];
 const s3Object: S3Object = {
   LastModified: new Date(),

@@ -8,10 +8,11 @@ import {
 import type { File, Files } from "formidable";
 import {
   LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   log,
-  logger,
-  util
+  logger
 } from "@fs/ppaas-common";
 import { ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
 import {
@@ -31,7 +32,7 @@ import { waitForSecrets } from "../pages/api/util/secrets";
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE + ".zip");
+const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
@@ -119,13 +120,13 @@ describe("PewPew Util Integration", () => {
         log("sharedPewPewVersions: " + sharedPewPewVersions, LogLevel.DEBUG);
         try {
           const pewpewFiles = await PpaasS3File.getAllFilesInS3({
-            s3Folder: `${util.PEWPEW_BINARY_FOLDER}/${version}`,
+            s3Folder: `${PEWPEW_BINARY_FOLDER}/${version}/`,
             localDirectory: process.env.TEMP || "/tmp",
-            extension: util.PEWPEW_BINARY_EXECUTABLE
+            extension: PEWPEW_BINARY_EXECUTABLE
           });
           expect(pewpewFiles).to.not.equal(undefined);
           expect(pewpewFiles.length).to.be.greaterThan(0);
-          const pewpewFile = pewpewFiles.find((file) => file.filename === util.PEWPEW_BINARY_EXECUTABLE);
+          const pewpewFile = pewpewFiles.find((file) => file.filename === PEWPEW_BINARY_EXECUTABLE);
           expect(pewpewFile).to.not.equal(undefined);
           expect(pewpewFile?.tags).to.not.equal(undefined);
           expect(pewpewFile?.tags?.get(VERSION_TAG_NAME)).to.equal(version);
@@ -171,13 +172,13 @@ describe("PewPew Util Integration", () => {
         log("sharedPewPewVersions: " + sharedPewPewVersions, LogLevel.DEBUG);
         try {
           const pewpewFiles = await PpaasS3File.getAllFilesInS3({
-            s3Folder: `${util.PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+            s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}/`,
             localDirectory: process.env.TEMP || "/tmp",
-            extension: util.PEWPEW_BINARY_EXECUTABLE
+            extension: PEWPEW_BINARY_EXECUTABLE
           });
           expect(pewpewFiles).to.not.equal(undefined);
           expect(pewpewFiles.length).to.be.greaterThan(0);
-          const pewpewFile = pewpewFiles.find((file) => file.filename === util.PEWPEW_BINARY_EXECUTABLE);
+          const pewpewFile = pewpewFiles.find((file) => file.filename === PEWPEW_BINARY_EXECUTABLE);
           expect(pewpewFile).to.not.equal(undefined);
           expect(pewpewFile?.tags).to.not.equal(undefined);
           expect(pewpewFile?.tags?.get(VERSION_TAG_NAME)).to.equal(version);
@@ -198,12 +199,12 @@ describe("PewPew Util Integration", () => {
     before(async () => {
       try {
         const pewpewFiles = await PpaasS3File.getAllFilesInS3({
-          s3Folder: `${util.PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
+          s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}/`,
           localDirectory: process.env.TEMP || "/tmp",
-          extension: util.PEWPEW_BINARY_EXECUTABLE
+          extension: PEWPEW_BINARY_EXECUTABLE
         });
         expect(pewpewFiles).to.not.equal(undefined);
-        const pewpewFile = pewpewFiles.find((file) => file.filename === util.PEWPEW_BINARY_EXECUTABLE);
+        const pewpewFile = pewpewFiles.find((file) => file.filename === PEWPEW_BINARY_EXECUTABLE);
         expect(pewpewFile).to.not.equal(undefined);
       } catch (error) {
         log(latestPewPewVersion + " Pewpew executable not found in S3. failed: ", LogLevel.ERROR, error);

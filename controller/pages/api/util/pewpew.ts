@@ -12,11 +12,13 @@ import {
 } from "./util";
 import {
   LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   log,
   logger,
-  s3,
-  util
+  s3
 } from "@fs/ppaas-common";
 import { latestPewPewVersion, versionSort } from "./clientutil";
 import { TestScheduler } from "./testscheduler";
@@ -31,12 +33,6 @@ const execFile = promisify(_execFile);
 logger.config.LogFileName = "ppaas-controller";
 
 const deleteS3 = s3.deleteObject;
-// TODO: Add Mac/Windows support
-const {
-  PEWPEW_BINARY_EXECUTABLE,
-  PEWPEW_BINARY_EXECUTABLE_NAMES,
-  PEWPEW_BINARY_FOLDER
-} = util;
 export const VERSION_TAG_NAME: string = "version";
 
 /**

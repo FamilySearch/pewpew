@@ -12,7 +12,8 @@ import {
   PEWPEW_BINARY_FOLDER,
   PpaasTestId,
   log,
-  logger
+  logger,
+  sleep
 } from "@fs/ppaas-common";
 import {
   ParsedForm,
@@ -40,6 +41,7 @@ import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
+import { platform } from "os";
 import semver from "semver";
 
 logger.config.LogFileName = "ppaas-controller";
@@ -103,6 +105,10 @@ describe("PewPew Util", () => {
       mixedFiles = {
         additionalFiles: [...unzippedFiles, pewpewZipFile] as any as File
       };
+      if (platform() === "win32") {
+        // Windows gets EBUSY trying to run pewpew --version since the unzip still hasn't released
+        await sleep(100);
+      }
     } catch (error) {
       log("Error unzipping " + filename, LogLevel.ERROR, error);
       throw error;

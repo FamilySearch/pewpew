@@ -12,7 +12,8 @@ import {
   PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   log,
-  logger
+  logger,
+  sleep
 } from "@fs/ppaas-common";
 import { ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
 import {
@@ -26,6 +27,7 @@ import {
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
+import { platform } from "os";
 import semver from "semver";
 import { waitForSecrets } from "../pages/api/util/secrets";
 
@@ -61,6 +63,10 @@ describe("PewPew Util Integration", () => {
         additionalFiles: unzippedFiles as any as File
       };
       log("new files " + filename, LogLevel.DEBUG, files);
+      if (platform() === "win32") {
+        // Windows gets EBUSY trying to run pewpew --version since the unzip still hasn't released
+        await sleep(100);
+      }
     } catch (error) {
       log("Error unzipping " + filename, LogLevel.ERROR, error);
       throw error;

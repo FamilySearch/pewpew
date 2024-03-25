@@ -7,7 +7,8 @@ import {
   LogLevel,
   PpaasS3File,
   log,
-  logger
+  logger,
+  sleep
 } from "@fs/ppaas-common";
 import { Entry as ZipEntry, ZipFile, Options as ZipOptions, open as _yauzlOpen } from "yauzl";
 import { formatError, isYamlFile } from "./clientutil";
@@ -19,11 +20,11 @@ import formidable, {
   Files,
   Options as FormidableOptions
 } from "formidable";
+import { platform, tmpdir } from "os";
 import { NextApiRequest as Request } from "next";
 import { createWriteStream } from "fs";
 import fs from "fs/promises";
 import { promisify } from "util";
-import { tmpdir } from "os";
 
 const yauzlOpen: (path: string, options: ZipOptions) => Promise<ZipFile | undefined> = promisify(_yauzlOpen);
 // We have to set this before we make any log calls
@@ -262,6 +263,7 @@ export async function parseZip (formFiles: Files): Promise<void> {
       return nonYamlFiles;
     };
     if (fileKeys.includes("additionalFiles")) {
+      let hasZipFiles: boolean = false;
       const additionalFiles: File | File[] = formFiles.additionalFiles;
       log("parseForm currentFile", LogLevel.DEBUG, additionalFiles);
       if (Array.isArray(additionalFiles)) {
@@ -270,6 +272,7 @@ export async function parseZip (formFiles: Files): Promise<void> {
         // Need to do an "as" cast here for typechecking
         for (const file of additionalFiles) {
           if (file.originalFilename?.endsWith(".zip")) {
+            hasZipFiles = true;
             // Remove this one and add the unzipped
             const unzippedFiles: File[] = await unzipFile(file);
             // Check if any are yamlFiles
@@ -284,9 +287,14 @@ export async function parseZip (formFiles: Files): Promise<void> {
         formFiles.additionalFiles = newFiles;
       } else {
         if (additionalFiles.originalFilename?.endsWith(".zip")) {
+          hasZipFiles = true;
           const unzippedFiles: File[] = await unzipFile(additionalFiles);
           formFiles.additionalFiles = filterYamlFromUnzipped(unzippedFiles);
         }
+      }
+      if (hasZipFiles && platform() === "win32") {
+        // There's a race condition on Windows where we can't use the file immediately because the unzip has it locked
+        await sleep(100);
       }
     }
     // If additionalFiles is an empty array, remove it

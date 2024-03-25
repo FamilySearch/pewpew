@@ -74,25 +74,39 @@ describe("PewPew Util Integration", () => {
     await waitForSecrets();
   });
 
-  describe("getPewPewVersionsInS3", () => {
-    it("getPewPewVersionsInS3() should return array with elements", (done: Mocha.Done) => {
-      getPewPewVersionsInS3().then((result: string[]) => {
-        log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
-        expect(result).to.not.equal(undefined);
-        expect(Array.isArray(result), JSON.stringify(result)).to.equal(true);
-        expect(result.length).to.be.greaterThan(0);
-        for (const version of result) {
-          if (version !== latestPewPewVersion) {
-            log(`semver.valid(${version}) = ${semver.valid(version)}`, LogLevel.DEBUG);
-            expect(semver.valid(version), `semver.valid(${version})`).to.not.equal(null);
-          }
-        }
-        if (!sharedPewPewVersions) {
-          sharedPewPewVersions = result;
-        }
-        done();
-      }).catch((error) => done(error));
-    });
+  after(async () => {
+    try {
+      const parsedForm: ParsedForm = {
+        fields: {},
+        files
+      };
+      log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      const res: ErrorResponse = await postPewPew(parsedForm, authAdmin);
+      log("postPewPew res", LogLevel.DEBUG, res);
+      expect(res.status, JSON.stringify(res.json)).to.equal(200);
+      const body: TestManagerError = res.json;
+      log("body: " + JSON.stringify(body), LogLevel.DEBUG, body);
+      expect(body).to.not.equal(undefined);
+      expect(body.message).to.not.equal(undefined);
+      expect(body.message).to.include("PewPew uploaded, version");
+      expect(body.message).to.not.include("as latest");
+      const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+      log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+      expect(match, "pewpew match").to.not.equal(null);
+      expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
+      const version: string = match![1];
+      uploadedPewPewVersion = version;
+      log("uploadedPewPewVersion: " + uploadedPewPewVersion, LogLevel.DEBUG);
+      const s3Versions: string[] = await getPewPewVersionsInS3();
+      expect(s3Versions).to.not.equal(undefined);
+      expect(Array.isArray(s3Versions), JSON.stringify(s3Versions)).to.equal(true);
+      expect(s3Versions.length).to.be.greaterThan(0);
+      sharedPewPewVersions = s3Versions;
+      expect(s3Versions).to.include(version);
+    } catch (error) {
+      log("deletePewPew after error", LogLevel.ERROR, error);
+      throw error;
+    }
   });
 
   describe("postPewPew", () => {
@@ -198,6 +212,27 @@ describe("PewPew Util Integration", () => {
         log("postPewPew error", LogLevel.ERROR, error);
         done(error);
       });
+    });
+  });
+
+  describe("getPewPewVersionsInS3", () => {
+    it("getPewPewVersionsInS3() should return array with elements", (done: Mocha.Done) => {
+      getPewPewVersionsInS3().then((result: string[]) => {
+        log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(Array.isArray(result), JSON.stringify(result)).to.equal(true);
+        expect(result.length).to.be.greaterThan(0);
+        for (const version of result) {
+          if (version !== latestPewPewVersion) {
+            log(`semver.valid(${version}) = ${semver.valid(version)}`, LogLevel.DEBUG);
+            expect(semver.valid(version), `semver.valid(${version})`).to.not.equal(null);
+          }
+        }
+        if (!sharedPewPewVersions) {
+          sharedPewPewVersions = result;
+        }
+        done();
+      }).catch((error) => done(error));
     });
   });
 

@@ -124,7 +124,7 @@ describe("TestManager Integration", () => {
       expect(sharedPewPewVersions, "sharedPewPewVersions").to.not.equal(undefined);
       expect(sharedPewPewVersions!.length, "sharedPewPewVersions.length").to.be.greaterThan(0);
       numberedVersion = sharedPewPewVersions!.find((pewpewVersion: string) => pewpewVersion !== latestPewPewVersion);
-      expect(numberedVersion).to.not.equal(undefined);
+      expect(numberedVersion, "numberedVersion").to.not.equal(undefined);
       log("numberedVersion", LogLevel.DEBUG, { numberedVersion });
       const basicFilenameWithEnv = path.basename(BASIC_FILEPATH_WITH_ENV);
       const ppaasTestIdWithEnv: PpaasTestId = PpaasTestId.makeTestId(basicFilenameWithEnv);

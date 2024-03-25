@@ -68,7 +68,7 @@ export class PpaasTestId {
     const yamlname: string = (path.basename(yamlFile, path.extname(yamlFile)).toLocaleLowerCase()
     + (profile || "").toLocaleLowerCase())
     .replace(/[^a-z0-9]/g, "");
-    if (yamlname === "pewpew") {
+    if (yamlname.startsWith("pewpew")) {
       throw new Error("Yaml File cannot be named PewPew");
     }
     const newTestId: PpaasTestId = new PpaasTestId(yamlname, dateString || this.getDateString());

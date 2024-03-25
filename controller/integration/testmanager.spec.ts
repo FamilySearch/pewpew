@@ -133,14 +133,14 @@ describe("TestManager Integration", () => {
       const scriptingRegex = /^0\.6\./;
       legacyVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
         pewpewVersion !== latestPewPewVersion && !scriptingRegex.test(pewpewVersion)) || "";
-      expect(legacyVersion).to.not.equal(undefined);
-      expect(legacyVersion).to.not.equal("");
+      expect(legacyVersion, "legacyVersion").to.not.equal(undefined);
+      expect(legacyVersion, "legacyVersion").to.not.equal("");
       expect(scriptingRegex.test(legacyVersion), `${scriptingRegex}.test("${legacyVersion}")`).to.equal(false);
       log("legacyVersion", LogLevel.DEBUG, { legacyVersion });
       scriptingVersion = sharedPewPewVersions!.find((pewpewVersion: string) =>
         scriptingRegex.test(pewpewVersion)) || "";
-      expect(scriptingVersion).to.not.equal(undefined);
-      expect(scriptingVersion).to.not.equal("");
+      expect(scriptingVersion, "scriptingVersion").to.not.equal(undefined);
+      expect(scriptingVersion, "scriptingVersion").to.not.equal("");
       expect(scriptingRegex.test(scriptingVersion), `${scriptingRegex}.test("${scriptingVersion}")`).to.equal(true);
       log("scriptingVersion", LogLevel.DEBUG, { scriptingVersion });
 

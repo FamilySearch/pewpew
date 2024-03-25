@@ -3,6 +3,8 @@
 
 const { access, symlink } = require('fs/promises');
 const { join } = require('path');
+const CopyPlugin = require("copy-webpack-plugin");
+const { platform } = require('os');
 
 if (process.env.BASE_PATH && !process.env.BASE_PATH.startsWith("/")) {
   const errorMessage = "process.env.BASE_PATH must start with a '/' found " + process.env.BASE_PATH;
@@ -53,9 +55,20 @@ const nextConfig = {
     if (!config.experiments) { config.experiments = {}; }
     config.experiments.asyncWebAssembly = true;
   
-    // https://github.com/vercel/next.js/issues/25852#issuecomment-1057059000
+    // https://github.com/vercel/next.js/issues/25852
+    // Compiling we run into an issue where it can't find the config wasm.
+    // On Linux the workaround is to create a symlink to the correct location
+    // On Windows, the symlinks fail so we must copy the file
     config.plugins.push(
-      new (class {
+      platform() === "win32"
+      // https://github.com/vercel/next.js/issues/25852#issuecomment-1727385542
+      ? new CopyPlugin({
+        patterns: [
+          { from: "../lib/config-wasm/pkg/config_wasm_bg.wasm", to: "./" },
+        ],
+      })
+      // https://github.com/vercel/next.js/issues/25852#issuecomment-1057059000
+      : new (class {
         apply(compiler) {
           compiler.hooks.afterEmit.tapPromise(
             'SymlinkWebpackPlugin',

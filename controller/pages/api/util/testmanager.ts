@@ -19,7 +19,6 @@ import {
 } from "../../../types";
 import {
   ENCRYPTED_TEST_SCHEDULER_FOLDERNAME,
-  PEWPEW_BINARY_FOLDER,
   ParsedForm,
   createFormidableFile,
   getLogAuthPermissions,
@@ -32,6 +31,8 @@ import {
   EnvironmentVariables,
   LogLevel,
   MessageType,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   PpaasS3Message,
   PpaasTestId,
@@ -198,7 +199,7 @@ async function getUpdatedTestDataFromStoredData (storedTestData: StoredTestData)
       ppaasTestStatus.status = TestStatus.Failed;
       ppaasTestStatus.errors = [...(ppaasTestStatus.errors || []), "End time or last status update were more than fifteen minutes ago, status manually changed to Failed"];
       storedTestData.lastChecked = new Date();
-      ppaasTestStatus.writeStatus().catch((error) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.ERROR, error));
+      ppaasTestStatus.writeStatus().catch((error: unknown) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.ERROR, error));
       TestScheduler.addHistoricalTest(ppaasTestStatus.getTestId(), undefined, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status)
       .catch(() => { /* noop */ });
     }
@@ -1184,7 +1185,7 @@ export abstract class TestManager {
             }
             Object.assign(environmentVariablesFile, parsedEnv);
 
-          } else if (file.originalFilename === "pewpew" || file.originalFilename === "pewpew.exe") {
+          } else if (PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)) {
             if (authPermission < AuthPermission.Admin) {
               log("Unauthorized User attempted to use custom pewpew binary.", LogLevel.WARN, { yamlFile });
               return { json: { message: "User is not authorized to use custom pewpew binaries. If you think this is an error, please contact the PerformanceQA team." }, status: 403 };
@@ -1330,7 +1331,7 @@ export abstract class TestManager {
           return { json: { message: "Invalid Yaml filename", error: `${error}` }, status: 400 };
         }
         // Check for pewpew/ and settings/ and reject
-        if ((ppaasTestId.yamlFile) === PEWPEW_BINARY_FOLDER || ppaasTestId.yamlFile === ENCRYPTED_TEST_SCHEDULER_FOLDERNAME) {
+        if (ppaasTestId.yamlFile.startsWith(PEWPEW_BINARY_FOLDER) || ppaasTestId.yamlFile.startsWith(ENCRYPTED_TEST_SCHEDULER_FOLDERNAME)) {
           return { json: { message: ppaasTestId.yamlFile + " is a reserved word and cannot be used for a yaml file. Please change your yaml filename" }, status: 400 };
         }
         const testId = ppaasTestId.testId;

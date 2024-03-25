@@ -38,7 +38,7 @@ const DEFAULT_PEWPEW_PARAMS = [
   "-w"
 ];
 
-const PEWPEW_PATH: string = process.env.PEWPEW_PATH || "pewpew";
+const PEWPEW_PATH: string = process.env.PEWPEW_PATH || util.PEWPEW_BINARY_EXECUTABLE;
 const DOWNLOAD_PEWPEW: boolean = (process.env.DOWNLOAD_PEWPEW || "false") === "true";
 const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
 const RESULTS_FILE_MAX_WAIT: number = parseInt(process.env.RESULTS_FILE_MAX_WAIT || "0", 10) || 5000; // S3_UPLOAD_INTERVAL + this Could take up to a minute
@@ -70,7 +70,7 @@ export async function findYamlCreatedFiles (localPath: string, yamlFile: string,
       additionalFiles = additionalFiles || [];
       // Find files that aren't the yamlFile or additionalFile, a results file, or the pewpew executable
       const YamlCreatedFiles = files.filter((file) => file !== yamlFile && !additionalFiles!.includes(file)
-          && !(file.startsWith("stats-") && file.endsWith(".json")) && file !== "pewpew" && file !== "pewpew.exe");
+        && !(file.startsWith("stats-") && file.endsWith(".json")) && !util.PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file));
       log(`YamlCreatedFiles: ${YamlCreatedFiles}}`, LogLevel.DEBUG);
       if (YamlCreatedFiles.length > 0) {
         return YamlCreatedFiles; // Don't return the joined path
@@ -377,24 +377,16 @@ export class PewPewTest {
         const localDirectory = this.localPath;
         const s3Folder = "pewpew/" + version;
         this.log(`os.platform() = ${platform()}`, LogLevel.DEBUG, { version, s3Folder });
-        if (platform() === "win32") {
-          const pewpewS3File: PpaasS3File = new PpaasS3File({
-            filename: "pewpew.exe",
-            s3Folder,
-            localDirectory
-          });
-          pewpewPath = await pewpewS3File.download(true);
-          this.log(`getFile(pewpew.exe) result = ${pewpewPath}`, LogLevel.DEBUG);
-        } else {
-          // If the version isn't there, this will throw (since we can't find it)
-          const pewpewS3File: PpaasS3File = new PpaasS3File({
-            filename: "pewpew",
-            s3Folder,
-            localDirectory
-          });
-          pewpewPath = await pewpewS3File.download(true);
-          this.log(`getFile(pewpew) result = ${pewpewPath}`, LogLevel.DEBUG);
-          // We need to make it executable
+        const pewpewS3File: PpaasS3File = new PpaasS3File({
+          filename: util.PEWPEW_BINARY_EXECUTABLE,
+          s3Folder,
+          localDirectory
+        });
+        pewpewPath = await pewpewS3File.download(true);
+        this.log(`getFile("${util.PEWPEW_BINARY_EXECUTABLE}") result = ${pewpewPath}`, LogLevel.DEBUG);
+        // If the version isn't there, this will throw (since we can't find it)
+        if (platform() !== "win32") {
+          // We need to make it executable for non-windows
           await fs.chmod(pewpewPath, 0o775);
         }
         // Always call this even if it isn't logged to make sure the file downloaded

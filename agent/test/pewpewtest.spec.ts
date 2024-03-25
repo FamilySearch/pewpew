@@ -27,17 +27,9 @@ describe("PewPewTest", () => {
     let localFiles: string[];
 
     before (async () => {
-      localFiles = await readdir(UNIT_TEST_FILEDIR);
+      localFiles = (await readdir(UNIT_TEST_FILEDIR))
+      .filter((filename) => filename !== UNIT_TEST_FILENAME && !util.PEWPEW_BINARY_EXECUTABLE_NAMES.includes(filename));
       log(`localFiles = ${JSON.stringify(localFiles)}`, LogLevel.DEBUG);
-      const unitTestFound = localFiles.indexOf(UNIT_TEST_FILENAME);
-      if (unitTestFound >= 0) {
-        localFiles.splice(unitTestFound, 1);
-      }
-      const pewpewFound = localFiles.indexOf(util.PEWPEW_BINARY_EXECUTABLE);
-      if (pewpewFound >= 0) {
-        localFiles.splice(pewpewFound, 1);
-      }
-      log(`localFiles removed = ${JSON.stringify(localFiles)}`, LogLevel.DEBUG);
     });
 
     it("Find Yaml should find nothing when everything passed", (done: Mocha.Done) => {

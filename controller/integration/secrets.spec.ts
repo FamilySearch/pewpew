@@ -11,7 +11,7 @@ import {
   getGlobalSecretsConfig,
   getKey,
   init as initSecrets,
-  config as secretsConfig,
+  internalConfig as secretsConfig,
   waitForSecrets
 } from "../pages/api/util/secrets";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

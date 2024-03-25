@@ -35,7 +35,7 @@ logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_LEGACY_FILEPATH = process.env.PEWPEW_ZIP_LEGACY_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
-const PEWPEW_ZIP_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER + "/scripting", PEWPEW_BINARY_EXECUTABLE + ".zip");
+const PEWPEW_ZIP_SCRIPTING_FILEPATH = process.env.PEWPEW_ZIP_SCRIPTING_FILEPATH || path.join(UNIT_TEST_FOLDER + "/scripting", PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,

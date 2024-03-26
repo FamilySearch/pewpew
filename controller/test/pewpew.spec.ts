@@ -6,15 +6,22 @@ import {
   TestManagerError
 } from "../types";
 import type { File, Files } from "formidable";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
 import {
+  LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
   PEWPEW_BINARY_FOLDER,
+  PpaasTestId,
+  log,
+  logger,
+  sleep
+} from "@fs/ppaas-common";
+import {
   ParsedForm,
   createFormidableFile,
   unzipFile
 } from "../pages/api/util/util";
+import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
-  PEWPEW_EXECUTABLE_NAME,
   VERSION_TAG_NAME,
   deletePewPew,
   getCurrentPewPewLatestVersion,
@@ -22,7 +29,6 @@ import {
   getPewpew,
   postPewPew
 } from "../pages/api/util/pewpew";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
   mockGetObjectTagging,
   mockListObject,
@@ -35,12 +41,13 @@ import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
+import { platform } from "os";
 import semver from "semver";
 
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
+const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
@@ -48,8 +55,8 @@ const authAdmin: AuthPermissions = {
 };
 
 const pewpewZipFile: File = createFormidableFile(
-  path.basename(PEWPEW_FILEPATH),
-  PEWPEW_FILEPATH,
+  path.basename(PEWPEW_ZIP_FILEPATH),
+  PEWPEW_ZIP_FILEPATH,
   "unittest",
   1,
   null
@@ -59,7 +66,7 @@ const invalidFiles = {
 };
 
 const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
-const pewpewFilename = PEWPEW_EXECUTABLE_NAME;
+const pewpewFilename = PEWPEW_BINARY_EXECUTABLE;
 const versions = ["0.5.10", "0.5.11", "0.5.12-preview1", "0.5.12-preview2", "latest"];
 const s3Object: S3Object = {
   LastModified: new Date(),
@@ -98,6 +105,10 @@ describe("PewPew Util", () => {
       mixedFiles = {
         additionalFiles: [...unzippedFiles, pewpewZipFile] as any as File
       };
+      if (platform() === "win32") {
+        // Windows gets EBUSY trying to run pewpew --version since the unzip still hasn't released
+        await sleep(100);
+      }
     } catch (error) {
       log("Error unzipping " + filename, LogLevel.ERROR, error);
       throw error;

@@ -23,6 +23,7 @@ import DropFile from "../components/DropFile";
 import FilesList from "../components/FilesList";
 import Layout from "../components/Layout";
 import { Line } from "rc-progress";
+import { PEWPEW_BINARY_EXECUTABLE_NAMES } from "@fs/ppaas-common/dist/src/util/util";
 import { authPage } from "./api/util/authserver";
 import { getServerSideProps as getPropsPewPewVersions } from "../components/PewPewVersions/initialProps";
 import styled from "styled-components";
@@ -95,7 +96,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
       const additionalFiles: File[] = [];
       for (const file of filelist) {
         // log("File Upload File", LogLevel.DEBUG, file);
-        if (file.name === "pewpew" || file.name === "pewpew.exe" || file.name.endsWith(".zip")) {
+        if (PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.name) || file.name.endsWith(".zip")) {
           const existingIndex = state.additionalFiles.findIndex((additionalFile: File) => additionalFile.name === file.name);
           if (existingIndex >= 0) {
             // We can't have two files with the same name even if their path's are different. They go in the same s3 folder

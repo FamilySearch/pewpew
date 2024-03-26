@@ -1,5 +1,6 @@
 import {
   LogLevel,
+  PEWPEW_VERSION_LATEST,
   PpaasTestId,
   PpaasTestStatus,
   TestStatus,
@@ -33,7 +34,7 @@ describe("PpaasTestStatus", () => {
       resultsFilename: [ppaasTestId.testId + ".json"],
       status: TestStatus.Running,
       errors: ["Test Error"],
-      version: "latest",
+      version: PEWPEW_VERSION_LATEST,
       queueName: "unittest",
       userId: "unittestuser"
     };

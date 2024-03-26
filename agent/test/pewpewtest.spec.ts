@@ -1,11 +1,13 @@
 import {
   LogLevel,
+  PEWPEW_VERSION_LATEST,
   PpaasTestId,
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
   log,
-  logger
+  logger,
+  util
 } from "@fs/ppaas-common";
 import {
   copyTestStatus,
@@ -26,17 +28,9 @@ describe("PewPewTest", () => {
     let localFiles: string[];
 
     before (async () => {
-      localFiles = await readdir(UNIT_TEST_FILEDIR);
+      localFiles = (await readdir(UNIT_TEST_FILEDIR))
+      .filter((filename) => filename !== UNIT_TEST_FILENAME && !util.PEWPEW_BINARY_EXECUTABLE_NAMES.includes(filename));
       log(`localFiles = ${JSON.stringify(localFiles)}`, LogLevel.DEBUG);
-      const unitTestFound = localFiles.indexOf(UNIT_TEST_FILENAME);
-      if (unitTestFound >= 0) {
-        localFiles.splice(unitTestFound, 1);
-      }
-      const pewpewFound = localFiles.indexOf("pewpew");
-      if (pewpewFound >= 0) {
-        localFiles.splice(pewpewFound, 1);
-      }
-      log(`localFiles removed = ${JSON.stringify(localFiles)}`, LogLevel.DEBUG);
     });
 
     it("Find Yaml should find nothing when everything passed", (done: Mocha.Done) => {
@@ -85,17 +79,17 @@ describe("PewPewTest", () => {
 
   describe("versionGreaterThan", () => {
     it("latest is always greater", (done: Mocha.Done) => {
-      expect(versionGreaterThan("latest", "")).to.equal(true);
+      expect(versionGreaterThan(PEWPEW_VERSION_LATEST, "")).to.equal(true);
       done();
     });
 
     it("latest is always greater than latest", (done: Mocha.Done) => {
-      expect(versionGreaterThan("latest", "latest")).to.equal(true);
+      expect(versionGreaterThan(PEWPEW_VERSION_LATEST, PEWPEW_VERSION_LATEST)).to.equal(true);
       done();
     });
 
     it("greater than latest is false", (done: Mocha.Done) => {
-      expect(versionGreaterThan("0.5.5", "latest")).to.equal(false);
+      expect(versionGreaterThan("0.5.5", PEWPEW_VERSION_LATEST)).to.equal(false);
       done();
     });
 

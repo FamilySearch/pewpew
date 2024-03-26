@@ -1,5 +1,7 @@
 import {
   LogLevel,
+  PEWPEW_BINARY_FOLDER,
+  PEWPEW_VERSION_LATEST,
   PpaasTestId,
   PpaasTestMessage,
   TestMessage,
@@ -19,8 +21,8 @@ logger.config.LogFileName = "ppaas-agent";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const yamlFile = "basicwithenv.yaml";
-const version = "latest";
-const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, "pewpew");
+const version = PEWPEW_VERSION_LATEST;
+const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE);
 const buildTestContents = `
 vars:
   rampTime: 10s
@@ -72,7 +74,7 @@ export async function buildTest ({
       }),
       s3.uploadFile({
         filepath: PEWPEW_PATH,
-        s3Folder: `pewpew/${version}`,
+        s3Folder: `${PEWPEW_BINARY_FOLDER}/${version}`,
         publicRead: false,
         contentType: "application/octet-stream"
       })

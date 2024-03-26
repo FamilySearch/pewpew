@@ -15,6 +15,11 @@ For your full deployment you should have environment variables injected into Clo
 $ npm i && npm run build
 ```
 
+## Mac and Windows Testing
+The unit tests, integration, and acceptance tests are designed to run on Linux. As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew.zip`).
+
+To override these tests for mac or windows, the pewpew exectuable must be named `pewpew.exe` for Windows and `pewpew.mac` for Mac. These files should then be zipped up as `pewpew.exe.zip` or `pewpew.mac.zip` correspondingly. Then either override the `PEWPEW_ZIP_FILEPATH` environment variable to point to the full path to your zip file, or drop the zipped file in the `test/` folder.
+
 ## Test
 ```bash
 # You must set your aws credentials to start or run tests

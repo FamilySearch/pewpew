@@ -1,4 +1,11 @@
-import { AgentQueueDescription, LogLevel, PpaasTestMessage, TestMessage, log } from "../src/index";
+import {
+  AgentQueueDescription,
+  LogLevel,
+  PEWPEW_VERSION_LATEST,
+  PpaasTestMessage,
+  TestMessage,
+  log
+} from "../src/index";
 import { UNIT_TEST_FILENAME, UNIT_TEST_KEY_PREFIX } from "../test/s3.spec";
 import {
   mockReceiveMessageAttributes,
@@ -36,7 +43,7 @@ describe("PpaasTestMessage", () => {
     },
     restartOnFailure: true,
     bucketSizeMs: 60000,
-    version: "latest",
+    version: PEWPEW_VERSION_LATEST,
     additionalFiles: ["file1", "file2"],
     userId: "bruno@madrigal.family",
     bypassParser: false
@@ -45,7 +52,16 @@ describe("PpaasTestMessage", () => {
   before(() => {
     mockSqs();
     log("QUEUE_URL_TEST=" + [...QUEUE_URL_TEST], LogLevel.DEBUG);
-    ppaasUnitTestMessage = new PPaasUnitTestMessage({ testId, s3Folder, yamlFile, testRunTimeMn, envVariables: {}, restartOnFailure: true, bucketSizeMs: 60000, version: "latest" });
+    ppaasUnitTestMessage = new PPaasUnitTestMessage({
+      testId,
+      s3Folder,
+      yamlFile,
+      testRunTimeMn,
+      envVariables: {},
+      restartOnFailure: true,
+      bucketSizeMs: 60000,
+      version: PEWPEW_VERSION_LATEST
+    });
   });
 
   after(() => {
@@ -102,7 +118,16 @@ describe("PpaasTestMessage", () => {
 
   it("extendMessageVisibility should succeed", (done: Mocha.Done) => {
     if (ppaasTestMessage === undefined) {
-      ppaasTestMessage = new PpaasTestMessage({ testId, s3Folder, yamlFile, testRunTimeMn, envVariables: {}, restartOnFailure: true, bucketSizeMs: 60000, version: "latest" });
+      ppaasTestMessage = new PpaasTestMessage({
+        testId,
+        s3Folder,
+        yamlFile,
+        testRunTimeMn,
+        envVariables: {},
+        restartOnFailure: true,
+        bucketSizeMs: 60000,
+        version: PEWPEW_VERSION_LATEST
+      });
     }
     if (ppaasTestMessage.receiptHandle === undefined) {
       ppaasTestMessage.receiptHandle = "unit-test-receipt-handle";
@@ -112,7 +137,16 @@ describe("PpaasTestMessage", () => {
 
   it("deleteMessageFromQueue should succeed", (done: Mocha.Done) => {
     if (ppaasTestMessage === undefined) {
-      ppaasTestMessage = new PpaasTestMessage({ testId, s3Folder, yamlFile, testRunTimeMn, envVariables: {}, restartOnFailure: true, bucketSizeMs: 60000, version: "latest" });
+      ppaasTestMessage = new PpaasTestMessage({
+        testId,
+        s3Folder,
+        yamlFile,
+        testRunTimeMn,
+        envVariables: {},
+        restartOnFailure: true,
+        bucketSizeMs: 60000,
+        version: PEWPEW_VERSION_LATEST
+      });
     }
     if (ppaasTestMessage.receiptHandle === undefined) {
       ppaasTestMessage.receiptHandle = "unit-test-receipt-handle";

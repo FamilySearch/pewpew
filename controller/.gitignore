@@ -10,7 +10,7 @@
 /storybook-static
 system-test-encrypt-key*
 /.nyc_output
-/test/pewpew
+/test/pewpew*
 /test/password.txt
 /pewpew-okta-creds-db
 /pewpew-okta-creds-db-np

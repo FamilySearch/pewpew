@@ -1,5 +1,6 @@
 import {
   LogLevel,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
   PpaasS3File,
   PpaasTestId,
   S3File,
@@ -148,13 +149,20 @@ describe("PpaasS3File", () => {
     });
 
     it("pewpew should be octet-stream", (done: Mocha.Done) => {
-      const ppaasS3File: PpaasS3File = new PpaasS3File({
-        filename: "pewpew",
-        s3Folder: unitTestKeyPrefix,
-        localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION
-      });
-      expect(ppaasS3File.contentType).to.equal("application/octet-stream");
-      done();
+      try {
+        for (const pewpewExecutable of PEWPEW_BINARY_EXECUTABLE_NAMES) {
+          const ppaasS3File: PpaasS3File = new PpaasS3File({
+            filename: pewpewExecutable,
+            s3Folder: unitTestKeyPrefix,
+            localDirectory: UNIT_TEST_LOCAL_FILE_LOCATION
+          });
+          expect(ppaasS3File.contentType).to.equal("application/octet-stream");
+        }
+        done();
+      } catch (error) {
+        log("pewpew should be octet-stream error", LogLevel.ERROR, error);
+        done(error);
+      }
     });
 
     it("should be set public-read", (done: Mocha.Done) => {

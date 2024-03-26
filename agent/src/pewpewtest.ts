@@ -86,9 +86,9 @@ export async function findYamlCreatedFiles (localPath: string, yamlFile: string,
 // Export for testing
 export function versionGreaterThan (currentVersion: string, compareVersion: string): boolean {
   // If the current version is latest then we're always greater than or equal to
-  if (currentVersion === "latest") { return true; }
+  if (currentVersion === util.PEWPEW_VERSION_LATEST) { return true; }
   // If the compareVersion is latest, then only currrentVersion=latest is greater
-  if (compareVersion === "latest") { return false; }
+  if (compareVersion === util.PEWPEW_VERSION_LATEST) { return false; }
 
   return semver.gt(currentVersion, compareVersion);
 }
@@ -373,10 +373,10 @@ export class PewPewTest {
       // Download the pewpew executable if needed
       if (DOWNLOAD_PEWPEW) {
         // version check in the test message
-        const version = this.testMessage.version || "latest";
+        const version = this.testMessage.version || util.PEWPEW_VERSION_LATEST;
         const localDirectory = this.localPath;
-        const s3Folder = "pewpew/" + version;
-        this.log(`os.platform() = ${platform()}`, LogLevel.DEBUG, { version, s3Folder });
+        const s3Folder = `${util.PEWPEW_BINARY_FOLDER}/${version}`;
+        this.log(`os.platform() = ${platform()}`, LogLevel.DEBUG, { version, s3Folder, filename: util.PEWPEW_BINARY_EXECUTABLE });
         const pewpewS3File: PpaasS3File = new PpaasS3File({
           filename: util.PEWPEW_BINARY_EXECUTABLE,
           s3Folder,

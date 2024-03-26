@@ -9,6 +9,7 @@ export const CONTROLLER_ENV = process.env.CONTROLLER_ENV;
 export const AGENT_ENV = process.env.AGENT_ENV;
 
 export const PEWPEW_BINARY_FOLDER: string = "pewpew";
+export const PEWPEW_VERSION_LATEST: string = "latest";
 export const PEWPEW_BINARY_EXECUTABLE_LINUX = "pewpew";
 export const PEWPEW_BINARY_EXECUTABLE_WINDOWS = "pewpew.exe";
 export const PEWPEW_BINARY_EXECUTABLE_MAC = "pewpew.mac";

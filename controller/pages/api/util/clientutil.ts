@@ -2,6 +2,8 @@ import { LogLevel, log } from "./log";
 import { TestData, TestManagerError, TestManagerMessage } from "../../../types";
 import { AxiosError } from "axios";
 import { IncomingMessage } from "http";
+// Must import from sub-path to avoid other dependencies
+import { PEWPEW_VERSION_LATEST } from "@fs/ppaas-common/dist/src/util/util";
 import getConfig from "next/config";
 import semver from "semver";
 
@@ -116,7 +118,7 @@ export function getHourMinuteFromTimestamp (datetime: number): string {
   return date.toTimeString().split(" ")[0];
 }
 
-export const latestPewPewVersion: string = "latest";
+export const latestPewPewVersion: string = PEWPEW_VERSION_LATEST;
 
 /**
  * Sorts the array by versions returning the latest versions first and invalid versions last.

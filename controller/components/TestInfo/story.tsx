@@ -5,6 +5,7 @@ import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import React from "react";
 import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import { latestPewPewVersion } from "../../pages/api/util/clientutil";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
@@ -40,7 +41,7 @@ const fullTest: Required<TestData> = {
   lastUpdated: new Date(Date.now() - 300000),
   lastChecked: new Date(Date.now() - 100000),
   errors: ["error1", "error2", "error3"],
-  version: "latest",
+  version: latestPewPewVersion,
   queueName: "unittest",
   userId: "bruno.madrigal@pewpew.org"
 };

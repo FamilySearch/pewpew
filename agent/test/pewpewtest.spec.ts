@@ -1,5 +1,6 @@
 import {
   LogLevel,
+  PEWPEW_VERSION_LATEST,
   PpaasTestId,
   PpaasTestStatus,
   TestStatus,
@@ -78,17 +79,17 @@ describe("PewPewTest", () => {
 
   describe("versionGreaterThan", () => {
     it("latest is always greater", (done: Mocha.Done) => {
-      expect(versionGreaterThan("latest", "")).to.equal(true);
+      expect(versionGreaterThan(PEWPEW_VERSION_LATEST, "")).to.equal(true);
       done();
     });
 
     it("latest is always greater than latest", (done: Mocha.Done) => {
-      expect(versionGreaterThan("latest", "latest")).to.equal(true);
+      expect(versionGreaterThan(PEWPEW_VERSION_LATEST, PEWPEW_VERSION_LATEST)).to.equal(true);
       done();
     });
 
     it("greater than latest is false", (done: Mocha.Done) => {
-      expect(versionGreaterThan("0.5.5", "latest")).to.equal(false);
+      expect(versionGreaterThan("0.5.5", PEWPEW_VERSION_LATEST)).to.equal(false);
       done();
     });
 

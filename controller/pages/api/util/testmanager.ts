@@ -1097,7 +1097,8 @@ export abstract class TestManager {
         let version: string | undefined;
         if (fieldKeys.includes("version")) {
           // Validate the version is in s3
-          if (Array.isArray(fields.version) || !fields.version || !await PpaasS3File.existsInS3("pewpew/" + fields.version)) {
+          if (Array.isArray(fields.version) || !fields.version
+            || !await PpaasS3File.existsInS3(`${PEWPEW_BINARY_FOLDER}/${fields.version}/`)) {
             return { json: { message: "Received an invalid version: " + fields.version }, status: 400 };
           }
           version = fields.version;

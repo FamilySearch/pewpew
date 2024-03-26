@@ -162,7 +162,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       // If latest version is being updated:
       if (latest) {
         global.currentLatestVersion = version;
-        log("Sucessfully updated currentLatestVersion. ", LogLevel.INFO, version);
+        log("Sucessfully updated currentLatestVersion: " + version, LogLevel.INFO, version);
       }
       log(PEWPEW_BINARY_EXECUTABLE + " only uploaded, version: " + versionLogDisplay, LogLevel.INFO, { files, authPermissions: getLogAuthPermissions(authPermissions) });
       return { json: { message: "PewPew uploaded, version: " + versionLogDisplay }, status: 200 };
@@ -241,7 +241,11 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
       filename: PEWPEW_BINARY_EXECUTABLE
     });
     global.currentLatestVersion = pewpewTags && pewpewTags.get(VERSION_TAG_NAME); // <- change to get the tag here
-    log("Setting global.currentLatestVersion = " + global.currentLatestVersion, LogLevel.ERROR, global.currentLatestVersion);
+    if (global.currentLatestVersion) {
+      log("Sucessfully retrieved currentLatestVersion: " + global.currentLatestVersion, LogLevel.INFO, global.currentLatestVersion);
+    } else {
+      log("Failed to retriev currentLatestVersion: " + global.currentLatestVersion, LogLevel.WARN, global.currentLatestVersion);
+    }
     return global.currentLatestVersion;
   } catch (error) {
     log("Could not load latest pewpew in file for currentLatestVersion", LogLevel.ERROR, error);

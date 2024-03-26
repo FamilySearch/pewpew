@@ -237,13 +237,14 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
   }
   try {
     const pewpewTags = await s3.getTags({
-      s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}/`,
+      s3Folder: `${PEWPEW_BINARY_FOLDER}/${latestPewPewVersion}`,
       filename: PEWPEW_BINARY_EXECUTABLE
     });
     global.currentLatestVersion = pewpewTags && pewpewTags.get(VERSION_TAG_NAME); // <- change to get the tag here
+    log("Setting global.currentLatestVersion = " + global.currentLatestVersion, LogLevel.ERROR, global.currentLatestVersion);
     return global.currentLatestVersion;
   } catch (error) {
-    log("Could not load latest pewpew in file", LogLevel.ERROR, error);
+    log("Could not load latest pewpew in file for currentLatestVersion", LogLevel.ERROR, error);
     throw error;
   }
 }

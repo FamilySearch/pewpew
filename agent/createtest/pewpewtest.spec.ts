@@ -1,6 +1,7 @@
 import {
   LogLevel,
   MessageType,
+  PEWPEW_VERSION_LATEST,
   PpaasS3File,
   PpaasS3Message,
   PpaasTestId,
@@ -83,7 +84,7 @@ describe("PewPewTest Create Test", () => {
         s3Folder,
         yamlFile: createTestFilename,
         testRunTimeMn: 2,
-        version: "latest",
+        version: PEWPEW_VERSION_LATEST,
         envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
         restartOnFailure: false,
         additionalFiles: [],
@@ -309,7 +310,7 @@ describe("PewPewTest Create Test", () => {
         testId: ppaasTestId.testId,
         s3Folder,
         yamlFile: createTestFilename,
-        version: "latest",
+        version: PEWPEW_VERSION_LATEST,
         envVariables: {
           SERVICE_URL_AGENT: "127.0.0.1:8080",
           RUST_LOG: "info",

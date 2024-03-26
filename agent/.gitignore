@@ -9,6 +9,7 @@
 /coverage
 setaws.sh
 /.nyc_output/
+/test/pewpew.*
 
 # production
 /build

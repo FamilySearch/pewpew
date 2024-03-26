@@ -15,6 +15,11 @@ $ npm i && npm run build
 
 ```
 
+## Mac and Windows Testing
+The unit tests, integration, and acceptance tests are designed to run on Linux. As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew`).
+
+To override these tests for mac or windows, the pewpew exectuable must be named `pewpew.exe` for Windows and `pewpew.mac` for Mac. These files should then be dropped in the `test/` folder.
+
 ## Test
 
 ```bash

@@ -57,7 +57,7 @@ import {
   IV_LENGTH as SECRET_LENGTH,
   getGlobalSecretsConfig,
   init as initSecrets,
-  config as secretsConfig
+  internalConfig as secretsConfig
 } from "../pages/api/util/secrets";
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";

@@ -209,6 +209,7 @@ describe("PewPew Util Integration", () => {
         expect(match, "pewpew match").to.not.equal(null);
         expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
         const version: string = match![1];
+        expect(global.currentLatestVersion, "global.currentLatestVersion").to.equal(version);
         // If this runs before the other acceptance tests populate the shared pewpew versions
         if (!sharedPewPewVersions) {
           sharedPewPewVersions = [latestPewPewVersion];
@@ -368,7 +369,10 @@ describe("PewPew Util Integration", () => {
 
     it("getCurrentPewPewLatestVersion", async () => {
       expect(currentPewPewLatestVersion, "currentPewPewLatestVersion").to.not.equal(undefined);
+      // We need to reset this to force it to go to S3. Otherwise it just returns the value
+      global.currentLatestVersion = undefined;
       const result = await getCurrentPewPewLatestVersion();
+      log("getCurrentPewPewLatestVersion: " + result, LogLevel.DEBUG, result);
       expect(result, "result").to.equal(currentPewPewLatestVersion);
     });
   });

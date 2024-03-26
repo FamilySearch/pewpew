@@ -140,12 +140,16 @@ describe("PewPew Util", () => {
 
   after(() => {
     resetMockS3();
+    // We need to reset this to force it to go to S3 later. Otherwise it just returns the value
+    global.currentLatestVersion = undefined;
   });
 
   describe("getCurrentPewPewLatestVersion", () => {
     it("getCurrentPewPewLatestVersion should return version with latest tag from S3", (done: Mocha.Done) => {
       const expected = "0.5.13";
       mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
+      // We need to reset this to force it to go to S3. Otherwise it just returns the value
+      global.currentLatestVersion = undefined;
       getCurrentPewPewLatestVersion().then((result: string | undefined)  => {
         log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
         expect(result).to.equal(expected);
@@ -210,6 +214,7 @@ describe("PewPew Util", () => {
         files: filesLegacyPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      global.currentLatestVersion = "0.0.1"; // bogus value
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);
@@ -219,6 +224,12 @@ describe("PewPew Util", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.include("as latest");
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+        expect(match, "pewpew match").to.not.equal(null);
+        expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
+        const version: string = match![1];
+        expect(global.currentLatestVersion, "global.currentLatestVersion").to.equal(version);
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);

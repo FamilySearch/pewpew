@@ -3,7 +3,11 @@ import {
   FormDataPewPew,
   TestManagerError
 } from "../types";
-import { LogLevel, log } from "@fs/ppaas-common";
+import {
+  LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
+  log
+} from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
 import FormData from "form-data";
 import { createReadStream } from "fs";
@@ -32,8 +36,8 @@ async function fetch (
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_LEGACY_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
-const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting/pewpew.zip");
+const PEWPEW_ZIP_LEGACY_FILEPATH = process.env.PEWPEW_ZIP_LEGACY_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
+const PEWPEW_ZIP_SCRIPTING_FILEPATH = process.env.PEWPEW_ZIP_SCRIPTING_FILEPATH || path.join(UNIT_TEST_FOLDER + "/scripting", PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 // Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
@@ -95,10 +99,10 @@ describe("PewPew API Integration", () => {
 
   describe("POST /pewpew", () => {
     it("POST /pewpew legacy should respond 200 OK", (done: Mocha.Done) => {
-      const filename: string = path.basename(PEWPEW_LEGACY_FILEPATH);
+      const filename: string = path.basename(PEWPEW_ZIP_LEGACY_FILEPATH);
       const formData: FormDataPewPew = {
         additionalFiles: {
-          value: createReadStream(PEWPEW_LEGACY_FILEPATH),
+          value: createReadStream(PEWPEW_ZIP_LEGACY_FILEPATH),
           options: { filename }
         }
       };
@@ -143,10 +147,10 @@ describe("PewPew API Integration", () => {
     });
 
     it("POST /pewpew as latest should respond 200 OK", (done: Mocha.Done) => {
-      const filename: string = path.basename(PEWPEW_LEGACY_FILEPATH);
+      const filename: string = path.basename(PEWPEW_ZIP_LEGACY_FILEPATH);
       const formData: FormDataPewPew = {
         additionalFiles: [{
-          value: createReadStream(PEWPEW_LEGACY_FILEPATH),
+          value: createReadStream(PEWPEW_ZIP_LEGACY_FILEPATH),
           options: { filename }
         }],
         latest: "true"
@@ -186,10 +190,10 @@ describe("PewPew API Integration", () => {
     });
 
     it("POST /pewpew scripting should respond 200 OK", (done: Mocha.Done) => {
-      const filename: string = path.basename(PEWPEW_SCRIPTING_FILEPATH);
+      const filename: string = path.basename(PEWPEW_ZIP_SCRIPTING_FILEPATH);
       const formData: FormDataPewPew = {
         additionalFiles: {
-          value: createReadStream(PEWPEW_SCRIPTING_FILEPATH),
+          value: createReadStream(PEWPEW_ZIP_SCRIPTING_FILEPATH),
           options: { filename }
         }
       };
@@ -254,10 +258,10 @@ describe("PewPew API Integration", () => {
   describe("DELETE /pewpew", () => {
     const uploadLegacyPewpew = async () => {
       try {
-        const filename: string = path.basename(PEWPEW_LEGACY_FILEPATH);
+        const filename: string = path.basename(PEWPEW_ZIP_LEGACY_FILEPATH);
         const formData: FormDataPewPew = {
           additionalFiles: {
-            value: createReadStream(PEWPEW_LEGACY_FILEPATH),
+            value: createReadStream(PEWPEW_ZIP_LEGACY_FILEPATH),
             options: { filename }
           }
         };

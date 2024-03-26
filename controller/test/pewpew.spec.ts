@@ -6,15 +6,22 @@ import {
   TestManagerError
 } from "../types";
 import type { File, Files } from "formidable";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
 import {
+  LogLevel,
+  PEWPEW_BINARY_EXECUTABLE,
   PEWPEW_BINARY_FOLDER,
+  PpaasTestId,
+  log,
+  logger,
+  sleep
+} from "@fs/ppaas-common";
+import {
   ParsedForm,
   createFormidableFile,
   unzipFile
 } from "../pages/api/util/util";
+import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
-  PEWPEW_EXECUTABLE_NAME,
   VERSION_TAG_NAME,
   deletePewPew,
   getCurrentPewPewLatestVersion,
@@ -22,7 +29,6 @@ import {
   getPewpew,
   postPewPew
 } from "../pages/api/util/pewpew";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
 import {
   mockGetObjectTagging,
   mockListObject,
@@ -35,13 +41,14 @@ import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
+import { platform } from "os";
 import semver from "semver";
 
 logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const PEWPEW_LEGACY_FILEPATH = path.join(UNIT_TEST_FOLDER, "pewpew.zip");
-const PEWPEW_SCRIPTING_FILEPATH = path.join(UNIT_TEST_FOLDER, "scripting/pewpew.zip");
+const PEWPEW_ZIP_LEGACY_FILEPATH = process.env.PEWPEW_ZIP_LEGACY_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
+const PEWPEW_ZIP_SCRIPTING_FILEPATH = process.env.PEWPEW_ZIP_SCRIPTING_FILEPATH || path.join(UNIT_TEST_FOLDER + "/scripting", PEWPEW_BINARY_EXECUTABLE + ".zip");
 
 const authAdmin: AuthPermissions = {
   authPermission: AuthPermission.Admin,
@@ -49,8 +56,8 @@ const authAdmin: AuthPermissions = {
 };
 
 const legacyPewpewZipFile: File = createFormidableFile(
-  path.basename(PEWPEW_LEGACY_FILEPATH),
-  PEWPEW_LEGACY_FILEPATH,
+  path.basename(PEWPEW_ZIP_LEGACY_FILEPATH),
+  PEWPEW_ZIP_LEGACY_FILEPATH,
   "unittest",
   1,
   null
@@ -60,7 +67,7 @@ const invalidFiles = {
 };
 
 const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
-const pewpewFilename = PEWPEW_EXECUTABLE_NAME;
+const pewpewFilename = PEWPEW_BINARY_EXECUTABLE;
 const versions = ["0.5.11", "0.5.12", "0.5.13-preview1", "0.5.13-preview2", "0.6.0-preview1", "0.6.0-preview2", "latest"];
 const s3Object: S3Object = {
   LastModified: new Date(),
@@ -101,14 +108,18 @@ describe("PewPew Util", () => {
       mixedFiles = {
         additionalFiles: [...unzippedFiles, legacyPewpewZipFile] as any as File
       };
+      if (platform() === "win32") {
+        // Windows gets EBUSY trying to run pewpew --version since the unzip still hasn't released
+        await sleep(100);
+      }
     } catch (error) {
       log("Error unzipping " + legacyPewpewZipFile.originalFilename, LogLevel.ERROR, error);
       throw error;
     }
 
     const scriptingPewpewZipFile: File = createFormidableFile(
-      path.basename(PEWPEW_SCRIPTING_FILEPATH),
-      PEWPEW_SCRIPTING_FILEPATH,
+      path.basename(PEWPEW_ZIP_SCRIPTING_FILEPATH),
+      PEWPEW_ZIP_SCRIPTING_FILEPATH,
       "unittest",
       1,
       null
@@ -129,12 +140,16 @@ describe("PewPew Util", () => {
 
   after(() => {
     resetMockS3();
+    // We need to reset this to force it to go to S3 later. Otherwise it just returns the value
+    global.currentLatestVersion = undefined;
   });
 
   describe("getCurrentPewPewLatestVersion", () => {
     it("getCurrentPewPewLatestVersion should return version with latest tag from S3", (done: Mocha.Done) => {
       const expected = "0.5.13";
       mockGetObjectTagging(new Map([[VERSION_TAG_NAME, expected]]));
+      // We need to reset this to force it to go to S3. Otherwise it just returns the value
+      global.currentLatestVersion = undefined;
       getCurrentPewPewLatestVersion().then((result: string | undefined)  => {
         log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
         expect(result).to.equal(expected);
@@ -199,6 +214,7 @@ describe("PewPew Util", () => {
         files: filesLegacyPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      global.currentLatestVersion = "0.0.1"; // bogus value
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);
@@ -208,6 +224,12 @@ describe("PewPew Util", () => {
         expect(body.message).to.not.equal(undefined);
         expect(body.message).to.include("PewPew uploaded, version");
         expect(body.message).to.include("as latest");
+        const match: RegExpMatchArray | null = body.message.match(/PewPew uploaded, version: (\d+\.\d+\.\d+)/);
+        log(`pewpew match: ${match}`, LogLevel.DEBUG, match);
+        expect(match, "pewpew match").to.not.equal(null);
+        expect(match!.length, "pewpew match.length").to.be.greaterThan(1);
+        const version: string = match![1];
+        expect(global.currentLatestVersion, "global.currentLatestVersion").to.equal(version);
         done();
       }).catch((error) => {
         log("postPewPew error", LogLevel.ERROR, error);
@@ -221,6 +243,7 @@ describe("PewPew Util", () => {
         files: filesScriptingPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      global.currentLatestVersion = "0.0.1"; // bogus value
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);

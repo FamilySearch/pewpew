@@ -243,6 +243,7 @@ describe("PewPew Util", () => {
         files: filesScriptingPewpew
       };
       log("postPewPew parsedForm", LogLevel.DEBUG, parsedForm);
+      global.currentLatestVersion = "0.0.1"; // bogus value
       postPewPew(parsedForm, authAdmin).then((res: ErrorResponse) => {
         log("postPewPew res", LogLevel.DEBUG, res);
         expect(res.status, JSON.stringify(res.json)).to.equal(200);

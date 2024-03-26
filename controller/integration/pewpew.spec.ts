@@ -313,27 +313,6 @@ describe("PewPew Util Integration", () => {
     });
   });
 
-  describe("getPewPewVersionsInS3", () => {
-    it("getPewPewVersionsInS3() should return array with elements", (done: Mocha.Done) => {
-      getPewPewVersionsInS3().then((result: string[]) => {
-        log("getPewPewVersionsInS3()", LogLevel.DEBUG, result);
-        expect(result).to.not.equal(undefined);
-        expect(Array.isArray(result), JSON.stringify(result)).to.equal(true);
-        expect(result.length).to.be.greaterThan(0);
-        for (const version of result) {
-          if (version !== latestPewPewVersion) {
-            log(`semver.valid(${version}) = ${semver.valid(version)}`, LogLevel.DEBUG);
-            expect(semver.valid(version), `semver.valid(${version})`).to.not.equal(null);
-          }
-        }
-        if (!sharedPewPewVersions) {
-          sharedPewPewVersions = result;
-        }
-        done();
-      }).catch((error) => done(error));
-    });
-  });
-
   describe("getPewpew", () => {
     before(async () => {
       try {

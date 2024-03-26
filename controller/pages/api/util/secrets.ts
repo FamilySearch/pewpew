@@ -45,11 +45,12 @@ export function getGlobalSecretsConfig (): SecretsConfig {
 }
 
 // Export for testing so we can reset and mock secretsClient
+// Can't use name config https://nextjs.org/docs/messages/invalid-page-config
 /**
  * Secrets Manager configuration. Exported for testing so we can reset and mock secretsClient.
  * Or alter the encryptionKeyName/secretKeyName after the fact
  */
-export const config: {
+export const internalConfig: {
   /** Aws SDK client for secrets-manager */
   secretsClient: SecretsManagerClient,
   /** Can be overriden by environment variable SECRETS_ENCRYPTION_KEY_NAME */
@@ -63,11 +64,11 @@ export const config: {
 };
 
 export function init (): void {
-  if (config.secretsClient) {
+  if (internalConfig.secretsClient) {
     // If we've already set the secretsClient then we've done this already.
     return;
   }
-  config.secretsClient = new SecretsManagerClient({
+  internalConfig.secretsClient = new SecretsManagerClient({
     region: "us-east-1"
   });
 }
@@ -89,7 +90,7 @@ export async function createSecret (secretKeyName: string, value: string | Buffe
       SecretString: typeof input.SecretString,
       SecrSecretBinary: typeof input.SecretBinary
     });
-    const response: CreateSecretCommandOutput = await config.secretsClient.send(new CreateSecretCommand(input));
+    const response: CreateSecretCommandOutput = await internalConfig.secretsClient.send(new CreateSecretCommand(input));
     log("CreateSecretCommand succeeded", LogLevel.TRACE, response);
     log("CreateSecretCommand succeeded", LogLevel.DEBUG, {
       ...response,
@@ -108,7 +109,7 @@ export async function createSecret (secretKeyName: string, value: string | Buffe
       Tags: [...s3.ADDITIONAL_TAGS_ON_ALL].map(([Key, Value]) => ({ Key, Value }))
     };
     log("TagResourceCommand request", LogLevel.DEBUG, input);
-    const response: TagResourceCommandOutput = await config.secretsClient.send(new TagResourceCommand(input));
+    const response: TagResourceCommandOutput = await internalConfig.secretsClient.send(new TagResourceCommand(input));
     log("TagResourceCommand succeeded", LogLevel.DEBUG, {
       ...response,
       "$metadata": undefined
@@ -128,7 +129,7 @@ export async function deleteSecret (secretKeyName: string, force?: boolean): Pro
       ForceDeleteWithoutRecovery: force
     };
     log("DeleteSecretCommand request", LogLevel.DEBUG, input);
-    const response: DeleteSecretCommandOutput = await config.secretsClient.send(new DeleteSecretCommand(input));
+    const response: DeleteSecretCommandOutput = await internalConfig.secretsClient.send(new DeleteSecretCommand(input));
     log("DeleteSecretCommand succeeded", LogLevel.DEBUG, {
       ...response,
       "$metadata": undefined
@@ -148,7 +149,7 @@ export async function getSecretValue (secretKeyName: string): Promise<string> {
       SecretId: secretKeyName
     };
     log("GetSecretValueCommand request", LogLevel.DEBUG, input);
-    const response: GetSecretValueCommandOutput = await config.secretsClient.send(new GetSecretValueCommand(input));
+    const response: GetSecretValueCommandOutput = await internalConfig.secretsClient.send(new GetSecretValueCommand(input));
     log("GetSecretValueCommand succeeded", LogLevel.TRACE, response);
     log("GetSecretValueCommand succeeded", LogLevel.DEBUG, {
       ...response,
@@ -195,14 +196,14 @@ export async function getKey (secretKeyName: string): Promise<string> {
 
 /** Async function that loads and waits for the encryption key */
 async function getAndSetEncryptionKey (): Promise<Buffer> {
-  if (!config.encryptionKeyName) {
+  if (!internalConfig.encryptionKeyName) {
     throw new Error("SECRETS_ENCRYPTION_KEY_NAME environment variable not set");
   }
   if (getGlobalSecretsConfig().encryptionKey === undefined) {
     // Keep trying to get the key
     try {
       log("getAndSetEncryptionKey start", LogLevel.DEBUG);
-      const key: string = await getKey(config.encryptionKeyName);
+      const key: string = await getKey(internalConfig.encryptionKeyName);
       log("getAndSetEncryptionKey finished", LogLevel.DEBUG);
       getGlobalSecretsConfig().encryptionKey = Buffer.from(key, "hex");
     } catch (error) {
@@ -218,7 +219,7 @@ getAndSetEncryptionKey()
 
 /** Async function that loads and waits for the client secret */
 async function getAndSetOpenIdClientSecret (): Promise<Buffer> {
-  if (!config.openIdClientSecret) {
+  if (!internalConfig.openIdClientSecret) {
     throw new Error("SECRETS_OPENID_CLIENT_SECRET_NAME environment variable not set");
   }
   if (getGlobalSecretsConfig().openIdClientSecret === undefined) {
@@ -226,7 +227,7 @@ async function getAndSetOpenIdClientSecret (): Promise<Buffer> {
     try {
       log("getAndSetOpenIdClientSecret start", LogLevel.DEBUG);
 
-      const key: string = await getKey(config.openIdClientSecret);
+      const key: string = await getKey(internalConfig.openIdClientSecret);
       getGlobalSecretsConfig().openIdClientSecret = Buffer.from(key, "ascii"); // OpenId is an ascii password
       log("getAndSetOpenIdClientSecret finished", LogLevel.DEBUG);
     } catch (error) {

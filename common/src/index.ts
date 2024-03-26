@@ -3,6 +3,16 @@ import * as logger from "./util/log";
 import * as s3 from "./util/s3";
 import * as sqs from "./util/sqs";
 import * as util from "./util/util";
+import {
+  APPLICATION_NAME,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER,
+  PEWPEW_VERSION_LATEST,
+  SYSTEM_NAME,
+  poll,
+  sleep
+ } from "./util/util";
 import { LogLevel, log } from "./util/log";
 import { MakeTestIdOptions, PpaasTestId } from "./ppaastestid";
 import { PpaasS3File, PpaasS3FileCopyOptions, PpaasS3FileOptions } from "./s3file";
@@ -29,6 +39,14 @@ export {
   util,
   log,
   LogLevel,
+  APPLICATION_NAME,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_EXECUTABLE_NAMES,
+  PEWPEW_BINARY_FOLDER,
+  PEWPEW_VERSION_LATEST,
+  SYSTEM_NAME,
+  poll,
+  sleep,
   PpaasCommunicationsMessage,
   PpaasS3Message,
   PpaasTestId,

@@ -8,6 +8,7 @@ const config: StorybookConfig = {
     // storyStoreV7: false, // Opt out of on-demand story loading
     // postcss: false,
   },
+  staticDirs: ["../public"],
   // In the future consider https://clacified.com/tech-science/16/how-to-set-up-storybook-v6-with-react-17
   typescript: {
     check: false,

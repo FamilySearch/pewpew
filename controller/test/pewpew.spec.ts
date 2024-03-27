@@ -354,7 +354,7 @@ describe("PewPew Util", () => {
     const versionInUse = "0.1.1";
     let testIdInUse: string | undefined;
 
-    before(() => {
+    before(async () => {
       const yamlFile = "unittest.yaml";
       const { testId, s3Folder } = PpaasTestId.makeTestId(yamlFile);
       const testScheduler = new Map<string, TestSchedulerItem>();
@@ -364,7 +364,7 @@ describe("PewPew Util", () => {
         token: "user1token",
         userId: "user1"
       };
-      TestSchedulerIntegration.addTest({
+      await TestSchedulerIntegration.addTest({
         queueName: "bogus",
         scheduleDate: Date.now() + 600000,
         testMessage: {
@@ -377,6 +377,11 @@ describe("PewPew Util", () => {
         }
       }, authUser1);
       testIdInUse = testId;
+      const foundInUse = await TestSchedulerIntegration.getTestIdsForPewPewVersion(versionInUse);
+      log("scheduledTests", LogLevel.DEBUG, global.scheduledTests);
+      expect(foundInUse, "foundInUse").to.not.equal(undefined);
+      expect(foundInUse?.length, "foundInUse.length").to.equal(1);
+      expect(foundInUse![0], "foundInUse[0]").to.equal(testId);
     });
 
     after(() => {

@@ -38,7 +38,7 @@ async function fetch (
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
 
-// Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
+// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 let sharedPewPewVersions: string[] | undefined;

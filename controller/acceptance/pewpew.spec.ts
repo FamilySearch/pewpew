@@ -38,7 +38,7 @@ async function fetch (
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
 
-// Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
+// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 let sharedPewPewVersions: string[] | undefined;
@@ -208,8 +208,7 @@ describe("PewPew API Integration", () => {
   });
 
   describe("DELETE /pewpew", () => {
-    after(async () => {
-      // Put the version back
+    const uploadPewpew = async () => {
       try {
         const filename: string = path.basename(PEWPEW_ZIP_FILEPATH);
         const formData: FormDataPewPew = {
@@ -252,6 +251,18 @@ describe("PewPew API Integration", () => {
       } catch (error) {
         throw error;
       }
+    };
+
+    beforeEach(async () => {
+      if (uploadedPewPewVersion) {
+        return;
+      }
+      await uploadPewpew();
+    });
+
+    after(async () => {
+      // Put the version back
+      await uploadPewpew();
     });
 
     it("DELETE /pewpew should respond 200 OK", (done: Mocha.Done) => {
@@ -259,10 +270,11 @@ describe("PewPew API Integration", () => {
       const deleteVersion = uploadedPewPewVersion;
       const deleteURL = `${url}?version=${deleteVersion}`;
       log("DELETE URL", LogLevel.DEBUG, { deleteURL });
+      // Reset it since it's been deleted
+      uploadedPewPewVersion = undefined;
       fetch(deleteURL, { method: "DELETE" }).then((res: Response) => {
         log("DELETE /pewpew res", LogLevel.DEBUG, res);
         expect(res.status).to.equal(200);
-        uploadedPewPewVersion = undefined;
         const body: TestManagerError = res.data;
         log("body: " + res.data, LogLevel.DEBUG, body);
         expect(body).to.not.equal(undefined);

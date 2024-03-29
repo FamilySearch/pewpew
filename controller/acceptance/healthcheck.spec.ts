@@ -5,7 +5,7 @@ import { expect } from "chai";
 
 const fetch = _axios.get;
 
-// Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
+// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 describe("Healthcheck Integration", () => {

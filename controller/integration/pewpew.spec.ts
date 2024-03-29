@@ -281,10 +281,7 @@ describe("PewPew Util Integration", () => {
   });
 
   describe("deletePewPew", () => {
-    beforeEach(async () => {
-      if (uploadedPewPewVersion) {
-        return;
-      }
+    const uploadPewpew = async () => {
       try {
         const parsedForm: ParsedForm = {
           fields: {},
@@ -317,6 +314,17 @@ describe("PewPew Util Integration", () => {
         log("deletePewPew beforeEach error", LogLevel.ERROR, error);
         throw error;
       }
+    };
+
+    beforeEach(async () => {
+      if (uploadedPewPewVersion) {
+        return;
+      }
+      await uploadPewpew();
+    });
+
+    after(async () => {
+      await uploadPewpew();
     });
 
     it("deletePewPew should respond 200 OK", (done: Mocha.Done) => {

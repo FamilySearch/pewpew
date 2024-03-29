@@ -68,7 +68,7 @@ const defaultEnvironmentVariables: EnvironmentVariablesFile = {
   TEST2: "true"
 };
 
-// Beanstalk	<SYSTEM_NAME>_<SERVICE_NAME>_URL
+// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
 export const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 let sharedPpaasTestId: PpaasTestId | undefined;

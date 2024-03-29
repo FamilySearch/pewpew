@@ -34,6 +34,7 @@
     "no-angle-bracket-type-assertion": 0,
     "no-bitwise": 1,
     "no-console": 1,
+    "no-tabs": 1,
     "no-multiple-empty-lines": ["error", { "max": 2, "maxEOF": 0, "maxBOF": 0 }],
     "no-empty": [1, { "allowEmptyCatch": true }],
     "no-empty-interface": 0,

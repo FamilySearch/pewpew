@@ -24,6 +24,8 @@ cargo clippy --all -- -D warnings
 cargo test --all
 cargo test --all --doc
 
+cargo deny check --hide-inclusion-graph license sources advisories
+
 CWD=$(pwd)
 
 cd "$CWD/lib/config-wasm"
@@ -61,13 +63,29 @@ npm run build:common
 npm run build:react
 NODE_ENV=test npm test
 
-# npm run testcleanup
-# npm run coverage
-# echo grab screenshot
+read -e -p "Run Coverage Tests y/N: " choice
+if [[ "$choice" == [Yy]* ]]; then
+  npm run testcleanup
+  # npm run coverage
+  # read -e -p "Grab screenshot then hit enter to continue." choice
+  npm run coverage:common
+  read -e -p "Grab common screenshot then hit enter to continue." choice
+  npm run coverage:controller
+  read -e -p "Grab controller screenshot then hit enter to continue." choice
+  npm run coverage:agent
+  read -e -p "Grab agent screenshot then hit enter to continue." choice
+  npm run testmerge
+  read -e -p "Grab overall screenshot then hit enter to continue." choice
+fi
 
-# npm run testcleanup
-# echo Hit Ctrl-C when acceptance tests finish
-# npm acceptance:all
-# echo grab screenshot
-
-cargo deny check --hide-inclusion-graph license sources advisories
+read -e -p "Run Acceptance Tests y/N: " choice
+if [[ "$choice" == [Yy]* ]]; then
+  while [[ "$clean_result" != "0" ]]; do
+    (npm run testcleanup)
+    clean_result=$?
+    echo "clean_result: $clean_result"
+  done
+  echo Hit Ctrl-C when acceptance tests finish
+  npm run acceptance:all
+  read -e -p "Grab screenshot then hit enter to continue." choice
+fi

@@ -280,7 +280,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       if (types[mimeType] !== undefined) {
         types[mimeType]!.index.push({ iter: i, id });
       } else {
-				types[mimeType] = { index: [{ iter: i, id }], selected: "partial"};
+        types[mimeType] = { index: [{ iter: i, id }], selected: "partial"};
       }
 
       // Adds a reference to an endpoint with given response type
@@ -291,7 +291,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       } else {
         urls[hostUrl] = { index: [{ iter: i, id }], selected: "yes"};
       }
-			endpoints.push({ selected: "yes", url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
+      endpoints.push({ selected: "yes", url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
     }
 
     const typesTemp = types;

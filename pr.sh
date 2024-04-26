@@ -72,11 +72,14 @@ if [[ "$choice" == [Yy]* ]]; then
   read -e -p "Grab common screenshot then hit enter to continue." choice
   npm run coverage:agent
   read -e -p "Grab agent screenshot then hit enter to continue." choice
+  set +e
+  clean_result="1"
   while [[ "$clean_result" != "0" ]]; do
     (npm run testcleanup)
     clean_result=$?
     echo "clean_result: $clean_result"
   done
+  set -e
   npm run coverage:controller
   read -e -p "Grab controller screenshot then hit enter to continue." choice
   npm run testmerge
@@ -85,11 +88,14 @@ fi
 
 read -e -p "Run Acceptance Tests y/N: " choice
 if [[ "$choice" == [Yy]* ]]; then
+  set +e
+  clean_result="1"
   while [[ "$clean_result" != "0" ]]; do
     (npm run testcleanup)
     clean_result=$?
     echo "clean_result: $clean_result"
   done
+  set -e
   echo Hit Ctrl-C when acceptance tests finish
   npm run acceptance:all
   read -e -p "Grab screenshot then hit enter to continue." choice

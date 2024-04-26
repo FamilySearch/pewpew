@@ -70,10 +70,15 @@ if [[ "$choice" == [Yy]* ]]; then
   # read -e -p "Grab screenshot then hit enter to continue." choice
   npm run coverage:common
   read -e -p "Grab common screenshot then hit enter to continue." choice
-  npm run coverage:controller
-  read -e -p "Grab controller screenshot then hit enter to continue." choice
   npm run coverage:agent
   read -e -p "Grab agent screenshot then hit enter to continue." choice
+  while [[ "$clean_result" != "0" ]]; do
+    (npm run testcleanup)
+    clean_result=$?
+    echo "clean_result: $clean_result"
+  done
+  npm run coverage:controller
+  read -e -p "Grab controller screenshot then hit enter to continue." choice
   npm run testmerge
   read -e -p "Grab overall screenshot then hit enter to continue." choice
 fi

@@ -41,6 +41,7 @@ export type { S3File };
 const gunzip = promisify(zlibGunzip);
 const writeFile = promisify(fsWriteFile);
 
+export const SHARED_ENVIRONMENT_PREFIX: string = process.env.SHARED_ENVIRONMENT_PREFIX || "s3-environment/";
 export let BUCKET_NAME: string;
 export let BUCKET_URL: string;
 export let KEYSPACE_PREFIX: string;

@@ -1,6 +1,6 @@
-import { LogLevel, log } from "./util/log";
-import { TestStatus, TestStatusMessage } from "../types";
 import {
+  KEYSPACE_PREFIX,
+  SHARED_ENVIRONMENT_PREFIX,
   defaultTestFileTags,
   getFileContents as getFileContentsS3,
   getTags,
@@ -8,6 +8,8 @@ import {
   listFiles,
   uploadFileContents
 } from "./util/s3";
+import { LogLevel, log } from "./util/log";
+import { TestStatus, TestStatusMessage } from "../types";
 import PpaasTestId from "./ppaastestid";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 
@@ -175,9 +177,17 @@ export class PpaasTestStatus implements TestStatusMessage {
         s3File: S3Object;
         contents: string | undefined;
       }
+      const isSharedS3Environment: boolean =  KEYSPACE_PREFIX.startsWith(SHARED_ENVIRONMENT_PREFIX);
       const ppaasTestIds: TestIdContents[] = s3Files.map((s3File: S3Object) => {
         try {
           if (!s3File.Key) { return undefined; }
+          // Check if it's an /s3-environment/* and we're prefix ""
+          // Fixed Bug: We were having issues with non-dev environments finding the old runs from /s3-environment/*
+          // This code would then try to load those tests from the root and can't find them and would error
+          // If we're prefix "" then filter out tests that are under /s3-environment/*
+          if (!isSharedS3Environment && s3File.Key.startsWith(SHARED_ENVIRONMENT_PREFIX)) {
+            return undefined;
+          }
           const testId: string = s3File.Key.slice(s3File.Key.lastIndexOf("/") + 1, s3File.Key.lastIndexOf("."));
           log(`Parsed testId ${testId} from ${s3File.Key}`, LogLevel.DEBUG);
           if (ignoreList && ignoreList.includes(testId)) {

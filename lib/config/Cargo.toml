@@ -9,11 +9,11 @@ license = "Apache 2.0"
 doctest = false
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 ether = { path = "../either" }
 futures = "0.3"
 http = "0.2"
-itertools = "0.11"
+itertools = "0.13"
 jsonpath_lib = "0.3.0"
 percent-encoding = "2"
 pest = "2"

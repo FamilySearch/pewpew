@@ -286,7 +286,7 @@ impl BucketGroupStats {
                 // human format
                 let piece = format!(
                     "\n{}\n  calls made: {}\n  status counts: {:?}\n",
-                    Paint::yellow(format!("- {method} {url}:")).dimmed(),
+                    (format!("- {method} {url}:")).yellow().dim(),
                     calls_made,
                     self.status_counts
                 );
@@ -490,7 +490,7 @@ impl Stats {
                 format!(
                     "\n- {}:\n  length: {}\n  limit: {}\n  \
                      number of receivers: {}\n  number of senders: {}\n",
-                    Paint::yellow(stats.provider).dimmed(),
+                    Paint::yellow(stats.provider).dim(),
                     stats.len,
                     stats.limit,
                     stats.receiver_count,

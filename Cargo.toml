@@ -48,7 +48,7 @@ test_common = { path = "./lib/test_common" }
 tokio = "1"
 tokio-stream = { version = "0.1", features = ["sync", "time"] }
 url = "2"
-yansi = "0.5"
+yansi = "1"
 zip_all = { path = "./lib/zip_all" }
 # https://github.com/softprops/json-env-logger/issues/6
 log = { version = "0.4", features = ["kv_unstable_std"] }

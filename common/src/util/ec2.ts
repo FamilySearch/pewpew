@@ -54,6 +54,5 @@ export async function getInstanceId (): Promise<string> {
   } catch (error: unknown) {
     log(`Could not load instanceId command "${INSTANCE_ID_COMMAND}"`, LogLevel.WARN, error);
   }
-  // curl http://169.254.169.254/latest/meta-data/instance-id
   throw new Error("Could not load instanceId");
 }

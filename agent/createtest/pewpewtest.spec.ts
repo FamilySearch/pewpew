@@ -1,6 +1,7 @@
 import {
   LogLevel,
   MessageType,
+  PEWPEW_BINARY_FOLDER,
   PEWPEW_VERSION_LATEST,
   PpaasS3File,
   PpaasS3Message,
@@ -18,6 +19,7 @@ import {
   util
 } from "@fs/ppaas-common";
 import { PewPewTest, getEndTime } from "../src/pewpewtest";
+import { PEWPEW_PATH } from "../src/tests";
 import { basename } from "path";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util";
@@ -36,9 +38,22 @@ describe("PewPewTest Create Test", () => {
   let ipAddress: string;
   let hostname: string;
 
-  before(() => {
+  before(async () => {
     sqs.init();
     log("smoke queue url=" + [...sqs.QUEUE_URL_TEST], LogLevel.DEBUG);
+
+    const filepath = PEWPEW_PATH;
+    const s3Folder = `${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}`;
+    const pewpewNotInS3 = (await s3.listFiles({ s3Folder, extension: filepath })).length === 0;
+    log("pewpewNotInS3: " + pewpewNotInS3, pewpewNotInS3 ? LogLevel.WARN : LogLevel.DEBUG);
+    if (pewpewNotInS3) {
+      await s3.uploadFile({
+        filepath: PEWPEW_PATH,
+        s3Folder: `${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}`,
+        publicRead: false,
+        contentType: "application/octet-stream"
+      });
+    }
 
     // Prepopulate PpaasTestStatus and make sure all expected data is still there after run
     expectedTestStatusMessage = {

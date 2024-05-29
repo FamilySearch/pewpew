@@ -1,6 +1,5 @@
-import Document, { DocumentContext, DocumentInitialProps, Head, Html, Main, NextScript } from "next/document";
-import React from "react";
-import { RenderPage } from "next/dist/shared/lib/utils";
+import type  { DocumentContext, DocumentInitialProps } from "next/document";
+import Document from "next/document";
 import { ServerStyleSheet } from "styled-components";
 
 /**
@@ -12,9 +11,11 @@ import { ServerStyleSheet } from "styled-components";
 class CustomDocument extends Document {
   // We can't remove this getInitialProps call yet. If we do, we get a flicker on server side loads
   // while it client-side loads our styles. Watching https://github.com/vercel/next.js/discussions/22065
+  // Other options available with app directory instead of pages
+  // https://github.com/vercel/next.js/blob/canary/examples/with-styled-components/pages/_document.tsx
   public static async getInitialProps (ctx: DocumentContext): Promise<DocumentInitialProps> {
     const sheet: ServerStyleSheet = new ServerStyleSheet();
-    const originalRenderPage: RenderPage = ctx.renderPage;
+    const originalRenderPage = ctx.renderPage;
 
     try {
       ctx.renderPage = () =>
@@ -25,30 +26,11 @@ class CustomDocument extends Document {
       const initialProps = await Document.getInitialProps(ctx);
       return {
         ...initialProps,
-        styles: [(
-          <>
-            {initialProps.styles}
-            {sheet.getStyleElement()}
-          </>
-        )]
+        styles: [initialProps.styles, sheet.getStyleElement()]
       };
     } finally {
       sheet.seal();
     }
-  }
-
-  public render () {
-    return (
-      <Html lang="en">
-        <Head>
-          {this.props.styles}
-        </Head>
-        <body>
-          <Main />
-          <NextScript />
-        </body>
-      </Html>
-    );
   }
 }
 

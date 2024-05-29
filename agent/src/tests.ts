@@ -22,7 +22,7 @@ logger.config.LogFileName = "ppaas-agent";
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const yamlFile = "basicwithenv.yaml";
 const version = PEWPEW_VERSION_LATEST;
-const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE);
+export const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE);
 const buildTestContents = `
 vars:
   rampTime: 10s

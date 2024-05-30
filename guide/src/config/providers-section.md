@@ -206,6 +206,16 @@ as a value. A `file` provider has the following parameters:
   When enabled there is no sense of "fairness" in the randomization. Any record in the file could
   be used more than once before other records are used.
 
+**Example**, the following:
+```yaml
+providers:
+  - username:
+    - file:
+      path: "usernames.csv"
+      repeat: true
+      random: true
+```
+
 ## response
 Unlike other *provider_type*s `response` does not automatically receive data from a source. Instead
 a `response` provider is available to be a "sink" for data originating from an HTTP response.
@@ -222,6 +232,15 @@ The `response` provider has the following parameters.
 - **`unique`** - <sub><sup>*Optional*</sup></sub> A boolean value which when `true` makes the provider
     a "unique" provider--meaning each item within the provider will be a unique JSON value without
     duplicates. Defaults to `false`.
+
+**Example**, the following:
+```yaml
+providers:
+  - session:
+    - response:
+        buffer: 1000
+        auto_return: if_not_full
+```
 
 ## list
 The `list` *provider_type* creates a means of specifying an array of static values to be used as a provider.

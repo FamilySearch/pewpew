@@ -20,13 +20,11 @@ has an internal buffer with has a soft limit on how many items can be stored.
 Example:
 ```yaml
 providers:
-  session:
-    !response
-        auto_return: force
-  username:
-    !file
-      path: "usernames.csv"
-      repeat: true
+  session: !response
+    auto_return: force
+  username: !file
+    path: "usernames.csv"
+    repeat: true
 ```
 
 There are four *provider_type*s: [file](#file), [response](#response), [list](#list) and [range](#range).
@@ -209,11 +207,11 @@ as a value. A `file` provider has the following parameters:
 **Example**, the following:
 ```yaml
 providers:
-  - username:
-    - file:
-      path: "usernames.csv"
-      repeat: true
-      random: true
+  username: !file
+    path: "usernames.csv"
+    format: !line
+    repeat: true
+    random: true
 ```
 
 ## response
@@ -236,10 +234,9 @@ The `response` provider has the following parameters.
 **Example**, the following:
 ```yaml
 providers:
-  - session:
-    - response:
-        buffer: 1000
-        auto_return: if_not_full
+  session: !response
+      buffer: 1000
+      auto_return: if_not_full
 ```
 
 ## list

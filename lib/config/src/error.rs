@@ -1,7 +1,7 @@
 use std::{error::Error as StdError, fmt};
 
 use serde_json as json;
-use yaml_rust::scanner::{Marker, ScanError};
+use yaml_rust2::scanner::{Marker, ScanError};
 
 type PestError = pest::error::Error<crate::select_parser::Rule>;
 

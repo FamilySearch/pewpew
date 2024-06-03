@@ -12,8 +12,13 @@ crate-type = ["cdylib"]
 config = { workspace = true, features = ["legacy"]  }
 js-sys.workspace = true
 serde.workspace = true
-serde-wasm-bindgen = "0.5"
-wasm-bindgen = { workspace = true, features = ["serde-serialize"]  }
+serde-wasm-bindgen = "0.6"
+# https://github.com/tkaitchuck/aHash/issues/95#issuecomment-1937448134
+# https://github.com/rustwasm/wasm-bindgen/pull/3031#issuecomment-1442610289
+wasm-bindgen = { workspace = true }
+# Not a direct dependency but get random as of 0.2.2 throws an error on "unsupported targets"
+# https://docs.rs/getrandom/0.2.2/getrandom/#unsupported-targets
+# The fix is to add it as a supported target and specify the target. As of 0.2.2 both browser and nodejs use "js"
 getrandom.workspace = true
 log.workspace = true
 wasm-logger.workspace = true

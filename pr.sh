@@ -21,7 +21,7 @@ cargo fmt --all -- --check
 
 cargo clippy --all -- -D warnings
 
-cargo test --all
+TZ=UTC cargo test --all
 cargo test --all --doc
 
 cargo deny check --hide-inclusion-graph license sources advisories

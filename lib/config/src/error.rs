@@ -11,6 +11,7 @@ pub enum ExecutingExpressionError {
     InvalidFunctionArguments(&'static str, Marker),
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum CreatingExpressionError {
     Executing(ExecutingExpressionError),

@@ -1,4 +1,5 @@
 #![allow(clippy::empty_docs)]
+#![allow(clippy::result_large_err)]
 use crate::expression_functions::{
     Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
     Range, Repeat, Replace,

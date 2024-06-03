@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 use super::select_parser::{bool_value, f64_value, RequiredProviders, Value, ValueOrExpression};
 
 use crate::error::{CreatingExpressionError, ExecutingExpressionError};

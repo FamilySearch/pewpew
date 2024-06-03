@@ -26,7 +26,7 @@ pub use select_parser::{
 };
 use serde::Serialize;
 use serde_json as json;
-use yaml_rust::scanner::{Marker, Scanner};
+use yaml_rust2::scanner::{Marker, Scanner};
 
 use log::{debug, error, LevelFilter};
 use std::{

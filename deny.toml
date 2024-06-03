@@ -1,25 +1,26 @@
+[graph]
 targets = [
     { triple = "x86_64-unknown-linux-musl" },
     { triple = "aarch64-unknown-linux-musl" },
+    { triple = "armv7-unknown-linux-musleabihf" },
     { triple = "x86_64-pc-windows-msvc" },
     { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-apple-darwin" },
     { triple = "wasm32-unknown-unknown" },
 ]
 
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
+version = 2
 yanked = "warn"
-notice = "warn"
 ignore = [
     # "RUSTSEC-2020-0071",
 ]
 
 [licenses]
 private = { ignore = true }
-unlicensed = "deny"
+version = 2
 allow = [
     "Apache-2.0",
     "BSD-3-Clause",
@@ -28,8 +29,6 @@ allow = [
     "Unicode-DFS-2016",
     "Zlib",
 ]
-copyleft = "deny"
-default = "deny"
 confidence-threshold = 1.0
 
 [bans]

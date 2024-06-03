@@ -12,7 +12,7 @@ doctest = false
 ahash = "0.8"
 concurrent-queue = "2"
 dashmap = "5"
-event-listener = "2"
+event-listener = "5"
 futures.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

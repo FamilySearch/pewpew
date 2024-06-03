@@ -4,7 +4,6 @@ use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
 use pewpew::{create_run, ExecConfig, RunOutputFormat, TryRunFormat};
 use tokio::runtime;
-use yansi::Paint;
 
 mod args {
     use clap::{Args, Parser, Subcommand};
@@ -184,14 +183,8 @@ mod args {
 }
 
 fn main() {
-    #[cfg(target_os = "windows")]
-    {
-        if !Paint::enable_windows_ascii() {
-            Paint::disable();
-        }
-    }
     if !io::stdout().is_terminal() {
-        Paint::disable();
+        yansi::disable();
     }
 
     let (ctrl_c_tx, ctrlc_channel) = futures_channel::unbounded();

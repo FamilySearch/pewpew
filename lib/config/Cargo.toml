@@ -34,7 +34,7 @@ serde-tuple-vec-map = "1.0.1"
 serde_yaml.workspace = true
 thiserror.workspace = true
 unicode-segmentation = "1"
-yaml-rust = { version = "0.4", optional = true }
+yaml-rust2 = { version = "0.8", optional = true }
 zip_all.workspace = true
 
 [dev-dependencies]
@@ -44,4 +44,4 @@ tokio.workspace = true
 
 [features]
 convert = ["legacy"]
-legacy = ["dep:yaml-rust", "dep:pest", "dep:pest_derive"]
+legacy = ["dep:yaml-rust2", "dep:pest", "dep:pest_derive"]

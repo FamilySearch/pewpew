@@ -5,7 +5,7 @@ use crate::TestEndReason;
 use crate::{RunConfig, RunOutputFormat};
 
 use channel::ChannelStatsReader;
-use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
 use ether::Either;
 use futures::{
     channel::mpsc::{self as futures_channel, Sender as FCSender},
@@ -286,7 +286,7 @@ impl BucketGroupStats {
                 // human format
                 let piece = format!(
                     "\n{}\n  calls made: {}\n  status counts: {:?}\n",
-                    Paint::yellow(format!("- {method} {url}:")).dimmed(),
+                    (format!("- {method} {url}:")).yellow().dim(),
                     calls_made,
                     self.status_counts
                 );
@@ -490,7 +490,7 @@ impl Stats {
                 format!(
                     "\n- {}:\n  length: {}\n  limit: {}\n  \
                      number of receivers: {}\n  number of senders: {}\n",
-                    Paint::yellow(stats.provider).dimmed(),
+                    Paint::yellow(stats.provider).dim(),
                     stats.len,
                     stats.limit,
                     stats.receiver_count,
@@ -569,12 +569,16 @@ fn get_epoch() -> u64 {
 fn create_date_diff(start: u64, end: u64) -> String {
     // TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset
     let start = DateTime::<Utc>::from_naive_utc_and_offset(
-        NaiveDateTime::from_timestamp_opt(start as i64, 0).unwrap(),
+        DateTime::<Utc>::from_timestamp(start as i64, 0)
+            .unwrap()
+            .naive_utc(),
         Utc,
     )
     .with_timezone(&Local);
     let end = DateTime::<Utc>::from_naive_utc_and_offset(
-        NaiveDateTime::from_timestamp_opt((end) as i64, 0).unwrap(),
+        DateTime::<Utc>::from_timestamp((end) as i64, 0)
+            .unwrap()
+            .naive_utc(),
         Utc,
     )
     .with_timezone(&Local);
@@ -896,4 +900,22 @@ pub fn create_stats_channel(
     tokio::spawn(stats_receiver_task);
 
     Ok(tx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_date_diff_works() {
+        println!("If these don't match up, make sure you're running on TZ=UTC for your tests");
+        let expect = r#"17:48:48 1-Jun-2024 to 17:48:48 3-Jun-2024"#;
+        assert_eq!(create_date_diff(1717264128, 1717436928), expect);
+
+        let expect = r#"00:00:00 1-Jan-1970 to 23:59:59 31-Dec-2099"#;
+        assert_eq!(create_date_diff(0, 4102444799), expect);
+
+        let expect = r#"00:00:00 1-Jan-2024 to 23:59:59 31-Dec-2024"#;
+        assert_eq!(create_date_diff(1704067200, 1735689599), expect);
+    }
 }

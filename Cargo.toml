@@ -18,7 +18,7 @@ name = "test-server"
 path = "src/bin/test_server.rs"
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"
 channel = { path = "./lib/channel" }
@@ -35,7 +35,7 @@ hdrhistogram = "7"
 http = "0.2"
 hyper = { version = "0.14", features = ["client", "http1", "http2", "stream"] }
 hyper-tls = "0.5"
-itertools = "0.11"
+itertools = "0.13"
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
 once_cell = "1.17.1"
@@ -48,11 +48,11 @@ test_common = { path = "./lib/test_common" }
 tokio = "1"
 tokio-stream = { version = "0.1", features = ["sync", "time"] }
 url = "2"
-yansi = "0.5"
+yansi = "1"
 zip_all = { path = "./lib/zip_all" }
 # https://github.com/softprops/json-env-logger/issues/6
 log = { version = "0.4", features = ["kv_unstable_std"] }
-env_logger = "0.10"
+env_logger = "0.11"
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }
 # https://github.com/sfackler/rust-openssl/issues/1021#issuecomment-605602642
 openssl = { version = "0.10", features = ["vendored"] }

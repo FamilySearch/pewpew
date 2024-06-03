@@ -1,9 +1,10 @@
 use crate::error::Error;
 
 use serde_json as json;
-use yaml_rust::{
+use yaml_rust2::{
     parser::Parser as YamlParser,
-    scanner::{Marker, TScalarStyle, TokenType},
+    parser::Tag as YamlTag,
+    scanner::{Marker, TScalarStyle},
     Event as YamlParseEvent,
 };
 
@@ -265,7 +266,7 @@ impl<I: Iterator<Item = char>> YamlDecoder<I> {
                 }
                 continue;
             }
-            let (event, marker) = self.parser.next()?;
+            let (event, marker) = self.parser.next_token()?;
             let in_reference = !self.reference_stack.is_empty();
             let (alias_id, event) = match event {
                 Nothing | StreamStart | DocumentStart => continue,
@@ -280,16 +281,21 @@ impl<I: Iterator<Item = char>> YamlDecoder<I> {
                     continue;
                 }
                 Scalar(s, style, alias_id, tag) => {
-                    let tag = if let Some(TokenType::Tag(a, b)) = tag {
+                    // Switching from the unmaintained yaml-rust to yaml-rust2 converts the TokenType::Tag Tuple to a Tag struct
+                    let tag = if let Some(YamlTag {
+                        handle: a,
+                        suffix: b,
+                    }) = tag
+                    {
                         Some((a, b))
                     } else {
                         None
                     };
                     (alias_id, YamlEvent::Scalar(s, style, tag))
                 }
-                MappingStart(alias_id) => (alias_id, YamlEvent::MappingStart),
+                MappingStart(alias_id, _) => (alias_id, YamlEvent::MappingStart),
                 MappingEnd => (0, YamlEvent::MappingEnd),
-                SequenceStart(alias_id) => (alias_id, YamlEvent::SequenceStart),
+                SequenceStart(alias_id, _) => (alias_id, YamlEvent::SequenceStart),
                 SequenceEnd => (0, YamlEvent::SequenceEnd),
             };
             if in_reference || alias_id > 0 {
@@ -483,7 +489,8 @@ impl<T: FromYaml> FromYaml for Nullable<T> {
         let marker = *marker;
         let is_null = match event {
             YamlEvent::Scalar(_, _, Some((bang_bang, null)))
-                if bang_bang == "!!" && null == "null" =>
+                // Switching from the unmaintained yaml-rust to yaml-rust2 converts the '!!' to 'tag:yaml.org,2002:'
+                if (bang_bang == "!!" || bang_bang == "tag:yaml.org,2002:") && null == "null" =>
             {
                 true
             }

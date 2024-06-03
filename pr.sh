@@ -13,13 +13,14 @@ cargo build
 # cargo build --target x86_64-unknown-linux-musl
 # cross build --target aarch64-unknown-linux-musl
 # cross build --target armv7-unknown-linux-musleabihf
+cargo build --bin test-server
 
 # cargo fmt --all
 cargo fmt --all -- --check
 
 cargo clippy --all -- -D warnings
 
-cargo test --all
+TZ=UTC cargo test --all
 cargo test --all --doc
 
 cargo deny check --hide-inclusion-graph license sources advisories

@@ -1,3 +1,5 @@
+#![allow(clippy::empty_docs)]
+#![allow(clippy::result_large_err)]
 use crate::expression_functions::{
     Collect, Encode, Entries, Epoch, If, Join, JsonPath, Match, MinMax, Pad, ParseNum, Random,
     Range, Repeat, Replace,
@@ -19,7 +21,7 @@ use pest::{
 };
 use pest_derive::Parser;
 use serde_json as json;
-use yaml_rust::scanner::Marker;
+use yaml_rust2::scanner::Marker;
 use zip_all::zip_all;
 
 use std::{
@@ -1236,7 +1238,7 @@ impl Template {
 
     // #[cfg(test)]
     pub fn simple(t: &str) -> Template {
-        let s = yaml_rust::scanner::Scanner::new("".chars());
+        let s = yaml_rust2::scanner::Scanner::new("".chars());
         let marker = s.mark();
         Template::new(
             t,

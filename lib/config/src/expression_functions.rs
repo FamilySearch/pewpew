@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 use super::select_parser::{bool_value, f64_value, RequiredProviders, Value, ValueOrExpression};
 
 use crate::error::{CreatingExpressionError, ExecutingExpressionError};
@@ -14,7 +15,7 @@ use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
-use yaml_rust::scanner::Marker;
+use yaml_rust2::scanner::Marker;
 use zip_all::zip_all;
 
 use std::{

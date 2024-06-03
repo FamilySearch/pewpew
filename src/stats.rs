@@ -569,14 +569,14 @@ fn get_epoch() -> u64 {
 fn create_date_diff(start: u64, end: u64) -> String {
     // TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset
     let start = DateTime::<Utc>::from_naive_utc_and_offset(
-        DateTime::from_timestamp(start as i64, 0)
+        DateTime::<Utc>::from_timestamp(start as i64, 0)
             .unwrap()
             .naive_utc(),
         Utc,
     )
     .with_timezone(&Local);
     let end = DateTime::<Utc>::from_naive_utc_and_offset(
-        DateTime::from_timestamp((end) as i64, 0)
+        DateTime::<Utc>::from_timestamp((end) as i64, 0)
             .unwrap()
             .naive_utc(),
         Utc,
@@ -908,13 +908,14 @@ mod tests {
 
     #[test]
     fn create_date_diff_works() {
-        let expect = r#"11:48:48 1-Jun-2024 to 11:48:48 3-Jun-2024"#;
+        println!("If these don't match up, make sure you're running on TZ=UTC for your tests");
+        let expect = r#"17:48:48 1-Jun-2024 to 17:48:48 3-Jun-2024"#;
         assert_eq!(create_date_diff(1717264128, 1717436928), expect);
 
-        let expect = r#"17:00:00 31-Dec-1969 to 16:59:59 31-Dec-2099"#;
+        let expect = r#"00:00:00 1-Jan-1970 to 23:59:59 31-Dec-2099"#;
         assert_eq!(create_date_diff(0, 4102444799), expect);
 
         let expect = r#"00:00:00 1-Jan-2024 to 23:59:59 31-Dec-2024"#;
-        assert_eq!(create_date_diff(1704092400, 1735714799), expect);
+        assert_eq!(create_date_diff(1704067200, 1735689599), expect);
     }
 }

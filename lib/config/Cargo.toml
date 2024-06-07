@@ -7,13 +7,15 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-boa_engine = "0.16.0"
+boa_engine = "0.18"
+boa_gc = "0.18"
+boa_parser = "0.18"
 derivative = "2.2.0"
 derive_more = "0.99.17"
 diplomatic-bag = "0.3.1"
 ether.workspace = true
 futures.workspace = true
-gc = "0.4.1"
+# gc = "0.4.1"
 http.workspace = true
 itertools.workspace = true
 js-sys.workspace = true

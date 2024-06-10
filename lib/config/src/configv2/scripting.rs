@@ -101,8 +101,12 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                 .into()),
             &JsValue::Rational(rat) => Ok(rat.into()),
             &JsValue::Integer(int) => Ok(int.into()),
-            JsValue::BigInt(_bigint) => context.throw_type_error("cannot convert bigint to JSON"),
-            JsValue::Symbol(_sym) => context.throw_type_error("cannot convert Symbol to JSON"),
+            JsValue::BigInt(_bigint) => Err(JsError::from_native(
+                JsNativeError::typ().with_message("cannot convert bigint to JSON"),
+            )),
+            JsValue::Symbol(_sym) => Err(JsError::from_native(
+                JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
+            )),
             JsValue::Object(o) => {
                 if o.is_array() {
                     let jsarr =
@@ -130,7 +134,10 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                                 .to_owned(),
                             PropertyKey::Index(i) => i.get().to_string(),
                             PropertyKey::Symbol(_sym) => {
-                                return context.throw_type_error("cannot convert Symbol to JSON")
+                                return Err(JsError::from_native(
+                                    JsNativeError::typ()
+                                        .with_message("cannot convert Symbol to JSON"),
+                                ))
                             }
                         };
 
@@ -973,7 +980,8 @@ mod builtins {
 
         use crate::shared::{encode::Encoding, Epoch};
         use boa_engine::{
-            builtins::typed_array::TypedArray as JsArray, Context, JsError, JsResult, JsValue
+            builtins::typed_array::TypedArray as JsArray, Context, JsError, JsNativeError,
+            JsResult, JsValue,
         };
         use std::fmt::Display;
 
@@ -1004,7 +1012,9 @@ mod builtins {
             fn from_js(js: &'a JsValue, ctx: &mut Context) -> JsResult<Self> {
                 Ok(js
                     .as_string()
-                    .ok_or_else(|| ctx.construct_type_error("not a string"))?
+                    .ok_or_else(|| {
+                        JsError::from_native(JsNativeError::typ().with_message("not a string"))
+                    })?
                     .as_str())
             }
         }
@@ -1017,7 +1027,9 @@ mod builtins {
                         log::trace!("casting float to int");
                         Ok(*r as i64)
                     }
-                    _ => Err(ctx.construct_type_error("not an int")),
+                    _ => Err(JsError::from_native(
+                        JsNativeError::typ().with_message("not an int"),
+                    )),
                 }
             }
         }
@@ -1036,16 +1048,22 @@ mod builtins {
         impl JsInput<'_> for Encoding {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
                 let s: &str = JsInput::from_js(js, ctx)?;
-                s.parse()
-                    .map_err(|_| ctx.construct_type_error("invalid string for Encoding"))
+                s.parse().map_err(|_| {
+                    JsError::from_native(
+                        JsNativeError::typ().with_message("invalid string for Encoding"),
+                    )
+                })
             }
         }
 
         impl JsInput<'_> for Epoch {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
                 let s: &str = JsInput::from_js(js, ctx)?;
-                s.parse()
-                    .map_err(|_| ctx.construct_type_error("invalid string for Epoch"))
+                s.parse().map_err(|_| {
+                    JsError::from_native(
+                        JsNativeError::typ().with_message("invalid string for Epoch"),
+                    )
+                })
             }
         }
 
@@ -1089,7 +1107,9 @@ mod builtins {
                 match js {
                     JsValue::Integer(i) => Ok(Self::Int(*i as i64)),
                     JsValue::Rational(f) => Ok(Self::Real(*f)),
-                    _ => Err(ctx.construct_type_error("needed numerical")),
+                    _ => Err(JsError::from_native(
+                        JsNativeError::typ().with_message("needed numerical"),
+                    )),
                 }
             }
         }

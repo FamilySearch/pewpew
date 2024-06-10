@@ -4,9 +4,8 @@ use super::{
 };
 use crate::make_send::MakeSend;
 use boa_engine::{
-    builtins::{function::OrdinaryFunction as JsFunction, typed_array::TypedArray as JsArray},
     js_string,
-    object::ObjectInitializer,
+    object::{builtins::JsArray, builtins::JsFunction, ObjectInitializer},
     prelude::*,
     property::{Attribute, PropertyKey},
     JsResult,
@@ -109,8 +108,7 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
             )),
             JsValue::Object(o) => {
                 if o.is_array() {
-                    let jsarr =
-                        JsArray::from_object(o.clone(), context).expect("just checked if array");
+                    let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
                     let len = jsarr.length(context)?;
                     (0..len)
                         .map(|i| {
@@ -304,10 +302,10 @@ impl EvalExpr {
             purge_undefined(
                 &efn.call(&JsValue::Null, &[object.into()], ctx)
                     .map(|js| if js.is_undefined() { JsValue::Null } else { js })
-                    .map_err(EvalExprErrorInner::ExecutionError)?,
+                    .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(ctx)))?,
                 ctx,
             )
-            .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(&mut ctx)))?,
+            .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))?,
             values.into_iter().flat_map(|v| v.1 .1).collect_vec(),
         ))
     }
@@ -354,9 +352,7 @@ impl EvalExpr {
 #[cfg(test)]
 mod tests {
     use super::LibSrc;
-    use boa_engine::{
-        builtins::typed_array::TypedArray as JsArray, Context, JsError, JsValue, Source,
-    };
+    use boa_engine::{object::builtins::JsArray, Context, JsError, JsValue, Source};
     use std::{path::PathBuf, sync::Arc};
 
     // I don't bother calling purge_undefined() in here, because for unit testing we control the
@@ -980,8 +976,7 @@ mod builtins {
 
         use crate::shared::{encode::Encoding, Epoch};
         use boa_engine::{
-            builtins::typed_array::TypedArray as JsArray, Context, JsError, JsNativeError,
-            JsResult, JsValue,
+            object::builtins::JsArray, Context, JsError, JsNativeError, JsResult, JsValue,
         };
         use std::fmt::Display;
 

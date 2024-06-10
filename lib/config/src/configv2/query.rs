@@ -1,7 +1,6 @@
 use boa_engine::{
-    builtins::typed_array::TypedArray as JsArray,
     js_string,
-    object::ObjectInitializer, // JSArray Private
+    object::{builtins::JsArray, ObjectInitializer}, // JSArray Private
     property::Attribute,
     Context,
     JsResult,
@@ -227,10 +226,9 @@ impl TryFrom<Rc<QueryTmp>> for QueryInner {
 }
 
 fn compile(src: &str, ctx: &mut Context) -> Result<Script, QueryGenError> {
-    let code = Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
-        .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)));
-    // let result = code.map(|block| block.codeblock(ctx));
-    //     // .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx))));
+    let code: Result<Script, QueryGenError> =
+        Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
+            .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)));
     code
 }
 
@@ -278,15 +276,15 @@ impl QueryInner {
                 .into_iter()
                 .map(|jv| {
                     Ok(match jv {
-                        JsValue::Object(o) if o.is_array() => {
-                            let a = JsArray::from_object(o, ctx).map_err(ExecutionError)?;
-                            let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
-                            while a.length(ctx).map_err(ExecutionError)? > 0 {
-                                let v = a.pop(ctx).map_err(ExecutionError)?;
-                                vd.push_front(v)
-                            }
-                            vd
-                        }
+                        // JsValue::Object(o) if o.is_array() => {
+                        //     let a = JsArray::from_object(o, ctx).map_err(ExecutionError)?;
+                        //     let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
+                        //     while a.length(ctx).map_err(ExecutionError)? > 0 {
+                        //         let v = a.pop(ctx).map_err(ExecutionError)?;
+                        //         vd.push_front(v)
+                        //     }
+                        //     vd
+                        // }
                         v => vec![v].into(),
                     })
                 })

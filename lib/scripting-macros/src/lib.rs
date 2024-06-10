@@ -17,7 +17,7 @@ pub fn boa_fn(_attrs: TokenStream, input: TokenStream) -> TokenStream {
         pub(super) fn #name(_: &::boa_engine::JsValue,
             args: &[::boa_engine::JsValue],
             ctx: &mut ::boa_engine::Context) -> ::boa_engine::JsResult<boa_engine::JsValue> {
-            use ::boa_engine::builtins::JsArgs;
+            use ::boa_engine::JsArgs;
             use self::helper::{AsJsResult, JsInput};
 
             // original function
@@ -81,12 +81,12 @@ pub fn boa_mod(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let (vals, lens): (Vec<_>, Vec<_>) = vals.into_iter().unzip();
     let new_function = quote! {
         pub fn get_default_context() -> ::boa_engine::Context {
-            static FUNCTIONS_MAP: ::phf::Map<&'static str, (::boa_engine::builtins::function::NativeFunctionSignature, usize)> = ::phf::phf_map! {
+            static FUNCTIONS_MAP: ::phf::Map<&'static str, (::boa_engine::native_function::NativeFunctionPointer, usize)> = ::phf::phf_map! {
                 #(#keys => (#vals, #lens)),*
             };
             let mut ctx = ::boa_engine::Context::default();
             for (k, (v, l)) in &FUNCTIONS_MAP {
-                ctx.register_global_function(k, *l, *v);
+                ctx.register_global_callable(::boa_engine::js_string!(*k), *l, ::boa_engine::native_function::NativeFunction::from_fn_ptr(*v));
             }
             ctx
         }

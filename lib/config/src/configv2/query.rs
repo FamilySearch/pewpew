@@ -1,10 +1,14 @@
 use boa_engine::{
-    object::{JsArray, ObjectInitializer},
+    builtins::typed_array::TypedArray as JsArray,
+    js_string,
+    object::ObjectInitializer, // JSArray Private
     property::Attribute,
-    vm::CodeBlock,
-    Context, JsResult, JsValue,
+    Context,
+    JsResult,
+    JsValue,
+    Script,
+    Source,
 };
-use gc::Gc;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde_json::Value as SJVal;
@@ -44,7 +48,7 @@ impl PropagateVars for Query<False> {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
-                .register_global_property("_v", js, Attribute::READONLY);
+                .register_global_property(js_string!("_v"), js, Attribute::READONLY);
         });
 
         let Self(q, _) = self;
@@ -136,8 +140,8 @@ impl<VD: Bool> TryFrom<QueryTmp> for Query<VD> {
 
 struct QueryInner {
     select: Select,
-    for_each: Vec<Gc<CodeBlock>>,
-    r#where: Option<Gc<CodeBlock>>,
+    for_each: Vec<Script>,
+    r#where: Option<Script>,
     ctx: RefCell<Context>,
     /// used for rebuilding on Clone
     src: Rc<QueryTmp>,
@@ -170,7 +174,7 @@ impl Clone for QueryInner {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
-                .register_global_property("_v", js, Attribute::READONLY);
+                .register_global_property(js_string!("_v"), js, Attribute::READONLY);
         }
         q
     }
@@ -222,11 +226,12 @@ impl TryFrom<Rc<QueryTmp>> for QueryInner {
     }
 }
 
-fn compile(src: &str, ctx: &mut Context) -> Result<Gc<CodeBlock>, QueryGenError> {
-    use boa_engine::syntax::Parser;
-
-    let code = Parser::new(src.as_bytes()).parse_all(ctx)?;
-    ctx.compile(&code).map_err(QueryGenError::js_compile)
+fn compile(src: &str, ctx: &mut Context) -> Result<Script, QueryGenError> {
+    let code = Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
+        .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)));
+    // let result = code.map(|block| block.codeblock(ctx));
+    //     // .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx))));
+    code
 }
 
 fn get_context() -> RefCell<Context> {
@@ -257,12 +262,18 @@ impl QueryInner {
             .into_iter()
             // put the provider values into the context for the query expressions to read
             // unlike template expressions, queries access providers directly
-            .for_each(|(n, o)| ctx.register_global_property(n.as_str(), o, Attribute::READONLY));
+            .for_each(|(n, o)| {
+                ctx.register_global_property(js_string!(n.as_str()), o, Attribute::READONLY);
+            });
         let for_each = {
             let for_each: Vec<VecDeque<JsValue>> = self
                 .for_each
                 .iter()
-                .map(|fe| ctx.execute(fe.clone()).map_err(ExecutionError))
+                .map(|fe| {
+                    fe.clone()
+                        .evaluate(ctx)
+                        .map_err(|err| ExecutionError(err.to_opaque(ctx)))
+                })
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .map(|jv| {
@@ -299,21 +310,29 @@ impl QueryInner {
                 // same property is "registered" twice, as opposed to the current behavior which
                 // overwrites it. If it is desired to update the boa engine to a newer version in
                 // the future, an alternative to this will be needed.
-                ctx.register_global_property("for_each", x, Attribute::READONLY);
+                ctx.register_global_property(js_string!("for_each"), x, Attribute::READONLY);
                 Ok(self
                     .r#where
                     .as_ref()
                     .map_or(Ok(true), |w| {
-                        Ok(ctx.execute(w.clone()).map_err(ExecutionError)?.to_boolean())
+                        Ok(w.clone()
+                            .evaluate(ctx)
+                            .map_err(|err| ExecutionError(err.to_opaque(ctx)))?
+                            .to_boolean())
                     })?
-                    .then(|| self.select.select(ctx).map_err(ExecutionError)))
+                    .then(|| {
+                        self.select
+                            .select(ctx)
+                            .map_err(|err| ExecutionError(err.to_opaque(ctx)))
+                    }))
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
             .map(|x| {
                 x.and_then(|v| {
-                    purge_undefined(&v, ctx).map_err(EvalExprErrorInner::InvalidResultJson)
+                    purge_undefined(&v, ctx)
+                        .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))
                 })
             })
             .collect_vec()
@@ -328,7 +347,7 @@ impl QueryInner {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 #[derive(serde::Serialize)]
-enum Select<T = Gc<CodeBlock>> {
+enum Select<T = Script> {
     /// String that gets compiled into bytecode
     Expr(T),
     Map(BTreeMap<Arc<str>, Self>),
@@ -359,7 +378,7 @@ impl SelectTmp {
 impl Select {
     fn select(&self, ctx: &mut Context) -> JsResult<JsValue> {
         match self {
-            Self::Expr(code) => ctx.execute(code.clone()),
+            Self::Expr(code) => code.clone().evaluate(ctx),
             Self::Map(m) => {
                 let m: BTreeMap<Arc<str>, JsValue> = m
                     .iter()
@@ -367,7 +386,7 @@ impl Select {
                     .collect::<JsResult<_>>()?;
                 let mut obj = ObjectInitializer::new(ctx);
                 for (k, v) in m {
-                    obj.property(k.to_string(), v, Attribute::READONLY);
+                    obj.property(js_string!(k.to_string()), v, Attribute::READONLY);
                 }
 
                 Ok(obj.build().into())

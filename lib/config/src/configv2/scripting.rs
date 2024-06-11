@@ -284,9 +284,7 @@ impl EvalExpr {
             .into_iter()
             .map(|(n, (v, ar))| {
                 JsValue::from_json(&v, ctx)
-                    .map_err(|err| {
-                        EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(ctx))
-                    })
+                    .map_err(|err| EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(ctx)))
                     .map(|v| (n, (v, ar)))
             })
             .collect::<Result<_, _>>()?;

@@ -47,7 +47,7 @@ impl PropagateVars for Query<False> {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
-                .register_global_property(js_string!("_v"), js, Attribute::READONLY);
+                .register_global_property(js_string!("_v"), js, Attribute::READONLY).expect("TODO");
         });
 
         let Self(q, _) = self;
@@ -173,7 +173,7 @@ impl Clone for QueryInner {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
-                .register_global_property(js_string!("_v"), js, Attribute::READONLY);
+                .register_global_property(js_string!("_v"), js, Attribute::READONLY).expect("TODO");
         }
         q
     }
@@ -261,7 +261,7 @@ impl QueryInner {
             // put the provider values into the context for the query expressions to read
             // unlike template expressions, queries access providers directly
             .for_each(|(n, o)| {
-                ctx.register_global_property(js_string!(n.as_str()), o, Attribute::READONLY);
+                ctx.register_global_property(js_string!(n.as_str()), o, Attribute::READONLY).expect("TODO");
             });
         let for_each = {
             let for_each: Vec<VecDeque<JsValue>> = self
@@ -276,15 +276,15 @@ impl QueryInner {
                 .into_iter()
                 .map(|jv| {
                     Ok(match jv {
-                        // JsValue::Object(o) if o.is_array() => {
-                        //     let a = JsArray::from_object(o, ctx).map_err(ExecutionError)?;
-                        //     let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
-                        //     while a.length(ctx).map_err(ExecutionError)? > 0 {
-                        //         let v = a.pop(ctx).map_err(ExecutionError)?;
-                        //         vd.push_front(v)
-                        //     }
-                        //     vd
-                        // }
+                        JsValue::Object(o) if o.is_array() => {
+                            let a = JsArray::from_object(o).map_err(|err| ExecutionError(err.to_opaque(ctx)))?;
+                            let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
+                            while a.length(ctx).map_err(|err| ExecutionError(err.to_opaque(ctx)))? > 0 {
+                                let v = a.pop(ctx).map_err(|err| ExecutionError(err.to_opaque(ctx)))?;
+                                vd.push_front(v)
+                            }
+                            vd
+                        }
                         v => vec![v].into(),
                     })
                 })
@@ -308,7 +308,7 @@ impl QueryInner {
                 // same property is "registered" twice, as opposed to the current behavior which
                 // overwrites it. If it is desired to update the boa engine to a newer version in
                 // the future, an alternative to this will be needed.
-                ctx.register_global_property(js_string!("for_each"), x, Attribute::READONLY);
+                ctx.register_global_property(js_string!("for_each"), x, Attribute::READONLY).expect("TODO");
                 Ok(self
                     .r#where
                     .as_ref()

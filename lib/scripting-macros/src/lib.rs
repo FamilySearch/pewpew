@@ -86,7 +86,7 @@ pub fn boa_mod(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             };
             let mut ctx = ::boa_engine::Context::default();
             for (k, (v, l)) in &FUNCTIONS_MAP {
-                ctx.register_global_callable(::boa_engine::js_string!(*k), *l, ::boa_engine::native_function::NativeFunction::from_fn_ptr(*v));
+                ctx.register_global_callable(::boa_engine::js_string!(*k), *l, ::boa_engine::native_function::NativeFunction::from_fn_ptr(*v)).expect("TODO");
             }
             ctx
         }

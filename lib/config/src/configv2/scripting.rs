@@ -124,7 +124,8 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                         .map(Into::into)
                 } else {
                     let mut map = serde_json::Map::new();
-                    for (key, property) in o.borrow().properties().iter() {
+                    for (key, property) in o.borrow().properties().index_properties() {
+                        let key = boa_engine::property::PropertyKey::from(key);
                         let key = match &key {
                             PropertyKey::String(string) => string
                                 .to_std_string()
@@ -284,7 +285,7 @@ impl EvalExpr {
             .map(|(n, (v, ar))| {
                 JsValue::from_json(&v, ctx)
                     .map_err(|err| {
-                        EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(&mut ctx))
+                        EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(ctx))
                     })
                     .map(|v| (n, (v, ar)))
             })
@@ -293,7 +294,7 @@ impl EvalExpr {
         for (name, (value, _)) in values.iter() {
             object.property(
                 js_string!(name.to_string()),
-                value.into(),
+                value.clone(),
                 Attribute::READONLY,
             );
         }
@@ -352,15 +353,12 @@ impl EvalExpr {
 #[cfg(test)]
 mod tests {
     use super::LibSrc;
-    use boa_engine::{object::builtins::JsArray, Context, JsError, JsValue, Source};
+    use boa_engine::{object::builtins::JsArray, Context, JsValue, Source};
     use std::{path::PathBuf, sync::Arc};
 
     // I don't bother calling purge_undefined() in here, because for unit testing we control the
     // inputs, and none of these should be undefined. For production code that users can provide
     // data for, that extra check is needed.
-    fn create_source(ctx: &mut Context, code: &str) -> Result<JsValue, JsError> {
-        ctx.eval(Source::from_bytes(code.as_bytes()))
-    }
 
     #[test]
     fn parse_funcs() {
@@ -389,7 +387,7 @@ mod tests {
         let rep_arr = ctx.eval(Source::from_bytes(r#"repeat(3)"#)).unwrap();
         let rep_arr = rep_arr.as_object().unwrap();
         assert!(rep_arr.is_array());
-        let rep_arr = JsArray::from_object(rep_arr.clone(), &mut ctx).unwrap();
+        let rep_arr = JsArray::from_object(rep_arr.clone()).unwrap();
         for _ in 0..3 {
             assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::Null);
         }
@@ -735,7 +733,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn end_pad(s: AnyAsString, min_length: i64, pad_string: &str) -> String {
+    fn end_pad(s: AnyAsString, min_length: i64, pad_string: String) -> String {
         use unicode_segmentation::UnicodeSegmentation;
         let mut s = s.get();
         let needed_chars = (min_length as usize).saturating_sub(s.len());
@@ -772,7 +770,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn join(value: SJV, separator: &str, separator2: Option<&str>) -> String {
+    fn join(value: SJV, separator: String, separator2: Option<String>) -> String {
         // The std ToString impl for SJV put extra "" around the String
         fn get_as_str(v: &SJV) -> Cow<str> {
             match v {
@@ -783,37 +781,37 @@ mod builtins {
         let s = separator;
         let s2 = separator2;
         match (value, s2) {
-            (SJV::Array(a), _) => a.iter().map(get_as_str).collect::<Vec<_>>().join(s),
+            (SJV::Array(a), _) => a.iter().map(get_as_str).collect::<Vec<_>>().join(&s),
             (SJV::Object(m), Some(s2)) => m
                 .into_iter()
                 .map(|(k, v)| format!("{k}{s2}{0}", get_as_str(&v)))
                 .collect::<Vec<_>>()
-                .join(s),
+                .join(&s),
             (SJV::String(s), _) => s,
             (other, _) => other.to_string(),
         }
     }
 
     #[boa_fn]
-    fn json_path(v: SJV, s: &str) -> Vec<SJV> {
+    fn json_path(v: SJV, s: String) -> Vec<SJV> {
         use jsonpath_lib::Compiled;
         // same pattern as in `match` helper function
-        fn get_node(s: &str) -> Arc<Result<Compiled, String>> {
+        fn get_node(s: String) -> Arc<Result<Compiled, String>> {
             static PATH_CACHE: Mutex<BTreeMap<String, Arc<Result<Compiled, String>>>> =
                 Mutex::new(BTreeMap::new());
 
             match PATH_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(s.to_owned())
-                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(s)))
+                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(&s)))
                     .clone(),
                 Err(_) => {
                     log::warn!("jsonpath cache Mutex has been poisoned");
-                    Arc::new(jsonpath_lib::Compiled::compile(s))
+                    Arc::new(jsonpath_lib::Compiled::compile(&s))
                 }
             }
         }
-        let path = get_node(s);
+        let path = get_node(s.clone());
         let path = match &*path {
             Ok(p) => p,
             Err(e) => {
@@ -827,9 +825,9 @@ mod builtins {
     }
 
     #[boa_fn(jsname = "match")]
-    fn r#match(s: AnyAsString, regex: &str) -> SJV {
+    fn r#match(s: AnyAsString, regex: String) -> SJV {
         // Prevent same Regex from being compiled again.
-        fn get_reg(reg: &str) -> Arc<Result<Regex, regex::Error>> {
+        fn get_reg(reg: String) -> Arc<Result<Regex, regex::Error>> {
             // does not need to be a tokio::Mutex, as LockGuard is not held beyond any await point,
             // being dropped within this purely-non-async function.
             static REG_CACHE: Mutex<BTreeMap<String, Arc<Result<Regex, regex::Error>>>> =
@@ -838,16 +836,16 @@ mod builtins {
             match REG_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(reg.to_owned())
-                    .or_insert_with(|| Arc::new(Regex::new(reg)))
+                    .or_insert_with(|| Arc::new(Regex::new(&reg)))
                     .clone(),
                 Err(_) => {
                     log::warn!("regex cache mutex has been poisoned");
-                    Arc::new(Regex::new(reg))
+                    Arc::new(Regex::new(&reg))
                 }
             }
         }
         let s = s.get();
-        let reg = get_reg(regex);
+        let reg = get_reg(regex.clone());
         let reg = match &*reg {
             Ok(reg) => reg,
             Err(e) => {
@@ -925,19 +923,19 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn replace(needle: &str, haystack: SJV, replacer: &str) -> SJV {
+    fn replace(needle: String, haystack: SJV, replacer: String) -> SJV {
         let n = needle;
         let r = replacer;
         match haystack {
-            SJV::String(s) => SJV::String(s.replace(n, r)),
+            SJV::String(s) => SJV::String(s.replace(&n, &r)),
             SJV::Array(a) => a
                 .into_iter()
-                .map(|v| replace(n, v, r))
+                .map(|v| replace(n.clone(), v, r.clone()))
                 .collect::<Vec<_>>()
                 .into(),
             SJV::Object(m) => SJV::Object(
                 m.into_iter()
-                    .map(|(k, v)| (k.replace(n, r), replace(n, v, r)))
+                    .map(|(k, v)| (k.replace(&n, &r), replace(n.clone(), v, r.clone())))
                     .collect(),
             ),
             other => other,
@@ -945,7 +943,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn start_pad(s: AnyAsString, min_length: i64, pad_string: &str) -> String {
+    fn start_pad(s: AnyAsString, min_length: i64, pad_string: String) -> String {
         use unicode_segmentation::UnicodeSegmentation;
         let s = s.get();
         let needed_chars = (min_length as usize).saturating_sub(s.len());
@@ -961,7 +959,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn stwrap(s: &str) -> String {
+    fn stwrap(s: String) -> String {
         format!("\"{s}\"")
     }
 
@@ -1003,19 +1001,34 @@ mod builtins {
             }
         }
 
-        impl<'a> JsInput<'a> for &'a str {
-            fn from_js(js: &'a JsValue, ctx: &mut Context) -> JsResult<Self> {
+        // impl<'a> JsInput<'a> for &'static str {
+        //     fn from_js(js: &'a JsValue, _ctx: &mut Context) -> JsResult<Self> {
+        //         // return Err(JsError::from_native(JsNativeError::typ().with_message("as_str() removed from JsValue")));
+        //         let value = js
+        //             .as_string()
+        //             .ok_or_else(|| {
+        //                 JsError::from_native(JsNativeError::typ().with_message("not a string"))
+        //             })?;
+        //         let value = value.to_std_string().expect("JsString should convert to std String");
+        //         // let value: Box<&str> = Box::new(value.as_str());
+        //         // let value = value.as_str();
+        //         Ok(Box::leak(value.into_boxed_str()))
+        //     }
+        // }
+
+        impl<'a> JsInput<'a> for String {
+            fn from_js(js: &'a JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 Ok(js
                     .as_string()
                     .ok_or_else(|| {
                         JsError::from_native(JsNativeError::typ().with_message("not a string"))
                     })?
-                    .as_str())
+                    .to_std_string_escaped())
             }
         }
 
         impl JsInput<'_> for i64 {
-            fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
+            fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 match js {
                     JsValue::Integer(i) => Ok(*i as i64),
                     JsValue::Rational(r) => {
@@ -1042,7 +1055,7 @@ mod builtins {
 
         impl JsInput<'_> for Encoding {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                let s: &str = JsInput::from_js(js, ctx)?;
+                let s: String = JsInput::from_js(js, ctx)?;
                 s.parse().map_err(|_| {
                     JsError::from_native(
                         JsNativeError::typ().with_message("invalid string for Encoding"),
@@ -1053,7 +1066,7 @@ mod builtins {
 
         impl JsInput<'_> for Epoch {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                let s: &str = JsInput::from_js(js, ctx)?;
+                let s: String = JsInput::from_js(js, ctx)?;
                 s.parse().map_err(|_| {
                     JsError::from_native(
                         JsNativeError::typ().with_message("invalid string for Epoch"),
@@ -1098,7 +1111,7 @@ mod builtins {
         }
 
         impl JsInput<'_> for NumType {
-            fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
+            fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 match js {
                     JsValue::Integer(i) => Ok(Self::Int(*i as i64)),
                     JsValue::Rational(f) => Ok(Self::Real(*f)),

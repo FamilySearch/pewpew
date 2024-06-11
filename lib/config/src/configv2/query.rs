@@ -6,7 +6,6 @@ use boa_engine::{
     JsResult,
     JsValue,
     Script,
-    Source,
 };
 use itertools::Itertools;
 use serde::Deserialize;
@@ -228,10 +227,10 @@ impl TryFrom<Rc<QueryTmp>> for QueryInner {
 }
 
 fn compile(src: &str, ctx: &mut Context) -> Result<Script, QueryGenError> {
-    let code: Result<Script, QueryGenError> =
-        Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
-            .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)));
-    code
+    use boa_engine::Source;
+
+    Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
+        .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)))
 }
 
 fn get_context() -> RefCell<Context> {

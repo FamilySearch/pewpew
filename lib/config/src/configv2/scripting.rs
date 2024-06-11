@@ -94,10 +94,7 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
         match js {
             JsValue::Null => Ok(serde_json::Value::Null),
             &JsValue::Boolean(b) => Ok(b.into()),
-            JsValue::String(string) => Ok(string
-                .to_std_string()
-                .expect("JsString should convert to std_string")
-                .into()),
+            JsValue::String(string) => Ok(string.to_std_string_escaped().into()),
             &JsValue::Rational(rat) => Ok(rat.into()),
             &JsValue::Integer(int) => Ok(int.into()),
             JsValue::BigInt(_bigint) => Err(JsError::from_native(
@@ -127,10 +124,9 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                     for (key, property) in o.borrow().properties().index_properties() {
                         let key = boa_engine::property::PropertyKey::from(key);
                         let key = match &key {
-                            PropertyKey::String(string) => string
-                                .to_std_string()
-                                .expect("JsString should convert to std_string")
-                                .to_owned(),
+                            PropertyKey::String(string) => {
+                                string.to_std_string_escaped().to_owned()
+                            }
                             PropertyKey::Index(i) => i.get().to_string(),
                             PropertyKey::Symbol(_sym) => {
                                 return Err(JsError::from_native(
@@ -166,9 +162,8 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
 
 pub fn eval_direct(code: &str) -> Result<String, EvalExprError> {
     let context = &mut get_default_context();
-    let source = Source::from_bytes(code.as_bytes());
     context
-        .eval(source)
+        .eval(Source::from_bytes(code))
         .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(context)))
         .map_err(Into::into)
         .map(|js| js.display().to_string())
@@ -207,8 +202,7 @@ impl EvalExpr {
         Ok(Self {
             ctx: MakeSend::try_new::<CreateExprError, _>(|| {
                 let mut ctx = builtins::get_default_context();
-                let source = Source::from_bytes(script.as_bytes());
-                ctx.eval(source)
+                ctx.eval(Source::from_bytes(script.as_bytes()))
                     .map_err(|err| CreateExprError::fn_err(err.to_opaque(&mut ctx)))?;
                 let efn = ctx
                     .eval(Source::from_bytes("____eval".as_bytes()))
@@ -452,8 +446,7 @@ mod tests {
                 .unwrap()
                 .as_string()
                 .unwrap()
-                .to_std_string()
-                .unwrap()
+                .to_std_string_escaped()
                 .to_owned()
         };
 
@@ -1007,7 +1000,7 @@ mod builtins {
         //             .ok_or_else(|| {
         //                 JsError::from_native(JsNativeError::typ().with_message("not a string"))
         //             })?;
-        //         let value = value.to_std_string().expect("JsString should convert to std String");
+        //         let value = value.to_std_string_escaped();
         //         // let value: Box<&str> = Box::new(value.as_str());
         //         // let value = value.as_str();
         //         Ok(Box::leak(value.into_boxed_str()))
@@ -1078,12 +1071,7 @@ mod builtins {
 
         impl JsInput<'_> for AnyAsString {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                Ok(Self(
-                    js.to_string(ctx)?
-                        .to_std_string()
-                        .expect("JsString should convert to std string")
-                        .to_owned(),
-                ))
+                Ok(Self(js.to_string(ctx)?.to_std_string_escaped().to_owned()))
             }
         }
 

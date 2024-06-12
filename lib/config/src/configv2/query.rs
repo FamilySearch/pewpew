@@ -46,8 +46,15 @@ impl PropagateVars for Query<False> {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
+                // NOTE: this function got changed in boa 0.17, where it returns an error if the
+                // same property is "registered" twice, as opposed to the current behavior which
+                // overwrites it. On repeat calls, log the error and continue
                 .register_global_property(js_string!("_v"), js, Attribute::READONLY)
-                .expect("TODO");
+                .map_err(|err| {
+                    log::debug!("register_global_property _v error {}", err);
+                    err
+                })
+                .unwrap_or_default();
         });
 
         let Self(q, _) = self;
@@ -173,8 +180,15 @@ impl Clone for QueryInner {
             let js = JsValue::from_json(v, &mut q.ctx.borrow_mut()).expect("TODO");
             q.ctx
                 .borrow_mut()
+                // NOTE: this function got changed in boa 0.17, where it returns an error if the
+                // same property is "registered" twice, as opposed to the current behavior which
+                // overwrites it. On repeat calls, log the error and continue
                 .register_global_property(js_string!("_v"), js, Attribute::READONLY)
-                .expect("TODO");
+                .map_err(|err| {
+                    log::debug!("register_global_property _v error {}", err);
+                    err
+                })
+                .unwrap_or_default();
         }
         q
     }
@@ -262,8 +276,15 @@ impl QueryInner {
             // put the provider values into the context for the query expressions to read
             // unlike template expressions, queries access providers directly
             .for_each(|(n, o)| {
+                // NOTE: this function got changed in boa 0.17, where it returns an error if the
+                // same property is "registered" twice, as opposed to the current behavior which
+                // overwrites it. On repeat calls, log the error and continue
                 ctx.register_global_property(js_string!(n.as_str()), o, Attribute::READONLY)
-                    .expect("TODO");
+                    .map_err(|err| {
+                        log::debug!("register_global_property {} error {}", n, err);
+                        err
+                    })
+                    .unwrap_or_default();
             });
         let for_each = {
             let for_each: Vec<VecDeque<JsValue>> = self
@@ -317,8 +338,13 @@ impl QueryInner {
                 // same property is "registered" twice, as opposed to the current behavior which
                 // overwrites it. If it is desired to update the boa engine to a newer version in
                 // the future, an alternative to this will be needed.
+                //  On repeat calls, log the error and continue
                 ctx.register_global_property(js_string!("for_each"), x, Attribute::READONLY)
-                    .expect("TODO");
+                    .map_err(|err| {
+                        log::debug!("register_global_property for_each error {}", err);
+                        err
+                    })
+                    .unwrap_or_default();
                 Ok(self
                     .r#where
                     .as_ref()

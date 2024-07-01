@@ -39,11 +39,28 @@ export function getLogger (): Logger {
     });
     logger.warn({ message: `Logging Level set to ${config.LoggingLevel} for app-${config.LogFileName}.json` });
     logger.warn({ message: `Console Logging Level set to ${config.LoggingLevelConsole}` });
+    // Get the injected S3 and SQS environment variables starting with PEWPEWCONTROLLER or PEWPEWAGENT
+    const injectedVariables = Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([varaibleName, _]) => varaibleName && varaibleName.startsWith("PEWPEW")
+      )
+    );
     logger.info({ message: "Environment Variables",
+      ...injectedVariables,
       APPLICATION_NAME: process.env.APPLICATION_NAME,
       SYSTEM_NAME: process.env.SYSTEM_NAME,
       SERVICE_NAME: process.env.SERVICE_NAME,
       NODE_ENV: process.env.NODE_ENV,
+      AUTH_MODE: process.env.AUTH_MODE,
+      CONTROLLER_ENV: process.env.CONTROLLER_ENV,
+      CONTROLLER_ENV_S3: process.env.CONTROLLER_ENV_S3,
+      AGENT_ENV: process.env.AGENT_ENV,
+      AGENT_DESC: process.env.AGENT_DESC,
+      KEYSPACE_PREFIX_OVERRIDE: process.env.KEYSPACE_PREFIX_OVERRIDE,
+      BASE_PATH: process.env.BASE_PATH,
+      DELETE_OLD_FILES_DAYS: process.env.DELETE_OLD_FILES_DAYS,
+      RUN_HISTORICAL_SEARCH: process.env.RUN_HISTORICAL_SEARCH,
+      RUN_HISTORICAL_DELETE: process.env.RUN_HISTORICAL_DELETE,
       variables: Object.keys(process.env).filter((variableName: string) => variableName && !variableName.startsWith("npm"))
     });
   }

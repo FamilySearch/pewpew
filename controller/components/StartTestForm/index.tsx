@@ -611,7 +611,7 @@ export const StartTestForm = ({
               </LabelDiv>
               <ContentDiv><DatePicker
                 selected={state.scheduleDate}
-                onChange={(scheduleDate: Date) => setState({ scheduleDate })}
+                onChange={(scheduleDate: Date | null) => { if (scheduleDate) { setState({ scheduleDate }); }}}
                 showTimeSelect
                 timeFormat="HH:mm"
                 timeIntervals={15}
@@ -635,7 +635,7 @@ export const StartTestForm = ({
                 <LabelDiv><label> End Date </label></LabelDiv>
                 <ContentDiv><DatePicker
                   selected={state.endDate}
-                  onChange={(endDate: Date) => setState({ endDate })}
+                  onChange={(endDate: Date | null) => { if (endDate) { setState({ endDate }); }}}
                   showTimeSelect
                   timeFormat="HH:mm"
                   timeIntervals={15}

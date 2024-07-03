@@ -5,11 +5,9 @@ import {
 import { AgentQueueDescription, LogLevel, log } from "@fs/ppaas-common";
 import _axios, { AxiosResponse as Response } from "axios";
 import { expect } from "chai";
+import { integrationUrl } from "./util";
 
 const fetch = _axios.get;
-
-// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
-const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 let sharedQueueNames: string[] | undefined;
 

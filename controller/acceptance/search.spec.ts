@@ -1,8 +1,9 @@
 import { API_SEARCH, API_TEST_STATUS, TestData, TestManagerMessage } from "../types";
 import { LogLevel, PpaasTestId, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
-import { getTestData, integrationUrl } from "./test.spec";
 import { expect } from "chai";
+import { getTestData } from "./test.spec";
+import { integrationUrl } from "./util";
 
 async function fetch (
   url: string,

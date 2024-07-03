@@ -1,8 +1,9 @@
 import { API_ERROR, API_SEARCH, API_TEST, TestData } from "../types";
 import { LogLevel, PpaasTestId, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
-import { getPpaasTestId, getTestData, integrationUrl } from "./test.spec";
+import { getPpaasTestId, getTestData } from "./test.spec";
 import { expect } from "chai";
+import { integrationUrl } from "./util";
 
 const REDIRECT_TO_S3: boolean = process.env.REDIRECT_TO_S3 === "true";
 

@@ -32,7 +32,7 @@ loggers:
       method: request.method
       url: request.url
       requestHeaders: request.headers
-      requestBody: replace("${password}", replace("${devKey}", request.body, "******"), "******")
+      requestBody: replace("${password}", request.body, "******")
       response: response["start-line"]
       status: response.status
       responseHeaders: response.headers
@@ -104,7 +104,7 @@ endpoints:
     headers:
       Accept-Language: en-us
       Content-Type: application/x-www-form-urlencoded
-    body: username=${username}&password=${password}&grant_type=password&client_id=${devKey}
+    body: username=${username}&password=${password}&grant_type=password
     peak_load: 100hpm
     on_demand: true
     provides:

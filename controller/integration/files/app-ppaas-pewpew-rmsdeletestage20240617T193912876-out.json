@@ -1,0 +1,305 @@
+{"type":"start","msg":"Test will end around 21:57:01 17-Jun-2024 in approximately 1 hour and 30 minutes","binVersion":"0.5.13"}
+{"timestamp":1718656020,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656020,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":13,"onDemandCount":2}
+{"type":"summary","startTime":1718656020,"timestamp":1718656080,"summaryType":"bucket","method":"POST","url":"http://cis-web.cis.ident.service.integ.us-east-1.dev.fslocal.org/oauth2/v3/token","callCount":2,"statusCounts":[{"status":200,"count":2}],"requestTimeouts":0,"testErrors":[],"testErrorCount":0,"p50":119.999,"p90":156.287,"p95":156.287,"p99":156.287,"p99_9":156.287,"min":119.936,"max":156.287,"mean":138.096,"stddev":18.128,"tags":{"_id":"0"}}
+{"type":"summary","startTime":1718656020,"timestamp":1718656080,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":247,"statusCounts":[{"status":204,"count":247}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":246},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":246},{"error":"endpoint was delayed waiting for provider `sessionId`","count":247}],"testErrorCount":739,"p50":247.551,"p90":292.095,"p95":313.343,"p99":346.367,"p99_9":413.951,"min":95.232,"max":413.951,"mean":235.133,"stddev":50.385,"tags":{"_id":"1","status":"204"}}
+{"timestamp":1718656080,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656080,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":13,"onDemandCount":2}
+{"type":"summary","startTime":1718656080,"timestamp":1718656140,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":225,"statusCounts":[{"status":204,"count":225}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":225},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":225},{"error":"endpoint was delayed waiting for provider `sessionId`","count":225}],"testErrorCount":675,"p50":261.503,"p90":290.559,"p95":316.159,"p99":349.951,"p99_9":372.991,"min":230.912,"max":372.991,"mean":266.165,"stddev":22.064,"tags":{"_id":"1","status":"204"}}
+{"timestamp":1718656140,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656140,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":13,"onDemandCount":2}
+{"type":"summary","startTime":1718656140,"timestamp":1718656200,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":223,"statusCounts":[{"status":204,"count":223}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":223},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":223},{"error":"endpoint was delayed waiting for provider `sessionId`","count":223}],"testErrorCount":669,"p50":262.655,"p90":295.423,"p95":310.271,"p99":348.159,"p99_9":430.847,"min":238.08,"max":430.847,"mean":269.09,"stddev":23.609,"tags":{"_id":"1","status":"204"}}
+{"timestamp":1718656200,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656200,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":13,"onDemandCount":2}
+{"type":"summary","startTime":1718656200,"timestamp":1718656260,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":223,"statusCounts":[{"status":204,"count":223}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":223},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":223},{"error":"endpoint was delayed waiting for provider `sessionId`","count":223}],"testErrorCount":669,"p50":264.447,"p90":290.559,"p95":314.879,"p99":348.159,"p99_9":360.191,"min":243.584,"max":360.191,"mean":269.063,"stddev":19.426,"tags":{"_id":"1","status":"204"}}
+{"timestamp":"1718656312285","request":"DELETE /maintenance/group/test:loadtest-001125?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":1,"delete404sNew":2,"maxDelete404":50}
+{"timestamp":"1718656312295","request":"DELETE /maintenance/group/test:loadtest-001126?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":2,"delete404sNew":3,"maxDelete404":50}
+{"timestamp":"1718656312304","request":"DELETE /maintenance/group/test:loadtest-001127?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":3,"delete404sNew":4,"maxDelete404":50}
+{"timestamp":"1718656312312","request":"DELETE /maintenance/group/test:loadtest-001128?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":4,"delete404sNew":5,"maxDelete404":50}
+{"timestamp":"1718656312323","request":"DELETE /maintenance/group/test:loadtest-001129?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":5,"delete404sNew":6,"maxDelete404":50}
+{"timestamp":"1718656312332","request":"DELETE /maintenance/group/test:loadtest-001130?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":6,"delete404sNew":7,"maxDelete404":50}
+{"timestamp":"1718656312342","request":"DELETE /maintenance/group/test:loadtest-001131?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":7,"delete404sNew":8,"maxDelete404":50}
+{"timestamp":"1718656312352","request":"DELETE /maintenance/group/test:loadtest-001132?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":8,"delete404sNew":9,"maxDelete404":50}
+{"timestamp":"1718656312363","request":"DELETE /maintenance/group/test:loadtest-001133?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":9,"delete404sNew":10,"maxDelete404":50}
+{"timestamp":"1718656312373","request":"DELETE /maintenance/group/test:loadtest-001134?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":10,"delete404sNew":11,"maxDelete404":50}
+{"timestamp":"1718656312385","request":"DELETE /maintenance/group/test:loadtest-001135?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":11,"delete404sNew":12,"maxDelete404":50}
+{"timestamp":"1718656312393","request":"DELETE /maintenance/group/test:loadtest-001136?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":12,"delete404sNew":13,"maxDelete404":50}
+{"timestamp":"1718656312402","request":"DELETE /maintenance/group/test:loadtest-001137?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":13,"delete404sNew":14,"maxDelete404":50}
+{"timestamp":"1718656312409","request":"DELETE /maintenance/group/test:loadtest-001138?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":14,"delete404sNew":15,"maxDelete404":50}
+{"timestamp":"1718656312416","request":"DELETE /maintenance/group/test:loadtest-001139?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":15,"delete404sNew":16,"maxDelete404":50}
+{"timestamp":"1718656312426","request":"DELETE /maintenance/group/test:loadtest-001140?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":16,"delete404sNew":17,"maxDelete404":50}
+{"timestamp":"1718656312433","request":"DELETE /maintenance/group/test:loadtest-001141?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":17,"delete404sNew":18,"maxDelete404":50}
+{"timestamp":"1718656312441","request":"DELETE /maintenance/group/test:loadtest-001142?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":18,"delete404sNew":19,"maxDelete404":50}
+{"timestamp":"1718656312450","request":"DELETE /maintenance/group/test:loadtest-001143?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":19,"delete404sNew":20,"maxDelete404":50}
+{"timestamp":"1718656312458","request":"DELETE /maintenance/group/test:loadtest-001144?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":20,"delete404sNew":21,"maxDelete404":50}
+{"timestamp":"1718656312466","request":"DELETE /maintenance/group/test:loadtest-001145?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":21,"delete404sNew":22,"maxDelete404":50}
+{"timestamp":"1718656312476","request":"DELETE /maintenance/group/test:loadtest-001146?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":22,"delete404sNew":23,"maxDelete404":50}
+{"timestamp":"1718656312485","request":"DELETE /maintenance/group/test:loadtest-001147?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":23,"delete404sNew":24,"maxDelete404":50}
+{"timestamp":"1718656312493","request":"DELETE /maintenance/group/test:loadtest-001148?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":24,"delete404sNew":25,"maxDelete404":50}
+{"timestamp":"1718656312502","request":"DELETE /maintenance/group/test:loadtest-001149?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":25,"delete404sNew":26,"maxDelete404":50}
+{"timestamp":"1718656312511","request":"DELETE /maintenance/group/test:loadtest-001150?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":26,"delete404sNew":27,"maxDelete404":50}
+{"timestamp":"1718656312521","request":"DELETE /maintenance/group/test:loadtest-001151?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":27,"delete404sNew":28,"maxDelete404":50}
+{"timestamp":"1718656312530","request":"DELETE /maintenance/group/test:loadtest-001152?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":28,"delete404sNew":29,"maxDelete404":50}
+{"timestamp":"1718656312542","request":"DELETE /maintenance/group/test:loadtest-001153?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":29,"delete404sNew":30,"maxDelete404":50}
+{"timestamp":"1718656312550","request":"DELETE /maintenance/group/test:loadtest-001154?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":30,"delete404sNew":31,"maxDelete404":50}
+{"timestamp":"1718656312560","request":"DELETE /maintenance/group/test:loadtest-001155?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":31,"delete404sNew":32,"maxDelete404":50}
+{"timestamp":"1718656312569","request":"DELETE /maintenance/group/test:loadtest-001156?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":32,"delete404sNew":33,"maxDelete404":50}
+{"timestamp":"1718656312578","request":"DELETE /maintenance/group/test:loadtest-001157?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":33,"delete404sNew":34,"maxDelete404":50}
+{"timestamp":"1718656312586","request":"DELETE /maintenance/group/test:loadtest-001158?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":34,"delete404sNew":35,"maxDelete404":50}
+{"timestamp":"1718656312594","request":"DELETE /maintenance/group/test:loadtest-001159?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":35,"delete404sNew":36,"maxDelete404":50}
+{"timestamp":"1718656312603","request":"DELETE /maintenance/group/test:loadtest-001160?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":36,"delete404sNew":37,"maxDelete404":50}
+{"timestamp":"1718656312610","request":"DELETE /maintenance/group/test:loadtest-001161?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":37,"delete404sNew":38,"maxDelete404":50}
+{"timestamp":"1718656312618","request":"DELETE /maintenance/group/test:loadtest-001162?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":38,"delete404sNew":39,"maxDelete404":50}
+{"timestamp":"1718656312627","request":"DELETE /maintenance/group/test:loadtest-001163?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":39,"delete404sNew":40,"maxDelete404":50}
+{"timestamp":"1718656312636","request":"DELETE /maintenance/group/test:loadtest-001164?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":40,"delete404sNew":41,"maxDelete404":50}
+{"timestamp":"1718656312643","request":"DELETE /maintenance/group/test:loadtest-001165?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":41,"delete404sNew":42,"maxDelete404":50}
+{"timestamp":"1718656312651","request":"DELETE /maintenance/group/test:loadtest-001166?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":42,"delete404sNew":43,"maxDelete404":50}
+{"timestamp":"1718656312658","request":"DELETE /maintenance/group/test:loadtest-001167?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":43,"delete404sNew":44,"maxDelete404":50}
+{"timestamp":"1718656312666","request":"DELETE /maintenance/group/test:loadtest-001168?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":44,"delete404sNew":45,"maxDelete404":50}
+{"timestamp":"1718656312676","request":"DELETE /maintenance/group/test:loadtest-001169?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":45,"delete404sNew":46,"maxDelete404":50}
+{"timestamp":"1718656312684","request":"DELETE /maintenance/group/test:loadtest-001170?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":46,"delete404sNew":47,"maxDelete404":50}
+{"timestamp":"1718656312694","request":"DELETE /maintenance/group/test:loadtest-001171?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":47,"delete404sNew":48,"maxDelete404":50}
+{"timestamp":"1718656312704","request":"DELETE /maintenance/group/test:loadtest-001172?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":48,"delete404sNew":49,"maxDelete404":50}
+{"timestamp":"1718656312715","request":"DELETE /maintenance/group/test:loadtest-001173?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":49,"delete404sNew":50,"maxDelete404":50}
+{"timestamp":"1718656312724","request":"DELETE /maintenance/group/test:loadtest-001174?include-children=true&delete-journal=true HTTP/1.1","response":"HTTP/1.1 404 Not Found","status":404,"delete404s":50,"delete404sNew":51,"maxDelete404":50}
+{"timestamp":"1718656312786","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":0,"countNew":1,"maxEmptySearch":20}
+{"timestamp":"1718656312835","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":1,"countNew":2,"maxEmptySearch":20}
+{"timestamp":"1718656312863","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":2,"countNew":3,"maxEmptySearch":20}
+{"timestamp":"1718656312885","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":3,"countNew":4,"maxEmptySearch":20}
+{"timestamp":"1718656312904","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":4,"countNew":5,"maxEmptySearch":20}
+{"timestamp":"1718656312923","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":5,"countNew":6,"maxEmptySearch":20}
+{"timestamp":"1718656312946","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":6,"countNew":7,"maxEmptySearch":20}
+{"timestamp":"1718656312964","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":7,"countNew":8,"maxEmptySearch":20}
+{"timestamp":"1718656312987","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":8,"countNew":9,"maxEmptySearch":20}
+{"timestamp":"1718656313003","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":9,"countNew":10,"maxEmptySearch":20}
+{"timestamp":"1718656313030","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":10,"countNew":11,"maxEmptySearch":20}
+{"timestamp":"1718656313052","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":11,"countNew":12,"maxEmptySearch":20}
+{"timestamp":"1718656313142","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":12,"countNew":13,"maxEmptySearch":20}
+{"timestamp":"1718656313160","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":13,"countNew":14,"maxEmptySearch":20}
+{"timestamp":"1718656313183","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":14,"countNew":15,"maxEmptySearch":20}
+{"timestamp":"1718656313206","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":15,"countNew":16,"maxEmptySearch":20}
+{"timestamp":"1718656313228","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":16,"countNew":17,"maxEmptySearch":20}
+{"timestamp":"1718656313249","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":17,"countNew":18,"maxEmptySearch":20}
+{"timestamp":"1718656313273","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":18,"countNew":19,"maxEmptySearch":20}
+{"timestamp":"1718656313292","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":19,"countNew":20,"maxEmptySearch":20}
+{"timestamp":"1718656313309","request":"PUT /group/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":20,"countNew":21,"maxEmptySearch":20}
+{"timestamp":"1718656313414","request":"PUT /artifact/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":0,"countNew":1}
+{"timestamp":"1718656313529","request":"PUT /artifact/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":1,"countNew":2}
+{"timestamp":"1718656313628","request":"PUT /artifact/search HTTP/1.1","response":"HTTP/1.1 200 OK","responseBody":{"totalCount":0},"status":200,"token":"","count":2,"countNew":3}
+{"timestamp":1718656260,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656260,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"type":"summary","startTime":1718656260,"timestamp":1718656320,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":206,"statusCounts":[{"status":204,"count":206}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":206},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":206},{"error":"endpoint was delayed waiting for provider `sessionId`","count":206}],"testErrorCount":618,"p50":264.447,"p90":294.655,"p95":307.711,"p99":327.935,"p99_9":339.711,"min":29.904,"max":339.711,"mean":253.455,"stddev":61.552,"tags":{"_id":"1","status":"204"}}
+{"type":"summary","startTime":1718656260,"timestamp":1718656320,"summaryType":"bucket","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":50,"statusCounts":[{"status":404,"count":50}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":50},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":50},{"error":"endpoint was delayed waiting for provider `sessionId`","count":50}],"testErrorCount":150,"p50":8.663,"p90":10.447,"p95":10.935,"p99":11.727,"p99_9":11.727,"min":6.564,"max":11.727,"mean":8.754,"stddev":1.248,"tags":{"_id":"1","status":"404"}}
+{"type":"summary","startTime":1718656260,"timestamp":1718656320,"summaryType":"bucket","method":"PUT","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/group/search","callCount":21,"statusCounts":[{"status":200,"count":21}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `nextPageTokenGroup`","count":21},{"error":"endpoint was delayed waiting for provider `sessionId`","count":20}],"testErrorCount":41,"p50":22.335,"p90":48.991,"p95":61.791,"p99":88.959,"p99_9":88.959,"min":15.568,"max":88.959,"mean":27.678,"stddev":17.33,"tags":{"_id":"2","status":"200"}}
+{"type":"summary","startTime":1718656260,"timestamp":1718656320,"summaryType":"bucket","method":"PUT","url":"http://stage.rms.records.service.integ.us-east-1.dev.fslocal.org/artifact/search","callCount":3,"statusCounts":[{"status":200,"count":3}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `nextPageTokenImage`","count":3},{"error":"endpoint was delayed waiting for provider `sessionId`","count":2}],"testErrorCount":5,"p50":104.383,"p90":115.263,"p95":115.263,"p99":115.263,"p99_9":115.263,"min":97.984,"max":115.263,"mean":105.867,"stddev":7.11,"tags":{"_id":"4","status":"200"}}
+{"timestamp":1718656320,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656320,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656380,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656380,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656440,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656440,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656500,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656500,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656560,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656560,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656620,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656620,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656680,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656680,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656740,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656740,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656800,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656800,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656860,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656860,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656920,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656920,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718656980,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718656980,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657040,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657040,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657100,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657100,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657160,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657160,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657220,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657220,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657280,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657280,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657340,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657340,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"timestamp":1718657400,"provider":"apid","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"artifactDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"delete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"groupCreateId","len":5,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"groupId","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"nextPageTokenGroup","len":0,"limit":1,"receiverCount":2,"senderCount":3,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"nextPageTokenImage","len":0,"limit":1,"receiverCount":3,"senderCount":4,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"searchDelete404s","len":0,"limit":5,"receiverCount":2,"senderCount":2,"onDemandCount":1}
+{"timestamp":1718657400,"provider":"sessionId","len":5,"limit":6,"receiverCount":6,"senderCount":12,"onDemandCount":2}
+{"type":"summary","startTime":1718656021,"timestamp":1718661421,"summaryType":"test","method":"POST","url":"http://cis-web.cis.ident.service.integ.us-east-1.dev.fslocal.org/oauth2/v3/token","callCount":2,"statusCounts":[{"status":200,"count":2}],"requestTimeouts":0,"testErrors":[],"testErrorCount":0,"p50":119.999,"p90":156.287,"p95":156.287,"p99":156.287,"p99_9":156.287,"min":119.936,"max":156.287,"mean":138.096,"stddev":18.128,"tags":{"_id":"0"}}
+{"type":"summary","startTime":1718656021,"timestamp":1718661421,"summaryType":"test","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":1124,"statusCounts":[{"status":204,"count":1124}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":1123},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":1123},{"error":"endpoint was delayed waiting for provider `sessionId`","count":1124}],"testErrorCount":3370,"p50":261.503,"p90":292.863,"p95":313.087,"p99":348.159,"p99_9":413.951,"min":29.904,"max":430.847,"mean":258.172,"stddev":41.423,"tags":{"_id":"1","status":"204"}}
+{"type":"summary","startTime":1718656021,"timestamp":1718661421,"summaryType":"test","method":"DELETE","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/maintenance/group/test:loadtest-*?include-children=true&delete-journal=true","callCount":50,"statusCounts":[{"status":404,"count":50}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `delete404s`","count":50},{"error":"endpoint was delayed waiting for provider `groupCreateId`","count":50},{"error":"endpoint was delayed waiting for provider `sessionId`","count":50}],"testErrorCount":150,"p50":8.663,"p90":10.447,"p95":10.935,"p99":11.727,"p99_9":11.727,"min":6.564,"max":11.727,"mean":8.754,"stddev":1.248,"tags":{"_id":"1","status":"404"}}
+{"type":"summary","startTime":1718656021,"timestamp":1718661421,"summaryType":"test","method":"PUT","url":"http://stage.group-service.rms.records.service.integ.us-east-1.dev.fslocal.org/group/search","callCount":21,"statusCounts":[{"status":200,"count":21}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `nextPageTokenGroup`","count":21},{"error":"endpoint was delayed waiting for provider `sessionId`","count":20}],"testErrorCount":41,"p50":22.335,"p90":48.991,"p95":61.791,"p99":88.959,"p99_9":88.959,"min":15.568,"max":88.959,"mean":27.678,"stddev":17.33,"tags":{"_id":"2","status":"200"}}
+{"type":"summary","startTime":1718656021,"timestamp":1718661421,"summaryType":"test","method":"PUT","url":"http://stage.rms.records.service.integ.us-east-1.dev.fslocal.org/artifact/search","callCount":3,"statusCounts":[{"status":200,"count":3}],"requestTimeouts":0,"testErrors":[{"error":"endpoint was delayed waiting for provider `nextPageTokenImage`","count":3},{"error":"endpoint was delayed waiting for provider `sessionId`","count":2}],"testErrorCount":5,"p50":104.383,"p90":115.263,"p95":115.263,"p99":115.263,"p99_9":115.263,"min":97.984,"max":115.263,"mean":105.867,"stddev":7.11,"tags":{"_id":"4","status":"200"}}

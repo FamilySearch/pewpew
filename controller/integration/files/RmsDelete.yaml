@@ -1,46 +1,26 @@
 vars:
-  fullprofile: ${PROFILE}
-  profile: ${match(PROFILE, "[^-]+")[0]}
-  username: testuser
-  password: ${PASSWORD}
+  port: "${PORT}"
   totalTimeDelete: 90m
-  splunkPath: ${SPLUNK_PATH}
   ingestName: 'test:loadtest-'
   peakLoadDelete: 400hpm
   peakLoadSearch: 20hpm
   maxDelete404: 50
   maxSearchDelete404: 500
   maxEmptySearch: 20
+
 load_pattern:
   - linear:
       from: 100%
       to: 100%
       over: ${totalTimeDelete}
+
 config:
   client:
     headers:
       TestTime: '${epoch("ms")}'
       Accept: application/json
-  general:
-    bucket_size: 1m
-    log_provider_stats: 1m
+
 loggers:
-  http_errors:
-    select:
-      timestamp: epoch("ms")
-      request: request["start-line"]
-      method: request.method
-      url: request.url
-      requestHeaders: request.headers
-      requestBody: replace("${password}", request.body, "******")
-      response: response["start-line"]
-      status: response.status
-      responseHeaders: response.headers
-      responseBody: response.body
-    where: response.status >= 400 && response.status != 404
-    limit: 1000
-    to: '${splunkPath}/app-pewpew-http-err.json'
-    pretty: false
   test_end:
     select:
       timestamp: epoch("ms")
@@ -56,9 +36,6 @@ loggers:
     to: stdout
     pretty: false
 providers:
-  sessionId:
-    response:
-      auto_return: if_not_full
   groupCreateId:
     range:
       start: 1
@@ -98,30 +75,13 @@ providers:
     response:
       buffer: 1
 endpoints:
-  ###### Authorization #######
-  - method: POST
-    url: http://localhost/oauth2/v3/token
-    headers:
-      Accept-Language: en-us
-      Content-Type: application/x-www-form-urlencoded
-    body: username=${username}&password=${password}&grant_type=password
-    peak_load: 100hpm
-    on_demand: true
-    provides:
-      sessionId:
-        select: response.body.token
-        for_each:
-          - repeat(1000)
-        where: response.status == 200
-        # send: block
   ###### group Delete Sequential ######
   # This runs sequentially through groupIds until we get maxDelete404 404 errors in a row. Any successes, reset the counter
   - method: DELETE
-    url: 'http://localhost/maintenance/group/${ingestName}${start_pad(groupCreateId, 6, "0")}?include-children=true&delete-journal=true'
+    url: 'http://localhost:${port}?id=${ingestName}${start_pad(createdId, 6, "0")}?include-children=true'
     tags:
       status: ${response.status}
     headers:
-      Authorization: Bearer ${sessionId}
       Delete404s: ${delete404s}
     peak_load: ${peakLoadDelete}
     provides:
@@ -154,7 +114,7 @@ endpoints:
   # the searchDelete404s provider and the groupId provider. Once we hit maxDelete404 404s, the searchDelete404s provider will
   # not be refilled and the send: block in the groupId provider will prevent the group search from running anymore
   - method: PUT
-    url: 'http://localhost/group/search'
+    url: 'http://localhost:${port}'
     tags:
       status: ${response.status}
     headers:
@@ -199,7 +159,7 @@ endpoints:
         where: response.status == 200 && response.body != "" && response.body.totalCount == 0
   ###### group Delete Search ######
   - method: DELETE
-    url: 'http://localhost/maintenance/group/${groupId}?include-children=true&delete-journal=true'
+    url: 'http://localhost:${port}/?group=${groupId}&include-children=true&delete-journal=true'
     tags:
       status: ${response.status}
     headers:
@@ -226,7 +186,7 @@ endpoints:
         where: searchDelete404s >= maxSearchDelete404
   ###### artifact search name
   - method: PUT
-    url: 'localhost/artifact/search'
+    url: 'http://localhost:${port}/'
     tags:
       status: ${response.status}
     headers:
@@ -266,7 +226,7 @@ endpoints:
         where: (response.status > 200 && response.status < 500) || (response.status == 200 && response.body != "" && response.body.totalCount == 0)
   ###### artifact Delete ######
   - method: DELETE
-    url: 'localhost/artifact/${apid}'
+    url: 'http://localhost:${port}/?artifact=${apid}'
     tags:
       status: ${response.status}
     headers:
@@ -279,9 +239,9 @@ endpoints:
       test_404s:
         select:
           timestamp: epoch("ms")
+          id: '`${ingestName}${start_pad(createdId, 6, "0")}`'
           request: request["start-line"]
           response: response["start-line"]
-          responseBody: response.body
           status: response.status
           artifactDelete404s: artifactDelete404s
           artifactDelete404sNew: artifactDelete404s + 1

@@ -31,7 +31,7 @@ const ACCEPTANCE_FOLDER = "integration/files";
 const ACCEPTANCE_FILES: AcceptanceFiles = {
   ppaasTestId: FILES_PPAAS_TESTID,
   yamlFile,
-  statusFile: "rmsdeletestage20240617T193912876.json",
+  statusFile: "rmsdeletestage20240617T193912876.info",
   resultsFile: "stats-rmsdeletestage20240617T193912876.json",
   stdoutFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-out.json",
   stderrFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-error.json"

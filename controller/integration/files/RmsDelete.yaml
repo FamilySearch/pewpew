@@ -1,16 +1,10 @@
 vars:
   fullprofile: ${PROFILE}
   profile: ${match(PROFILE, "[^-]+")[0]}
-  username: ${if(PROFILE=="test","tuf000020000","tuinfn0001")}
+  username: testuser
   password: ${PASSWORD}
-  serviceEnv: ${if(PROFILE=="test","beta","integ")}
-  vpc: ${if(PROFILE=="test","test","dev")}
-  stage: ${if(PROFILE=="stage","stage.","")}
-  wftest: ${if(WFTEST=="wftest","wftest.","")}
   totalTimeDelete: 90m
-  devKey: WCQY-7J1Q-GKVV-7DNM-SQ5M-9Q5H-JX3H-CMJK
   splunkPath: ${SPLUNK_PATH}
-  xFsFeatureTag: ${X_FS_FEATURE_TAG}
   ingestName: 'test:loadtest-'
   peakLoadDelete: 400hpm
   peakLoadSearch: 20hpm
@@ -27,9 +21,6 @@ config:
     headers:
       TestTime: '${epoch("ms")}'
       Accept: application/json
-      FS-User-Agent-Chain: RMS-Performance Test
-      User-Agent: FS-QA-SystemTest RMS Performance Test
-      X-FS-Feature-Tag: '${xFsFeatureTag}'
   general:
     bucket_size: 1m
     log_provider_stats: 1m
@@ -64,18 +55,6 @@ loggers:
   test_404s:
     to: stdout
     pretty: false
-  # splunk:
-  #   select:
-  #     request: request["start-line"]
-  #     response: response["start-line"]
-  #     status: response.status
-  #     responseBody: response.body
-  #     responseTime: response.headers.date
-  #     timestamp: request.headers.testtime
-  #     endTs: '`${epoch("ms")}`'
-  #   where: request["start-line"] != "POST /oauth2/v3/token HTTP/1.1"
-  #   to: '${splunkPath}/app-pewpew-rms-${profile}-delete.json'
-  #   pretty: false
 providers:
   sessionId:
     response:
@@ -121,7 +100,7 @@ providers:
 endpoints:
   ###### Authorization #######
   - method: POST
-    url: http://cis-web.cis.ident.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/oauth2/v3/token
+    url: http://localhost/oauth2/v3/token
     headers:
       Accept-Language: en-us
       Content-Type: application/x-www-form-urlencoded
@@ -138,7 +117,7 @@ endpoints:
   ###### group Delete Sequential ######
   # This runs sequentially through groupIds until we get maxDelete404 404 errors in a row. Any successes, reset the counter
   - method: DELETE
-    url: 'http://${stage}group-service.${wftest}rms.records.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/maintenance/group/${ingestName}${start_pad(groupCreateId, 6, "0")}?include-children=true&delete-journal=true'
+    url: 'http://localhost/maintenance/group/${ingestName}${start_pad(groupCreateId, 6, "0")}?include-children=true&delete-journal=true'
     tags:
       status: ${response.status}
     headers:
@@ -175,7 +154,7 @@ endpoints:
   # the searchDelete404s provider and the groupId provider. Once we hit maxDelete404 404s, the searchDelete404s provider will
   # not be refilled and the send: block in the groupId provider will prevent the group search from running anymore
   - method: PUT
-    url: 'http://${stage}group-service.${wftest}rms.records.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/group/search'
+    url: 'http://localhost/group/search'
     tags:
       status: ${response.status}
     headers:
@@ -220,7 +199,7 @@ endpoints:
         where: response.status == 200 && response.body != "" && response.body.totalCount == 0
   ###### group Delete Search ######
   - method: DELETE
-    url: 'http://${stage}group-service.${wftest}rms.records.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/maintenance/group/${groupId}?include-children=true&delete-journal=true'
+    url: 'http://localhost/maintenance/group/${groupId}?include-children=true&delete-journal=true'
     tags:
       status: ${response.status}
     headers:
@@ -247,7 +226,7 @@ endpoints:
         where: searchDelete404s >= maxSearchDelete404
   ###### artifact search name
   - method: PUT
-    url: 'http://${stage}rms.${wftest}records.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/artifact/search'
+    url: 'localhost/artifact/search'
     tags:
       status: ${response.status}
     headers:
@@ -287,7 +266,7 @@ endpoints:
         where: (response.status > 200 && response.status < 500) || (response.status == 200 && response.body != "" && response.body.totalCount == 0)
   ###### artifact Delete ######
   - method: DELETE
-    url: 'http://${stage}rms.${wftest}records.service.${serviceEnv}.us-east-1.${vpc}.fslocal.org/artifact/${apid}'
+    url: 'localhost/artifact/${apid}'
     tags:
       status: ${response.status}
     headers:

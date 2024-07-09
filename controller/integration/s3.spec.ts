@@ -1,6 +1,7 @@
 import { IncomingMessage, ServerResponse } from "http";
-import { LogLevel, log, logger, s3 } from "@fs/ppaas-common";
+import { LogLevel, log, logger } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
+import { cleanupAcceptanceFiles, uploadAcceptanceFiles } from "./util";
 import { Socket } from "net";
 import { expect } from "chai";
 import { getS3Response } from "../pages/api/util/s3";
@@ -23,29 +24,25 @@ describe("S3 Integration", () => {
 
   before(async () => {
     try {
-      // Get file
-      const testFolder = "createtest";
-      const files = await s3.listFiles({ s3Folder: "createtest", extension: "yaml", maxKeys: 1 });
-      if (!files || files.length === 0) {
-        throw new Error(`No files found in [${testFolder}]. Please run "npm run createtest" from the agent project`);
-      }
-      const file = files[0];
-      if (!file.Key) {
-        throw new Error(`${testFolder} file did not have a key`);
-      }
-      const key = s3.KEYSPACE_PREFIX && file.Key.startsWith(s3.KEYSPACE_PREFIX)
-        ? file.Key.replace(s3.KEYSPACE_PREFIX, "")
-        : file.Key;
-      const split = key.split("/");
-      filename = split.pop()!;
-      s3Folder = split.join("/");
-      log("S3 Integration key", LogLevel.WARN, { filename, s3Folder, key, keyOrig: file.Key });
+      // Upload files in case createtest hasn't run.
+      const { yamlFile, ppaasTestId, ...rest } = await uploadAcceptanceFiles();
+      filename = yamlFile;
+      s3Folder = ppaasTestId.s3Folder;
+      log("S3 Integration files", LogLevel.WARN, { filename, s3Folder, yamlFile, ppaasTestId, ...rest });
       expect(filename, "filename").to.not.equal(undefined);
       expect(filename.length, "filename.length").to.be.greaterThan(0);
       expect(s3Folder, "s3Folder").to.not.equal(undefined);
       expect(s3Folder.length, "s3Folder.length").to.be.greaterThan(0);
     } catch (error) {
       log("S3 Integration before could not find a file in S3", LogLevel.ERROR, error);
+      throw error;
+    }
+  });
+  after(async () => {
+    try {
+      await cleanupAcceptanceFiles();
+    } catch (error) {
+      log("S3 Integration after could not cleanup files in S3", LogLevel.ERROR, error);
       throw error;
     }
   });

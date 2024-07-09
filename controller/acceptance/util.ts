@@ -1,5 +1,6 @@
-// Shared functions for Acceptance Tests
+export { uploadAcceptanceFiles } from "../integration/util";
 
+// Shared functions for Acceptance Tests
 export const ACCEPTANCE_AWS_PERMISSIONS: boolean = process.env.ACCEPTANCE_AWS_PERMISSIONS?.toLowerCase() === "true";
 
 // Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL

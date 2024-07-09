@@ -16,6 +16,7 @@ import { createReadStream } from "fs";
 import { expect } from "chai";
 import { getPewPewVersions } from "./pewpew.spec";
 import { getQueueNames } from "./queues.spec";
+import { integrationUrl } from "./util";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 
@@ -68,13 +69,6 @@ const defaultEnvironmentVariables: EnvironmentVariablesFile = {
   TEST2: "true"
 };
 
-// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
-export const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
-
-let sharedPpaasTestId: PpaasTestId | undefined;
-let sharedTestData: TestData | undefined;
-let sharedScheduledTestData: TestData | undefined;
-
 function appendFileData (formData: FormData, formName: string, fileData: string | FileData) {
   if (typeof fileData === "string") {
     formData.append(formName, fileData);
@@ -126,6 +120,10 @@ function convertFormDataPutToFormData (formDataPut: FormDataPut): FormData {
   formData.append("testId", formDataPut.testId);
   return formData;
 }
+
+let sharedPpaasTestId: PpaasTestId | undefined;
+let sharedTestData: TestData | undefined;
+let sharedScheduledTestData: TestData | undefined;
 
 export async function getPpaasTestId (): Promise<PpaasTestId> {
   if (sharedPpaasTestId) { return sharedPpaasTestId; }

@@ -5,12 +5,13 @@ import {
   TestData,
   TestManagerError
 } from "../types";
-import { BASIC_FILEPATH, getScheduledTestData, integrationUrl, unsetScheduledTestData } from "./test.spec";
+import { BASIC_FILEPATH, getScheduledTestData, unsetScheduledTestData } from "./test.spec";
 import { LogLevel, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
 import { getQueueNames } from "./queues.spec";
+import { integrationUrl } from "./util";
 import path from "path";
 
 async function fetch (

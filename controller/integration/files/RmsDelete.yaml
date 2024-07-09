@@ -1,0 +1,261 @@
+vars:
+  port: "${PORT}"
+  totalTimeDelete: 90m
+  ingestName: 'test:loadtest-'
+  peakLoadDelete: 400hpm
+  peakLoadSearch: 20hpm
+  maxDelete404: 50
+  maxSearchDelete404: 500
+  maxEmptySearch: 20
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: ${totalTimeDelete}
+
+config:
+  client:
+    headers:
+      TestTime: '${epoch("ms")}'
+      Accept: application/json
+
+loggers:
+  test_end:
+    select:
+      timestamp: epoch("ms")
+      request: request["start-line"]
+      response: response["start-line"]
+      responseBody: response.body
+    where: response.status >= 500
+    limit: 20
+    to: stdout
+    pretty: false
+    kill: true
+  test_404s:
+    to: stdout
+    pretty: false
+providers:
+  groupCreateId:
+    range:
+      start: 1
+  delete404s: # When this is empty we move on to group searches
+    list:
+      values:
+        - 1
+      repeat: false
+  searchDelete404s: # When this is empty we move on to artifact searches
+    list:
+      values:
+        - 1
+      repeat: false
+  artifactDelete404s: # When this is empty we move on to artifact searches
+    list:
+      values:
+        - 1
+      repeat: false
+  nextPageTokenGroup:
+    response:
+      buffer: 1
+    # list:
+    #   values:
+    #     - token: ""
+    #       count: 0
+  groupId:
+    response:
+      buffer: 1
+  nextPageTokenImage:
+    response:
+      buffer: 1
+    # list:
+    #   values:
+    #     - token: ""
+    #       count: 0
+  apid:
+    response:
+      buffer: 1
+endpoints:
+  ###### group Delete Sequential ######
+  # This runs sequentially through groupIds until we get maxDelete404 404 errors in a row. Any successes, reset the counter
+  - method: DELETE
+    url: 'http://localhost:${port}?id=${ingestName}${start_pad(createdId, 6, "0")}?include-children=true'
+    tags:
+      status: ${response.status}
+    headers:
+      Delete404s: ${delete404s}
+    peak_load: ${peakLoadDelete}
+    provides:
+      delete404s:
+        select: if(response.status == 404, delete404s + 1, 1)
+        where: delete404s < maxDelete404
+      # delete404s:
+      #   select: delete404s
+      #   where: response.status != 404
+      nextPageTokenGroup:
+        select: 
+          token: "''"
+          count: 0
+        where: delete404s >= maxDelete404
+    logs:
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          # responseBody: response.body
+          status: response.status
+          delete404s: delete404s
+          delete404sNew: delete404s + 1
+          maxDelete404: maxDelete404
+        where: response.status == 404
+  ###### group search name
+  # This runs group searches until we get maxEmptySearch empty searches, or we get 50 404s in a row and then moves on to images
+  # the searchDelete404s provider will block this from running if we ever get over 50 404s since the delete requires BOTH
+  # the searchDelete404s provider and the groupId provider. Once we hit maxDelete404 404s, the searchDelete404s provider will
+  # not be refilled and the send: block in the groupId provider will prevent the group search from running anymore
+  - method: PUT
+    url: 'http://localhost:${port}'
+    tags:
+      status: ${response.status}
+    headers:
+      Authorization: Bearer ${sessionId}
+      Content-Type: application/json
+    body: '{
+        "pageSize": 20,
+        "returnChildCounts": false,
+        "name": "TEST-GROUP-FOR-IMAGE-FIELDS-OVERWRITE",
+        "nextPageToken": "${nextPageTokenGroup.token}"
+      }'
+    peak_load: ${peakLoadSearch}
+    provides:
+      groupId:
+        select: for_each[0].id
+        for_each:
+          - response.body.groups
+        where: response.status == 200 && response.body.numberReturned > 0
+        send: block
+      nextPageTokenGroup:
+        select:
+          token: if(response.status == 200 && response.body.numberReturned > 0 && response.body.totalCount > 0 && response.body.nextPageToken != null, response.body.nextPageToken, "")
+          count: if(response.status == 200 && response.body.numberReturned > 0 && response.body.totalCount > 0, 0, nextPageTokenGroup.count + 1)
+        where: nextPageTokenGroup.count < maxEmptySearch
+      nextPageTokenImage:
+        select: 
+          token: "''"
+          count: 0
+        where: nextPageTokenGroup.count >= maxEmptySearch
+    logs:
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          responseBody: response.body
+          status: response.status
+          token: nextPageTokenGroup.token
+          count: nextPageTokenGroup.count
+          countNew: nextPageTokenGroup.count + 1
+          maxEmptySearch: maxEmptySearch
+        where: response.status == 200 && response.body != "" && response.body.totalCount == 0
+  ###### group Delete Search ######
+  - method: DELETE
+    url: 'http://localhost:${port}/?group=${groupId}&include-children=true&delete-journal=true'
+    tags:
+      status: ${response.status}
+    headers:
+      Authorization: Bearer ${sessionId}
+    peak_load: ${peakLoadDelete}
+    logs:
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          responseBody: response.body
+          status: response.status
+          groupId: groupId
+        where: response.status > 300
+    provides:
+      searchDelete404s: # If we get any successes, reset back to 1, but if we get straight 404s, move on to image.
+        select: if(response.status == 404, searchDelete404s + 1, 1)
+        where: searchDelete404s < maxSearchDelete404
+      nextPageTokenImage:
+        select: 
+          token: "''"
+          count: 0
+        where: searchDelete404s >= maxSearchDelete404
+  ###### artifact search name
+  - method: PUT
+    url: 'http://localhost:${port}/'
+    tags:
+      status: ${response.status}
+    headers:
+      Authorization: Bearer ${sessionId}
+      Content-Type: application/json
+    body: '{
+        "pageSize": 20,
+        "returnChildCounts": false,
+        "name": "TEST-IMAGE-OVERWRITE",
+        "nextPageToken": "${nextPageTokenImage.token}"
+      }'
+    peak_load: ${peakLoadSearch}
+    provides:
+      apid:
+        select: for_each[0].id
+        for_each:
+          - response.body.images
+        where: response.status == 200 && response.body.numberReturned > 0
+        send: block
+      nextPageTokenImage:
+        select:
+          token: if(response.status == 200 && response.body.numberReturned > 0 && response.body.totalCount > 0 && response.body.nextPageToken != null, response.body.nextPageToken, "")
+          count: if(response.status == 200 && response.body.numberReturned > 0 && response.body.totalCount > 0 && response.body.nextPageToken != null, nextPageTokenImage.count, nextPageTokenImage.count + 1)
+        # Don't put a limit here on nextPageTokenImage.count < max, let the logger kill it
+    logs:
+      # log to test_end rather than test404s so we can kill it when we reach the limit
+      test_end:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          responseBody: response.body
+          status: response.status
+          token: nextPageTokenImage.token
+          count: nextPageTokenImage.count
+          countNew: nextPageTokenImage.count + 1
+        where: (response.status > 200 && response.status < 500) || (response.status == 200 && response.body != "" && response.body.totalCount == 0)
+  ###### artifact Delete ######
+  - method: DELETE
+    url: 'http://localhost:${port}/?artifact=${apid}'
+    tags:
+      status: ${response.status}
+    headers:
+      Authorization: Bearer ${sessionId}
+    peak_load: ${peakLoadDelete}
+    provides:
+      artifactDelete404s: # If we get any successes, reset back to 1, but if we get straight 404s, move on to image.
+        select: if(response.status == 404, artifactDelete404s + 1, 1)
+    logs:
+      test_404s:
+        select:
+          timestamp: epoch("ms")
+          id: '`${ingestName}${start_pad(createdId, 6, "0")}`'
+          request: request["start-line"]
+          response: response["start-line"]
+          status: response.status
+          artifactDelete404s: artifactDelete404s
+          artifactDelete404sNew: artifactDelete404s + 1
+          maxDelete404: maxDelete404
+        where: response.status == 404
+      # log to test_end rather than test404s so we can kill it when we reach the limit
+      test_end:
+        select:
+          timestamp: epoch("ms")
+          request: request["start-line"]
+          response: response["start-line"]
+          responseBody: response.body
+          status: response.status
+          token: nextPageTokenImage.token
+          count: nextPageTokenImage.count
+          countNew: nextPageTokenImage.count + 1
+        where: artifactDelete404s >= maxSearchDelete404

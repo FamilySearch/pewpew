@@ -12,6 +12,7 @@ import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
 import FormData from "form-data";
 import { createReadStream } from "fs";
 import { expect } from "chai";
+import { integrationUrl } from "./util";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
 import semver from "semver";
@@ -37,9 +38,6 @@ async function fetch (
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");
-
-// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
-const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 let sharedPewPewVersions: string[] | undefined;
 let uploadedPewPewVersion: string | undefined;

@@ -2,11 +2,9 @@ import { API_HEALTHCHECK, API_HEALTHCHECK_HEARTBEAT, API_HEALTHCHECK_S3, API_HEA
 import { LogLevel, log } from "@fs/ppaas-common";
 import _axios, { AxiosResponse as Response } from "axios";
 import { expect } from "chai";
+import { integrationUrl } from "./util";
 
 const fetch = _axios.get;
-
-// Beanstalk <SYSTEM_NAME>_<SERVICE_NAME>_URL
-const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8081"}`);
 
 describe("Healthcheck Integration", () => {
   let url: string;

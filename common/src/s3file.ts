@@ -99,6 +99,7 @@ export class PpaasS3File implements S3File {
         this.contentType = "text/x-yaml";
         break;
       case ".json":
+      case ".info":
         this.contentType = "application/json";
         break;
       default:

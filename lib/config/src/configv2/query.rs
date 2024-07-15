@@ -291,8 +291,7 @@ impl QueryInner {
                 .for_each
                 .iter()
                 .map(|fe| {
-                    fe.clone()
-                        .evaluate(ctx)
+                    fe.evaluate(ctx)
                         .map_err(|err| ExecutionError(err.to_opaque(ctx)))
                 })
                 .collect::<Result<Vec<_>, _>>()?
@@ -349,8 +348,7 @@ impl QueryInner {
                     .r#where
                     .as_ref()
                     .map_or(Ok(true), |w| {
-                        Ok(w.clone()
-                            .evaluate(ctx)
+                        Ok(w.evaluate(ctx)
                             .map_err(|err| ExecutionError(err.to_opaque(ctx)))?
                             .to_boolean())
                     })?
@@ -412,7 +410,7 @@ impl SelectTmp {
 impl Select {
     fn select(&self, ctx: &mut Context) -> JsResult<JsValue> {
         match self {
-            Self::Expr(code) => code.clone().evaluate(ctx),
+            Self::Expr(code) => code.evaluate(ctx),
             Self::Map(m) => {
                 let m: BTreeMap<Arc<str>, JsValue> = m
                     .iter()

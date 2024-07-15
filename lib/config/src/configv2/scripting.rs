@@ -821,22 +821,22 @@ mod builtins {
     fn json_path(v: SJV, s: String) -> Vec<SJV> {
         use jsonpath_lib::Compiled;
         // same pattern as in `match` helper function
-        fn get_node(s: String) -> Arc<Result<Compiled, String>> {
+        fn get_node(s: &str) -> Arc<Result<Compiled, String>> {
             static PATH_CACHE: Mutex<BTreeMap<String, Arc<Result<Compiled, String>>>> =
                 Mutex::new(BTreeMap::new());
 
             match PATH_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(s.to_owned())
-                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(&s)))
+                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(s)))
                     .clone(),
                 Err(_) => {
                     log::warn!("jsonpath cache Mutex has been poisoned");
-                    Arc::new(jsonpath_lib::Compiled::compile(&s))
+                    Arc::new(jsonpath_lib::Compiled::compile(s))
                 }
             }
         }
-        let path = get_node(s.clone());
+        let path = get_node(s.as_str());
         let path = match &*path {
             Ok(p) => p,
             Err(e) => {
@@ -1026,18 +1026,15 @@ mod builtins {
             }
         }
 
-        // impl<'a> JsInput<'a> for &'static str {
-        //     fn from_js(js: &'a JsValue, _ctx: &mut Context) -> JsResult<Self> {
-        //         // return Err(JsError::from_native(JsNativeError::typ().with_message("as_str() removed from JsValue")));
-        //         let value = js
+        // Conversion to &str was removed in 0.17. 0.19 added back in a JsStr, but lifetime issues...
+        // impl<'a> JsInput<'a> for &'a str {
+        //     fn from_js(js: &'a JsValue, ctx: &mut Context) -> JsResult<Self> {
+        //         Ok(js
         //             .as_string()
         //             .ok_or_else(|| {
         //                 JsError::from_native(JsNativeError::typ().with_message("not a string"))
-        //             })?;
-        //         let value = value.to_std_string_escaped();
-        //         // let value: Box<&str> = Box::new(value.as_str());
-        //         // let value = value.as_str();
-        //         Ok(Box::leak(value.into_boxed_str()))
+        //             })?
+        //             .as_str())
         //     }
         // }
 

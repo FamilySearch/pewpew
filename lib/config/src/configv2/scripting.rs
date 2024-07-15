@@ -5,7 +5,10 @@ use super::{
 use crate::make_send::MakeSend;
 use boa_engine::{
     js_string,
-    object::{builtins::JsArray, builtins::JsFunction, ObjectInitializer},
+    object::{
+        builtins::{JsArray, JsFunction},
+        ObjectInitializer,
+    },
     prelude::*,
     property::{Attribute, PropertyKey},
     JsResult,
@@ -104,8 +107,10 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                 JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
             )),
             JsValue::Object(o) => {
+                log::debug!("purge_undefined Object: {o:?}");
                 if o.is_array() {
                     let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
+                    log::trace!("purge_undefined array: {jsarr:?}");
                     let len = jsarr.length(context)?;
                     (0..len)
                         .map(|i| {
@@ -121,8 +126,15 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                         .map(Into::into)
                 } else {
                     let mut map = serde_json::Map::new();
-                    for (key, property) in o.borrow().properties().index_properties() {
-                        let key = boa_engine::property::PropertyKey::from(key);
+                    let keys = o
+                        .own_property_keys(context)
+                        .expect("Objects should have keys");
+                    log::trace!("purge_undefined object keys: {keys:?}");
+
+                    for key in keys {
+                        let property = o.get(key.clone(), context);
+                        log::trace!("purge_undefined object property: {key:?} = {property:?}");
+
                         let key = match &key {
                             PropertyKey::String(string) => {
                                 string.to_std_string_escaped().to_owned()
@@ -136,13 +148,13 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                             }
                         };
 
-                        let value = match property.value() {
-                            Some(val) => purge_inner(val, context, {
+                        let value = match property {
+                            Ok(val) => purge_inner(&val, context, {
                                 let mut trace = trace.clone();
                                 trace.push(key.clone());
                                 trace
                             })?,
-                            None => serde_json::Value::Null,
+                            Err(_) => serde_json::Value::Null,
                         };
 
                         map.insert(key, value);
@@ -548,6 +560,24 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
             ctx.eval(Source::from_bytes(
+                r#"replace("foo", "foobarisfooobar", "bar")"#
+            ))
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap(),
+            serde_json::json!("barbarisbarobar")
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(
+                r#"replace("foo", ["abc", 123, "fooo"], "bar")"#
+            ))
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap(),
+            serde_json::json!(["abc", 123, "baro"])
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(
                 r#"replace("foo", {"foo": "baz", "zed": ["abc", 123, "fooo"]}, "bar")"#
             ))
             .unwrap()
@@ -772,12 +802,16 @@ mod builtins {
         let s = separator;
         let s2 = separator2;
         match (value, s2) {
-            (SJV::Array(a), _) => a.iter().map(get_as_str).collect::<Vec<_>>().join(&s),
+            (SJV::Array(a), _) => a
+                .iter()
+                .map(get_as_str)
+                .collect::<Vec<_>>()
+                .join(s.as_str()),
             (SJV::Object(m), Some(s2)) => m
                 .into_iter()
                 .map(|(k, v)| format!("{k}{s2}{0}", get_as_str(&v)))
                 .collect::<Vec<_>>()
-                .join(&s),
+                .join(s.as_str()),
             (SJV::String(s), _) => s,
             (other, _) => other.to_string(),
         }
@@ -818,7 +852,7 @@ mod builtins {
     #[boa_fn(jsname = "match")]
     fn r#match(s: AnyAsString, regex: String) -> SJV {
         // Prevent same Regex from being compiled again.
-        fn get_reg(reg: String) -> Arc<Result<Regex, regex::Error>> {
+        fn get_reg(reg: &str) -> Arc<Result<Regex, regex::Error>> {
             // does not need to be a tokio::Mutex, as LockGuard is not held beyond any await point,
             // being dropped within this purely-non-async function.
             static REG_CACHE: Mutex<BTreeMap<String, Arc<Result<Regex, regex::Error>>>> =
@@ -827,16 +861,16 @@ mod builtins {
             match REG_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(reg.to_owned())
-                    .or_insert_with(|| Arc::new(Regex::new(&reg)))
+                    .or_insert_with(|| Arc::new(Regex::new(reg)))
                     .clone(),
                 Err(_) => {
                     log::warn!("regex cache mutex has been poisoned");
-                    Arc::new(Regex::new(&reg))
+                    Arc::new(Regex::new(reg))
                 }
             }
         }
         let s = s.get();
-        let reg = get_reg(regex.clone());
+        let reg = get_reg(regex.as_str());
         let reg = match &*reg {
             Ok(reg) => reg,
             Err(e) => {

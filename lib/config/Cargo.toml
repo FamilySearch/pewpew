@@ -7,9 +7,9 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-boa_engine = "0.18"
-boa_gc = "0.18"
-boa_parser = "0.18"
+boa_engine = "0.19"
+boa_gc = "0.19"
+boa_parser = "0.19"
 derivative = "2.2.0"
 derive_more = "0.99.17"
 diplomatic-bag = "0.3.1"

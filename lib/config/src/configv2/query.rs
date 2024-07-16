@@ -51,7 +51,7 @@ impl PropagateVars for Query<False> {
                 // overwrites it. On repeat calls, log the error and continue
                 .register_global_property(js_string!("_v"), js, Attribute::READONLY)
                 .map_err(|err| {
-                    log::debug!("register_global_property _v error {}", err);
+                    log::warn!("register_global_property _v error {}", err);
                     err
                 })
                 .unwrap_or_default();
@@ -185,7 +185,7 @@ impl Clone for QueryInner {
                 // overwrites it. On repeat calls, log the error and continue
                 .register_global_property(js_string!("_v"), js, Attribute::READONLY)
                 .map_err(|err| {
-                    log::debug!("register_global_property _v error {}", err);
+                    log::warn!("register_global_property _v error {}", err);
                     err
                 })
                 .unwrap_or_default();
@@ -276,12 +276,9 @@ impl QueryInner {
             // put the provider values into the context for the query expressions to read
             // unlike template expressions, queries access providers directly
             .for_each(|(n, o)| {
-                // NOTE: this function got changed in boa 0.17, where it returns an error if the
-                // same property is "registered" twice, as opposed to the current behavior which
-                // overwrites it. On repeat calls, log the error and continue
-                ctx.register_global_property(js_string!(n.as_str()), o, Attribute::READONLY)
+                ctx.register_global_property(js_string!(n.as_str()), o, Attribute::WRITABLE)
                     .map_err(|err| {
-                        log::debug!("register_global_property {} error {}", n, err);
+                        log::warn!("register_global_property {n} error {err}");
                         err
                     })
                     .unwrap_or_default();
@@ -333,14 +330,9 @@ impl QueryInner {
         Ok(for_each
             .into_iter()
             .map(|x| {
-                // NOTE: this function got changed in boa 0.17, where it returns an error if the
-                // same property is "registered" twice, as opposed to the current behavior which
-                // overwrites it. If it is desired to update the boa engine to a newer version in
-                // the future, an alternative to this will be needed.
-                //  On repeat calls, log the error and continue
-                ctx.register_global_property(js_string!("for_each"), x, Attribute::READONLY)
+                ctx.register_global_property(js_string!("for_each"), x, Attribute::WRITABLE)
                     .map_err(|err| {
-                        log::debug!("register_global_property for_each error {}", err);
+                        log::warn!("register_global_property for_each error {err}");
                         err
                     })
                     .unwrap_or_default();

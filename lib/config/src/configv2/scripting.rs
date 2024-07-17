@@ -107,7 +107,7 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                 JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
             )),
             JsValue::Object(o) => {
-                log::debug!("purge_undefined Object: {o:?}");
+                log::trace!("purge_undefined Object: {o:?}");
                 if o.is_array() {
                     let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
                     log::trace!("purge_undefined array: {jsarr:?}");
@@ -126,6 +126,9 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                         .map(Into::into)
                 } else {
                     let mut map = serde_json::Map::new();
+                    // https://github.com/boa-dev/boa/issues/3923
+                    // Starting in 0.17, to_json uses properties().shape().keys() which doesn't include integer keys
+                    // own_property_keys() does include them
                     let keys = o
                         .own_property_keys(context)
                         .expect("Objects should have keys");
@@ -157,6 +160,7 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                             Err(_) => serde_json::Value::Null,
                         };
 
+                        log::trace!("purge_undefined Object result: {value:?}");
                         map.insert(key, value);
                     }
 
@@ -606,7 +610,10 @@ mod tests {
         let caps = ctx.eval(Source::from_bytes(
             r#"match("<html>\n<body>\nHello, Jean! Today's date is 2038-01-19. So glad you made it!\n</body>\n</html>", "Hello, (?P<name>\\w+).*(?P<y>\\d{4})-(?P<m>\\d{2})-(?P<d>\\d{2})")"#
         )).map_err(|js| js.to_opaque(&mut ctx).display().to_string()).unwrap();
-        let caps = caps.to_json(&mut ctx).unwrap();
+        // https://github.com/boa-dev/boa/issues/3923
+        // Starting in 0.17, to_json removes any integer/integer strings from the object. purge_undefined doesn't
+        // let caps = caps.to_json(&mut ctx).unwrap();
+        let caps = crate::scripting::purge_undefined(&caps, &mut ctx).unwrap();
         assert_eq!(
             caps,
             serde_json::json!({

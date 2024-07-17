@@ -1,7 +1,8 @@
+import { ACCEPTANCE_AWS_PERMISSIONS, integrationUrl, uploadAcceptanceFiles } from "./util";
 import { API_ERROR, API_SEARCH, API_TEST, TestData } from "../types";
 import { LogLevel, PpaasTestId, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
-import { getPpaasTestId, getTestData, integrationUrl } from "./test.spec";
+import { getPpaasTestId, getTestData } from "./test.spec";
 import { expect } from "chai";
 
 const REDIRECT_TO_S3: boolean = process.env.REDIRECT_TO_S3 === "true";
@@ -36,6 +37,12 @@ describe("ErrorFile API Integration", function () {
     this.timeout(60000);
     url = integrationUrl + API_ERROR;
     log("ErrorFile tests url=" + url, LogLevel.DEBUG);
+    if (ACCEPTANCE_AWS_PERMISSIONS) {
+      const { ppaasTestId } = await uploadAcceptanceFiles();
+      yamlFile = ppaasTestId.yamlFile;
+      dateString = ppaasTestId.dateString;
+      expectedStatus = 200;
+    } else {
     // Initialize to one that will 404 for the build server
     const ppaasTestId = await getPpaasTestId();
     yamlFile = ppaasTestId.yamlFile;
@@ -87,6 +94,7 @@ describe("ErrorFile API Integration", function () {
     } catch (error) {
       log("Could not Search and find Results", LogLevel.ERROR, error);
     }
+    } // end else not ACCEPTANCE_AWS_PERMISSIONS
   });
 
   it("GET /error should respond 404 Not Found", (done: Mocha.Done) => {

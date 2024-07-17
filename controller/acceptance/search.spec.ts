@@ -1,8 +1,9 @@
+import { ACCEPTANCE_AWS_PERMISSIONS, integrationUrl, uploadAcceptanceFiles } from "./util";
 import { API_SEARCH, API_TEST_STATUS, TestData, TestManagerMessage } from "../types";
 import { LogLevel, PpaasTestId, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
-import { getTestData, integrationUrl } from "./test.spec";
 import { expect } from "chai";
+import { getTestData } from "./test.spec";
 
 async function fetch (
   url: string,
@@ -62,8 +63,14 @@ describe("Search API Integration", () => {
   before(async () => {
     url = integrationUrl + API_SEARCH;
     log("search tests url=" + url, LogLevel.DEBUG);
-    const testData = await getTestData();
-    s3Folder = testData.s3Folder;
+    if (ACCEPTANCE_AWS_PERMISSIONS) {
+      // Populate a finished result
+      const { ppaasTestId } = await uploadAcceptanceFiles();
+      s3Folder = ppaasTestId.s3Folder;
+    } else {
+      const testData = await getTestData();
+      s3Folder = testData.s3Folder;
+    }
   });
 
   describe("GET /search", () => {

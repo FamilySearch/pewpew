@@ -203,6 +203,7 @@ impl ProviderStream<AutoReturn> for providers::Provider {
 
 pub struct BuilderContext {
     pub config: config::Config,
+    #[allow(dead_code)]
     pub config_path: PathBuf,
     // the http client
     pub client:

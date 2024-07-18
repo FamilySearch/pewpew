@@ -599,7 +599,7 @@ impl FromYaml for RangeProviderPreProcessed {
         let mut saw_opening = false;
 
         let mut start = 0;
-        let mut end = std::i64::MAX;
+        let mut end = i64::MAX;
         let mut step = NonZeroU16::new(1).expect("1 is non-zero");
         let mut repeat = false;
         let mut unique = false;
@@ -3193,7 +3193,7 @@ mod tests {
                 "range: {}",
                 Some(ProviderPreProcessed::Range(RangeProviderPreProcessed {
                     start: 0,
-                    end: std::i64::MAX,
+                    end: i64::MAX,
                     step: NonZeroU16::new(1).expect("1 is non-zero"),
                     repeat: false,
                     unique: false,

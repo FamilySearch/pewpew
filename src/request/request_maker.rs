@@ -401,7 +401,7 @@ mod tests {
     fn sends_request() {
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            let (port, ..) = test_common::start_test_server(None);
+            let (port, ..) = test_common::start_test_server(None).await;
             let url = Template::simple(&format!("https://127.0.0.1:{}", port));
             let method = Method::GET;
             let headers = Vec::new();

@@ -1,18 +1,21 @@
 use log::{debug, info};
-use std::{future::Future, io, str::FromStr, sync::Arc, time::Duration};
+use std::{future::Future, io, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+use tokio::net::TcpListener;
 
+use bytes::Bytes;
 use futures::{channel::oneshot, future::select, FutureExt};
 use futures_timer::Delay;
 use http::{header, StatusCode};
-use hyper::{
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn},
-    Body, Error, Request, Response, Server,
+use http_body_util::{combinators::BoxBody, BodyExt, Empty};
+use hyper::{body::Incoming as Body, service::service_fn, Error, Request, Response};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder as HyperBuilder,
 };
 use parking_lot::Mutex;
 use url::Url;
 
-async fn echo_route(req: Request<Body>) -> Response<Body> {
+async fn echo_route(req: Request<Body>) -> Response<BoxBody<Bytes, hyper::Error>> {
     let headers = req.headers();
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -36,24 +39,24 @@ async fn echo_route(req: Request<Body>) -> Response<Body> {
     if echo.is_some() {
         debug!("Echo Body = {}", echo.clone().unwrap_or_default());
     }
-    let mut response = match (req.method(), echo) {
+    let mut response: Response<BoxBody<Bytes, Error>> = match (req.method(), echo) {
         (&http::Method::GET, Some(b)) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, content_type)
-            .body(b.into())
+            .body(b.map_err(|never| match never {}).boxed())
             .unwrap(),
         (&http::Method::POST, _) | (&http::Method::PUT, _) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, content_type)
-            .body(req.into_body())
+            .body(req.into_body().boxed())
             .unwrap(),
         _ => Response::builder()
             .status(StatusCode::NO_CONTENT)
-            .body(Body::empty())
+            .body(empty())
             .unwrap(),
     };
     let ms = wait.and_then(|c| FromStr::from_str(&c).ok()).unwrap_or(0);
-    let old_body = std::mem::replace(response.body_mut(), Body::empty());
+    let old_body = std::mem::replace(response.body_mut(), empty());
     if ms > 0 {
         debug!("waiting {} ms", ms);
     }
@@ -62,13 +65,22 @@ async fn echo_route(req: Request<Body>) -> Response<Body> {
     response
 }
 
-pub fn start_test_server(
+fn empty() -> BoxBody<Bytes, hyper::Error> {
+    Empty::<Bytes>::new()
+        .map_err(|never| match never {})
+        .boxed()
+}
+
+pub async fn start_test_server(
     port: Option<u16>,
 ) -> (u16, oneshot::Sender<()>, impl Future<Output = ()>) {
     let port = port.unwrap_or(0);
-    let address = ([127, 0, 0, 1], port).into();
+    let address: SocketAddr = ([127, 0, 0, 1], port).into();
 
-    let make_svc = make_service_fn(|_: &AddrStream| async {
+    let listener = TcpListener::bind(address).await.unwrap();
+    let local_addr = listener.local_addr().unwrap();
+
+    let server = tokio::spawn(async move {
         let service = service_fn(|req: Request<Body>| async {
             debug!("{:?}", req);
             let method = req.method().to_string();
@@ -78,7 +90,7 @@ pub fn start_test_server(
                 "/" => echo_route(req).await,
                 _ => Response::builder()
                     .status(StatusCode::NOT_FOUND)
-                    .body(Body::empty())
+                    .body(empty())
                     .unwrap(),
             };
             debug!("{:?}", response);
@@ -92,14 +104,20 @@ pub fn start_test_server(
             );
             Ok::<_, Error>(response)
         });
-        Ok::<_, Error>(service)
+
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let stream = TokioIo::new(stream);
+            tokio::task::spawn(async move {
+                let builder = HyperBuilder::new(TokioExecutor::new());
+                builder.serve_connection(stream, service).await.unwrap();
+            });
+        }
     });
 
     let (tx, rx) = oneshot::channel();
 
-    let server = Server::bind(&address).serve(make_svc);
-
-    let port = server.local_addr().port();
+    let port = local_addr.port();
 
     let future = select(server, rx);
 

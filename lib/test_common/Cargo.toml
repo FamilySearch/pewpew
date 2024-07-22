@@ -13,8 +13,8 @@ path = "test_common.rs"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
-hyper = { version = "1.4", features = ["http1"] }
-hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+hyper = { version = "1.4", features = ["http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1", "http2"] }
 http = "1.1"
 http-body-util = "0.1"
 parking_lot = "0.12"

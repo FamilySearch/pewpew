@@ -12,11 +12,15 @@ use futures::{
 };
 use futures_timer::Delay;
 use hyper::{
-    client::HttpConnector,
+    body::Incoming,
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST},
-    Client, Method, Request,
+    Method, Request,
 };
 use hyper_tls::HttpsConnector;
+use hyper_util::client::legacy::{
+    connect::{dns::GaiResolver, HttpConnector},
+    Client,
+};
 use log::{debug, info};
 use serde_json as json;
 
@@ -41,8 +45,7 @@ pub(super) struct RequestMaker {
     pub(super) headers: Vec<(String, Template)>,
     pub(super) body: BodyTemplate,
     pub(super) rr_providers: u16,
-    pub(super) client:
-        Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
+    pub(super) client: Arc<Client<HttpsConnector<HttpConnector<GaiResolver>>, Incoming>>,
     pub(super) stats_tx: StatsTx,
     pub(super) no_auto_returns: bool,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
@@ -279,21 +282,7 @@ impl RequestMaker {
             request.headers_mut().extend(headers);
 
             let mut response_future = client.request(request).map_err(|e| {
-                let err: Arc<dyn StdError + Send + Sync> = if let Some(io_error_maybe) = e.source()
-                {
-                    if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
-                        let io_error = e.into_cause().expect("should have a cause error");
-                        Arc::new(
-                            *io_error
-                                .downcast::<std::io::Error>()
-                                .expect("should downcast as io error"),
-                        )
-                    } else {
-                        Arc::new(e)
-                    }
-                } else {
-                    Arc::new(e)
-                };
+                let err: Arc<dyn StdError + Send + Sync> = Arc::new(e);
                 TestError::from(RecoverableError::ConnectionErr(SystemTime::now(), err))
             });
             let outgoing2 = outgoing.clone();

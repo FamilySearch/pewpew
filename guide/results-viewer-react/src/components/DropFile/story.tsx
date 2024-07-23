@@ -1,4 +1,5 @@
 import DropFile, { DropFileProps } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { GlobalStyle } from "../Global";
 import React from "react";
 
@@ -16,9 +17,9 @@ const props: DropFileProps = {
 
 export default {
   title: "DropFile"
-};
+} as Meta<typeof DropFile>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DropFile {...props} />

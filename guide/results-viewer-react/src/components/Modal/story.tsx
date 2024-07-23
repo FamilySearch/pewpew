@@ -1,4 +1,5 @@
 import { LogLevel, log } from "../../util/log";
+import type { Meta, StoryFn } from "@storybook/react";
 import { Modal, ModalObject, useEffectModal } from ".";
 import React, { useRef, useState } from "react";
 import { DisplayDivMain } from "../YamlWriterForm";
@@ -188,20 +189,20 @@ const ModalCreateYamlDemo = () => {
 
 export default {
   title: "Modal"
-};
+} as Meta<typeof Modal>;
 
-export const UploadHarModal = () => (
+export const UploadHarModal: StoryFn = () => (
   <ModalUploadHarDemo/>
 );
 
-export const ListModal = () => (
+export const ListModal: StoryFn = () => (
   <ModalListDemo/>
 );
 
-export const _LoggerModal = () => (
+export const _LoggerModal: StoryFn = () => (
   <ModalLoggerDemo/>
 );
 
-export const CreateYamlModal = () => (
+export const CreateYamlModal: StoryFn = () => (
   <ModalCreateYamlDemo/>
 );

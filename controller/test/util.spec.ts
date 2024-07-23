@@ -141,13 +141,14 @@ describe("Util", () => {
     });
 
     it("unzip a yaml and make it yaml", (done: Mocha.Done) => {
-      const formFiles: Files = { additionalFiles: zipyaml };
+      const formFiles: Files = { additionalFiles: [zipyaml] };
       parseZip(formFiles)
       .then(() => {
         expect(formFiles.yamlFile).to.not.equal(undefined);
         expect(formFiles.additionalFiles).to.equal(undefined);
-        expect(Array.isArray(formFiles.yamlFile)).to.equal(false);
-        expect((formFiles.yamlFile as any as File).originalFilename).to.equal(BASIC_YAML_FILE);
+        expect(Array.isArray(formFiles.yamlFile)).to.equal(true);
+        expect(formFiles.yamlFile?.length).to.equal(1);
+        expect(formFiles.yamlFile![0].originalFilename).to.equal(BASIC_YAML_FILE);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);
@@ -156,13 +157,13 @@ describe("Util", () => {
     });
 
     it("unzip two yaml zip and make it two yaml", (done: Mocha.Done) => {
-      const formFiles: Files = { additionalFiles: zipyamls };
+      const formFiles: Files = { additionalFiles: [zipyamls] };
       parseZip(formFiles)
       .then(() => {
         expect(formFiles.yamlFile).to.not.equal(undefined);
         expect(formFiles.additionalFiles).to.equal(undefined);
         expect(Array.isArray(formFiles.yamlFile)).to.equal(true);
-        expect((formFiles.yamlFile as any as File[]).length).to.equal(2);
+        expect(formFiles.yamlFile?.length).to.equal(2);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);
@@ -171,13 +172,13 @@ describe("Util", () => {
     });
 
     it("unzip to file zip and make it files", (done: Mocha.Done) => {
-      const formFiles: Files = { additionalFiles: zipfiles };
+      const formFiles: Files = { additionalFiles: [zipfiles] };
       parseZip(formFiles)
       .then(() => {
         expect(formFiles.yamlFile).to.equal(undefined);
         expect(formFiles.additionalFiles).to.not.equal(undefined);
         expect(Array.isArray(formFiles.additionalFiles)).to.equal(true);
-        expect((formFiles.additionalFiles as any as File[]).length).to.equal(2);
+        expect(formFiles.additionalFiles?.length).to.equal(2);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);
@@ -191,10 +192,11 @@ describe("Util", () => {
       .then(() => {
         expect(formFiles.yamlFile).to.not.equal(undefined);
         expect(formFiles.additionalFiles).to.not.equal(undefined);
-        expect(Array.isArray(formFiles.yamlFile)).to.equal(false);
-        expect((formFiles.yamlFile as any as File).originalFilename).to.equal(BASIC_YAML_FILE);
+        expect(Array.isArray(formFiles.yamlFile)).to.equal(true);
+        expect(formFiles.yamlFile?.length).to.equal(1);
+        expect(formFiles.yamlFile![0].originalFilename).to.equal(BASIC_YAML_FILE);
         expect(Array.isArray(formFiles.additionalFiles)).to.equal(true);
-        expect((formFiles.additionalFiles as any as File[]).length).to.equal(1);
+        expect(formFiles.additionalFiles?.length).to.equal(1);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);
@@ -203,13 +205,13 @@ describe("Util", () => {
     });
 
     it("unzip a yaml when there's already a yaml", (done: Mocha.Done) => {
-      const formFiles: Files = { yamlFile: basicYamlFile, additionalFiles: zipyaml };
+      const formFiles: Files = { yamlFile: [basicYamlFile], additionalFiles: [zipyaml] };
       parseZip(formFiles)
       .then(() => {
         expect(formFiles.yamlFile).to.not.equal(undefined);
         expect(formFiles.additionalFiles).to.equal(undefined);
         expect(Array.isArray(formFiles.yamlFile)).to.equal(true);
-        expect((formFiles.yamlFile as any as File[]).length).to.equal(2);
+        expect(formFiles.yamlFile?.length).to.equal(2);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);
@@ -219,17 +221,17 @@ describe("Util", () => {
 
     it("unzip a bunch of stuff and parse it all", (done: Mocha.Done) => {
       const formFiles: Files = {
-        yamlFile: basicYamlFile,
-        additionalFiles: ([basicNotYamlFile, zipyamls, zipfiles] as any)
+        yamlFile: [basicYamlFile],
+        additionalFiles: ([basicNotYamlFile, zipyamls, zipfiles])
       };
       parseZip(formFiles)
       .then(() => {
         expect(formFiles.yamlFile).to.not.equal(undefined);
         expect(formFiles.additionalFiles).to.not.equal(undefined);
         expect(Array.isArray(formFiles.yamlFile)).to.equal(true);
-        expect((formFiles.yamlFile as any as File[]).length).to.equal(3);
+        expect(formFiles.yamlFile?.length).to.equal(3);
         expect(Array.isArray(formFiles.additionalFiles)).to.equal(true);
-        expect((formFiles.additionalFiles as any as File[]).length).to.equal(3);
+        expect(formFiles.additionalFiles?.length).to.equal(3);
         done();
       }).catch((error) => {
         log("Error parseZip yaml", LogLevel.ERROR, error);

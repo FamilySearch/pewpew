@@ -60,7 +60,7 @@ describe("PewPew Util Integration", () => {
       const unzippedFiles: File[] = await unzipFile(pewpewZipFile);
       log("unzipped " + filename, LogLevel.DEBUG, unzippedFiles);
       files = {
-        additionalFiles: unzippedFiles as any as File
+        additionalFiles: unzippedFiles
       };
       log("new files " + filename, LogLevel.DEBUG, files);
       if (platform() === "win32") {
@@ -164,7 +164,7 @@ describe("PewPew Util Integration", () => {
     it("postPewPew as latest should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         fields: {
-          latest: "true"
+          latest: ["true"]
         },
         files
       };

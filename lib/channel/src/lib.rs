@@ -183,7 +183,7 @@ impl<T: Serialize> Channel<T> {
 
     /// notify all OnDemand with an event listener
     fn notify_all_on_demand(&self) {
-        self.on_demand_events.notify(std::usize::MAX);
+        self.on_demand_events.notify(usize::MAX);
     }
 
     /// create a listener so an OnDemand can get notice when demand has been requested
@@ -199,7 +199,7 @@ impl<T: Serialize> Channel<T> {
 
     /// notify all senders with an event listener
     fn notify_all_senders(&self) {
-        self.sender_events.notify(std::usize::MAX);
+        self.sender_events.notify(usize::MAX);
     }
 
     /// notify a single receiver with an event listener
@@ -209,7 +209,7 @@ impl<T: Serialize> Channel<T> {
 
     /// notify all receivers with an event listener
     fn notify_all_receivers(&self) {
-        self.receiver_events.notify(std::usize::MAX);
+        self.receiver_events.notify(usize::MAX);
     }
 
     /// create a listener so a sender can get notice when it can make progress

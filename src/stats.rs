@@ -604,6 +604,7 @@ pub enum StatsMessage {
 pub struct ResponseStat {
     pub kind: StatKind,
     pub rtt: Option<u64>,
+    #[allow(dead_code)]
     pub time: SystemTime,
     pub tags: Arc<Tags>,
 }

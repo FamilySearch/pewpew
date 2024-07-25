@@ -278,23 +278,17 @@ export class TestScheduler implements TestSchedulerItem {
       localPath = await createTestFolder(testIdTime);
       const parsedForm: ParsedForm = {
         fields: {
-          queueName,
-          testId,
-          yamlFile,
-          environmentVariables: environmentVariablesFile ? JSON.stringify(environmentVariablesFile) : JSON.stringify(envVariables),
-          version
+          queueName: [queueName],
+          testId: [testId],
+          yamlFile: [yamlFile],
+          environmentVariables: [environmentVariablesFile ? JSON.stringify(environmentVariablesFile) : JSON.stringify(envVariables)],
+          version: [version],
+          additionalFiles: additionalFiles ? [JSON.stringify(additionalFiles)] : undefined,
+          restartOnFailure: restartOnFailure ? ["true"] : undefined,
+          bypassParser: bypassParser ? ["true"] : undefined
         },
         files: {}
       };
-      if (additionalFiles) {
-        parsedForm.fields.additionalFiles = JSON.stringify(additionalFiles);
-      }
-      if (restartOnFailure) {
-        parsedForm.fields.restartOnFailure = "true";
-      }
-      if (bypassParser) {
-        parsedForm.fields.bypassParser = "true";
-      }
       const result: ErrorResponse | TestDataResponse = await TestManager.postTest(parsedForm, authPermissions, localPath);
       if (result.status !== 200) {
         const errorResponse: TestManagerError  = result.json as TestManagerError;

@@ -5,6 +5,7 @@ import {
   DivRight as DivRightInternal,
   Row as RowInternal
 } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { GlobalStyle } from "../Global";
 import React from "react";
 import styled from "styled-components";
@@ -47,7 +48,7 @@ export const Row = styled(RowInternal)`
 export default {
   title: "Div",
   excludeStories: ["Div", "Column", "DivLeft", "DivRight", "Row"]
-};
+} as Meta<typeof Div>;
 
 export const _Div = () => (
   <React.Fragment>
@@ -77,7 +78,7 @@ export const _Column = () => (
   </React.Fragment>
 );
 
-export const DivLeftRight = () => (
+export const DivLeftRight: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <Row>

@@ -41,7 +41,7 @@ export interface ParsedForm {
   files: Files;
 }
 
-export function createErrorResponse (request: Request, error: any, logLevel?: LogLevel): TestManagerError {
+export function createErrorResponse (request: Request, error: unknown, logLevel?: LogLevel): TestManagerError {
   const message = `${request.method} ${request.url} failed with ${error}`;
   if (logLevel) {
     log(message, logLevel, error);
@@ -245,9 +245,9 @@ export async function parseZip (formFiles: Files): Promise<void> {
     // Check if there's a yamlFile and exclude it
     const fileKeys: string[] = Object.keys(formFiles);
     log(`parseZip parseForm fileKeys: ${fileKeys}`, LogLevel.DEBUG, fileKeys);
-    if (fileKeys.includes("yamlFile")) {
+    if (fileKeys.includes("yamlFile") && formFiles.yamlFile) {
       log("parseForm yamlFile", LogLevel.DEBUG, formFiles.yamlFile);
-      yamlFiles.push(...(Array.isArray(formFiles.yamlFile) ? formFiles.yamlFile : [formFiles.yamlFile]));
+      yamlFiles.push(...formFiles.yamlFile);
     }
     // Don't put yamlFiles in the loop
     const filterYamlFromUnzipped = (unzippedFiles: File[]): File[] => {
@@ -262,11 +262,10 @@ export async function parseZip (formFiles: Files): Promise<void> {
       }
       return nonYamlFiles;
     };
-    if (fileKeys.includes("additionalFiles")) {
+    if (fileKeys.includes("additionalFiles") && formFiles.additionalFiles) {
       let hasZipFiles: boolean = false;
-      const additionalFiles: File | File[] = formFiles.additionalFiles;
+      const additionalFiles: File[] = formFiles.additionalFiles;
       log("parseForm currentFile", LogLevel.DEBUG, additionalFiles);
-      if (Array.isArray(additionalFiles)) {
         // Check if any of them are a zip file, create a new array that has the unzipped
         const newFiles: File[] = [];
         // Need to do an "as" cast here for typechecking
@@ -283,15 +282,7 @@ export async function parseZip (formFiles: Files): Promise<void> {
           }
         }
         // Put the newFiles on (should be the original if we didn't change any)
-        // It's ok if we put a single in an array
-        formFiles.additionalFiles = newFiles;
-      } else {
-        if (additionalFiles.originalFilename?.endsWith(".zip")) {
-          hasZipFiles = true;
-          const unzippedFiles: File[] = await unzipFile(additionalFiles);
-          formFiles.additionalFiles = filterYamlFromUnzipped(unzippedFiles);
-        }
-      }
+        (formFiles as Record<string, File[]>).additionalFiles = newFiles;
       if (hasZipFiles && platform() === "win32") {
         // There's a race condition on Windows where we can't use the file immediately because the unzip has it locked
         await sleep(100);
@@ -299,12 +290,11 @@ export async function parseZip (formFiles: Files): Promise<void> {
     }
     // If additionalFiles is an empty array, remove it
     if (Array.isArray(formFiles.additionalFiles) && formFiles.additionalFiles.length === 0) {
-      delete formFiles.additionalFiles; // It was probably a yamlFile zipped
+      delete (formFiles as Record<string, File[]>).additionalFiles; // It was probably a yamlFile or pewpew executable zipped
     }
     // Put the yaml files back in
     if (yamlFiles.length > 0) {
-      // yamlFile will error if it's a single in an array
-      formFiles.yamlFile = yamlFiles.length > 1 ? yamlFiles : yamlFiles[0];
+      (formFiles as Record<string, File[]>).yamlFile = yamlFiles;
     }
     // return formFiles;
   } catch (error: any) {
@@ -318,28 +308,40 @@ export async function parseZip (formFiles: Files): Promise<void> {
   }
 }
 
-export async function parseForm (localPath: string, request: Request, maxFileSizeMb: number = MAX_FILE_SIZE_MB, allowMultiples: boolean = true): Promise<ParsedForm> {
+export async function parseForm (
+  localPath: string,
+  request: Request,
+  maxFileSizeMb: number = MAX_FILE_SIZE_MB,
+  allowMultiples: boolean = true
+): Promise<ParsedForm> {
   const options: FormidableOptions = {
     maxFileSize: maxFileSizeMb * 1024 * 1024, // Default is 200MB
     uploadDir: localPath,
+    allowEmptyFiles: true, // Some load tests may have an empty input file?
+    minFileSize: 0,
     multiples: allowMultiples // Allow multiple files (arrays)
   };
+  // Formidible V3 moved to ESM, but 3.5 added back in commonjs.
   const form = formidable(options);
-  const parsedForm: ParsedForm = await new Promise((resolve, reject) => form.parse(request, (err: any, formFields: Fields, formFiles: Files) => {
-    if (err) {
-      log ("Error parsing incoming test form: " + err, LogLevel.ERROR, err);
-      reject(err);
-    } else {
-      log("parseForm form", LogLevel.DEBUG, { maxFileSizeMb, localPath, allowMultiples });
-      log("parseForm formFields", LogLevel.DEBUG, Object.assign({}, formFields, { environmentVariables: undefined })); // Environment variables can have passwords, sanitize
-      log("parseForm formFiles", LogLevel.DEBUG, formFiles);
-      // Check if any of the files are zip files and unpack them
-      parseZip(formFiles)
-      .then(() => resolve({ fields: formFields, files: formFiles }))
-      .catch((error) => reject(error));
+  log("parseForm form", LogLevel.DEBUG, options);
+  log("parseForm form", LogLevel.TRACE, form);
+  const [fields, files] = await form.parse(request);
+  log("parseForm formFields", LogLevel.DEBUG, Object.assign({}, fields, { environmentVariables: undefined })); // Environment variables can have passwords, sanitize
+  log("parseForm formFiles", LogLevel.DEBUG, files);
+
+  // Check if any of the files are zip files and unpack them
+  await parseZip(files);
+
+  // BUG: For some reason PUT calls are making the Fields string rather than string[]
+  for (const [key, value] of Object.entries(fields)) {
+    if (!Array.isArray(value)) { // Can be a string or a number
+      log("parseForm found a string field after formidible for :" + key, LogLevel.WARN, { key, value, testId: fields.testId });
+      // Turn it back into an Array even though the typing says it already should be
+      (fields as Record<string, any[]>)[key] = [value];
     }
-  }));
-  return parsedForm;
+  }
+
+  return { fields, files };
 }
 
 export function makeRandomString (length: number): string {

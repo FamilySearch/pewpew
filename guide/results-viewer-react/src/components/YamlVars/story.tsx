@@ -1,5 +1,6 @@
 import { DEV_KEY_BETA, PewPewVars } from "../../util/yamlwriter";
 import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
+import type { Meta, StoryFn } from "@storybook/react";
 import { Vars, VarsProps} from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -41,9 +42,9 @@ const propsLoaded: VarsProps = { ...props,
 
 export default {
   title: "YamlVars"
-};
+} as Meta<typeof Vars>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -54,7 +55,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>

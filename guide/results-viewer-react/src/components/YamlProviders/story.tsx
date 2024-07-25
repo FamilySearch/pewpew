@@ -1,5 +1,6 @@
 import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
-import Providers, {ProviderMainProps} from ".";
+import type { Meta, StoryFn } from "@storybook/react";
+import { ProviderMainProps, Providers } from ".";
 import { GlobalStyle } from "../Global";
 import { PewPewProvider } from "../../util/yamlwriter";
 import React from "react";
@@ -42,9 +43,9 @@ const propsLoaded: ProviderMainProps = { ...props,
 
 export default {
   title: "YamlProviders"
-};
+} as Meta<typeof Providers>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -55,7 +56,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>

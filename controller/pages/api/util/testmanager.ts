@@ -15,7 +15,8 @@ import {
   StoredTestData,
   TestData,
   TestDataResponse,
-  TestListResponse
+  TestListResponse,
+  TestManagerError
 } from "../../../types";
 import {
   ENCRYPTED_TEST_SCHEDULER_FOLDERNAME,
@@ -282,8 +283,8 @@ export interface DownloadPriorTestIdResult {
 // Export for testing
 export async function downloadPriorTestId (
   priorTestId: string,
-  fieldYamlFile: string | string[] | undefined,
-  fieldAdditionalFiles: string | string[] | undefined,
+  fieldYamlFile: string[] | undefined,
+  fieldAdditionalFiles: string[] | undefined,
   localPath: string
 ): Promise<ErrorResponse | DownloadPriorTestIdResult> {
   const environmentVariables: EnvironmentVariablesFile = {};
@@ -319,17 +320,17 @@ export async function downloadPriorTestId (
     localDirectory
   });
   if (fieldYamlFile) {
-    if (Array.isArray(fieldYamlFile)) {
+    if (fieldYamlFile.length !== 1) {
       // Log the json stringified object here so we can check splunk but don't return it
       log("Received more than one yamlFile", LogLevel.WARN, fieldYamlFile);
-      return { json: { message: "Received multiple yamlFiles: " + fieldYamlFile.map((file) => file) }, status: 400 };
+      return { json: { message: "Received multiple yamlFiles: " + fieldYamlFile }, status: 400 };
     }
     try {
       const yamlPpaasFile: PpaasS3File = new PpaasS3File({
-        filename: fieldYamlFile, s3Folder: priorS3Folder, localDirectory: localPath
+        filename: fieldYamlFile[0], s3Folder: priorS3Folder, localDirectory: localPath
       });
       yamlFile = await downloadAndConvertFile(yamlPpaasFile);
-      yamlFileName = fieldYamlFile;
+      yamlFileName = fieldYamlFile[0];
       log("Prior yamlFile converted for testId: " + priorTestId, LogLevel.DEBUG, yamlFile);
     } catch (error) {
       return {
@@ -361,19 +362,17 @@ export async function downloadPriorTestId (
       // was merged but is not in the latest "released" code so we don't have access to it either.
       // The new canary builds of https://github.com/node-formidable/formidable/ support it but they don't have the @types for it yet
       // We have to JSON.stringify it from the client and parse it here
-      if (!Array.isArray(fieldAdditionalFiles) && fieldAdditionalFiles.startsWith("[") && fieldAdditionalFiles.endsWith("]")) {
+      if (fieldAdditionalFiles.length === 1 && fieldAdditionalFiles[0].startsWith("[") && fieldAdditionalFiles[0].endsWith("]")) {
         try {
-          const parsedAdditionalFiles: any = JSON.parse(fieldAdditionalFiles);
+          const parsedAdditionalFiles: unknown = JSON.parse(fieldAdditionalFiles[0]);
           if (Array.isArray(parsedAdditionalFiles)
-            && parsedAdditionalFiles.every((additionalFile: any) => typeof additionalFile === "string")) {
+            && parsedAdditionalFiles.every((additionalFile: unknown) => typeof additionalFile === "string")) {
             fieldAdditionalFiles = parsedAdditionalFiles as string[];
           }
         } catch (error) {
           log("Could not parse fieldAdditionalFiles: " + fieldAdditionalFiles, LogLevel.WARN, fieldAdditionalFiles);
         }
       }
-      fieldAdditionalFiles = Array.isArray(fieldAdditionalFiles) ? fieldAdditionalFiles : [fieldAdditionalFiles];
-      if (Array.isArray(fieldAdditionalFiles)) {
         additionalFileNames.push(...fieldAdditionalFiles);
         for (const additionalFile of fieldAdditionalFiles) {
           const s3File = priorS3Files.find((priorS3File) => priorS3File.filename === additionalFile);
@@ -384,7 +383,6 @@ export async function downloadPriorTestId (
             throw new Error(`Could not find ${additionalFile} in prior files ${priorS3Files.map((priorS3File) => priorS3File.filename)}`);
           }
         }
-      }
     }
     log("Prior additionalFiles converted for testId: " + priorTestId, LogLevel.DEBUG, additionalFiles);
   } catch (error) {
@@ -626,8 +624,8 @@ export abstract class TestManager {
   protected static async addToStoredList (newData: StoredTestData, cacheLocation: CacheLocation): Promise<StoredTestData | undefined> {
     log(`addToStoredTest testId (${newData.testId})`, LogLevel.DEBUG, { newData, cacheLocation });
     // Strip off the cacheLocation if it's a CachedTestData
-    if ((newData as any).cacheLocation) {
-      delete (newData as any).cacheLocation;
+    if ((newData as unknown as CachedTestData).cacheLocation) {
+      delete (newData as unknown as Partial<CachedTestData>).cacheLocation;
     }
     const { testId } = newData;
     let currentCacheLocation: CacheLocation | undefined;
@@ -1010,7 +1008,7 @@ export abstract class TestManager {
       // Check if either one is empty
       if (!fields || !files || fieldKeys.length === 0
           || !(fileKeys.includes("yamlFile") || (fieldKeys.includes("testId") && fieldKeys.includes("yamlFile")))
-          || !fieldKeys.includes("queueName")) {
+          || !fieldKeys.includes("queueName") || !fields.queueName) {
         // We're missing yamlFile or queueName
         return { json: { message: "Must provide a yamlFile and queueName minimally" }, status: 400 };
       } else {
@@ -1022,12 +1020,12 @@ export abstract class TestManager {
         const additionalFileNames: string[] = [];
         let priorTestId: string | undefined;
 
-        if (fieldKeys.includes("testId")) {
-          if (Array.isArray(fields.testId) || !fields.testId) {
+        if (fieldKeys.includes("testId") && fields.testId) {
+          if (fields.testId.length !== 1) {
             return { json: { message: "Received an invalid testId: " + fields.testId }, status: 400 };
           }
           // Download the files from the prior testId and either get an error or the files and their data.
-          priorTestId = fields.testId;
+          priorTestId = fields.testId[0];
           const downloadResponse: ErrorResponse | DownloadPriorTestIdResult = await downloadPriorTestId(priorTestId, fields.yamlFile, fields.additionalFiles, localPath);
           // eslint-disable-next-line no-prototype-builtins
           if (downloadResponse.hasOwnProperty("json")) {
@@ -1045,13 +1043,13 @@ export abstract class TestManager {
           if (editSchedule) {
             log("editSchedule", LogLevel.DEBUG, { priorYamlFile: priorTestIdResult.yamlFileName, yamlFile: files.yamlFile, fileKeys, priorTestIdResult });
           }
-          if (editSchedule && fileKeys.includes("yamlFile") && !Array.isArray(files.yamlFile)
-            && files.yamlFile.originalFilename !== priorTestIdResult.yamlFileName) {
+          if (editSchedule && fileKeys.includes("yamlFile") && files.yamlFile && files.yamlFile.length === 1
+            && files.yamlFile[0].originalFilename !== priorTestIdResult.yamlFileName) {
             // Check if the name changed
-            const errorText = `Edit Schedule called with changed yaml file name: ${priorTestIdResult.yamlFileName} -> ${files.yamlFile.originalFilename}`;
+            const errorText = `Edit Schedule called with changed yaml file name: ${priorTestIdResult.yamlFileName} -> ${files.yamlFile[0].originalFilename}`;
             log(errorText, LogLevel.WARN, {
               oldYamlFile: priorTestIdResult.yamlFileName,
-              newYamlFile: files.yamlFile.originalFilename
+              newYamlFile: files.yamlFile[0].originalFilename
             });
             return { json: { message: errorText }, status: 400 };
           }
@@ -1067,58 +1065,56 @@ export abstract class TestManager {
         }
         // Yay! We have the basics
         // queueName
-        if (Array.isArray(fields.queueName)) {
+        if (fields.queueName.length !== 1) {
           return { json: { message: "Received an invalid queueName: " + fields.queueName }, status: 400 };
         }
-        const queueName: string | undefined = fields.queueName;
+        const queueName: string | undefined = fields.queueName[0];
         if (!queueName || !PpaasTestMessage.getAvailableQueueNames().includes(queueName)) {
           return { json: { message: `Received an invalid queueName: ${queueName}\nqueues: ${JSON.stringify(PpaasTestMessage.getAvailableQueueMap())}` }, status: 400 };
         }
 
         // version
         let version: string | undefined;
-        if (fieldKeys.includes("version")) {
+        if (fieldKeys.includes("version") && fields.version) {
           // Validate the version is in s3
-          if (Array.isArray(fields.version) || !fields.version
-            || !await PpaasS3File.existsInS3(`${PEWPEW_BINARY_FOLDER}/${fields.version}/`)) {
+          if (fields.version.length !== 1 || !fields.version[0]
+            || !await PpaasS3File.existsInS3(`${PEWPEW_BINARY_FOLDER}/${fields.version[0]}/`)) {
             return { json: { message: "Received an invalid version: " + fields.version }, status: 400 };
           }
-          version = fields.version;
+          version = fields.version[0];
         }
 
         let restartOnFailure: boolean | undefined;
-        if (fieldKeys.includes("restartOnFailure")) {
-
-          if (Array.isArray(fields.restartOnFailure) || (fields.restartOnFailure !== "true" && fields.restartOnFailure !== "false")) {
+        if (fieldKeys.includes("restartOnFailure") && fields.restartOnFailure) {
+          if (fields.restartOnFailure.length !== 1 || (fields.restartOnFailure[0] !== "true" && fields.restartOnFailure[0] !== "false")) {
             return { json: { message: "Received an invalid restartOnFailure: " + fields.restartOnFailure }, status: 400 };
           }
 
-          restartOnFailure = fields.restartOnFailure === "true";
+          restartOnFailure = fields.restartOnFailure[0] === "true";
         }
 
         let bypassParser: boolean | undefined;
-        if (fieldKeys.includes("bypassParser")) {
-
-          if (Array.isArray(fields.bypassParser) || (fields.bypassParser !== "true" && fields.bypassParser !== "false")) {
+        if (fieldKeys.includes("bypassParser") && fields.bypassParser) {
+          if (fields.bypassParser.length !== 1 || (fields.bypassParser[0] !== "true" && fields.bypassParser[0] !== "false")) {
             return { json: { message: "Received an invalid bypassParser: " + fields.bypassParser }, status: 400 };
           }
 
-          bypassParser = fields.bypassParser === "true";
+          bypassParser = fields.bypassParser[0] === "true";
         }
 
         // yamlFile
-        if (fileKeys.includes("yamlFile")) {
+        if (fileKeys.includes("yamlFile") && files.yamlFile) {
           // We can't validate the file.type because depending on the framework the type can come in as application/octet-stream or text/yaml or other
           // And pewpew doesn't care. We'll use the pewpew webconfig parser to validate
-          if (Array.isArray(files.yamlFile)) {
+          if (files.yamlFile.length !== 1) {
             // Log the json stringified object here so we can check splunk but don't return it
             log("Received more than one yamlFile", LogLevel.WARN, yamlFile);
             return { json: { message: "Received multiple yamlFiles: " + files.yamlFile.map((file) => file.originalFilename || file.filepath) }, status: 400 };
-          } else if (!files.yamlFile.originalFilename) {
+          } else if (!files.yamlFile[0].originalFilename) {
             log("Missing yamlFile", LogLevel.WARN, yamlFile);
             return { json: { message: "Yaml file did not have a file.name: " + JSON.stringify(files.yamlFile) }, status: 400 };
           }
-          yamlFile = files.yamlFile;
+          yamlFile = files.yamlFile[0];
         }
         if (yamlFile === undefined) {
           // Log the json stringified object here so we can check splunk but don't return it
@@ -1127,13 +1123,13 @@ export abstract class TestManager {
         }
 
         // environmentVariables. It'll be stringified
-        if (Array.isArray(fields.environmentVariables)) {
-          return { json: { message: "Received more than one environmentVariables: " + fields.environmentVariables }, status: 400 };
-        }
-        if (fieldKeys.includes("environmentVariables")) {
+        if (fieldKeys.includes("environmentVariables") && fields.environmentVariables) {
+          if (fields.environmentVariables.length !== 1) {
+            return { json: { message: "Received more than one environmentVariables form field: " + fields.environmentVariables }, status: 400 };
+          }
           log("fields.environmentVariables", LogLevel.TRACE, fields.environmentVariables);
           try {
-            Object.assign(environmentVariablesFile, JSON.parse(fields.environmentVariables));
+            Object.assign(environmentVariablesFile, JSON.parse(fields.environmentVariables[0]));
             if (environmentVariablesFile && environmentVariablesFile.PROFILE) {
               profile = typeof environmentVariablesFile.PROFILE === "string"
                 ? environmentVariablesFile.PROFILE.toLowerCase()
@@ -1183,25 +1179,18 @@ export abstract class TestManager {
           }
           return undefined;
         };
-        if (fileKeys.includes("additionalFiles")) {
+        if (fileKeys.includes("additionalFiles") && files.additionalFiles) {
           try {
-            // If there's more than one it'll be an array, otherwise a File object
-            if (Array.isArray(files.additionalFiles)) {
-              // Need to do an "as" cast here for typechecking
               for (const file of files.additionalFiles) {
                 const processError: ErrorResponse | undefined = await processFile(file);
                 if (processError) { return processError; }
               }
-            } else {
-              const processError: ErrorResponse | undefined = await processFile(files.additionalFiles);
-              if (processError) { return processError; }
-            }
           } catch (error) {
             // Don't log the actual error or environmentVariables since it could include passwords
             return { json: { message: "Could not parse environmentVariables from files", error: formatError(error) }, status: 400 };
           }
         }
-        // Trace level since it might have passwords
+        // Trace level since it might have passwords. Log must be here because files can also have environment variables
         log("environmentVariables", LogLevel.TRACE, environmentVariablesFile);
 
         const validateResult: ErrorResponse | ValidateYamlfileResult = await validateYamlfile(yamlFile, PpaasEncryptEnvironmentFile.getEnvironmentVariables(environmentVariablesFile), additionalFileNames, bypassParser, authPermissions);
@@ -1216,23 +1205,24 @@ export abstract class TestManager {
         let daysOfWeek: number[] | undefined;
         let endDate: number | undefined;
         let fileTags: Map<string, string> | undefined;
-        if (fieldKeys.includes("scheduleDate")) {
+        if (fieldKeys.includes("scheduleDate") && fields.scheduleDate) {
           log("fields.scheduleDate: " + fields.scheduleDate, LogLevel.DEBUG);
-          if (Array.isArray(fields.scheduleDate)) {
+          if (fields.scheduleDate.length !== 1) {
             return { json: { message: "Received an invalid scheduleDate: " + fields.scheduleDate }, status: 400 };
           }
-          const convertedScheduleDate = convertToDatetime(fields.scheduleDate, "scheduleDate");
+          const convertedScheduleDate = convertToDatetime(fields.scheduleDate[0], "scheduleDate");
           if (typeof convertedScheduleDate === "number") {
             scheduleDate = convertedScheduleDate;
           } else {
+            // Return error message
             return convertedScheduleDate;
           }
           try {
             // Make sure it can be converted into a Date. Then get the time in ms.
             // First check if it's all numbers and parse it
-            const parsedScheduledDate: number = Number(fields.scheduleDate);
+            const parsedScheduledDate: number = Number(fields.scheduleDate[0]);
             // If it's not a pure number then see if the string is a date/time
-            scheduleDate = new Date(isNaN(parsedScheduledDate) ? fields.scheduleDate : parsedScheduledDate).getTime();
+            scheduleDate = new Date(isNaN(parsedScheduledDate) ? fields.scheduleDate[0] : parsedScheduledDate).getTime();
             log("scheduleDate: " + scheduleDate, LogLevel.DEBUG);
             if (isNaN(scheduleDate)) {
               throw new Error(`scheduleDate new Date(${fields.scheduleDate}).getTime() is not a number`);
@@ -1243,19 +1233,19 @@ export abstract class TestManager {
 
           // If we have a scheduleDate, check for recurrence
           // daysOfWeek: number[];
-          if (fieldKeys.includes("daysOfWeek")) {
+          if (fieldKeys.includes("daysOfWeek") && fields.daysOfWeek) {
             log("fields.daysOfWeek: " + fields.daysOfWeek, LogLevel.DEBUG);
             try { // Any issues parsing this, throw to the catch to return
-              if (!Array.isArray(fields.daysOfWeek) && fields.daysOfWeek.startsWith("[") && fields.daysOfWeek.endsWith("]")) {
+              if (fields.daysOfWeek.length === 1 && fields.daysOfWeek[0].startsWith("[") && fields.daysOfWeek[0].endsWith("]")) {
                 // JSON Stringified array
-                const parsedDaysOfWeek: any = JSON.parse(fields.daysOfWeek);
+                const parsedDaysOfWeek: unknown = JSON.parse(fields.daysOfWeek[0]);
                 if (Array.isArray(parsedDaysOfWeek)
-                  && parsedDaysOfWeek.every((dayOfWeek: any) => typeof dayOfWeek === "number")) {
+                  && parsedDaysOfWeek.every((dayOfWeek: unknown) => typeof dayOfWeek === "number")) {
                     daysOfWeek = parsedDaysOfWeek as number[];
                 } else {
                   throw new Error(fields.daysOfWeek + " did not parse into an array of numbers");
                 }
-              } else if (Array.isArray(fields.daysOfWeek)) {
+              } else {
                 // Array of strings. make sure each one is a number
                 daysOfWeek = fields.daysOfWeek.map((dayOfWeek: string) => {
                   const numberOfWeek: number = Number(dayOfWeek);
@@ -1265,26 +1255,20 @@ export abstract class TestManager {
                   }
                   return numberOfWeek;
                 });
-              } else {
-                const numberOfWeek: number = Number(fields.daysOfWeek);
-                if (numberOfWeek.toString() !== fields.daysOfWeek) {
-                  throw new Error(fields.daysOfWeek + " is not a valid number");
-                }
-                daysOfWeek = [numberOfWeek];
               }
               // Now that it's parsed, we still need to validate the range of numbers
-              daysOfWeek = sortAndValidateDaysOfWeek(daysOfWeek);
+              daysOfWeek = sortAndValidateDaysOfWeek(daysOfWeek!);
             } catch (error) {
-              return { json: { message: "Received an invalid daysOfWeek: " + fields.daysOfWeek, error: (error as any)?.message || `${error}` }, status: 400 };
+              return { json: { message: "Received an invalid daysOfWeek: " + fields.daysOfWeek, error: (error as TestManagerError)?.message || `${error}` }, status: 400 };
             }
           }
           // endDate: number;
-          if (fieldKeys.includes("endDate")) {
+          if (fieldKeys.includes("endDate") && fields.endDate) {
             log("fields.endDate: " + fields.endDate, LogLevel.DEBUG);
-            if (Array.isArray(fields.endDate)) {
+            if (fields.endDate.length !== 1) {
               return { json: { message: "Received an invalid endDate: " + fields.endDate }, status: 400 };
             }
-            const convertedEndDate = convertToDatetime(fields.endDate, "endDate");
+            const convertedEndDate = convertToDatetime(fields.endDate[0], "endDate");
             if (typeof convertedEndDate === "number") {
               endDate = convertedEndDate;
             } else {
@@ -1480,22 +1464,23 @@ export abstract class TestManager {
       log("fileKeys", LogLevel.DEBUG, fileKeys);
       // Check if either one is empty
       if (!fields || !files || fieldKeys.length === 0 || fileKeys.length === 0
-          || !fileKeys.includes("yamlFile") || !fieldKeys.includes("testId")) {
+          || !fileKeys.includes("yamlFile") || !fieldKeys.includes("testId")
+          || !files.yamlFile || !fields.testId) {
         // We're missing yamlFile or testId
         return { json: { message: "Must provide a yamlFile and testId minimally" }, status: 400 };
       } else {
-        if (Array.isArray(files.yamlFile)) {
+        if (files.yamlFile.length !== 1) {
           // Log the json stringified object here so we can check splunk but don't return it
           log("Received an more than one yamlFile", LogLevel.WARN, files.yamlFile);
           return { json: { message: "Received multiple yamlFiles: " + files.yamlFile.map((file) => file.originalFilename) }, status: 400 };
         }
-        const yamlFile: File | Files = files.yamlFile;
-        const testIdString: string | string[] = fields.testId;
-        if (Array.isArray(testIdString)) {
+        const yamlFile: File | Files = files.yamlFile[0];
+        if (fields.testId.length !== 1) {
           // Log the json stringified object here so we can check splunk but don't return it
-          log("Received more than one testId", LogLevel.WARN, testIdString);
-          return { json: { message: "Received multiple testIds: " + testIdString }, status: 400 };
+          log("Received more than one testId", LogLevel.WARN, fields.testId);
+          return { json: { message: "Received multiple testIds: " + fields.testId }, status: 400 };
         }
+        const testIdString: string = fields.testId[0];
         let testId: PpaasTestId;
         try {
           testId = PpaasTestId.getFromTestId(testIdString);
@@ -1515,13 +1500,12 @@ export abstract class TestManager {
         log(`PUT testId: ${testIdString}. Found ${yamlFile.originalFilename} in S3`, LogLevel.DEBUG, testId);
 
         let bypassParser: boolean | undefined;
-        if (fieldKeys.includes("bypassParser")) {
-
-          if (Array.isArray(fields.bypassParser) || (fields.bypassParser !== "true" && fields.bypassParser !== "false")) {
+        if (fieldKeys.includes("bypassParser") && fields.bypassParser) {
+          if (fields.bypassParser.length !== 1 || (fields.bypassParser[0] !== "true" && fields.bypassParser[0] !== "false")) {
             return { json: { message: "Received an invalid bypassParser: " + fields.bypassParser }, status: 400 };
           }
 
-          bypassParser = fields.bypassParser === "true";
+          bypassParser = fields.bypassParser[0] === "true";
         }
 
         if (bypassParser) {

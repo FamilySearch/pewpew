@@ -1,4 +1,5 @@
-import YamlViewer, { YamlViewerProps } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
+import { YamlViewer, YamlViewerProps } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
 
@@ -126,23 +127,23 @@ const propsWithAll: YamlViewerProps = {
 
 export default {
   title: "YamlViewer"
-};
+} as Meta<typeof YamlViewer>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...props } />
   </React.Fragment>
   );
 
-export const Contents = () => (
+export const Contents: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithContents } />
   </React.Fragment>
   );
 
-export const ContentsLarge = () => (
+export const ContentsLarge: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithContentsLarge } />
@@ -153,20 +154,20 @@ ContentsLarge.story = {
   name: "ContentsLarge"
 };
 
-export const Loading = () => (
+export const Loading: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithLoading } />
   </React.Fragment>
   );
 
-export const Error = () => (
+export const Error: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithError } />
   </React.Fragment>
   );
-export const All = () => (
+export const All: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlViewer { ...propsWithAll } />

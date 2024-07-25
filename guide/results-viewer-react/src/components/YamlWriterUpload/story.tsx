@@ -1,4 +1,5 @@
 import { LogLevel, log } from "../../util/log";
+import type { Meta, StoryFn } from "@storybook/react";
 import { YamlWriterUpload, YamlWriterUploadProps } from ".";
 import { GlobalStyle } from "../Global";
 import { HarEndpoint } from "../../util/yamlwriter";
@@ -18,9 +19,9 @@ const props: YamlWriterUploadProps = {
 
 export default {
   title: "YamlWriterUpload"
-};
+} as Meta<typeof YamlWriterUpload>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlWriterUpload {...props}></YamlWriterUpload>

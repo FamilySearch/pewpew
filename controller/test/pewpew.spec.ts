@@ -63,7 +63,7 @@ const legacyPewpewZipFile: File = createFormidableFile(
   null
 );
 const invalidFiles = {
-  additionalFiles: [legacyPewpewZipFile] as any as File
+  additionalFiles: [legacyPewpewZipFile]
 };
 
 const pewpewS3Folder = PEWPEW_BINARY_FOLDER;
@@ -102,11 +102,11 @@ describe("PewPew Util", () => {
       const unzippedFiles: File[] = await unzipFile(legacyPewpewZipFile);
       log("unzipped " + filename, LogLevel.DEBUG, unzippedFiles);
       filesLegacyPewpew = {
-        additionalFiles: unzippedFiles as any as File
+        additionalFiles: unzippedFiles
       };
       log("legacy files " + filename, LogLevel.DEBUG, filesLegacyPewpew);
       mixedFiles = {
-        additionalFiles: [...unzippedFiles, legacyPewpewZipFile] as any as File
+        additionalFiles: [...unzippedFiles, legacyPewpewZipFile]
       };
       if (platform() === "win32") {
         // Windows gets EBUSY trying to run pewpew --version since the unzip still hasn't released
@@ -209,7 +209,7 @@ describe("PewPew Util", () => {
     it("postPewPew as latest should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         fields: {
-          latest: "true"
+          latest: ["true"]
         },
         files: filesLegacyPewpew
       };

@@ -656,7 +656,7 @@ pub(super) fn f64_value(json: &json::Value) -> f64 {
     if let Some(f) = json.as_f64() {
         f
     } else {
-        std::f64::NAN
+        f64::NAN
     }
 }
 
@@ -985,7 +985,7 @@ static INFIX_OPERATOR_PRECEDENCE: [u8; 13] = [
 ];
 
 fn to_json_number(n: f64) -> json::Value {
-    if n - n.trunc() < std::f64::EPSILON {
+    if (n - n.trunc()).abs() < f64::EPSILON {
         (n as u64).into()
     } else {
         n.into()

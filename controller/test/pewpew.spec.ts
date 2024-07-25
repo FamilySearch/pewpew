@@ -129,7 +129,7 @@ describe("PewPew Util", () => {
       const unzippedFiles: File[] = await unzipFile(scriptingPewpewZipFile);
       log("unzipped " + filename, LogLevel.DEBUG, unzippedFiles);
       filesScriptingPewpew = {
-        additionalFiles: unzippedFiles as any as File
+        additionalFiles: unzippedFiles
       };
       log("scripting files " + filename, LogLevel.DEBUG, filesScriptingPewpew);
     } catch (error) {

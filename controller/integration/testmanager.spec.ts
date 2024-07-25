@@ -1842,8 +1842,8 @@ describe("TestManager Integration", () => {
   });
   });
   describe("POST scripting files", () => {
-    const scriptingFiles: Files = { yamlFile: createFileObject(SCRIPTING_FILEPATH) };
-    const scriptingFields: Fields = { queueName };
+    const scriptingFiles: Files = { yamlFile: [createFileObject(SCRIPTING_FILEPATH)] };
+    const scriptingFields: Fields = { queueName: [queueName] };
     const scriptingParsedForm: ParsedForm = {
       files: scriptingFiles,
       fields: scriptingFields
@@ -1854,9 +1854,9 @@ describe("TestManager Integration", () => {
         expect(sharedQueueNames!.length, "sharedQueueNames.length").to.be.greaterThan(0);
         queueName = sharedQueueNames![0];
       }
-      scriptingFields.queueName = queueName;
+      (scriptingFields as Record<string, string[]>).queueName = [queueName];
       expect(scriptingVersion, "scriptingVersion").to.not.equal(undefined);
-      scriptingFields.version = scriptingVersion!;
+      (scriptingFields as Record<string, string[]>).version = [scriptingVersion!];
       scriptingParsedForm.fields = scriptingFields;
       log("postTest sharedQueueNames", LogLevel.DEBUG, sharedQueueNames);
     });
@@ -1886,7 +1886,7 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          version: latestPewPewVersion
+          version: [latestPewPewVersion]
         }
       };
       log("postTest parsedForm latest", LogLevel.DEBUG, { parsedForm });
@@ -1914,7 +1914,7 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          version: scriptingVersion!
+          version: [scriptingVersion!]
         }
       };
       log("postTest parsedForm scripting", LogLevel.DEBUG, { parsedForm });
@@ -1941,7 +1941,7 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          version: legacyVersion!
+          version: [legacyVersion!]
         }
       };
       log("postTest parsedForm scripting as scripting", LogLevel.DEBUG, { parsedForm });
@@ -1967,7 +1967,7 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          version: "bogus"
+          version: ["bogus"]
         }
       };
       log("postTest parsedForm bogus", LogLevel.DEBUG, { parsedForm });
@@ -1995,12 +1995,12 @@ describe("TestManager Integration", () => {
       const parsedForm: ParsedForm = {
         files: {
           ...scriptingFiles,
-          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH)]
         },
         fields: {
           ...scriptingFields,
-          restartOnFailure: "true",
-          environmentVariables: JSON.stringify(environmentVariables)
+          restartOnFailure: ["true"],
+          environmentVariables: [JSON.stringify(environmentVariables)]
         }
       };
       log("postTest parsedForm extra options", LogLevel.DEBUG, { parsedForm });
@@ -2044,7 +2044,7 @@ describe("TestManager Integration", () => {
 
     it("postTest missing vars should respond 400 Bad Request", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
-        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        files: { yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_ENV)] },
         fields: scriptingFields
       };
       log("postTest parsedForm missing vars", LogLevel.DEBUG, { parsedForm });
@@ -2069,8 +2069,8 @@ describe("TestManager Integration", () => {
       const extrafilename: string = path.basename(NOT_YAML_FILEPATH2);
       const parsedForm: ParsedForm = {
         files: {
-          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
-          additionalFiles: createFileObject(NOT_YAML_FILEPATH)
+          yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_FILES)],
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH)]
         },
         fields: scriptingFields
       };
@@ -2092,10 +2092,10 @@ describe("TestManager Integration", () => {
 
     it("postTest with vars should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
-        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        files: { yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_ENV)] },
         fields: {
           ...scriptingFields,
-          environmentVariables: JSON.stringify(defaultEnvironmentVariables)
+          environmentVariables: [JSON.stringify(defaultEnvironmentVariables)]
         }
       };
       log("postTest parsedForm with vars", LogLevel.DEBUG, { parsedForm });
@@ -2140,8 +2140,8 @@ describe("TestManager Integration", () => {
     it("postTest with files should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
         files: {
-          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
-          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
+          yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_FILES)],
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)]
         },
         fields: scriptingFields
       };
@@ -2165,7 +2165,7 @@ describe("TestManager Integration", () => {
 
     it("postTest with no peak load should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
-        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_NO_PEAK_LOAD) },
+        files: { yamlFile: [createFileObject(SCRIPTING_FILEPATH_NO_PEAK_LOAD)] },
         fields: scriptingFields
       };
       log("postTest parsedForm no peak load", LogLevel.DEBUG, { parsedForm });
@@ -2188,7 +2188,7 @@ describe("TestManager Integration", () => {
 
     it("postTest with headers_all should respond 200 OK", (done: Mocha.Done) => {
       const parsedForm: ParsedForm = {
-        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_HEADERS_ALL) },
+        files: { yamlFile: [createFileObject(SCRIPTING_FILEPATH_HEADERS_ALL)] },
         fields: scriptingFields
       };
       log("postTest parsedForm headers_all", LogLevel.DEBUG, { parsedForm });
@@ -2217,7 +2217,7 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          scheduleDate: "" + scheduleDate
+          scheduleDate: ["" + scheduleDate]
         }
       };
       log("postTest parsedForm scheduled", LogLevel.DEBUG, { parsedForm });
@@ -2246,11 +2246,11 @@ describe("TestManager Integration", () => {
     it("postTest scheduled with vars should respond 200 OK", (done: Mocha.Done) => {
       const scheduleDate: number = Date.now() + 600000;
       const parsedForm: ParsedForm = {
-        files: { yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_ENV) },
+        files: { yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_ENV)] },
         fields: {
           ...scriptingFields,
-          environmentVariables: JSON.stringify(defaultEnvironmentVariables),
-          scheduleDate: "" + scheduleDate
+          environmentVariables: [JSON.stringify(defaultEnvironmentVariables)],
+          scheduleDate: ["" + scheduleDate]
         }
       };
       log("postTest parsedForm scheduled with vars", LogLevel.DEBUG, { parsedForm });
@@ -2296,12 +2296,12 @@ describe("TestManager Integration", () => {
       const scheduleDate: number = Date.now() + 600000;
       const parsedForm: ParsedForm = {
         files: {
-          yamlFile: createFileObject(SCRIPTING_FILEPATH_WITH_FILES),
-          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)] as any as File
+          yamlFile: [createFileObject(SCRIPTING_FILEPATH_WITH_FILES)],
+          additionalFiles: [createFileObject(NOT_YAML_FILEPATH), createFileObject(NOT_YAML_FILEPATH2)]
         },
         fields: {
           ...scriptingFields,
-          scheduleDate: "" + scheduleDate
+          scheduleDate: ["" + scheduleDate]
         }
       };
       log("postTest parsedForm with files", LogLevel.DEBUG, { parsedForm });
@@ -2329,9 +2329,9 @@ describe("TestManager Integration", () => {
         files: scriptingFiles,
         fields: {
           ...scriptingFields,
-          scheduleDate: "" + scheduleDate,
-          endDate: "" + endDate,
-          daysOfWeek: JSON.stringify(everyDaysOfWeek)
+          scheduleDate: ["" + scheduleDate],
+          endDate: ["" + endDate],
+          daysOfWeek: [JSON.stringify(everyDaysOfWeek)]
         }
       };
       log("postTest parsedForm scheduled recurring", LogLevel.DEBUG, { parsedForm });
@@ -2366,7 +2366,6 @@ describe("TestManager Integration", () => {
       });
     });
 
-  });
   });
   });
 

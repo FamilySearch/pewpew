@@ -1,3 +1,4 @@
+import type { Meta, StoryFn } from "@storybook/react";
 import { GlobalStyle } from "../Global";
 import React from "react";
 import { TestResults } from ".";
@@ -16,23 +17,23 @@ const statsrmsallstage20220603T012101115 = '{"test":"RmsAll","bin":"0.5.10","buc
 
 export default {
   title: "TestResults"
-};
+} as Meta<typeof TestResults>;
 
-export const EmptyResults = () => (
+export const EmptyResults: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={""} />
   </React.Fragment>
 );
 
-export const IntegrationResult = () => (
+export const IntegrationResult: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsIntegration} />
   </React.Fragment>
 );
 
-export const IntOnDemandResult = () => (
+export const IntOnDemandResult: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsIntOnDemand} />
@@ -43,28 +44,28 @@ IntOnDemandResult.story = {
   name: "IntOnDemand Result"
 };
 
-export const Discovery1Result = () => (
+export const Discovery1Result: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsdiscoverywicffamilybeta20200311T194618937} />
   </React.Fragment>
 );
 
-export const Discovery2Result = () => (
+export const Discovery2Result: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsdiscoverywicffamilybeta20200311T200153210} />
   </React.Fragment>
 );
 
-export const Discovery3Result = () => (
+export const Discovery3Result: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsdiscoverywicffamilybeta20200311T221932362} />
   </React.Fragment>
 );
 
-export const LargeResult = () => (
+export const LargeResult: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults resultsText={statsrmsallstage20220603T012101115} />

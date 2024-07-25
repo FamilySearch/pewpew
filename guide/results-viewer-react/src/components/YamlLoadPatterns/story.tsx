@@ -1,5 +1,6 @@
 import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
 import LoadPatterns, { LOAD_PATTERN, LoadPatternProps, RAMP_PATTERN } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { GlobalStyle } from "../Global";
 import { PewPewLoadPattern } from "../../util/yamlwriter";
 import React from "react";
@@ -49,9 +50,9 @@ const propsLoaded: LoadPatternProps = { ...props,
 
 export default {
   title: "YamlLoadPatterns"
-};
+} as Meta<typeof LoadPatterns>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -62,7 +63,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const Empty = () => (
+export const Empty: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -73,7 +74,7 @@ export const Empty = () => (
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>

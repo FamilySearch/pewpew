@@ -1,3 +1,4 @@
+import type { Meta, StoryFn } from "@storybook/react";
 import { YamlWriterForm, YamlWriterFormProps } from ".";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -18,9 +19,9 @@ const props: YamlWriterFormProps = {
 
 export default {
   title: "YamlWriterForm"
-};
+} as Meta<typeof YamlWriterForm>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlWriterForm {...props}></YamlWriterForm>

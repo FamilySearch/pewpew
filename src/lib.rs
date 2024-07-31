@@ -26,8 +26,15 @@ use futures::{
     stream, FutureExt, Stream, StreamExt,
 };
 use futures_timer::Delay;
-use hyper::{client::HttpConnector, Body, Client};
+use http_body_util::combinators::BoxBody;
 use hyper_tls::HttpsConnector;
+use hyper_util::{
+    client::legacy::{
+        connect::{dns::GaiResolver, HttpConnector},
+        Client,
+    },
+    rt::TokioExecutor,
+};
 use itertools::Itertools;
 use line_writer::{blocking_writer, MsgType};
 use log::{debug, error, info, warn};
@@ -56,6 +63,8 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
+
+type Body = BoxBody<bytes::Bytes, std::io::Error>;
 
 struct Endpoints {
     // yaml index of the endpoint, (endpoint tags, builder)
@@ -1139,16 +1148,15 @@ fn create_load_test_future(
 
 pub(crate) fn create_http_client(
     keepalive: Duration,
-) -> Result<
-    Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>,
-    TestError,
-> {
+) -> Result<Client<HttpsConnector<HttpConnector<GaiResolver>>, Body>, TestError> {
     let mut http = HttpConnector::new();
     http.set_keepalive(Some(keepalive));
     http.set_reuse_address(true);
     http.enforce_http(false);
     let https = HttpsConnector::from((http, TlsConnector::new()?.into()));
-    Ok(Client::builder().set_host(false).build::<_, Body>(https))
+    Ok(Client::builder(TokioExecutor::new())
+        .set_host(false)
+        .build::<_, Body>(https))
 }
 
 type ProvidersResult = Result<(BTreeMap<String, providers::Provider>, BTreeSet<String>), TestError>;

@@ -7,7 +7,7 @@ use tokio::runtime::Runtime;
 fn run_test(path: &str) -> (bool, String, String) {
     let rt = Runtime::new().unwrap();
     rt.block_on(async move {
-        let (port, kill_server, _) = start_test_server(None);
+        let (port, kill_server, _) = start_test_server(None).await;
         env::set_var("PORT", port.to_string());
 
         let (_, ctrlc_channel) = futures::channel::mpsc::unbounded();

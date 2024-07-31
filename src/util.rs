@@ -14,6 +14,7 @@ pub fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
     }
 }
 
+#[allow(clippy::needless_borrows_for_generic_args)]
 pub fn tweak_path(rest: &mut String, base: &Path) {
     *rest = base.with_file_name(&rest).to_string_lossy().into();
 }

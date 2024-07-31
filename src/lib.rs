@@ -26,7 +26,7 @@ use futures::{
     stream, FutureExt, Stream, StreamExt,
 };
 use futures_timer::Delay;
-use hyper::body::Incoming as Body;
+use http_body_util::combinators::BoxBody;
 use hyper_tls::HttpsConnector;
 use hyper_util::{
     client::legacy::{
@@ -63,6 +63,8 @@ use std::{
     task::Poll,
     time::{Duration, Instant},
 };
+
+type Body = BoxBody<bytes::Bytes, std::io::Error>;
 
 struct Endpoints {
     // yaml index of the endpoint, (endpoint tags, builder)

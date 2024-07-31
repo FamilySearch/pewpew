@@ -18,9 +18,8 @@ use futures::{
     sink::SinkExt,
     stream, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
 };
-use http_body_util::{combinators::BoxBody, BodyExt, Empty, StreamBody};
+use http_body_util::{combinators::BoxBody, BodyExt, StreamBody};
 use hyper::{
-    body::Incoming as HyperBody,
     header::{Entry as HeaderEntry, HeaderName, HeaderValue, CONTENT_DISPOSITION},
     Method, Response,
 };
@@ -59,6 +58,8 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+
+type HyperBody = BoxBody<Bytes, std::io::Error>;
 
 #[derive(Clone)]
 pub struct AutoReturn {
@@ -545,9 +546,9 @@ fn multipart_body_as_hyper_body(
             .flatten()
             .chain(stream::once(future::ok(closing_boundary)));
 
-        // let body = StreamBody::new(stream);
-        // let body: Incoming = body.into();
-        (bytes, HyperBody::wrap_stream(stream))
+        let body: HyperBody =
+            BodyExt::boxed(StreamBody::new(stream.map_ok(hyper::body::Frame::data)));
+        (bytes, body)
     });
     Ok(ret)
 }
@@ -577,8 +578,9 @@ async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), Te
         }
     });
 
-    // let body = StreamBody::new(stream);
-    let body = HyperBody::wrap_stream(stream);
+    let body: HyperBody = BodyExt::boxed(StreamBody::new(
+        stream.map_ok(|x| hyper::body::Frame::data(x.into())),
+    ));
     Ok((bytes, body))
 }
 
@@ -601,7 +603,7 @@ fn body_template_as_hyper_body(
             );
             return Either3::A(future::ready(r).and_then(|x| x));
         }
-        BodyTemplate::None => return Either3::B(future::ok((0, Empty::<Bytes>::new()))),
+        BodyTemplate::None => return Either3::B(future::ok((0, BoxBody::default()))),
         BodyTemplate::String(t) => t,
     };
     let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()), None) {
@@ -618,7 +620,10 @@ fn body_template_as_hyper_body(
         if copy_body_value {
             *body_value = Some(body.clone());
         }
-        Either3::B(future::ok((body.as_bytes().len() as u64, body.into())))
+        Either3::B(future::ok((
+            body.as_bytes().len() as u64,
+            body.map_err(|never| match never {}).boxed(),
+        )))
     }
 }
 
@@ -928,7 +933,8 @@ mod tests {
             let (_, body) = create_file_hyper_body("tests/test.jpg".to_string())
                 .await
                 .unwrap();
-            body.map(|b| stream::iter(b.unwrap()))
+            body.into_data_stream()
+                .map(|b| stream::iter(b.unwrap()))
                 .flatten()
                 .collect::<Vec<_>>()
                 .await

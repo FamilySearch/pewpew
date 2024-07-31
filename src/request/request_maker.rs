@@ -11,8 +11,8 @@ use futures::{
     FutureExt, TryFutureExt,
 };
 use futures_timer::Delay;
+use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::{
-    body::Incoming,
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST},
     Method, Request,
 };
@@ -45,7 +45,9 @@ pub(super) struct RequestMaker {
     pub(super) headers: Vec<(String, Template)>,
     pub(super) body: BodyTemplate,
     pub(super) rr_providers: u16,
-    pub(super) client: Arc<Client<HttpsConnector<HttpConnector<GaiResolver>>, Incoming>>,
+    pub(super) client: Arc<
+        Client<HttpsConnector<HttpConnector<GaiResolver>>, BoxBody<bytes::Bytes, std::io::Error>>,
+    >,
     pub(super) stats_tx: StatsTx,
     pub(super) no_auto_returns: bool,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
@@ -316,7 +318,7 @@ impl RequestMaker {
                         stats_tx,
                         tags,
                     };
-                    rh.handle(response, auto_returns)
+                    rh.handle(hyper::Response::new(response.into_body().boxed().map_err(std::io::Error::other).boxed()), auto_returns)
                         .map_err(TestError::from)
                 })
                 .or_else(move |r| {

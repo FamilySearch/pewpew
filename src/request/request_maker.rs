@@ -318,6 +318,7 @@ impl RequestMaker {
                         stats_tx,
                         tags,
                     };
+                    // Convert from a Response<Incoming> to a Response<BoxBody> to pass to handle()
                     rh.handle(hyper::Response::new(response.into_body().boxed().map_err(std::io::Error::other).boxed()), auto_returns)
                         .map_err(TestError::from)
                 })

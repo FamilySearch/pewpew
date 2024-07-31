@@ -1410,7 +1410,6 @@ dependencies = [
  "test_common",
  "tokio",
  "tokio-stream",
- "tokio-util",
  "url",
  "yansi",
  "zip_all",

@@ -6,7 +6,7 @@ use bytes::Bytes;
 use futures::{channel::oneshot, future::select, FutureExt};
 use futures_timer::Delay;
 use http::{header, StatusCode};
-use http_body_util::{combinators::BoxBody, BodyExt, Empty};
+use http_body_util::{BodyExt, Empty};
 use hyper::{body::Incoming as Body, service::service_fn, Error, Request, Response};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo},
@@ -15,7 +15,9 @@ use hyper_util::{
 use parking_lot::Mutex;
 use url::Url;
 
-async fn echo_route(req: Request<Body>) -> Response<BoxBody<Bytes, hyper::Error>> {
+type HyperBody = http_body_util::combinators::BoxBody<Bytes, Error>;
+
+async fn echo_route(req: Request<Body>) -> Response<HyperBody> {
     let headers = req.headers();
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -39,7 +41,7 @@ async fn echo_route(req: Request<Body>) -> Response<BoxBody<Bytes, hyper::Error>
     if echo.is_some() {
         debug!("Echo Body = {}", echo.clone().unwrap_or_default());
     }
-    let mut response: Response<BoxBody<Bytes, Error>> = match (req.method(), echo) {
+    let mut response: Response<HyperBody> = match (req.method(), echo) {
         (&http::Method::GET, Some(b)) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, content_type)
@@ -65,7 +67,7 @@ async fn echo_route(req: Request<Body>) -> Response<BoxBody<Bytes, hyper::Error>
     response
 }
 
-fn empty() -> BoxBody<Bytes, hyper::Error> {
+fn empty() -> HyperBody {
     Empty::<Bytes>::new()
         .map_err(|never| match never {})
         .boxed()

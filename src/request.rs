@@ -503,8 +503,6 @@ fn multipart_body_as_hyper_body(
                 let piece_stream = future::ok(Bytes::from(piece_data)).into_stream();
                 tweak_path(&mut body, &multipart_body.path);
                 let a = create_file_hyper_body(body).map_ok(move |(bytes, body)| {
-                    // let reader_stream = tokio_util::io::ReaderStream::new(body.into_data_stream());
-                    // let body: StreamBody<Bytes> = StreamBody::new(body.into_data_stream());
                     let stream = piece_stream.chain(body.into_data_stream()).a();
                     (bytes + piece_data_bytes, stream)
                 });

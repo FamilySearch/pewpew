@@ -23,6 +23,7 @@ private = { ignore = true }
 version = 2
 allow = [
     "Apache-2.0",
+    "BSD-2-Clause",
     "BSD-3-Clause",
     "MIT",
     "Unicode-DFS-2016",

@@ -32,8 +32,8 @@ for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.3"
 futures-timer = "3"
 hdrhistogram = "7"
-http = "1.1"
-hyper = { version = "1.0", features = ["client", "http1", "http2"] }
+http = "1"
+hyper = { version = "1", features = ["client", "http1", "http2"] }
 hyper-tls = "0.6"
 hyper-util = { version = "0.1", features = ["tokio", "client", "http1", "http2"] }
 http-body-util = "0.1"

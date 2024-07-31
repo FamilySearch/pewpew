@@ -1,7 +1,8 @@
 import { DisplayDivMain, UrlsDiv } from "../YamlWriterForm";
+import type { Meta, StoryFn } from "@storybook/react";
 import { PewPewAPI, PewPewHeader } from "../../util/yamlwriter";
 import React, { useState } from "react";
-import Urls, { UrlProps, getDefaultHeaders } from ".";
+import { UrlProps, Urls, getDefaultHeaders } from ".";
 import { GlobalStyle } from "../Global";
 
 /**
@@ -79,9 +80,9 @@ const TestComponent: React.FC = () => {
 
 export default {
   title: "YamlUrls"
-};
+} as Meta<typeof Urls>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -92,7 +93,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>

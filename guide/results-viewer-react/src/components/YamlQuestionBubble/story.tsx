@@ -1,4 +1,5 @@
-import QuestionBubble, { QuestionBubbleProps } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
+import { QuestionBubble, QuestionBubbleProps } from ".";
 import { DisplayDivBody } from "../YamlWriterForm";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -16,9 +17,9 @@ const linkProps: QuestionBubbleProps = {
 
 export default {
   title: "YamlQuestionBubble"
-};
+} as Meta<typeof QuestionBubble>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivBody>
@@ -28,7 +29,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const LinkedQuestionMark = () => (
+export const LinkedQuestionMark: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivBody>

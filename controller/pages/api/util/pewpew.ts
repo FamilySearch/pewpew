@@ -102,27 +102,23 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
     // Check if either one is empty
     if (!files || fileKeys.length === 0 || !fileKeys.includes("additionalFiles")) {
       return { json: { message: "Must provide a additionalFiles minimally" }, status: 400 };
-    } else if (
-      ((Array.isArray(files.additionalFiles) && files.additionalFiles.every((file: File) => file && file.originalFilename && PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)))
-      || (!Array.isArray(files.additionalFiles) && (files.additionalFiles.originalFilename && PEWPEW_BINARY_EXECUTABLE_NAMES.includes(files.additionalFiles.originalFilename))))
-    ) {
+    } else if (files.additionalFiles && files.additionalFiles.length > 0 && files.additionalFiles.every((file: File) =>
+        file && file.originalFilename && PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)
+    )) {
       // Everything here is just pepew
-      if (Array.isArray(fields.latest)) {
+      if (fields.latest && fields.latest.length !== 1) {
         return { json: { message: "Only one 'latest' is allowed" }, status: 400 };
       }
 
       log(`fields.latest: ${fields.latest}`, LogLevel.DEBUG);
-
-      const latest: boolean = fields.latest === "true";
+      const latest: boolean = fields.latest?.length === 1 && fields.latest[0] === "true";
 
       // Run pewpew --version and parse the version
       const pewpewVersionBinaryName = PEWPEW_BINARY_EXECUTABLE;
       log(`os.platform(): ${os.platform()}`, LogLevel.DEBUG, { platform: os.platform(), pewpewVersionBinary: pewpewVersionBinaryName });
 
       // Find the binary for our platform.
-      const pewpewVersionBinary: File | undefined = Array.isArray(files.additionalFiles)
-        ? files.additionalFiles.find((file) => file.originalFilename === pewpewVersionBinaryName)
-        : (files.additionalFiles.originalFilename === pewpewVersionBinaryName ? files.additionalFiles : undefined);
+      const pewpewVersionBinary: File | undefined = files.additionalFiles.find((file) => file.originalFilename === pewpewVersionBinaryName);
       log(`pewpewVersionBinary: ${JSON.stringify(pewpewVersionBinary)}`, LogLevel.DEBUG);
 
       if (pewpewVersionBinary === undefined) {
@@ -151,12 +147,8 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
       log(PEWPEW_BINARY_EXECUTABLE + " only upload, version: " + versionLogDisplay, LogLevel.DEBUG, files);
       // Pass in an override Map to override the default tags and not set a "test" tag
       const tags = new Map<string, string>([[PEWPEW_BINARY_FOLDER, "true"], [VERSION_TAG_NAME, version]]);
-      if (Array.isArray(files.additionalFiles)) {
-        for (const file of files.additionalFiles) {
-          uploadPromises.push(uploadFile(file, `${PEWPEW_BINARY_FOLDER}/${versionFolder}`, tags));
-        }
-      } else {
-        uploadPromises.push(uploadFile(files.additionalFiles, `${PEWPEW_BINARY_FOLDER}/${versionFolder}`, tags));
+      for (const file of files.additionalFiles) {
+        uploadPromises.push(uploadFile(file, `${PEWPEW_BINARY_FOLDER}/${versionFolder}`, tags));
       }
       await Promise.all(uploadPromises);
       // If latest version is being updated:

@@ -1,4 +1,5 @@
 import { Endpoints, EndpointsProps } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { PewPewAPI, PewPewHeader } from "../../util/yamlwriter";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -52,16 +53,16 @@ const propsLoaded: EndpointsProps = {
 
 export default {
   title: "YamlEndpoints"
-};
+} as Meta<typeof Endpoints>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <Endpoints {...props}></Endpoints>
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <Endpoints {...propsLoaded}></Endpoints>

@@ -1,4 +1,4 @@
-import Div from "../Div";
+import { Div } from "../Div";
 import styled from "styled-components";
 
 export const Alert = styled(Div)`

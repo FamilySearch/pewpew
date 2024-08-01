@@ -8,7 +8,7 @@ fn main() {
     rt.block_on(async {
         let port = std::env::var("PORT").ok().and_then(|s| s.parse().ok());
         debug!("port = {}", port.unwrap_or_default());
-        let (port, rx, handle) = start_test_server(port);
+        let (port, rx, handle) = start_test_server(port).await;
 
         println!("Listening on port {port}");
 

@@ -10,10 +10,13 @@ doctest = false
 path = "test_common.rs"
 
 [dependencies]
+bytes.workspace = true
 futures.workspace = true
 futures-timer.workspace = true
-hyper = { workspace = true, features = ["server"] }
+hyper = { workspace = true, features = ["http1", "http2"] }
+hyper-util = { workspace = true, features = ["tokio", "server", "http1", "http2"] }
 http.workspace = true
+http-body-util.workspace = true
 parking_lot = "0.12"
 tokio = { workspace = true, features = ["full"] }
 url.workspace = true

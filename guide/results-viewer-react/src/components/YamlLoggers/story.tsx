@@ -1,5 +1,6 @@
 import { DisplayDivBody, DisplayDivMain } from "../YamlWriterForm";
 import { LoggerProps, Loggers, getDefaultLoggers } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { GlobalStyle } from "../Global";
 import { PewPewLogger } from "../../util/yamlwriter";
 import React from "react";
@@ -36,9 +37,9 @@ const propsLoaded: LoggerProps = { ...props,
 
 export default {
   title: "YamlLoggers"
-};
+} as Meta<typeof Loggers>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
@@ -49,7 +50,7 @@ export const Default = () => (
   </React.Fragment>
 );
 
-export const Loaded = () => (
+export const Loaded: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>

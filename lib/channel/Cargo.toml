@@ -11,7 +11,7 @@ doctest = false
 [dependencies]
 ahash = "0.8"
 concurrent-queue = "2"
-dashmap = "5"
+dashmap = "6"
 event-listener = "5"
 futures.workspace = true
 serde = { workspace = true, features = ["derive"] }

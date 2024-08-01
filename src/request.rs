@@ -18,12 +18,16 @@ use futures::{
     sink::SinkExt,
     stream, FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
 };
+use http_body_util::{combinators::BoxBody, BodyExt, StreamBody};
 use hyper::{
-    client::HttpConnector,
     header::{Entry as HeaderEntry, HeaderName, HeaderValue, CONTENT_DISPOSITION},
-    Body as HyperBody, Client, Method, Response,
+    Method, Response,
 };
 use hyper_tls::HttpsConnector;
+use hyper_util::client::legacy::{
+    connect::{dns::GaiResolver, HttpConnector},
+    Client,
+};
 use rand::distributions::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
@@ -61,6 +65,8 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+
+type HyperBody = BoxBody<Bytes, std::io::Error>;
 
 #[derive(Clone)]
 pub struct AutoReturn {
@@ -206,8 +212,7 @@ pub struct BuilderContext {
     #[allow(dead_code)]
     pub config_path: PathBuf,
     // the http client
-    pub client:
-        Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
+    pub client: Arc<Client<HttpsConnector<HttpConnector<GaiResolver>>, HyperBody>>,
     // a mapping of names to their prospective providers
     pub providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
     // a mapping of names to their prospective loggers
@@ -504,7 +509,7 @@ fn multipart_body_as_hyper_body(
                     let piece_stream = future::ok(Bytes::from(piece_data)).into_stream();
                     tweak_path(&mut body, path);
                     let a = create_file_hyper_body(body).map_ok(move |(bytes, body)| {
-                        let stream = piece_stream.chain(body).a();
+                        let stream = piece_stream.chain(body.into_data_stream()).a();
                         (bytes + piece_data_bytes, stream)
                     });
                     Either::A(a)
@@ -542,7 +547,9 @@ fn multipart_body_as_hyper_body(
             .flatten()
             .chain(stream::once(future::ok(closing_boundary)));
 
-        (bytes, HyperBody::wrap_stream(stream))
+        let body: HyperBody =
+            BodyExt::boxed(StreamBody::new(stream.map_ok(hyper::body::Frame::data)));
+        (bytes, body)
     });
     Ok(ret)
 }
@@ -572,7 +579,9 @@ async fn create_file_hyper_body(filename: String) -> Result<(u64, HyperBody), Te
         }
     });
 
-    let body = HyperBody::wrap_stream(stream);
+    let body: HyperBody = BodyExt::boxed(StreamBody::new(
+        stream.map_ok(|x| hyper::body::Frame::data(x.into())),
+    ));
     Ok((bytes, body))
 }
 
@@ -590,7 +599,7 @@ fn body_template_as_hyper_body(
             return Either3::A(future::ready(r).and_then(|x| x));
         }
         Some(EndPointBody::String(t)) => t,
-        None => return Either3::B(future::ok((0, HyperBody::empty()))),
+        None => return Either3::B(future::ok((0, BoxBody::default()))),
     };
     let mut body = match template.evaluate(Cow::Borrowed(template_values.as_json()) /*, None*/) {
         Ok(b) => b,
@@ -605,7 +614,10 @@ fn body_template_as_hyper_body(
         Either3::C(create_file_hyper_body(body))
     } else {
         *body_value = Some(body.clone());
-        Either3::B(future::ok((body.as_bytes().len() as u64, body.into())))
+        Either3::B(future::ok((
+            body.as_bytes().len() as u64,
+            body.map_err(|never| match never {}).boxed(),
+        )))
     }
 }
 
@@ -618,7 +630,7 @@ pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
     body: Option<EndPointBody>,
-    client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
+    client: Arc<Client<HttpsConnector<HttpConnector<GaiResolver>>, HyperBody>>,
     headers: config::Headers<True>,
     max_parallel_requests: Option<NonZeroUsize>,
     method: Method,
@@ -909,7 +921,8 @@ mod tests {
             let (_, body) = create_file_hyper_body("tests/test.jpg".to_string())
                 .await
                 .unwrap();
-            body.map(|b| stream::iter(b.unwrap()))
+            body.into_data_stream()
+                .map(|b| stream::iter(b.unwrap()))
                 .flatten()
                 .collect::<Vec<_>>()
                 .await

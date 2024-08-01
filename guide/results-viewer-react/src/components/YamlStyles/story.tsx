@@ -1,4 +1,5 @@
-import Input, { Checkbox, Div, InputPropsText, InputsDiv, Label, NonFlexSpan, Span } from ".";
+import { Checkbox, Div, Input, InputPropsText, InputsDiv, Label, NonFlexSpan, Span } from ".";
+import type { Meta, StoryFn } from "@storybook/react";
 import { DisplayDivMain } from "../YamlWriterForm";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -22,9 +23,9 @@ const inputProps: InputPropsText = {
 
 export default {
   title: "YamlStyles"
-};
+} as Meta<typeof Input>;
 
-export const Default = () => (
+export const Default: StoryFn = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>
@@ -42,7 +43,7 @@ export const Default = () => (
 </React.Fragment>
 );
 
-export const _NonFlexSpan = () => (
+export const _NonFlexSpan: StoryFn = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>
@@ -60,7 +61,7 @@ export const _NonFlexSpan = () => (
 </React.Fragment>
 );
 
-export const FilledAndChecked = () => (
+export const FilledAndChecked: StoryFn = () => (
   <React.Fragment>
   <GlobalStyle />
   <DisplayDivMain>

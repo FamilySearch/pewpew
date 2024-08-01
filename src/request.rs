@@ -630,7 +630,6 @@ pub type StatsTx = futures_channel::UnboundedSender<stats::StatsMessage>;
 
 pub struct Endpoint {
     body: Option<EndPointBody>,
-    // client: Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     client: Arc<Client<HttpsConnector<HttpConnector<GaiResolver>>, HyperBody>>,
     headers: config::Headers<True>,
     max_parallel_requests: Option<NonZeroUsize>,

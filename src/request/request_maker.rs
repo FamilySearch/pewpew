@@ -45,8 +45,6 @@ pub(super) struct RequestMaker {
     pub(super) method: Method,
     pub(super) headers: config::common::Headers<True>,
     pub(super) body: Option<EndPointBody>,
-    // pub(super) client:
-    //     Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
     pub(super) client: Arc<
         Client<HttpsConnector<HttpConnector<GaiResolver>>, BoxBody<bytes::Bytes, std::io::Error>>,
     >,
@@ -314,6 +312,7 @@ impl RequestMaker {
                     stats_tx,
                     tags,
                 };
+                // Convert from a Response<Incoming> to a Response<BoxBody> to pass to handle()
                 rh.handle(
                     hyper::Response::new(
                         response

@@ -2,6 +2,7 @@ use super::*;
 
 use config::templating::Regular;
 use futures::TryStreamExt;
+use http_body_util::{combinators::BoxBody, BodyExt};
 
 pub(super) struct ResponseHandler {
     pub(super) provider_delays: ProviderDelays,
@@ -17,7 +18,7 @@ impl ResponseHandler {
     // https://github.com/rust-lang/rust/issues/71723
     pub(super) fn handle<F>(
         self,
-        response: hyper::Response<HyperBody>,
+        response: hyper::Response<BoxBody<bytes::Bytes, std::io::Error>>,
         auto_returns: Option<F>,
     ) -> impl Future<Output = Result<(), RecoverableError>>
     where
@@ -66,7 +67,7 @@ impl ResponseHandler {
         let body_future = match body_reader::Compression::try_from(ce_header) {
             Some(ce) => {
                 let body = response
-                    .into_body()
+                    .into_data_stream()
                     .map_err(|e| RecoverableError::BodyErr(Arc::new(e)));
                 let br = body_reader::BodyReader::new(ce);
                 let body_buffer = bytes::BytesMut::new();
@@ -99,7 +100,7 @@ impl ResponseHandler {
             None => {
                 // when we don't need the body, skip parsing it, but make sure we get it all
                 response
-                    .into_body()
+                    .into_data_stream()
                     .map_err(|e| RecoverableError::BodyErr(Arc::new(e)))
                     .try_fold((), |_, _| future::ok(()))
                     .map_ok(|_| None)
@@ -131,7 +132,7 @@ impl ResponseHandler {
 
 fn handle_response_requirements(
     rp: &mut json::map::Map<String, json::Value>,
-    response: &Response<HyperBody>,
+    response: &Response<BoxBody<bytes::Bytes, std::io::Error>>,
 ) {
     // check if we need the response startline and it hasn't already been set
     rp.entry("start_line")

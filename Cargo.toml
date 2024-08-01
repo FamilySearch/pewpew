@@ -20,7 +20,7 @@ path = "src/bin/test_server.rs"
 [dependencies]
 base64.workspace = true
 body_reader = { path = "./lib/body_reader" }
-bytes = "1"
+bytes.workspace = true
 channel = { path = "./lib/channel" }
 clap = { version = "4", features = ["derive", "cargo", "std", "help", "usage", "error-context", "wrap_help"], default-features = false }
 config.workspace = true
@@ -33,8 +33,10 @@ futures.workspace = true
 futures-timer.workspace = true
 hdrhistogram = "7"
 http.workspace = true
-hyper = { workspace = true, features = ["client", "http1", "http2", "stream"] }
-hyper-tls = "0.5"
+hyper = { workspace = true, features = ["client", "http1", "http2"] }
+hyper-tls = "0.6"
+hyper-util = { workspace = true, features = ["tokio", "client", "http1", "http2"] }
+http-body-util.workspace = true
 itertools.workspace = true
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
@@ -101,12 +103,15 @@ license = "Apache 2.0"
 
 [workspace.dependencies]
 base64 = "0.22"
+bytes = "1"
 config = { path = "./lib/config" }
 ether = { path = "./lib/either" }
 futures = "0.3"
 futures-timer = "3"
-http = "0.2"
-hyper = "0.14"
+http = "1"
+http-body-util = "0.1"
+hyper = "1"
+hyper-util = "0.1"
 itertools = "0.13"
 js-sys = "0.3.64"
 log = "0.4"

@@ -40,7 +40,7 @@ providers:
 
 loggers:
   test:
-    to: stderr
+    to: stdout
   test_404s:
     limit: 1
     to: stdout

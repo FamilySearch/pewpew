@@ -9,7 +9,7 @@ load_pattern:
 
 loggers:
   test:
-    to: stderr
+    to: !stdout
 
 endpoints:
   - method: POST

@@ -17,7 +17,7 @@ load_pattern:
 
 loggers:
   test:
-    to: stderr
+    to: !stdout
 
 endpoints:
   - method: POST
@@ -25,12 +25,12 @@ endpoints:
     headers:
       Accept-Language: en-us
       Content-Type: application/x-www-form-urlencoded
-    body: !str username=${v:username}&password=${v:password}&grant_type=password&client_id=${v:dev_key}
+    body: !str username=${v:username}&password=${v:password}&grant_type=password&client_id=${v:dev_key}&token=abcd-1234-efgh
     peak_load: 1hps
     logs:
       test:
         select:
           ts: epoch("ms")
           response: request.body
-          token: response.body.token
+          token: match(response.body, "token=(?P<token>[a-zA-Z0-9-]+)").token
     on_demand: true

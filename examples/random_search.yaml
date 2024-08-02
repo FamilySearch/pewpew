@@ -108,7 +108,7 @@ providers:
 
 loggers:
   test:
-    to: !stderr
+    to: !stdout
   http_errors:
     query:
       select:
@@ -124,7 +124,7 @@ loggers:
         responseBody: response.body
       where: response.status >= 400
     limit: 1000
-    to: !stderr
+    to: !stdout
     pretty: false
   search_logger:
     to: !file 'search-results-${x:epoch("ms")}.json' # log to a file with a timestamp. timestamp set at test start

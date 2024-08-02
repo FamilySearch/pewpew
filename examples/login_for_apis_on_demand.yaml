@@ -32,7 +32,7 @@ providers:
 
 loggers:
   test:
-    to: stderr
+    to: stdout
 
 endpoints:
   - method: POST

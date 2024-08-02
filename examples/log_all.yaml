@@ -25,7 +25,7 @@ loggers:
     pretty: false
 
   test:
-    to: !stderr
+    to: !stdout
 
 endpoints:
   - method: POST

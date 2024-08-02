@@ -29,7 +29,7 @@ providers:
 
 loggers:
   test:
-    to: !stderr
+    to: !stdout
 
 endpoints:
   - method: POST
@@ -64,7 +64,9 @@ endpoints:
     logs:
       test:
         select:
-          a: 'response.body.b'
+          a: a
+          b: 'response.body.b'
+          session: session
 
   - method: POST
     url: 'http://localhost:${v:port}?c'
@@ -75,4 +77,6 @@ endpoints:
     logs:
       test:
         select:
-          a: 'response.body.c'
+          a: a
+          c: 'response.body.c'
+          session: session

@@ -32,6 +32,22 @@ const UploadHarButton = styled.button`
   min-width: 115px;
   margin-top: 1.2%
 `;
+const UploadSwaggerHTMLButton = styled.button`
+  justify-content: left;
+  padding: 2px;
+  width: fit-content;
+  height: fit-content;
+  min-width: 115px;
+  margin-top: 1.2%
+`;
+const UploadSwaggerURLButton = styled.button`
+  justify-content: left;
+  padding: 2px;
+  width: fit-content;
+  height: fit-content;
+  min-width: 115px;
+  margin-top: 1.2%
+`;
 const AccHeadingDiv = styled.div`
   display: flex;
   flex-wrap: nowrap;
@@ -154,6 +170,8 @@ interface Output {
 
 interface YamlWriterUploadState {
   file: File | undefined,
+  htmlFile: File | undefined,
+  swaggerUrl: string,
   output: Record<string, Output | undefined>
 }
 
@@ -169,6 +187,8 @@ interface IndexType {
 export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultState: YamlWriterUploadState = {
     file: undefined,
+    htmlFile: undefined,
+    swaggerUrl: '',
     output: {}
   };
 
@@ -179,6 +199,10 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   useEffectModal(fileModalRef);
   const endpointModalRef = useRef<ModalObject| null>(null);
   useEffectModal(endpointModalRef);
+  const htmlFileModalRef = useRef<ModalObject| null>(null);
+  useEffectModal(htmlFileModalRef);
+  const swaggerUrlModalRef = useRef<ModalObject| null>(null);
+  useEffectModal(swaggerUrlModalRef);
 
   // Function to open and close customize modal
   // JSON file will be present after upload modal is used
@@ -195,6 +219,72 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         log("Error parsing file", LogLevel.ERROR, error, "Make sure the upload is a valid HAR file");
         alert("Error parsing files, make sure uploads are valid HAR file");
       }
+    }
+  };
+
+  const toggleHTMLModal = (doc?: Document) => {
+    if (doc) {
+      try {
+        const serverOption = doc.querySelector('div.servers option') as HTMLOptionElement;
+        let serverUrl = serverOption ? serverOption.value : '';
+        // If in the case that the serverUrl is blank we will grab that url from user input
+        if (serverUrl === '/') {
+          let inputURL = '';
+          // Only acceptable string is a valid url. Nothing else.
+          while (true) {
+            inputURL = window.prompt('Swagger Page is missing server URL\nPlease enter the server URL:', 'https://changeme.com') || '';
+            try {
+              new URL(inputURL);
+              break;
+            } catch (e) {
+              alert('Invalid URL. Please enter a valid server URL.');
+            }
+          }
+          if (!inputURL) {
+            alert('Server URL is required');
+            return;
+          }
+          serverUrl = inputURL;
+        }
+        createHTMLFileArray(doc, serverUrl);
+        log("createFileArray finished", LogLevel.DEBUG);
+        endpointModalRef.current?.openModal();
+        log("endpointModalRef openModal", LogLevel.DEBUG);
+        
+      } catch (error) {
+        log("Error parsing file", LogLevel.ERROR, error, "Make sure the upload is a valid HTML file");
+        alert("Error parsing files, make sure uploads are valid HTML file");
+      }
+    }
+  };
+  const toggleSwaggerUrlModal = (swaggerData: any) => {
+    try {
+      let serverUrl = swaggerData.servers && swaggerData.servers[0] && swaggerData.servers[0].url ? swaggerData.servers[0].url : '';
+      if (serverUrl === '/') {
+        let inputURL = '';
+        while (true) {
+          inputURL = window.prompt('Swagger Page is missing server URL\nPlease enter the server URL:', 'https://changeme.com') || '';
+          try {
+            new URL(inputURL);
+            break;
+          } catch (e) {
+            alert('Invalid URL please enter a valid server URL.')
+          }
+        }
+        if (!inputURL) {
+          alert('Serer URL is required');
+          return;
+        }
+        serverUrl = inputURL;
+      }
+      swaggerData.servers[0].url = serverUrl;
+      createSwaggerUrlFileArray(swaggerData);
+      log("createSwaggerUrlFileArray finished", LogLevel.DEBUG);
+      endpointModalRef.current?.openModal();
+      log("endpointModalRef openModal", LogLevel.DEBUG);
+    } catch (error) {
+      log("Error parsing Swagger URL", LogLevel.ERROR, error);
+      alert("Error parsing Swagger URL. Please input a valid Swagger");
     }
   };
 
@@ -231,6 +321,72 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     await returnPromise;
   };
 
+  const isValidHTMLDocument = (doc: Document): boolean => {
+    const hasSwaggerUIElements = doc.querySelector('div.servers option') !== null;
+    return hasSwaggerUIElements;
+  };
+
+  const submitHTMLEvent = async (): Promise<void> => {
+    log("state.htmlFile", LogLevel.DEBUG, state.htmlFile);
+    if (!state.htmlFile) { return Promise.resolve(); }
+    const file: File = state.htmlFile;
+    log("file", LogLevel.DEBUG, file);
+    if (file.type !== 'text/html') {
+      alert("The file is not acceptable. Please upload a valid HTML file.");
+      setState((prevState) => ({ ...prevState, htmlFile: undefined }));
+      return;
+    }
+    const reader = new FileReader();
+    const returnPromise = new Promise<void>((resolve, reject) => {
+      reader.onload = (event: ProgressEvent<FileReader>) => {
+        const readerTarget = event.target as FileReader;
+        const text = readerTarget.result as string;
+        try {
+          // Parse the HTML content using DOMParser
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(text, 'text/html');
+          if (!isValidHTMLDocument(doc)) {
+            throw new Error('Invalid HTML Swagger UI document');
+          }
+          toggleHTMLModal(doc);
+          resolve();
+        } catch (error) {
+          log("Error parsing file: " + file?.name, LogLevel.ERROR, error, "Make sure the upload is a valid HTML file");
+          alert("Error parsing files, make sure uploads are valid HTML files");
+          reject(error);
+        }
+      };
+    });
+
+    reader.readAsText(file);
+    await returnPromise;
+  };
+
+  const isValidSwaggerDocument = (swaggerData: any): boolean => {
+    return (
+      (swaggerData.openapi || swaggerData.swagger) && 
+      swaggerData.paths &&
+      swaggerData.info &&
+      (swaggerData.servers || swaggerData.host)
+    );
+  };
+  const submitUrlEvent = async (): Promise<void> => {
+    try {
+      const response = await fetch(state.swaggerUrl);
+      if (!response.ok) {
+        throw new Error('Network failed');
+      }
+      const swaggerData = await response.json();
+      if (!isValidSwaggerDocument(swaggerData)) {
+        throw new Error('Invalid Swagger/OpenAPI document');
+      }
+      toggleSwaggerUrlModal(swaggerData);
+    } catch (error) {
+      log("Error fetching or parsing URL:", LogLevel.ERROR, error);
+      alert("Error fetching or parsing URL. Please enter only valid url");
+    }
+  };
+
   // Sends endpoints to App.js to send to Content.js
   const finalizeEndpoints = () => {
     props.sendEndpoints(
@@ -247,12 +403,29 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     setFilename("");
   };
 
+  const clearHtmlFile = () => {
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, htmlFile: undefined }));
+    setFilename("");
+  };
+
+  const clearSwaggerUrl = () => {
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, swaggerUrl: '' }));
+  };
+
   // Checks both current state, and parent state to see if file has already been uploaded
   const handleFileInput = (newFiles: File[]) => {
     const file = newFiles.length >= 1 ? newFiles[0] : undefined;
     setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({
       ...prevState,
       file
+    }));
+  };
+
+  const handleHtmlFileInput = (newFiles: File[]) => {
+    const file = newFiles.length >= 1 ? newFiles[0] : undefined;
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({
+      ...prevState,
+      htmlFile: file
     }));
   };
 
@@ -316,6 +489,118 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         endpoints
     }};
     setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({...prevState, output }));
+  };
+
+  const createHTMLFileArray = (doc : Document, serverUrl: string) => {
+    const types: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const urls: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const parsedEndpoints: ParsedEndpoint[] = [];
+
+    const baseUrl = serverUrl;
+
+    // Extracting the URLs, method types, and accept headers
+    doc.querySelectorAll('div[id^="operations-"]').forEach((element, index) => {
+      const urlElement = element.querySelector('.opblock-summary-path a') as HTMLElement;
+      const methodElement = element.querySelector('.opblock-summary-method') as HTMLElement;
+      const selectElement = element.querySelector('.response-control-media-type select') as HTMLSelectElement;
+
+      if (!urlElement || !methodElement) return; // If in any case where the endpoint is not filled out
+
+      const url = urlElement.innerText.trim();
+      const cleanUrl = url.replace(/%7B/g, '{').replace(/%7D/g, '}');
+      const method = methodElement.innerText.trim();
+      const selectedOption = selectElement?.querySelector('option[selected]') as HTMLOptionElement;
+      const accept = selectedOption?.value || (selectElement ? selectElement.options[0].value : '*/*');
+          
+      // For keeping track of endpoints
+      const id = uniqueId();
+      const mimeType = accept;
+      const parsedUrl = new URL(cleanUrl, baseUrl);
+      const hostUrl = parsedUrl.hostname;
+
+      if (types[mimeType] !== undefined) {
+        types[mimeType]!.index.push({ iter: index, id });
+      } else {
+        types[mimeType] = { index: [{ iter: index, id }], selected: "partial"};
+      }
+
+      if (urls[hostUrl] !== undefined) {
+        urls[hostUrl]!.index.push({ iter: index, id });
+      } else {
+        urls[hostUrl] = { index: [{ iter: index, id }], selected: "yes"};
+      }
+
+      parsedEndpoints.push({
+        selected: "yes",
+        url: parsedUrl,
+        type: mimeType,
+        id,
+        method,
+        headers: []
+      });
+    });
+    
+    const output: Record<string, Output | undefined> = {
+      [filename]: {
+        types,
+        urls,
+        endpoints: parsedEndpoints
+      }
+      
+    };
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({...prevState, output }));
+  };
+  const createSwaggerUrlFileArray = (swaggerData: any) => {
+    const types: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const urls: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const parsedEndpoints: ParsedEndpoint[] = [];
+
+    const serverUrl = swaggerData.servers && swaggerData.servers[0] && swaggerData.servers[0].url ? swaggerData.servers[0].url : 'http://changeme.com';
+
+    Object.keys(swaggerData.paths).forEach((pathKey, index) => {
+      const pathItem = swaggerData.paths[pathKey];
+      let fullPath = serverUrl.endsWith('/') || pathKey.startsWith('/') ? `${serverUrl}${pathKey}` : `${serverUrl}/${pathKey}`;
+      fullPath = fullPath.replace(/\{([^}]+)\}/g, '${$1}');
+      Object.keys(pathItem).forEach((method) => {
+        const operation = pathItem[method];
+        const id = uniqueId();
+        const mimeType = operation.produces ? operation.produces[0] : '*/*';
+        console.log(fullPath);
+        const url = new URL(fullPath);
+        const hostUrl = url.hostname;
+
+        if (types[mimeType]) {
+          types[mimeType]!.index.push({ iter: index, id });
+        } else {
+          types[mimeType] = { index: [{ iter: index, id }], selected: "partial"};
+        }
+
+        if (urls[hostUrl]) {
+          urls[hostUrl]!.index.push({ iter: index, id });
+        } else {
+          urls[hostUrl] = { index: [{ iter: index, id }], selected: "yes"};
+        }
+
+        parsedEndpoints.push({
+          selected: 'yes',
+          url,
+          type: mimeType,
+          id,
+          method: method.toUpperCase(),
+          headers: []
+        });
+      });
+    });
+
+    const output: Record<string, Output | undefined> = {
+      [filename]: {
+        types,
+        urls,
+        endpoints: parsedEndpoints
+      }
+    };
+    
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, output }));
   };
 
   // This is in the Cutomize HAR File pop up window
@@ -411,6 +696,12 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <UploadHarButton onClick={() => fileModalRef.current?.openModal()}>
           Upload Har File
         </UploadHarButton>
+        <UploadSwaggerHTMLButton onClick={() => htmlFileModalRef.current?.openModal()}>
+          Upload Swagger HTML File
+        </UploadSwaggerHTMLButton>
+        <UploadSwaggerURLButton onClick={() => swaggerUrlModalRef.current?.openModal()}>
+          Upload Swagger URL File
+        </UploadSwaggerURLButton>
           <h3 style={{paddingRight: "100px"}}>
             <a href="https://familysearch.github.io/pewpew/" target="_blank">
             Help
@@ -440,6 +731,46 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
               {state.file.name}
             </div>
           )}
+        </div>
+      </Modal>
+      <Modal
+        ref={htmlFileModalRef}
+        title="Upload HTML File"
+        submitText="Load"
+        onSubmit={submitHTMLEvent}
+        closeText="Cancel"
+        onClose={clearHtmlFile}
+        isReady={state.htmlFile !== undefined}
+      >
+        <div style={{color: "rgb(242, 241, 239)"}}>
+          Drag file to drop zone or click to select file to load. Currently will only load one HTML file at a time.
+        </div>
+        <div style={{ width: "90%", height: "250px" }}>
+          <DropFile onDropFile={handleHtmlFileInput} multiple={false}></DropFile>
+        </div>
+        <div>
+          {state.htmlFile && (
+            <div style={{paddingTop: "13px"}}>
+              <button style={{marginRight: "5px"}} onClick={clearFile}>X</button>
+              {state.htmlFile.name}
+            </div>
+          )}
+        </div>
+      </Modal>
+      <Modal
+        ref={swaggerUrlModalRef}
+        title="Enter Swagger URL"
+        submitText="Submit"
+        closeText="Cancel"
+        onSubmit={submitUrlEvent}
+        onClose={clearSwaggerUrl}
+        isReady={true}
+      >
+        <div style={{color: "rgb(242, 241, 239)"}}>
+          Enter URL from Swagger JSON doc.
+        </div>
+        <div style={{ width: "90%", height: "auto", display: 'flex', justifyContent: 'center', alignItems: "center", flexDirection: 'column' }}>
+          <input type="text" placeholder="Enter Swagger URL" value={state.swaggerUrl} onChange={(e) => setState({ ...state, swaggerUrl: e.target.value })} />
         </div>
       </Modal>
       {/* This is the endpoint customize modal */}

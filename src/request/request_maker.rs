@@ -206,7 +206,7 @@ impl RequestMaker {
                 headers.insert(CONTENT_LENGTH, content_length.into());
             }
             debug!("final headers={:?}", headers);
-            info!("RequestMaker method=\"{}\" url=\"{}\" request_headers={:?} tags={:?}", method, url.as_str(), headers, tags);
+            info!("RequestMaker::send_request method=\"{}\" url=\"{}\" request_headers={:?} tags={:?}", method, url.as_str(), headers, tags);
             let mut request_provider = json::json!({});
             let request_obj = request_provider
                 .as_object_mut()
@@ -318,8 +318,12 @@ impl RequestMaker {
                         stats_tx,
                         tags,
                     };
+                    debug!("RequestMaker::send_request Response<Incoming>={:?}", response);
                     // Convert from a Response<Incoming> to a Response<BoxBody> to pass to handle()
-                    rh.handle(hyper::Response::new(response.into_body().boxed().map_err(std::io::Error::other).boxed()), auto_returns)
+                    let (head, body) = response.into_parts();
+                    let response = hyper::Response::from_parts(head, body.boxed().map_err(std::io::Error::other).boxed());
+                    debug!("RequestMaker::send_request Response<BoxBody>={:?}", response);
+                    rh.handle(response, auto_returns)
                         .map_err(TestError::from)
                 })
                 .or_else(move |r| {

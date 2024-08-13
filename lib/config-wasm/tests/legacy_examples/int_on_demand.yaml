@@ -10,7 +10,7 @@ load_pattern:
 
 loggers:
   test:
-    to: stdout
+    to: stderr
 
 vars:
   port: "${PORT}"

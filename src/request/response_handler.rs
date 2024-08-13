@@ -26,8 +26,16 @@ impl ResponseHandler {
     where
         F: Future<Output = ()> + Send,
     {
+        log::debug!("ResponseHandler::handle response=\"{:?}\"", response);
         let status_code = response.status();
         let status = status_code.as_u16();
+        let headers = response.headers().clone(); // For logging
+        log::debug!(
+            "ResponseHandler::handle status_code=\"{}\", status=\"{}\", headers={:?}",
+            status_code,
+            status,
+            headers
+        );
         let response_provider = json::json!({ "status": status });
         let mut template_values = self.template_values;
         template_values.insert("response".into(), response_provider);
@@ -124,6 +132,7 @@ impl ResponseHandler {
         let tags = self.tags;
         body_future
             .then(move |body_value| {
+                log::info!("ResponseHandler::handle status={:?} headers={:?} tags={:?} body_value=\"{:?}\"", status, headers, tags, body_value);
                 let bh = BodyHandler {
                     included_outgoing_indexes,
                     now,

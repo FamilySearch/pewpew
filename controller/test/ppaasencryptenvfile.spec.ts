@@ -325,7 +325,7 @@ describe("PpaasEncryptEnvironmentFile", () => {
         expect(JSON.stringify(sanitizedCopy.getEnvironmentVariables()), "getEnvironmentVariables()").to.equal("{}");
         done();
       } catch (error) {
-        done();
+        done(error);
       }
     });
 

@@ -169,7 +169,7 @@ describe("PpaasEncryptS3File", () => {
         expect(sanitizedCopy.getFileContents(), "getFileContents()").to.equal(undefined);
         done();
       } catch (error) {
-        done();
+        done(error);
       }
     });
 

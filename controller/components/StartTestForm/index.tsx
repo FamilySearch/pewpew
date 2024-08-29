@@ -62,7 +62,7 @@ const UploadTestButton = styled.button`
 const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <Info>
   <Column>
   <p>
-    {`'${username}'` || "User"} is not authorized to run tests.<br/>
+    {username ? `'${username}'` : "User"} is not authorized to run tests.<br/>
     Please request 'Pewpew - User' permission if you need to be able to run tests.
   </p>
   <Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning>

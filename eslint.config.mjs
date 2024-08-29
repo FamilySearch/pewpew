@@ -29,6 +29,7 @@ export default [{
     "controller/storybook-static",
     "controller/.storybook",
     "controller/**/**.js",
+    "controller/next-env.d.t",
     "eslint.config.mjs"
   ],
 }, ...compat.extends(

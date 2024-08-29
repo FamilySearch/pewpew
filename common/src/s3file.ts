@@ -171,7 +171,7 @@ export class PpaasS3File implements S3File {
     try {
       await access(this.localFilePath);
       return true;
-    } catch (error: unknown) {
+    } catch (error: unknown) { // eslint-disable-line  @typescript-eslint/no-unused-vars
       return false;
     }
   }

@@ -3,9 +3,7 @@ import { expect } from "chai";
 import path from "path";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const BAD_FILEPATH = path.join(UNIT_TEST_FOLDER, "s3test.txt");
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const EMPTY_FILEPATH = path.join(UNIT_TEST_FOLDER, "empty.yaml");
 const BASIC_FILEPATH = path.join(UNIT_TEST_FOLDER, "basic.yaml");
 const BASIC_FILEPATH_WITH_VARS = path.join(UNIT_TEST_FOLDER, "basicwithvars.yaml");

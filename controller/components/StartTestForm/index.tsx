@@ -334,6 +334,10 @@ export const StartTestForm = ({
         foundVar.variableName = newEnvVar.variableName !== undefined ? newEnvVar.variableName : foundVar.variableName;
         foundVar.variableValue = newEnvVar.variableValue !== undefined ? newEnvVar.variableValue : foundVar.variableValue;
         foundVar.type = newEnvVar.type !== undefined ? newEnvVar.type : foundVar.type;
+        if (newEnvVar.type === "password" && foundVar.variableName === "") {
+          // If we check the "password" box and the name is blank, default the name to PASSWORD
+          foundVar.variableName = "PASSWORD";
+        }
       } else {
         // New var
         const newVar: EnvironmentVariablesState = {

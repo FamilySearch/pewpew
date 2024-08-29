@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Agent Service for running pewpew tests",
   "main": "dist/src/app.js",
   "scripts": {
@@ -19,7 +19,6 @@
     "type": "git",
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
-  "author": "trevorm@churchofjesuschrist.org",
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },

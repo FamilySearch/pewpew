@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -25,7 +25,6 @@
     "type": "git",
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
-  "author": "trevorm@churchofjesuschrist.org",
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },

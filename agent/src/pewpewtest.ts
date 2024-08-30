@@ -215,7 +215,6 @@ export class PewPewTest {
   }
 
   // Create a sanitized copy which doesn't have the environment variables which may have passwords
-  // eslint-disable-next-line @typescript-eslint/ban-types
   public sanitizedCopy (): {
     started: boolean,
     pewpewRunning: boolean,

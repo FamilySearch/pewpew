@@ -130,7 +130,6 @@ const minMaxTime = (testResults: any) => {
   let startTime2 = Infinity;
   let endTime2 = -Infinity;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for (const [_, dataPoints] of testResults) {
     for (const point of dataPoints) {
       if (point.startTime) {

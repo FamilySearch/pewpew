@@ -126,7 +126,7 @@ describe("S3Util Integration", () => {
         `${UNIT_TEST_KEY_PREFIX}/${UNIT_TEST_KEY_PREFIX}/${UNIT_TEST_FILENAME}`
       ].map((s3Path: string) => deleteObject(s3Path).catch((error) =>
         log("S3Util Integration before delete failed: " + s3Path, LogLevel.DEBUG, error))));
-    } catch (error) {
+    } catch (error) { // eslint-disable-line  @typescript-eslint/no-unused-vars
       // Swallow
     }
   });

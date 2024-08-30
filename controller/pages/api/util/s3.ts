@@ -73,7 +73,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       }
       if (s3Object && s3Object.Body) {
         let content: GetObjectCommandOutput["Body"] | Buffer = s3Object.Body;
-        log("s3Object: " + s3Object, LogLevel.DEBUG, { ...s3Object, Body: content !== (undefined || null) });
+        log("s3Object: " + s3Object, LogLevel.DEBUG, { ...s3Object, Body: !!s3Object.Body });
         // res.writeHead and res.send don't mix so we have to set each header separately
         response.status(200);
         response.setHeader("Content-Disposition", "inline");

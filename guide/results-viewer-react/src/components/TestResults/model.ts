@@ -2,7 +2,6 @@ import { HDRHistogram } from "@fs/hdr-histogram-wasm";
 type CheckType = string | ((x: unknown) => boolean);
 type Check = [string, CheckType];
 
-// eslint-disable-next-line  @typescript-eslint/ban-types
 function isObject (o: unknown): o is object {
   return typeof o === "object" && !!o;
 }
@@ -53,7 +52,6 @@ function isObject (o: unknown): o is object {
  * @returns failed check or undefined
  */
 function propertyChecker (
-  // eslint-disable-next-line  @typescript-eslint/ban-types
   o: object,
   requiredChecks: Check[],
   unknownCheck?: CheckType,

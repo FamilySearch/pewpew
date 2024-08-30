@@ -101,7 +101,6 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   // /** Map to keep id's unique */
   const headersMap = new Map(headers.map((header) => ([header.id, header])));
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [state, _setState] = useState(defaultState);
   const modalRef = useRef<ModalObject | null>(null);
   useEffectModal(modalRef);

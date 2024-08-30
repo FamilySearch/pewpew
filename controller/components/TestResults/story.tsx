@@ -10,7 +10,7 @@ configureURL.baseS3Url = "/";
 let ppaasTestId: PpaasTestId;
 try {
   ppaasTestId = PpaasTestId.makeTestId("Story");
-} catch (error) {
+} catch (error) { // eslint-disable-line  @typescript-eslint/no-unused-vars
   // For some reason newer versions of storybook do not have path.extname()
   ppaasTestId = PpaasTestId.getFromS3Folder("Story/" + PpaasTestId.getDateString());
 }

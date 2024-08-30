@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "npm run lint && webpack serve --port 3001 --mode development --open --hot",
     "watch": "webpack --watch",
-    "build": "webpack --mode production",
+    "build": "npm run buildonly",
+    "buildonly": "tsc",
     "lint": "eslint --fix . --ext .ts,.tsx",
     "linterror": "eslint . --ext .ts,.tsx --max-warnings 0",
-    "test": "cd src/test && mocha",
+    "test": "npm run buildonly && mocha ./dist/_test_",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

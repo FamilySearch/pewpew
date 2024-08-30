@@ -21,7 +21,6 @@ import { expect } from "chai";
 logger.config.LogFileName = "ppaas-controller";
 
 describe("Secrets Integration", () => {
-  // eslint-disable-next-line require-await
   before(async () => {
     secretsConfig.secretsClient = undefined as any;
     getGlobalSecretsConfig().encryptionKey = undefined;

@@ -205,7 +205,7 @@ const TestStatusPage = ({
       });
       // Sanitized the search
       const searchString = state.testIdSearch;
-      // eslint-disable-next-line no-useless-escape
+
       if (!SEARCH_REGEX.test(searchString)) {
         setState({
           error: "Only Alphanumeric characters are allowed"

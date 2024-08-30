@@ -1,6 +1,6 @@
 {
   "name": "@fs/monorepo",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Service for running pewpew tests",
   "private": true,
   "workspaces": [
@@ -17,8 +17,8 @@
     "build": "npm run lint && npm run build:common && npm-run-all --parallel build:agent build:controller",
     "storybook": "cd controller && npm run storybook",
     "build-storybook": "cd controller && npm run build-storybook",
-    "lint": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js --fix . --ext .ts,.tsx",
-    "linterror": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js . --ext .ts,.tsx --max-warnings 0",
+    "lint": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js --fix .",
+    "linterror": "node --max_old_space_size=4096 ./node_modules/eslint/bin/eslint.js . --max-warnings 0",
     "build:common": "cd common && npm run build",
     "build:agent": "cd agent && npm run build",
     "build:controller": "cd controller && npm run build",
@@ -56,7 +56,6 @@
     "type": "git",
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
-  "author": "trevorm@churchofjesuschrist.org",
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },
@@ -67,14 +66,19 @@
   "nyc": {
     "exclude": "**/*.spec.ts"
   },
+  "overrides": {
+    "eslint": "^9.8.0"
+  },
   "dependencies": {
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.8.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "dotenv": "^16.0.0",
     "dotenv-flow": "^4.0.1",
-    "eslint": "^8.40.0",
+    "eslint": "^9.8.0",
     "jsdom-global": "^3.0.2",
     "mocha": "^10.2.0",
     "npm-run-all2": "^6.0.6",

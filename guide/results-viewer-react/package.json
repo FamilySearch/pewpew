@@ -9,7 +9,7 @@
     "build": "webpack --mode production",
     "lint": "eslint --fix . --ext .ts,.tsx",
     "linterror": "eslint . --ext .ts,.tsx --max-warnings 0",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "cd src/test && mocha",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -18,7 +18,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FamilySearch/pewpew.git"
+    "url": "git+https://github.com/FamilySearch/pewpew.git" 
   },
   "engines": {
     "node": ">=18.0.0 <21.0.0"
@@ -66,9 +66,11 @@
     "babel-loader": "^9.1.2",
     "eslint": "^8.32.0",
     "html-webpack-plugin": "^5.5.0",
+    "mocha": "^10.7.3",
     "storybook": "^8.2.5",
     "ts-loader": "^9.4.2",
-    "typescript": "^5.0.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
     "webpack": "^5.76.0",
     "webpack-cli": "^5.0.1",
     "webpack-dev-server": "^5.0.0"

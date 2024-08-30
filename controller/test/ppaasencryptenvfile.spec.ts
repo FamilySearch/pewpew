@@ -321,8 +321,16 @@ describe("PpaasEncryptEnvironmentFile", () => {
         expect(sanitizedCopy).to.not.equal(undefined);
         expect(sanitizedCopy.body, "body").to.equal(undefined);
         expect(sanitizedCopy.getFileContents(), "getFileContents()").to.equal(undefined);
-        expect(sanitizedCopy.getEnvironmentVariablesFile(), "getEnvironmentVariablesFile()").to.equal(undefined);
-        expect(JSON.stringify(sanitizedCopy.getEnvironmentVariables()), "getEnvironmentVariables()").to.equal("{}");
+        // We get a base PpaasEncryptS3File without these functions
+        expect(typeof sanitizedCopy.getEnvironmentVariablesFile, "typeof getEnvironmentVariablesFile()").to.equal("undefined");
+        expect(typeof sanitizedCopy.getEnvironmentVariables, "typeof getEnvironmentVariables()").to.equal("undefined");
+        const sanitizedJson = JSON.parse(JSON.stringify(sanitizedCopy));
+        expect(sanitizedJson.body, "body").to.equal(undefined);
+        expect(sanitizedJson.fileContents, "fileContents").to.equal(undefined);
+        // Should be an array of the keys instead of the object
+        expect(sanitizedJson.environmentVariablesFile, "environmentVariablesFile").to.not.equal(undefined);
+        expect(Array.isArray(sanitizedJson.environmentVariablesFile), "Array.isArray(environmentVariablesFile)").to.equal(true);
+        expect(JSON.stringify(sanitizedJson.environmentVariablesFile), "environmentVariablesFile").to.equal(JSON.stringify(Object.keys(environmentVariablesFile)));
         done();
       } catch (error) {
         done(error);

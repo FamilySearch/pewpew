@@ -140,7 +140,7 @@ export class PpaasTestMessage implements TestMessage {
           case "TestMessage":
             try {
               parsedTestMessage = temp as TestMessage;
-            } catch (error: unknown) {
+            } catch (error: unknown) { // eslint-disable-line  @typescript-eslint/no-unused-vars
               throw new Error(`messageAttributes[${key}] was not an TestMessage = ${JSON.stringify(temp)}`);
             }
             break;

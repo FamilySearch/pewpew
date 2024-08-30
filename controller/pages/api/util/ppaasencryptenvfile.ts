@@ -105,12 +105,14 @@ export class PpaasEncryptEnvironmentFile extends PpaasEncryptS3File {
   }
 
   // Create a sanitized copy which doesn't have the environment variables which may have passwords
-  public sanitizedCopy (): Record<string, any> {
-    return Object.assign({}, this, {
+  public sanitizedCopy (): PpaasEncryptS3File {
+    const sanitized = Object.assign(super.sanitizedCopy(), this, {
       body: undefined,
       fileContents: undefined,
+      // Change the object into an array of just the keys (that can be JSON.stringified)
       environmentVariablesFile: this.environmentVariablesFile && Object.keys(this.environmentVariablesFile)
     });
+    return sanitized;
   }
 
   // Returns itself

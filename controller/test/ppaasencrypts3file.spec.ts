@@ -167,9 +167,12 @@ describe("PpaasEncryptS3File", () => {
         expect(sanitizedCopy).to.not.equal(undefined);
         expect(sanitizedCopy.body, "body").to.equal(undefined);
         expect(sanitizedCopy.getFileContents(), "getFileContents()").to.equal(undefined);
+        const sanitizedJson = JSON.parse(JSON.stringify(sanitizedCopy));
+        expect(sanitizedJson.body, "body").to.equal(undefined);
+        expect(sanitizedJson.fileContents, "fileContents").to.equal(undefined);
         done();
       } catch (error) {
-        done();
+        done(error);
       }
     });
 

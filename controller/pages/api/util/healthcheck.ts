@@ -69,7 +69,7 @@ export function accessEncryptionKeyPass (): boolean {
     log("accessEncryptionKeyPass", LogLevel.DEBUG, { keyPass });
     return keyPass;
   } catch (error) {
-    log("accessEncryptionKeyPass", LogLevel.WARN, { keyPass: false });
+    log("accessEncryptionKeyPass", LogLevel.WARN, error, { keyPass: false });
     return false;
   }
 }
@@ -80,7 +80,7 @@ export function accessOpenIdSecretPass (): boolean {
     log("accessOpenIdSecretPass", LogLevel.DEBUG, { secretPass });
     return secretPass;
   } catch (error) {
-    log("accessOpenIdSecretPass", LogLevel.WARN, { secretPass: false });
+    log("accessOpenIdSecretPass", LogLevel.WARN, error, { secretPass: false });
     return false;
   }
 }

@@ -404,7 +404,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     }
   };
 
-  // Sends endpoints to App.js to send to Content.js
+  //Sends endpoints to App.js to send to Content.js
   const finalizeEndpoints = () => {
     props.sendEndpoints(
       (state.output[filename]?.endpoints || [])

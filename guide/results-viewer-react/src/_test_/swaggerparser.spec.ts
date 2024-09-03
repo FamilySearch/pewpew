@@ -1,45 +1,32 @@
-// import { expect } from "chai";
-// import { YamlWriterUpload} from "../components/YamlWriterUpload/index";
-// import {
-//     validHarFile
-// } from "../components/YamlWriterUpload/testData";
+import { YamlWriterUpload } from "../components/YamlWriterUpload";
+import { expect } from "chai";
+import { render } from "@testing-library/react";
 
-// import sinon from "sinon";
+describe("YamlWriterUpload  Tests", () => {
+  // Test valid HTML file
+  
+    it("it should handle valid Swagger HTML file uploads", async () => {
+      render(<YamlWriterUpload sendEndpoints={() => {}} />);
+      const validDoc = new DOMParser().parseFromString(`
+        <div id="swagger-ui">
+          <div class="servers">
+            <select>
+              <option value="http://valid-server.com">http://valid-server.com</option>
+            </select>
+          </div>
+          <div id="operations-default">
+            <div class="opblock-summary-path">
+              <a>/example/path</a>
+            </div>
+            <div class="opblock-summary-method">GET</div>
+          </div>
+        </div>
+        <title>Swagger UI</title>
+      `, 'text/html');
+      const props = { sendEndpoints: () => {} };
+      const uploader = YamlWriterUpload(props);
 
-describe("-> Dummy Test", () => {
-    it("this test should always pass", (done: Mocha.Done) => {
-      done();  
-    })
-
-}) 
-
-// describe ("YamlWriterUpload", () => {
-//     describe("submitEvent should handle HAR files", () => {
-//         it("should parse a valid HAR file", (done: Mocha.Done) => {
-//             // @ts-ignore
-//             const yamlWriterUpload: any = new YamlWriterUpload({});
-
-//             const mockFileReader = {
-//                 readAsText: sinon.stub(),
-//                 onload: sinon.stub()
-//             };
-
-//             sinon.stub(window, "FileReader").returns(mockFileReader as any);
-
-//             yamlWriterUpload.state = { file: validHarFile };
-
-//             const toggleCustomizeModalSpy = sinon.spy(yamlWriterUpload, "toggleCustomizeModal");
-
-//             mockFileReader.onload.callArgWith(0, {target: { result: JSON.stringify({ log: { entries: [] }}) } });
-
-//             yamlWriterUpload.submitEvent()
-//                 .then(() => {
-//                     expect(toggleCustomizeModalSpy.calledOnce).to.be.true;
-//                     done();
-//                 })
-//                 .catch(done);
-
-//             (window.FileReader as any).restore();
-//         });
-//     });
-// });
+      const result = uploader.isValidHtmlDocument(validDoc);
+      expect(result).to.be.true;
+    });
+});

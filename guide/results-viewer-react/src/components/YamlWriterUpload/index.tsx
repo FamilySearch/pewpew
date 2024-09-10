@@ -8,12 +8,14 @@ import {
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Div } from "../Div";
 import DropFile from "../DropFile";
 import { Span } from "../YamlStyles";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
+import type { PewPewProvider } from "../../util/yamlwriter";
+import { newProviderList } from "../YamlProviders";
 
 export const HeaderMain = styled.div`
   width: 100%;
@@ -201,8 +203,43 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const [foundVariables, setFoundVariables] = useState<string[]>([]);
   const variableModalRef = useRef<ModalObject | null>(null);
   useEffectModal(variableModalRef);
+  const [providers, setProviders] = useState<PewPewProvider[]>([]);
+  const [providersFinalized, setProvidersFinalized] = useState(false);
 
-// Determine how to fill out provider. Mayhaps have a option when all providers are needed we can select and handle those as they come up
+  // Provider Functions
+  const addProvider = (pewpewProvider: PewPewProvider) => {
+    setProviders((prevProviders) => [...prevProviders, pewpewProvider]);
+    console.log("Provider added:", pewpewProvider);
+  };
+
+  const clearAllProviders = () => {
+    setProviders([]); //Clear all providers in the array
+    console.log("All Providers cleared");
+  };
+
+  const deleteProvider = (id: string) => {
+    setProviders((prevProviders) => 
+      prevProviders.filter(provider => provider.id !== id)
+    );
+    console.log("Provider deleted with ID:", id);
+  };
+
+  const changeProvider = (updatedProvider: PewPewProvider) => {
+    setProviders((prevProviders) => 
+      prevProviders.map(provider => 
+        provider.id === updatedProvider.id ? updatedProvider : provider
+      )
+    );
+    console.log("Provider changed:", updatedProvider);
+  };
+
+  const providerProps = {
+    addProvider,
+    clearAllProviders,
+    deleteProvider,
+    changeProvider,
+    providers,
+  };
 
   // Function to open and close customize modal
   // JSON file will be present after upload modal is used
@@ -413,6 +450,28 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     );
     return Promise.resolve();
   };
+  const finalizeProviders = () => {
+    if (!providersFinalized && providers.length > 0) {
+      setProvidersFinalized(true);
+
+      console.log("Finalizing providers:", providers);
+      console.log("Provider props befor pfinalization", providerProps);
+
+      providerProps.clearAllProviders();
+      providers.forEach(provider => {
+        providerProps.addProvider(provider);
+      });
+      console.log("Providers finalized succcessfully");
+    } else {
+      console.log("NO providers to finalize")
+    }
+    return Promise.resolve();
+  };
+  useEffect(() => {
+    if (providers.length > 0 && !providersFinalized) {
+      finalizeProviders();
+    }
+  }, [providers, providersFinalized]);
 
   // Used if file is removed from upload list
   const clearFile = () => {
@@ -693,6 +752,13 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     if (uniqueVariables.size > 0) {
       setFoundVariables(Array.from(uniqueVariables));
       variableModalRef.current?.openModal();
+      const newProviders = Array.from(uniqueVariables).map(variable => {
+        const provider = newProviderList();
+        provider.name = variable;
+        return provider;
+      });
+      setProviders(newProviders);
+      setProvidersFinalized(false);
     }
 
     // Prepare and update the state with parsed output

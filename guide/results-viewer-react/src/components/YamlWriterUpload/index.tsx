@@ -8,14 +8,12 @@ import {
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Div } from "../Div";
 import DropFile from "../DropFile";
 import { Span } from "../YamlStyles";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
-import type { PewPewProvider } from "../../util/yamlwriter";
-import { newProviderList } from "../YamlProviders";
 
 export const HeaderMain = styled.div`
   width: 100%;
@@ -26,7 +24,7 @@ export const HeaderMain = styled.div`
   font: 14px "Century Gothic", Futura, sans-serif;
   text-align: left;
 `;
-const UploadHarButton = styled.button`
+const StyledButton = styled.button`
   justify-content: left;
   padding: 2px;
   width: fit-content;
@@ -34,14 +32,7 @@ const UploadHarButton = styled.button`
   min-width: 115px;
   margin-top: 1.2%
 `;
-const UploadSwaggerURLButton = styled.button`
-  justify-content: left;
-  padding: 2px;
-  width: fit-content;
-  height: fit-content;
-  min-width: 115px;
-  margin-top: 1.2%
-`;
+
 const AccHeadingDiv = styled.div`
   display: flex;
   flex-wrap: nowrap;
@@ -149,7 +140,7 @@ const AccordianStyleDiv = styled.div`
 `;
 
 export interface YamlWriterUploadProps {
-  sendEndpoints: (endpoints: HarEndpoint[]) => void,
+  sendEndpoints: (endpoints: HarEndpoint[]) => void;
 }
 
 interface OutputRecord {
@@ -179,12 +170,39 @@ interface IndexType {
   id: string
 }
 
+// Modal wrapper props to make reusing modal component easier
+interface ModalWrapperProps {
+  modalRef: React.RefObject<ModalObject>;
+  title: string;
+  submitText: string;
+  closeText: string;
+  isReady: boolean;
+  onSubmit: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+// A resusable modal wrapper that accepts props and provides a consistent structure for modals
+const ModalWrapper = ({ modalRef, title, submitText, closeText, isReady, onSubmit, onClose, children }: ModalWrapperProps) => (
+  <Modal
+    ref={modalRef}
+    title={title}
+    submitText={submitText}
+    onSubmit={() => Promise.resolve(onSubmit())}
+    closeText={closeText}
+    onClose={onClose}
+    isReady={isReady}
+  >
+    {children}
+  </Modal>
+)
+
 export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultState: YamlWriterUploadState = {
-    file: undefined,
-    htmlFile: undefined,
-    swaggerUrl: "",
-    serverUrl: "",
+    file: undefined,  // To track the Har file
+    htmlFile: undefined,  // To track the HTML file
+    swaggerUrl: "", // To track the url of the json file of the swagger page
+    serverUrl: "",  // To track the inputted server url on a swagger page that doesn't have one.
     output: {}
   };
 
@@ -203,127 +221,96 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const [foundVariables, setFoundVariables] = useState<string[]>([]);
   const variableModalRef = useRef<ModalObject | null>(null);
   useEffectModal(variableModalRef);
-  const [providers, setProviders] = useState<PewPewProvider[]>([]);
-  const [providersFinalized, setProvidersFinalized] = useState(false);
 
-  // Provider Functions
-  const addProvider = (pewpewProvider: PewPewProvider) => {
-    setProviders((prevProviders) => [...prevProviders, pewpewProvider]);
-    console.log("Provider added:", pewpewProvider);
-  };
-
-  const clearAllProviders = () => {
-    setProviders([]); //Clear all providers in the array
-    console.log("All Providers cleared");
-  };
-
-  const deleteProvider = (id: string) => {
-    setProviders((prevProviders) => 
-      prevProviders.filter(provider => provider.id !== id)
-    );
-    console.log("Provider deleted with ID:", id);
-  };
-
-  const changeProvider = (updatedProvider: PewPewProvider) => {
-    setProviders((prevProviders) => 
-      prevProviders.map(provider => 
-        provider.id === updatedProvider.id ? updatedProvider : provider
-      )
-    );
-    console.log("Provider changed:", updatedProvider);
-  };
-
-  const providerProps = {
-    addProvider,
-    clearAllProviders,
-    deleteProvider,
-    changeProvider,
-    providers,
-  };
-
-  // Function to open and close customize modal
+  // Functions to open and close customize modal
   // JSON file will be present after upload modal is used
   // Closing upload modal will send the file to here
-  const toggleCustomizeModal = (jsonFile?: Har) => {
-    if (jsonFile) {
-      try {
-        /* log("jsonFile", LogLevel.DEBUG, jsonFile); */
-        createFileArray(jsonFile);
-        log("createFileArray finished", LogLevel.DEBUG);
-        endpointModalRef.current?.openModal();
-        log("endpointModalRef openModal", LogLevel.DEBUG);
-      } catch (error) {
-        log("Error parsing file", LogLevel.ERROR, error, "Make sure the upload is a valid HAR file");
-        alert("Error parsing files, make sure uploads are valid HAR file");
+
+  const handleFileUpload = async (file: any, type: 'HAR' | 'HTML' | 'Swagger', modalRef: React.RefObject<ModalObject>) => {
+    try {
+      // Switch case to handle different types of files
+      switch (type) {
+        case 'HAR':
+          log("Creating file array for HAR", LogLevel.DEBUG);
+          createFileArray(file);
+          break;
+        case 'HTML':
+          await handleHTMLfile(file);
+          break;
+        case 'Swagger':
+          await handleSwaggerfile(file);
+          break;
       }
+      modalRef.current?.openModal();  // Open the corresponding modal for this file type
+    } catch (error) {
+      // Log any error and alert the user
+      log(`Error processing ${type} file`, LogLevel.ERROR, error);
+      alert(`Error processing ${type} file. Please make sure it's a valid file.`)
     }
+  };
+
+  // To process HTML files
+  // Gets the server URL from the file
+  const handleHTMLfile = async (doc: Document) => {
+    // Attempt to extract server URL from the doc
+    const serverOption = doc.querySelector('div.servers option') as HTMLOptionElement;
+    let serverUrl = serverOption ? serverOption.value : '';
+
+    // IF server URL is blank then we need user input to fill it out
+    if (serverUrl === '/') {
+      serverUrl = await new Promise<string>((resolve, reject) => {
+        setServerUrlCallback(() => (inputUrl: string) => {
+          if (inputUrl && inputUrl !== '/') {
+            resolve(inputUrl);
+          } else {
+            alert("Server URL is required. It cannot be '/'");
+            reject("Invalid server URL");
+          }
+        });
+        serverUrlModalRef.current?.openModal(); // Open that modal for server url input
+      });
+    }
+    log("Creating HTML file array", LogLevel.DEBUG);
+    createHTMLFileArray(doc); // Call create to fill out the endpoint arrays and other data
+    clearStateValue('serverUrl');
+  }
+
+  // Handles swagger file uploads
+  // Gets the server URL and processes the data from the swagger file
+  const handleSwaggerfile = async (swaggerData: any) => {
+    //First get the server URL
+    let serverUrl = swaggerData.servers?.[0]?.url || '';
+    
+    // If empty we need the user input
+    if (serverUrl === '/') {
+      serverUrl = await new Promise<string>((resolve, reject) => {
+        setServerUrlCallback(() => (inputUrl: string) => {
+          if (inputUrl && inputUrl !== '/') {
+            resolve(inputUrl);
+          } else {
+            alert("Server URL is required. It cannot be '/'");
+            reject("Invalid server URL");
+          }
+        });
+        serverUrlModalRef.current?.openModal(); // Open the modal for input
+      });
+    }
+    log("Creating Swagger URL file array", LogLevel.DEBUG);
+    createSwaggerUrlFileArray(swaggerData, serverUrl); // Call create to fill out the endpoint arrays and other data
+    clearStateValue('serverUrl');
+  }
+
+  // Each toggle function is meant to tell handleFile upload which one is being called. Is it a Har file, or HTML, or URL?
+  const toggleCustomizeModal = (jsonFile?: Har) => {
+    handleFileUpload(jsonFile, 'HAR', endpointModalRef);
   };
 
   const toggleHTMLModal = async (doc?: Document) => {
-    if (doc) {
-      try {
-        // Select the first option element wihin a div with class 'servers'. We will use this later when building endpoints
-        const serverOption = doc.querySelector("div.servers option") as HTMLOptionElement;
-        // Get the value of the selected server option or default to an empty string
-        let serverUrl = serverOption ? serverOption.value : "";
-        // If the server URL is '/' prompt the suer to enter a valid URL using a window prompt
-        if (serverUrl === "/") {
-          serverUrl = await new Promise<string>((resolve, reject) => {
-             setServerUrlCallback(() => (inputUrl: string) => {
-              if (inputUrl && inputUrl !== "/") {
-                resolve(inputUrl);
-              } else {
-                alert("Server URL is required. It cannot be '/'");
-                reject("Invalid server URL");
-              }
-             });
-            serverUrlModalRef.current?.openModal();
-          });
-        }
-        createHTMLFileArray(doc);
-        log("createFileArray finished", LogLevel.DEBUG);
-        endpointModalRef.current?.openModal();
-        log("endpointModalRef openModal", LogLevel.DEBUG);
-        clearServerUrl();
-      } catch (error) {
-        // Log any errors encountered during processing and alert the user
-        log("Error parsing file", LogLevel.ERROR, error, "Make sure the upload is a valid HTML file");
-        alert("Error parsing files, make sure uploads are valid HTML file");
-      }
-    }
+    handleFileUpload(doc, 'HTML', endpointModalRef);
   };
 
   const toggleSwaggerUrlModal = async (swaggerData: any) => {
-    try {
-      // Extract the server URL from the Swagger data object, default to an empty string if the server url is not present
-      let serverUrl = swaggerData.servers && swaggerData.servers[0] && swaggerData.servers[0].url ? swaggerData.servers[0].url : "";
-
-      // If the server URL is '/', prompt the user to enter a valid URL with validation.
-      if (serverUrl === "/") {
-        serverUrl = await new Promise<string>((resolve, reject) => {
-          setServerUrlCallback(() => (inputUrl: string) => {
-            if (inputUrl && inputUrl !== "/") {
-              resolve(inputUrl);
-            } else {
-              alert("Server URL is required. It cannot be '/'");
-              reject("Invalid server URL");
-            }
-          });
-          serverUrlModalRef.current?.openModal();
-        });
-      }
-      // Create an array of files from the Swagger data with the updated URL
-      createSwaggerUrlFileArray(swaggerData, state.serverUrl);
-      log("createSwaggerUrlFileArray finished", LogLevel.DEBUG);
-      // Open the endpoint modal to display the results.
-      endpointModalRef.current?.openModal();
-      log("endpointModalRef openModal", LogLevel.DEBUG);
-      clearServerUrl();
-    } catch (error) {
-      // Loga ny errors encountrered during processing and alert the user
-      log("Error parsing Swagger URL", LogLevel.ERROR, error);
-      alert("Error parsing Swagger URL. Please input a valid Swagger");
-    }
+    handleFileUpload(swaggerData, 'Swagger', endpointModalRef);
   };
 
   // Called when upload modal is closed
@@ -356,7 +343,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             resolve();
           } catch (jsonError) {
             try {
-              // Check if it's an HTML Swagger UI file
+              // Check if it's a valid file and is allowed to continue
               const parser = new DOMParser();
               const doc = parser.parseFromString(text, "text/html");
               if (isValidHTMLDocument(doc)) {
@@ -394,6 +381,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   };
 
   const isValidSwaggerDocument = (swaggerData: any): boolean => {
+    // Check the version whether it has paths and if they are valid paths, if the servers is present and if it has a good host
     const hasValidVersion = typeof swaggerData.openapi === "string" || typeof swaggerData.swagger === "string";
     const versionRegex = /^(\d+\.\d+\.\d+|3\.\d+\.\d+|2\.\d+\.\d+)$/;
     const validVersionFormat = versionRegex.test(swaggerData.openapi || swaggerData.swagger);
@@ -441,7 +429,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     }
   };
 
-  //Sends endpoints to App.js to send to Content.js
+  // Sends endpoints to App.js to send to Content.js
   const finalizeEndpoints = () => {
     props.sendEndpoints(
       (state.output[filename]?.endpoints || [])
@@ -450,41 +438,23 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     );
     return Promise.resolve();
   };
-  const finalizeProviders = () => {
-    if (!providersFinalized && providers.length > 0) {
-      setProvidersFinalized(true);
 
-      console.log("Finalizing providers:", providers);
-      console.log("Provider props befor pfinalization", providerProps);
+  // Use if a state needs to be cleared
+  // Meant to clear a specific key in the state like htmlFile or file
+  const clearStateValue = (key: keyof YamlWriterUploadState) => {
+    // Update the state by clearing the specified key value
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => {
+      const newState = {
+        ...prevState,
+        [key]: key === 'file' || key === 'htmlFile' ? undefined : ''
+      };
+      return newState; // Return the new state
+    });
 
-      providerProps.clearAllProviders();
-      providers.forEach(provider => {
-        providerProps.addProvider(provider);
-      });
-      console.log("Providers finalized succcessfully");
-    } else {
-      console.log("NO providers to finalize")
+    // If the cleared key is about files we also call setFileName to ('')
+    if (key === 'file' || key === 'htmlFile') {
+      setFilename('');
     }
-    return Promise.resolve();
-  };
-  useEffect(() => {
-    if (providers.length > 0 && !providersFinalized) {
-      finalizeProviders();
-    }
-  }, [providers, providersFinalized]);
-
-  // Used if file is removed from upload list
-  const clearFile = () => {
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, file: undefined }));
-    setFilename("");
-  };
-
-  const clearSwaggerUrl = () => {
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, swaggerUrl: "" }));
-  };
-
-  const clearServerUrl = () => {
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, serverUrl: "" }));
   };
 
   // Checks both current state, and parent state to see if file has already been uploaded
@@ -496,16 +466,16 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     }));
   };
 
+  // Handles the submission of the server URL entered by user
   const handleServerUrlSubmit = (): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       const serverUrlInput = document.getElementById("server-url-input") as HTMLInputElement;
       const serverUrl = serverUrlInput?.value.trim();
 
       try {
-        new URL(serverUrl);
+        new URL(serverUrl); // Validate the URL format is it a actual URL?
       } catch {
         alert("Please enter a valid URL.");
-        console.log("Here in failure");
         return reject("Invalid URL");
       }
       if (serverUrlCallback) {
@@ -752,13 +722,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     if (uniqueVariables.size > 0) {
       setFoundVariables(Array.from(uniqueVariables));
       variableModalRef.current?.openModal();
-      const newProviders = Array.from(uniqueVariables).map(variable => {
-        const provider = newProviderList();
-        provider.name = variable;
-        return provider;
-      });
-      setProviders(newProviders);
-      setProvidersFinalized(false);
     }
 
     // Prepare and update the state with parsed output
@@ -866,12 +829,12 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     <HeaderMain>
       <h2> Create from Upload </h2>
       <Div style={{ marginTop: "0px", justifyContent: "space-between"}}>
-        <UploadHarButton onClick={() => fileModalRef.current?.openModal()}>
+        <StyledButton onClick={() => fileModalRef.current?.openModal()}>
           Upload File
-        </UploadHarButton>
-        <UploadSwaggerURLButton onClick={() => swaggerUrlModalRef.current?.openModal()}>
+        </StyledButton>
+        <StyledButton onClick={() => swaggerUrlModalRef.current?.openModal()}>
           Upload Swagger URL File
-        </UploadSwaggerURLButton>
+        </StyledButton>
           <h3 style={{paddingRight: "100px"}}>
             <a href="https://familysearch.github.io/pewpew/" target="_blank">
             Help
@@ -879,39 +842,57 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           </h3>
       </Div>
       {/* This is the upload file modal */}
-      <Modal
-        ref={fileModalRef}
+      <ModalWrapper
+        modalRef={fileModalRef}
         title="Upload Files"
         submitText="Load"
-        onSubmit={submitEvent}
         closeText="Cancel"
-        onClose={clearFile}
+        onSubmit={submitEvent}
+        onClose={() => {
+          clearStateValue('file');
+          clearStateValue('htmlFile');
+        }}
         isReady={state.file !== undefined}
       >
         <div style={{color: "rgb(242, 241, 239)"}}>
           Drag file to drop zone or click to select file to load. Currently will only load one file at a time. Accepts either Har file or Swagger HTML file.
         </div>
+        <div style={{color: "rgb(242, 241, 239)"}}>
+          IMPORTANT! Swaggger HTML files must have all collapsible endpoints opened
+        </div>
         <div style={{ width: "90%", height: "250px" }}>
           <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
         </div>
         <div>
+          {/* for HAR */}
           {state.file && (
             <div style={{paddingTop: "13px"}}>
-              <button style={{marginRight: "5px"}} onClick={clearFile}>X</button>
+              <button style={{marginRight: "5px"}} onClick={() => {
+                clearStateValue('file');
+                }}>X</button>
               {state.file.name}
             </div>
           )}
+          {/* for HTML */}
+          {state.htmlFile && (
+            <div style={{paddingTop: "13px"}}>
+              <button style={{marginRight: "5px"}} onClick={() => {
+                clearStateValue('htmlFile');
+                }}>X</button>
+              {state.htmlFile.name}
+            </div>
+          )}
         </div>
-      </Modal>
+      </ModalWrapper>
       {/* Modal for Swagger URL input */}
-      <Modal
-        ref={swaggerUrlModalRef}
+      <ModalWrapper
+        modalRef={swaggerUrlModalRef}
         title="Enter Swagger URL"
         submitText="Submit"
         closeText="Cancel"
-        onSubmit={submitUrlEvent}
-        onClose={clearSwaggerUrl}
         isReady={true}
+        onSubmit={submitUrlEvent}
+        onClose={() => clearStateValue('swaggerUrl')}
       >
         <div style={{color: "rgb(242, 241, 239)"}}>
           Enter URL from Swagger JSON doc.
@@ -919,7 +900,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <div style={{ width: "90%", height: "auto", display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column" }}>
           <input type="text" style={{ width: "80%", padding: "10px", marginTop: "10px" }} placeholder="Enter Swagger URL" value={state.swaggerUrl} onChange={(e) => setState({ ...state, swaggerUrl: e.target.value })} />
         </div>
-      </Modal>
+      </ModalWrapper>
       {/* This is the modal that opens when a server is missing in a swagger upload */}
       <Modal
         ref= {serverUrlModalRef}
@@ -933,7 +914,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           }
         }}
         closeText="Cancel"
-        onClose={clearServerUrl}
+        onClose={() => clearStateValue('serverUrl')}
         isReady={true}
       >
         <div style={{color: "rgb(242, 241, 239)"}}>

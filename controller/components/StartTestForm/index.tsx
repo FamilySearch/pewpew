@@ -62,7 +62,7 @@ const UploadTestButton = styled.button`
 const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <Info>
   <Column>
   <p>
-    {`'${username}'` || "User"} is not authorized to run tests.<br/>
+    {username ? `'${username}'` : "User"} is not authorized to run tests.<br/>
     Please request 'Pewpew - User' permission if you need to be able to run tests.
   </p>
   <Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning>
@@ -334,6 +334,10 @@ export const StartTestForm = ({
         foundVar.variableName = newEnvVar.variableName !== undefined ? newEnvVar.variableName : foundVar.variableName;
         foundVar.variableValue = newEnvVar.variableValue !== undefined ? newEnvVar.variableValue : foundVar.variableValue;
         foundVar.type = newEnvVar.type !== undefined ? newEnvVar.type : foundVar.type;
+        if (newEnvVar.type === "password" && foundVar.variableName === "") {
+          // If we check the "password" box and the name is blank, default the name to PASSWORD
+          foundVar.variableName = "PASSWORD";
+        }
       } else {
         // New var
         const newVar: EnvironmentVariablesState = {

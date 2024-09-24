@@ -370,7 +370,7 @@ export async function downloadPriorTestId (
             fieldAdditionalFiles = parsedAdditionalFiles as string[];
           }
         } catch (error) {
-          log("Could not parse fieldAdditionalFiles: " + fieldAdditionalFiles, LogLevel.WARN, fieldAdditionalFiles);
+          log("Could not parse fieldAdditionalFiles: " + fieldAdditionalFiles, LogLevel.WARN, error, fieldAdditionalFiles);
         }
       }
         additionalFileNames.push(...fieldAdditionalFiles);

@@ -125,8 +125,18 @@ export class PpaasEncryptS3File implements s3.S3File {
   }
 
   // Create a sanitized copy which doesn't have the body which may have passwords
-  public sanitizedCopy (): unknown {
-    return Object.assign({}, this, { body: undefined, fileContents: undefined });
+  public sanitizedCopy (): PpaasEncryptS3File {
+    const sanitized = Object.assign(new PpaasEncryptS3File({
+      filename: this.filename,
+      s3Folder: this.s3Folder,
+      fileContents: this.fileContents,
+      tags: this.tags
+    }), this, { body: undefined, fileContents: undefined });
+    const notEnumerable: PropertyDescriptor = { enumerable: false, configurable: true, writable: true };
+    Object.defineProperties(sanitized, {
+      body: notEnumerable, fileContents: notEnumerable
+    });
+    return sanitized;
   }
 
   // Override toString so we can not log the body which may have passwords

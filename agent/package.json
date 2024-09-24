@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Agent Service for running pewpew tests",
   "main": "dist/src/app.js",
   "scripts": {
@@ -19,7 +19,6 @@
     "type": "git",
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
-  "author": "trevorm@churchofjesuschrist.org",
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },
@@ -45,17 +44,19 @@
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-sqs": "^3.363.0",
     "@aws-sdk/util-stream-node": "^3.363.0",
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.8.0",
     "@types/bunyan": "~1.8.8",
     "@types/chai": "^4.3.5",
     "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.0.0",
     "@types/semver": "^7.5.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "axios": "~1.7.0",
     "chai": "^4.3.7",
-    "eslint": "^8.40.0",
+    "eslint": "^9.8.0",
     "mocha": "^10.2.0",
     "nyc": "^17.0.0",
     "typescript": "^5.3.0"

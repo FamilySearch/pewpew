@@ -11,12 +11,16 @@ use futures::{
     FutureExt, TryFutureExt,
 };
 use futures_timer::Delay;
+use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::{
-    client::HttpConnector,
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST},
-    Client, Method, Request,
+    Method, Request,
 };
 use hyper_tls::HttpsConnector;
+use hyper_util::client::legacy::{
+    connect::{dns::GaiResolver, HttpConnector},
+    Client,
+};
 use log::{debug, info};
 use serde_json as json;
 
@@ -41,8 +45,9 @@ pub(super) struct RequestMaker {
     pub(super) headers: Vec<(String, Template)>,
     pub(super) body: BodyTemplate,
     pub(super) rr_providers: u16,
-    pub(super) client:
-        Arc<Client<HttpsConnector<HttpConnector<hyper::client::connect::dns::GaiResolver>>>>,
+    pub(super) client: Arc<
+        Client<HttpsConnector<HttpConnector<GaiResolver>>, BoxBody<bytes::Bytes, std::io::Error>>,
+    >,
     pub(super) stats_tx: StatsTx,
     pub(super) no_auto_returns: bool,
     pub(super) outgoing: Arc<Vec<Outgoing>>,
@@ -201,7 +206,7 @@ impl RequestMaker {
                 headers.insert(CONTENT_LENGTH, content_length.into());
             }
             debug!("final headers={:?}", headers);
-            info!("RequestMaker method=\"{}\" url=\"{}\" request_headers={:?} tags={:?}", method, url.as_str(), headers, tags);
+            info!("RequestMaker::send_request method=\"{}\" url=\"{}\" request_headers={:?} tags={:?}", method, url.as_str(), headers, tags);
             let mut request_provider = json::json!({});
             let request_obj = request_provider
                 .as_object_mut()
@@ -279,21 +284,7 @@ impl RequestMaker {
             request.headers_mut().extend(headers);
 
             let mut response_future = client.request(request).map_err(|e| {
-                let err: Arc<dyn StdError + Send + Sync> = if let Some(io_error_maybe) = e.source()
-                {
-                    if io_error_maybe.downcast_ref::<std::io::Error>().is_some() {
-                        let io_error = e.into_cause().expect("should have a cause error");
-                        Arc::new(
-                            *io_error
-                                .downcast::<std::io::Error>()
-                                .expect("should downcast as io error"),
-                        )
-                    } else {
-                        Arc::new(e)
-                    }
-                } else {
-                    Arc::new(e)
-                };
+                let err: Arc<dyn StdError + Send + Sync> = Arc::new(e);
                 TestError::from(RecoverableError::ConnectionErr(SystemTime::now(), err))
             });
             let outgoing2 = outgoing.clone();
@@ -327,6 +318,11 @@ impl RequestMaker {
                         stats_tx,
                         tags,
                     };
+                    debug!("RequestMaker::send_request Response<Incoming>={:?}", response);
+                    // Convert from a Response<Incoming> to a Response<BoxBody> to pass to handle()
+                    let (head, body) = response.into_parts();
+                    let response = hyper::Response::from_parts(head, body.boxed().map_err(std::io::Error::other).boxed());
+                    debug!("RequestMaker::send_request Response<BoxBody>={:?}", response);
                     rh.handle(response, auto_returns)
                         .map_err(TestError::from)
                 })
@@ -401,7 +397,7 @@ mod tests {
     fn sends_request() {
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            let (port, ..) = test_common::start_test_server(None);
+            let (port, ..) = test_common::start_test_server(None).await;
             let url = Template::simple(&format!("https://127.0.0.1:{}", port));
             let method = Method::GET;
             let headers = Vec::new();

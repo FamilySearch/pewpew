@@ -24,7 +24,7 @@ const makeTestData = (status: TestStatus): TestData => {
     ppaasTestId = PpaasTestId.makeTestId("Story" + counter, {
       dateString: PpaasTestId.getDateString(date)
     });
-  } catch (error) {
+  } catch (error) { // eslint-disable-line  @typescript-eslint/no-unused-vars
     // For some reason newer versions of storybook do not have path.extname()
     ppaasTestId = PpaasTestId.getFromS3Folder(`Story${counter}/` + PpaasTestId.getDateString(date));
   }

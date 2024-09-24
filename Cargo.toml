@@ -32,9 +32,11 @@ for_each_parallel = { path = "./lib/for_each_parallel" }
 futures = "0.3"
 futures-timer = "3"
 hdrhistogram = "7"
-http = "0.2"
-hyper = { version = "0.14", features = ["client", "http1", "http2", "stream"] }
-hyper-tls = "0.5"
+http = "1"
+hyper = { version = "1", features = ["client", "http1", "http2"] }
+hyper-tls = "0.6"
+hyper-util = { version = "0.1", features = ["tokio", "client", "http1", "http2"] }
+http-body-util = "0.1"
 itertools = "0.13"
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"

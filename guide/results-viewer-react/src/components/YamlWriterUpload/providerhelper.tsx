@@ -11,7 +11,7 @@ export const useProviderManager = () => {
     const addProviders = (variables: Set<string>) => {
         const newListProviders = Array.from(variables).map(variable => ({
             id: uniqueId(),
-            type: 'list',
+            type: "list",
             name: variable,
             list: [],
             repeat: true,

@@ -187,6 +187,76 @@ const ModalCreateYamlDemo = () => {
   );
 };
 
+// const ModalSwaggerUrlDemo = () => {
+//   const modalRef = useRef<ModalObject | null>(null);
+//   useEffectModal(modalRef, LogLevel.INFO);
+
+//   const [swaggerUrl, setSwaggerUrl] = useState('');
+
+//   const submitEvent = () => {
+//     log ("Swagger URL submitted: " + swaggerUrl, LogLevel.INFO);
+//     return Promise.resolve();
+//   };
+
+//   return (
+//     <div>
+//       <GlobalStyle />
+//       <button onClick={() => modalRef.current?.openModal()}>Upload Swagger URL</button>
+//       <Modal
+//         ref={modalRef}
+//         title={"Upload Swagger URL"}
+//         submitText={"Submit"}
+//         onSubmit={submitEvent}
+//         closeText={"Cancel"}
+//         isReady={swaggerUrl.length > 0}
+//       >
+//         <input
+//           type="text"
+//           value={swaggerUrl}
+//           onChange={(e) => setSwaggerUrl(e.target.value)}
+//           placeholder="Enter Swagger URL"
+//           style={{ width: "100%", padding: "8px", marginTop: "10px" }}
+//           />
+//       </Modal>
+//     </div>
+//   );
+// };
+
+// const ModalServerUrlDemo = () => {
+//   const modalRef = useRef<ModalObject | null>(null);
+//   useEffectModal(modalRef, LogLevel.INFO);
+
+//   const [serverUrl, setServerUrl] = useState('');
+
+//   const submitEvent = () => {
+//     log ("Server URL submitted: " + serverUrl, LogLevel.INFO);
+//     return Promise.resolve();
+//   };
+
+//   return (
+//     <div>
+//       <GlobalStyle />
+//       <button onClick={() => modalRef.current?.openModal()}>Insert Server URL</button>
+//       <Modal
+//         ref={modalRef}
+//         title={"Insert Server URL"}
+//         submitText={"Submit"}
+//         onSubmit={submitEvent}
+//         closeText={"Cancel"}
+//         isReady={serverUrl.length > 0}
+//       >
+//         <input
+//           type="text"
+//           value={serverUrl}
+//           onChange={(e) => setServerUrl(e.target.value)}
+//           placeholder="Enter Server URL"
+//           style={{ width: "100%", padding: "8px", marginTop: "10px" }}
+//           />
+//       </Modal>
+//     </div>
+//   );
+// }
+
 export default {
   title: "Modal"
 } as Meta<typeof Modal>;
@@ -206,3 +276,11 @@ export const _LoggerModal: StoryFn = () => (
 export const CreateYamlModal: StoryFn = () => (
   <ModalCreateYamlDemo/>
 );
+
+// export const SwaggerUrlModal: StoryFn = () => (
+//   <ModalSwaggerUrlDemo/>
+// );
+
+// export const ServerUrlModal: StoryFn = () => (
+//   <ModalServerUrlDemo/>
+// );

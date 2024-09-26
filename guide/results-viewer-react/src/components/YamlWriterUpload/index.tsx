@@ -175,33 +175,6 @@ interface IndexType {
   id: string
 }
 
-// Modal wrapper props to make reusing modal component easier
-interface ModalWrapperProps {
-  modalRef: React.RefObject<ModalObject>;
-  title: string;
-  submitText: string;
-  closeText: string;
-  isReady: boolean;
-  onSubmit: () => void;
-  onClose: () => void;
-  children: React.ReactNode;
-}
-
-// A resusable modal wrapper that accepts props and provides a consistent structure for modals
-const ModalWrapper = ({ modalRef, title, submitText, closeText, isReady, onSubmit, onClose, children }: ModalWrapperProps) => (
-  <Modal
-    ref={modalRef}
-    title={title}
-    submitText={submitText}
-    onSubmit={() => Promise.resolve(onSubmit())}
-    closeText={closeText}
-    onClose={onClose}
-    isReady={isReady}
-  >
-    {children}
-  </Modal>
-);
-
 export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultState: YamlWriterUploadState = {
     file: undefined,  // To track the Har file
@@ -419,11 +392,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     let hasValidVersion: boolean = false;
     let hasValidHost: boolean = false;
     if ("openapi" in swaggerData) {
-      // const swaggerData = unknownData as SwaggerDoc3;
       hasValidServers = Array.isArray(swaggerData.servers) && swaggerData.servers.length > 0;
       hasValidVersion = typeof swaggerData.openapi === "string" && versionRegex.test(swaggerData.openapi);
     } else if ("swagger" in swaggerData) {
-      // const swaggerData = unknownData as SwaggerDoc2;
       hasValidHost = typeof swaggerData.host === "string";
       hasValidVersion = typeof swaggerData.swagger === "string" && versionRegex.test(swaggerData.swagger);
     } else {
@@ -647,7 +618,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       const fullPath = baseUrl.endsWith("/") || url.startsWith("/") ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
       const hostUrl = new URL(baseUrl).hostname;
 
-      // Create URL object
+      // Create URL-like object without URL encoding the `{}` on the endpoints,
+      // because using the `new URL()` would encode `{}` into `%7B` and `%7D`.
+      // This ensures the curly braces remain intact for the endpoints.
       const parsedUrl = {
         href: fullPath,
         toString: () => fullPath
@@ -745,7 +718,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
               }
             }
 
-            // Create URL object
+            // Create URL-like object without URL encoding the `{}` on the endpoints,
+            // because using the `new URL()` would encode `{}` into `%7B` and `%7D`.
+            // This ensures the curly braces remain intact for the endpoints.
             const parsedUrl = {
               href: fullPath,
               toString: () => fullPath
@@ -902,8 +877,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           </h3>
       </Div>
       {/* This is the upload file modal */}
-      <ModalWrapper
-        modalRef={fileModalRef}
+      <Modal
+        ref={fileModalRef}
         title="Upload Files"
         submitText="Load"
         closeText="Cancel"
@@ -943,10 +918,10 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             </div>
           )}
         </div>
-      </ModalWrapper>
+      </Modal>
       {/* Modal for Swagger URL input */}
-      <ModalWrapper
-        modalRef={swaggerUrlModalRef}
+      <Modal
+        ref={swaggerUrlModalRef}
         title="Enter Swagger URL"
         submitText="Submit"
         closeText="Cancel"
@@ -960,7 +935,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <div style={{ width: "90%", height: "auto", display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column" }}>
           <input type="text" style={{ width: "80%", padding: "10px", marginTop: "10px" }} placeholder="Enter Swagger URL" value={state.swaggerUrl} onChange={(e) => setState({ ...state, swaggerUrl: e.target.value })} />
         </div>
-      </ModalWrapper>
+      </Modal>
       {/* This is the modal that opens when a server is missing in a swagger upload */}
       <Modal
         ref= {serverUrlModalRef}

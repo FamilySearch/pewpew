@@ -96,9 +96,7 @@ export const YamlWriter = () => {
     <GlobalStyle />
     <h1>Create a PewPew Test</h1>
     <YamlDiv>
-      <YamlWriterUpload
-      sendEndpoints={updateEndpoints}
-      />
+      <YamlWriterUpload sendEndpoints={updateEndpoints}/>
       <YamlWriterForm clearParentEndpoints={clearEndpoints} parentEndpoints={state.endpoints}/>
     </YamlDiv>
   </>

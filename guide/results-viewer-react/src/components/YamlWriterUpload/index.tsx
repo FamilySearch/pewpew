@@ -213,25 +213,25 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       // Switch case to handle different types of files
       switch (type) {
         case "HAR":
-          if (file && 'log' in file && Array.isArray(file.log.entries)) {
+          if (file && "log" in file && Array.isArray(file.log.entries)) {
             log("Creating file array for HAR", LogLevel.DEBUG);
             createFileArray(file);
           } else {
-            throw new Error('Invalid Har file');
+            throw new Error("Invalid Har file");
           }
           break;
         case "HTML":
           if (file instanceof Document) {
             await handleHTMLfile(file);
           } else {
-            throw new Error('Invalid HTML file');
+            throw new Error("Invalid HTML file");
           }
           break;
         case "Swagger":
-          if ((file && 'openapi' in file && 'paths' in file)) {
+          if ((file && "openapi" in file && "paths" in file)) {
             await handleSwaggerfile(file as OpenAPIV3.Document);
           } else {
-            throw new Error ('Invalid Swagger file');
+            throw new Error ("Invalid Swagger file");
           }
           break;
       }
@@ -306,7 +306,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       handleFileUpload(doc, "HTML", endpointModalRef);
     }
   };
-    
+
 
   const toggleSwaggerUrlModal = async (swaggerData: SwaggerDoc3) => {
     if (swaggerData) {
@@ -705,13 +705,11 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
               for (const responseCode in operation.responses) {
                 const response = operation.responses[responseCode];
                 if ("$ref" in response) {
-                  console.log("Here");
                   break;
                 } else {
                   const responseObj = response as OpenAPIV3.ResponseObject;
                   if (responseObj.content) {
                     mimeType = Object.keys(responseObj.content)[0] || "*/*";
-                    console.log(Object.keys(responseObj.content)[0]);
                     break;
                   }
                 }

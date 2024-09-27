@@ -21,7 +21,7 @@ logger.config.LogFileName = "ppaas-controller";
 
 const { ADDITIONAL_TAGS_ON_ALL } = s3;
 const filename: string = "unittest.json";
-const blueprintTags = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
+const additionalTagsOnAll = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
 
 class PpaasEncryptS3FileUnitTest extends PpaasEncryptS3File {
   public constructor (params: PpaasEncryptS3FileParams) {
@@ -52,7 +52,7 @@ describe("PpaasEncryptS3File", () => {
   let uploadFileContentsEncrypted: string;
   const setupMocks = () => {
     mockS3();
-    mockGetObjectTagging(blueprintTags);
+    mockGetObjectTagging(additionalTagsOnAll);
     mockUploadObject();
   };
 
@@ -375,8 +375,8 @@ describe("PpaasEncryptS3File", () => {
       // Reset this between tests
       testPpaasEncryptS3FileDownload.setLastModifiedRemote(new Date(0));
       lastModified = new Date(); // Set the time to now
-      mockGetObjectTagging(blueprintTags);
-      log("mockGetObjectTagging", LogLevel.DEBUG, blueprintTags);
+      mockGetObjectTagging(additionalTagsOnAll);
+      log("mockGetObjectTagging", LogLevel.DEBUG, additionalTagsOnAll);
     });
 
     it("Get File should return files", (done: Mocha.Done) => {
@@ -392,7 +392,7 @@ describe("PpaasEncryptS3File", () => {
           expect(testPpaasEncryptS3FileDownload.tags, "tags after").to.not.equal(undefined);
           expect(testPpaasEncryptS3FileDownload.tags?.size, "tags.size").to.equal(1);
           for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-            expect(testPpaasEncryptS3FileDownload.tags?.get(key), "tags[BLUEPRINT_TAG_KEY]").to.equal(value);
+            expect(testPpaasEncryptS3FileDownload.tags?.get(key), `ADDITIONAL_TAGS_ON_ALL tags["${key}"]`).to.equal(value);
           }
           done();
         }).catch((error) => {
@@ -419,7 +419,7 @@ describe("PpaasEncryptS3File", () => {
           expect(testPpaasEncryptS3FileDownload.tags, "tags after").to.not.equal(undefined);
           expect(testPpaasEncryptS3FileDownload.tags?.size, "tags.size").to.equal(1);
           for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-            expect(testPpaasEncryptS3FileDownload.tags?.get(key), "tags[BLUEPRINT_TAG_KEY]").to.equal(value);
+            expect(testPpaasEncryptS3FileDownload.tags?.get(key), "tags[_TAG_KEY]").to.equal(value);
           }
           done();
         }).catch((error) => {
@@ -472,7 +472,7 @@ describe("PpaasEncryptS3File", () => {
           expect(testPpaasEncryptS3FileDownload.tags, "tags after").to.not.equal(undefined);
           expect(testPpaasEncryptS3FileDownload.tags?.size, "tags.size").to.equal(1);
           for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-            expect(testPpaasEncryptS3FileDownload.tags?.get(key), "tags[BLUEPRINT_TAG_KEY]").to.equal(value);
+            expect(testPpaasEncryptS3FileDownload.tags?.get(key), `ADDITIONAL_TAGS_ON_ALL tags["${key}"]`).to.equal(value);
           }
           done();
         }).catch((error) => {

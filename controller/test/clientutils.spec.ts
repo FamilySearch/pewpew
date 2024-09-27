@@ -17,7 +17,7 @@ import { expect } from "chai";
 
 logger.config.LogFileName = "ppaas-controller";
 
-describe(("Client Utils"), () => {
+describe("Client Utils", () => {
   const publicRuntimeConfig: Record<string, string | undefined> = clientPublicRuntimeConfig;
   let savedBasePath: string | undefined;
   let savedAssetPrefix: string | undefined;
@@ -235,7 +235,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle base path", (done: Mocha.Done) => {
-      const expected = "/status/unittest";
+      const expected = "/pewpew/unittest";
       publicRuntimeConfig.BASE_PATH = expected;
       const basePath = getBasePath();
       expect(basePath).to.equal(expected);
@@ -276,7 +276,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "/bogus";
       const expected = publicRuntimeConfig.BASE_PATH + path;
       const actual = formatAssetHref(path);
@@ -285,7 +285,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle ASSET_PREFIX string", (done: Mocha.Done) => {
-      publicRuntimeConfig.ASSET_PREFIX = "/status/unittest";
+      publicRuntimeConfig.ASSET_PREFIX = "/pewpew/unittest";
       const path = "/bogus";
       const expected = publicRuntimeConfig.ASSET_PREFIX + path;
       const actual = formatAssetHref(path);
@@ -295,7 +295,7 @@ describe(("Client Utils"), () => {
 
     it("should override BASE_PATH with ASSET_PREFIX", (done: Mocha.Done) => {
       publicRuntimeConfig.BASE_PATH = "/wrong/path";
-      publicRuntimeConfig.ASSET_PREFIX = "/status/unittest";
+      publicRuntimeConfig.ASSET_PREFIX = "/pewpew/unittest";
       const path = "/bogus";
       const expected = publicRuntimeConfig.ASSET_PREFIX + path;
       const actual = formatAssetHref(path);
@@ -337,7 +337,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "/bogus";
       const expected = publicRuntimeConfig.BASE_PATH + path;
       const actual = formatPageHref(path);
@@ -346,7 +346,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle empty path string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "";
       const expected = publicRuntimeConfig.BASE_PATH + path;
       const actual = formatPageHref(path);
@@ -355,7 +355,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should handle slash only path string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "/";
       const expected = publicRuntimeConfig.BASE_PATH + path;
       const actual = formatPageHref(path);
@@ -364,7 +364,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should not add BASE_PATH if path is http://", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "http://bogus.com/";
       const expected = path;
       const actual = formatPageHref(path);
@@ -373,7 +373,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should not add BASE_PATH if path is https://", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "https://bogus.com/";
       const expected = path;
       const actual = formatPageHref(path);
@@ -382,7 +382,7 @@ describe(("Client Utils"), () => {
     });
 
     it("should not add BASE_PATH if path has it", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = publicRuntimeConfig.BASE_PATH + "/bogus";
       const expected = path;
       const actual = formatPageHref(path);
@@ -391,8 +391,8 @@ describe(("Client Utils"), () => {
     });
 
     it("should not add BASE_PATH if path has it without the slash", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
-      const path = "status/unittest/bogus/";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      const path = "pewpew/unittest/bogus/";
       const expected = path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
@@ -400,9 +400,9 @@ describe(("Client Utils"), () => {
     });
 
     it("should add BASE_PATH without the slash if path has it without the slash", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/status/unittest";
+      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
       const path = "bogus/";
-      const expected = "status/unittest/bogus/";
+      const expected = "pewpew/unittest/bogus/";
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
       done();

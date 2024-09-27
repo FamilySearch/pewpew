@@ -49,7 +49,7 @@ describe("Secrets Integration", () => {
       });
     });
 
-    it("getKey openIdClientSecret should succeed", (done: Mocha.Done) => {
+    it("getKey openId Client Secret should succeed", (done: Mocha.Done) => {
       getKey(secretsConfig.openIdClientSecret).then((key: string) => {
         log("getKey() = " + key, LogLevel.TRACE);
         expect(key.length).to.be.greaterThan(0);

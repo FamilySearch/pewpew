@@ -23,7 +23,6 @@ export default [{
     "tests/**",
     "next-env.d.ts",
     "next.config.js",
-    "**/setup.js",
     "common/lib",
     "controller/lib",
     "controller/storybook-static",
@@ -35,6 +34,7 @@ export default [{
 }, ...compat.extends(
   "eslint:recommended",
   "plugin:@typescript-eslint/stylistic",
+  "plugin:@typescript-eslint/eslint-recommended",
   "plugin:@typescript-eslint/recommended",
 ), {
   "plugins": {

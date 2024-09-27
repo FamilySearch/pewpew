@@ -1,12 +1,11 @@
 import { PewPewListProvider } from "../YamlProviders/ProviderTypes";
+import { PewPewProvider } from "../../util/yamlwriter";
 import { uniqueId } from "../../util/clientutil";
 import { useState } from "react";
-import { PewPewProvider } from "../../util/yamlwriter";
 
 
 export const useProviderManager = () => {
     const [providers, setProviders] = useState<PewPewProvider[]>([]);
-
 
     const addProviders = (variables: Set<string>) => {
         const newListProviders = Array.from(variables).map(variable => ({

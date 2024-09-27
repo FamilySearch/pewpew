@@ -8,14 +8,14 @@ import {
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
+import type { OpenAPIV2, OpenAPIV3} from "openapi-types";
 import React, { useRef, useState } from "react";
 import { Div } from "../Div";
 import DropFile from "../DropFile";
 import { Span } from "../YamlStyles";
+import { convertObj } from "swagger2openapi";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
-import { OpenAPIV2, OpenAPIV3} from "openapi-types";
-import { convertObj } from "swagger2openapi";
 
 type SwaggerDoc2 = OpenAPIV2.Document;
 type SwaggerDoc3 = OpenAPIV3.Document;
@@ -303,14 +303,14 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
   const toggleHTMLModal = async (doc?: Document) => {
     if (doc) {
-      handleFileUpload(doc, "HTML", endpointModalRef);
+      await handleFileUpload(doc, "HTML", endpointModalRef);
     }
   };
 
 
   const toggleSwaggerUrlModal = async (swaggerData: SwaggerDoc3) => {
     if (swaggerData) {
-      handleFileUpload(swaggerData, "Swagger", endpointModalRef);
+      await handleFileUpload(swaggerData, "Swagger", endpointModalRef);
     }
   };
 
@@ -329,7 +329,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     // When reader loads, parse file, and toggle customize modal
     try {
       const returnPromise = new Promise<void>((resolve, reject) => {
-        reader.onload = (event: ProgressEvent<FileReader>) => {
+        reader.onload = async (event: ProgressEvent<FileReader>) => {
           const readerTarget = event.target as FileReader;
           const text = readerTarget.result as string;
           try {
@@ -343,12 +343,13 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             }
             resolve();
           } catch (jsonError) {
+            log("submitEvent error", LogLevel.WARN, jsonError);
             try {
               // Check if it's a valid file and is allowed to continue
               const parser = new DOMParser();
               const doc = parser.parseFromString(text, "text/html");
               if (isValidHTMLDocument(doc)) {
-                toggleHTMLModal(doc);
+                await toggleHTMLModal(doc);
                 resolve();
               } else {
                 throw new Error("Invalid HTML Swagger UI document");

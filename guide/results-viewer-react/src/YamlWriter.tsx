@@ -91,7 +91,6 @@ export const YamlWriter = () => {
     setParentState((prevState: YamlWriterState): YamlWriterState => ({...prevState, endpoints: []}));
   };
 
-
   return (<>
     <GlobalStyle />
     <h1>Create a PewPew Test</h1>

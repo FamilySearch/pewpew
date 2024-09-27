@@ -50,7 +50,7 @@ export const AUTH_HEADER_HOST: string = "authhost";
 export const COOKIE_DURATION_DAYS: number = parseInt(publicRuntimeConfig.COOKIE_DURATION_DAYS || "0", 10) || 1;
 export const REFRESH_COOKIE_DURATION_DAYS: number = parseInt(publicRuntimeConfig.REFRESH_COOKIE_DURATION_DAYS || "0", 10) || 1;
 
-// Allow fslocal and familysearch. During development allow localhost
+// Allow internal and external. During development allow localhost
 export const VALID_DOMAINS: string[] = [CNAME_DOMAIN, ROUTING_DOMAIN];
 if (isAuthDevelopment()) { VALID_DOMAINS.push(LOCALHOST_DOMAIN); }
 log("VALID_DOMAINS=" + VALID_DOMAINS, LogLevel.DEBUG, { VALID_DOMAINS, isAuthEnabled: isAuthEnabled(), AUTH_MODE });

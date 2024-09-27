@@ -419,7 +419,7 @@ describe("PpaasEncryptS3File", () => {
           expect(testPpaasEncryptS3FileDownload.tags, "tags after").to.not.equal(undefined);
           expect(testPpaasEncryptS3FileDownload.tags?.size, "tags.size").to.equal(1);
           for (const [key, value] of ADDITIONAL_TAGS_ON_ALL) {
-            expect(testPpaasEncryptS3FileDownload.tags?.get(key), "tags[_TAG_KEY]").to.equal(value);
+            expect(testPpaasEncryptS3FileDownload.tags?.get(key), `ADDITIONAL_TAGS_ON_ALL tags["${key}"]`).to.equal(value);
           }
           done();
         }).catch((error) => {

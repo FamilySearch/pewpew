@@ -1,5 +1,6 @@
 const path = require('path');
 const HTMLWebpackPlugin = require('html-webpack-plugin');
+const webpack = require("webpack");
 
 const pages = ["index", "yaml"];
 const entries = pages.reduce((config, page) => {
@@ -37,8 +38,17 @@ module.exports = {
   },
   resolve: {
     extensions: ['.tsx', '.jsx', '.ts', '.js', '.json', '...'],
+    fallback: {
+      fs: false,
+      http: false,
+      path: false,
+      // process: require.resolve("process/browser.js"),
+    },
   },
   plugins: [
-    ...htmlWebpackPlugins
+    ...htmlWebpackPlugins,
+    new webpack.ProvidePlugin({
+      process: 'process',
+    }),
   ],
 };

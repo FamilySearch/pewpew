@@ -19,6 +19,7 @@ import { uniqueId } from "../../util/clientutil";
 
 type SwaggerDoc2 = OpenAPIV2.Document;
 type SwaggerDoc3 = OpenAPIV3.Document;
+type SwaggerDoc = SwaggerDoc2 | SwaggerDoc3;
 
 export const HeaderMain = styled.div`
   width: 100%;
@@ -387,7 +388,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     if (unknownData === null || unknownData === undefined || typeof unknownData !== "object") {
       return false;
     }
-    const swaggerData: SwaggerDoc2 | SwaggerDoc3 = unknownData as (SwaggerDoc2 | SwaggerDoc3);
+    const swaggerData: SwaggerDoc = unknownData as SwaggerDoc;
     const versionRegex = /^(\d+\.\d+\.\d+|3\.\d+\.\d+|2\.\d+\.\d+)$/;
     let hasValidServers: boolean = false;
     let hasValidVersion: boolean = false;

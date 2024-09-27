@@ -23,7 +23,6 @@ export default [{
     "tests/**",
     "next-env.d.ts",
     "next.config.js",
-    "**/setup.js",
     "common/lib",
     "controller/lib",
     "controller/storybook-static",

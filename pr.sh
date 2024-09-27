@@ -97,6 +97,7 @@ if [[ "$choice" == [Yy]* ]]; then
   done
   set -e
   echo Hit Ctrl-C when acceptance tests finish
+  export ACCEPTANCE_AWS_PERMISSIONS=true
   npm run acceptance:all
   read -e -p "Grab screenshot then hit enter to continue." choice
 fi

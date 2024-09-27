@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "3.3.1",
+  "version": "3.3.2",
   "description": "Agent Service for running pewpew tests",
   "main": "dist/src/app.js",
   "scripts": {

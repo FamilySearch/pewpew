@@ -285,11 +285,11 @@ export async function decryptFile (encryptedFilePath: string, decryptedFilePath?
         decryptedFileContents = await readFile(decryptedFilePath, "utf8");
         log("Using the fallback " + decryptedFilePath, LogLevel.WARN);
       } catch (error) {
-        log(`Could load ${decryptedFilePath}, encryptionKey === undefined && BLUEPRINT_SET === false`, LogLevel.ERROR, error);
+        log(`Could load ${decryptedFilePath}, encryptionKey === undefined && IS_RUNNING_IN_AWS === false`, LogLevel.ERROR, error);
         log(`Please see the README for setting up a Secrets Key override file or create the ${decryptedFilePath} from the template`, LogLevel.ERROR);
       }
     }
-    // Under blueprint this won't be set yet
+    // In aws this won't be set yet
     if (decryptedFileContents === undefined) {
       decryptedFileContents = decrypt(encryptedFileContents);
     }

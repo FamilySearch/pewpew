@@ -1,23 +1,8 @@
 import { LogLevel, log } from "./log";
-import {
-  EC2Client
-} from "@aws-sdk/client-ec2";
 import { exec as _exec } from "child_process";
 import { promisify } from "util";
 import { readFile } from "fs/promises";
 const exec = promisify(_exec);
-
-// Create these later so the profile can be set dynamically
-let ec2Client: EC2Client;
-
-// Init function to initialize these after we've started but on first access
-export function init (): void {
-  if (!ec2Client) {
-    ec2Client = new EC2Client({
-      region: "us-east-1"
-    });
-  }
-}
 
 export const INSTANCE_ID_FILE = "/var/lib/cloud/data/instance-id";
 export const INSTANCE_ID_REGEX = /^i-[0-9a-z]+$/;

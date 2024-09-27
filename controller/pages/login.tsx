@@ -5,10 +5,11 @@ import {
   logout as authLogout
 } from "./api/util/authclient";
 import { Alert, Danger, Info, Warning } from "../components/Alert";
-import {
+import type {
   GetServerSideProps,
   GetServerSidePropsContext,
-  GetServerSidePropsResult
+  GetServerSidePropsResult,
+  NextApiRequest
 } from "next";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
@@ -113,7 +114,7 @@ export const getServerSideProps: GetServerSideProps =
 
     // 1. Check the query for a code on redirect back from AUTH
     if (ctx.query.code && !Array.isArray(ctx.query.code)) {
-      const tokenResponse: TokenResponse = await getTokenFromCode({ ...ctx.req, query: ctx.query, headers: ctx.req.headers } as any);
+      const tokenResponse: TokenResponse = await getTokenFromCode({ ...(ctx.req), query: ctx.query, headers: ctx.req.headers } as NextApiRequest);
       const { token, refreshToken: newRefreshToken, hintToken } = tokenResponse;
       if (token) {
         logServer("auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken: newRefreshToken, hintToken });

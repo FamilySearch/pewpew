@@ -2,10 +2,6 @@ import { LogLevel, ec2, log } from "../src/index";
 import { expect } from "chai";
 
 describe("EC2 Integration", () => {
-  before (() => {
-    ec2.init();
-  });
-
   it("getInstanceId should get instanceId", (done: Mocha.Done) => {
     ec2.getInstanceId().then((result: string) => {
       log("getInstanceId", LogLevel.INFO, { result });

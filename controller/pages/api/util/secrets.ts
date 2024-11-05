@@ -80,7 +80,7 @@ export async function createSecret (secretKeyName: string, value: string | Buffe
   try {
     const input: CreateSecretCommandInput = {
       Name: secretKeyName,
-      Description: "Testing Secrets Manager for PerformanceQA/Pewpew",
+      Description: "Testing Secrets Manager for Performance/Pewpew",
       SecretString: typeof value === "string" ? value : undefined,
       SecretBinary: typeof value !== "string" ? new Uint8Array(value.buffer) : undefined
     };

@@ -27,6 +27,7 @@
     "node": "18"
   },
   "nyc": {
+    "reporter": ["lcov", "text"],
     "exclude": "**/*.spec.ts"
   },
   "dependencies": {

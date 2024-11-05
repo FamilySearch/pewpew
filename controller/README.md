@@ -39,12 +39,12 @@ $ PORT=8081 npm run acceptance
 You also need to configure your Secrets Overrides. You have two options, get the real key from someone who has it, or generate your own key for testing/development but any files stored encrypted in s3 will only be accessible by you. For the OpenId secret, you will need the real one.
 
 ### Generate your own encryption key for testing
-1. If you haven't created a `.env.local` run `cp -i .sample.env .env.local`
+1. If you haven't created a `.env.local` run `cp -i .sample-env .env.local`
 2. Uncomment the `PEWPEW_ENCRYPT_KEY_OVERRIDE` from `.env.local`
 3. Run `openssl rand -hex 16` and copy the value into the quotes for `PEWPEW_ENCRYPT_KEY_OVERRIDE`. Should be something like `a5158c830ac558b21baddb79803105fb`.
 
 ### Add your own OpenId Secret
-1. If you haven't created a `.env.local` run `cp -i .sample.env .env.local`
+1. If you haven't created a `.env.local` run `cp -i .sample-env .env.local`
 2. Uncomment the `PEWPEW_OPENID_SECRET_OVERRIDE` from `.env.local`
 3. Enter the value for your secret into the quotes for `PEWPEW_OPENID_SECRET_OVERRIDE`.
 

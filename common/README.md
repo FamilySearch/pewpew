@@ -24,7 +24,7 @@ logger.log("Log to console", logger.LogLevel.ERROR);
 ```
 
 ## Environment Config
-For your full deployment you should have environment variables injected into CloudFormation to set up the S3 bucket and SQS queues. For local development, copy the `.sample-env` file to `.env.local` (or run `cp -i .sample.env .env.local`). Then modify the .env.local file to point to your S3 bucket and your SQS queues. You can also override the default AWS profile for your local testing via the `AWS_PROFILE` variable if you are not using `default`.
+For your full deployment you should have environment variables injected into CloudFormation to set up the S3 bucket and SQS queues. For local development, copy the `.sample-env` file to `.env.local` (or run `cp -i .sample-env .env.local`). Then modify the .env.local file to point to your S3 bucket and your SQS queues. You can also override the default AWS profile for your local testing via the `AWS_PROFILE` variable if you are not using `default`.
 
 ## Build
 ```bash

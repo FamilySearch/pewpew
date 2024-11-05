@@ -13,6 +13,7 @@
 node_modules
 .nyc_output/
 coverage/
+mutants.out/
 /controller/aws*.sh
 testmerge.json
 .env.local*

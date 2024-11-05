@@ -24,6 +24,7 @@ cargo clippy --all -- -D warnings
 TZ=UTC cargo test --all
 cargo test --all --doc
 
+# cargo install cargo-deny
 cargo deny check --hide-inclusion-graph license sources advisories
 
 CWD=$(pwd)

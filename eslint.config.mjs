@@ -17,7 +17,7 @@ export default [{
   "ignores": [
     "guide",
     "lib",
-    "coverage/**",
+    "**/coverage/**",
     "**/dist/**",
     "target/**",
     "tests/**",

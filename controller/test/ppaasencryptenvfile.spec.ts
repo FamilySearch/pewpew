@@ -517,11 +517,11 @@ describe("PpaasEncryptEnvironmentFile", () => {
 
     it("Upload a test file force should upload unchanged files", (done: Mocha.Done) => {
       const lastModified: number = Date.now();
-      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified);
+      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified - 1);
       testPpaasEncryptEnvironmentFileUpload.upload(true).then(() => {
         log("testPpaasEncryptEnvironmentFileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified
-        expect(testPpaasEncryptEnvironmentFileUpload.getLastModifiedLocal()).to.be.greaterThanOrEqual(lastModified);
+        expect(testPpaasEncryptEnvironmentFileUpload.getLastModifiedLocal()).to.be.greaterThan(lastModified);
         done();
       }).catch((error) => done(error));
     });

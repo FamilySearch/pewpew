@@ -258,12 +258,12 @@ describe("PpaasEncryptS3File", () => {
     it("Upload a test file force should upload unchanged files", (done: Mocha.Done) => {
       mockUploadObject();
       const lastModified: number = Date.now();
-      testPpaasEncryptS3FileUpload.setLastModifiedLocal(lastModified);
+      testPpaasEncryptS3FileUpload.setLastModifiedLocal(lastModified - 1);
       testPpaasEncryptS3FileUpload.upload(true).then(() => {
         s3FileKey = testPpaasEncryptS3FileUpload.key;
         log("testPpaasEncryptS3FileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified
-        expect(testPpaasEncryptS3FileUpload.getLastModifiedLocal()).to.be.greaterThanOrEqual(lastModified);
+        expect(testPpaasEncryptS3FileUpload.getLastModifiedLocal()).to.be.greaterThan(lastModified);
         done();
       }).catch((error) => done(error));
     });

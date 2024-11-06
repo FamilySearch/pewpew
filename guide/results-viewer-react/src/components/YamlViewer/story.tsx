@@ -25,7 +25,6 @@ client:
   headers:
     TestTime: '\${epoch("ms")}'
     Accept: application/json
-    FS-User-Agent-Chain: Pewpew-Agent-Performance Test
     User-Agent: Pewpew Agent Performance Test
 general:
   bucket_size: 1m
@@ -55,7 +54,6 @@ client:
   headers:
     TestTime: '\${epoch("ms")}'
     Accept: application/json
-    FS-User-Agent-Chain: Pewpew-Agent-Performance Test
     User-Agent: Pewpew Agent Performance Test
 general:
   bucket_size: 1m

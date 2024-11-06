@@ -34,9 +34,9 @@ import {
 } from "openid-client";
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from "next";
 import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { parse as cookieParse, serialize as cookieSerialize } from "cookie";
 import { formatPageHref, getHostUrl } from "./clientutil";
 import { IncomingMessage } from "http";
-import cookie from "cookie";
 import { createErrorResponse } from "./util";
 import { getClientSecretOpenId } from "./secrets";
 import nextCookie from "next-cookies";
@@ -265,7 +265,7 @@ function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AU
     log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
   }
   if (!token && req.headers.cookie && !Array.isArray(req.headers.cookie)) {
-    const cookies = cookie.parse(req.headers.cookie);
+    const cookies = cookieParse(req.headers.cookie);
     token = cookies[headerName];
     log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
   }
@@ -374,7 +374,7 @@ export async function authApi (req: NextApiRequest, res: NextApiResponse, requir
     // If we don't have permissions or the permissions are not greater than requiredPermissions
     if (authPermissions.authPermission < requiredPermissions) {
       log("User was not authorized for api", LogLevel.WARN, { token, method: req.method, url: req.url });
-      res.status(403).json({ message: "User is not authorized for this api. If you think this is an error, please contact the PerformanceQA team." });
+      res.status(403).json({ message: "User is not authorized for this api. If you think this is an error, please contact the Performance team." });
       return undefined;
     }
 
@@ -428,15 +428,20 @@ export function setCookies (
   log(`Set cookie to ${token} on ${domain}`, LogLevel.DEBUG);
   // server side
   const oneDay: number = 60 * 60 * 24;
-  const cookies: string[] = [cookie.serialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
-  if (refreshToken) {
-    cookies.push(cookie.serialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
+  try {
+    const cookies: string[] = [cookieSerialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
+    if (refreshToken) {
+      cookies.push(cookieSerialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
+    }
+    if (hintToken) {
+      cookies.push(cookieSerialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
+    }
+    // Set the cookie and then redirect
+    ctx.res.setHeader("Set-Cookie", cookies);
+  } catch (error: unknown) {
+    log("Error setting cookies in header", LogLevel.WARN, error, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
+    throw error;
   }
-  if (hintToken) {
-    cookies.push(cookie.serialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
-  }
-  // Set the cookie and then redirect
-  ctx.res.setHeader("Set-Cookie", cookies);
 }
 
 function getTokenFromCookieOrHeader (ctx: GetServerSidePropsContext, cookieName: string = AUTH_COOKIE_NAME, headerName?: string): string | undefined {

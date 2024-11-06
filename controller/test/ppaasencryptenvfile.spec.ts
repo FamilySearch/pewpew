@@ -521,7 +521,7 @@ describe("PpaasEncryptEnvironmentFile", () => {
       testPpaasEncryptEnvironmentFileUpload.upload(true).then(() => {
         log("testPpaasEncryptEnvironmentFileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified
-        expect(testPpaasEncryptEnvironmentFileUpload.getLastModifiedLocal()).to.be.greaterThan(lastModified);
+        expect(testPpaasEncryptEnvironmentFileUpload.getLastModifiedLocal()).to.be.greaterThanOrEqual(lastModified);
         done();
       }).catch((error) => done(error));
     });

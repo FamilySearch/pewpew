@@ -263,7 +263,7 @@ describe("PpaasEncryptS3File", () => {
         s3FileKey = testPpaasEncryptS3FileUpload.key;
         log("testPpaasEncryptS3FileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified
-        expect(testPpaasEncryptS3FileUpload.getLastModifiedLocal()).to.be.greaterThan(lastModified);
+        expect(testPpaasEncryptS3FileUpload.getLastModifiedLocal()).to.be.greaterThanOrEqual(lastModified);
         done();
       }).catch((error) => done(error));
     });

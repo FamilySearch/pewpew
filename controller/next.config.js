@@ -106,7 +106,7 @@ const nextConfig = {
   distDir: "dist",
   // env: {} // env variables are set at build time, not run time. They are better optimized during the build process
   publicRuntimeConfig: { // These are sent to the client and the server and are set at run time
-    LoggingLevel: process.env.LoggingLevel,
+    LOGGING_LEVEL: process.env.LOGGING_LEVEL || process.env.LoggingLevel,
     APPLICATION_NAME: process.env.APPLICATION_NAME,
     SYSTEM_NAME: process.env.SYSTEM_NAME,
     FS_SITE: process.env.FS_SITE,
@@ -135,7 +135,7 @@ const nextConfig = {
   },
   // https://github.com/vercel/next.js/discussions/11493#discussioncomment-14606
   env: { // These are sent to the client and the server and are set at build time for static pages
-    LoggingLevel: process.env.LoggingLevel || "", // Only checks if debug
+    LOGGING_LEVEL: process.env.LOGGING_LEVEL || process.env.LoggingLevel || "", // Only checks if debug
     // @ts-ignore
     APPLICATION_NAME: process.env.APPLICATION_NAME,
     // @ts-ignore

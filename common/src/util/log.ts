@@ -6,9 +6,9 @@ import { join as pathJoin } from "path";
 export { LogLevel } ;
 
 export const config = {
-  LogFileName: process.env.LogFileName || "ppaas-common",
-  LoggingLevel: process.env.LoggingLevel as Logger.LogLevel || "info",
-  LoggingLevelConsole: process.env.LoggingLevelConsole as Logger.LogLevel || "warn",
+  LogFileName: process.env.LOG_FILE_NAME || process.env.LogFileName || "ppaas-common",
+  LoggingLevel: process.env.LOGGING_LEVEL as Logger.LogLevel || process.env.LoggingLevel as Logger.LogLevel || "info",
+  LoggingLevelConsole: process.env.LOGGING_LEVEL_CONSOLE as Logger.LogLevel || process.env.LoggingLevelConsole as Logger.LogLevel || "warn",
   LogFileLocation: process.env.LOG_FILE_LOCATION || "."
 };
 

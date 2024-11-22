@@ -35,7 +35,7 @@ const nextConfig = {
   },
   experimental: {
     typedRoutes: true,
-    instrumentationHook: true,
+    // instrumentationHook: true,
   },
   webpack: (config, { isServer, dir: optionsDir }) => {
     const wasmExtensionRegExp = /\.wasm$/;

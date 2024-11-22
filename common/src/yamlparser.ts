@@ -80,8 +80,10 @@ export class YamlParser {
           config = new Config(
             fileBuffer,
             varMap,
-            typeof logConfig.LoggingLevel === "number" ? undefined : logConfig.LoggingLevel
-            // TODO: Add version checker
+            // If RUST_LOG is set use that, otherwise use LoggingLevel
+            process.env.RUST_LOG || (typeof logConfig.LoggingLevel === "number"
+              ? undefined
+              : logConfig.LoggingLevel)
           );
           yamlValid = true;
         } catch (error: unknown) {

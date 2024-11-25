@@ -17,7 +17,7 @@ import {
   PewPewHeader
 } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { QuestionBubble } from "../YamlQuestionBubble";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -142,6 +142,9 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
   const invalidHitRate = !HIT_RATE_REGEX.test(state.hitRate);
   const hitRateStyle: React.CSSProperties = getHitRateStyle(invalidHitRate);
   const hitRateTitle: string | undefined = state.hitRate === "" ? "Please enter a Hit Rate" : (getHitRateTitle(invalidHitRate) || "Update all hit rates");
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <button onClick={() => addUrl()}>
@@ -167,9 +170,9 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
           </button>
         </NonFlexSpan>
       </HitratesDiv>
-      <TransitionGroup className="endpoints-section_list">
+      <TransitionGroup className="endpoints-section_list" nodeRef={nodeRef}>
         {Array.from(urlsMap.values()).map((url) => (
-          <CSSTransition key={url.id} timeout={300} classNames="point">
+          <CSSTransition key={url.id} timeout={300} classNames="point" nodeRef={nodeRef}>
             <Urls
               deleteUrl={props.deleteUrl}
               changeUrl={props.changeUrl}

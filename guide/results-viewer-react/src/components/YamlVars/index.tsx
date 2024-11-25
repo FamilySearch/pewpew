@@ -9,7 +9,7 @@ import {
   SESSION_ID_DEFAULT
 } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
 import VarsDropDown from "./DropDown";
 import { uniqueId } from "../../util/clientutil";
@@ -180,6 +180,9 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     }
   };
 
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <button onClick={() => props.addVar(emptyVar())}>
@@ -225,9 +228,9 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
           <VarsDropDown display={state.devKey} onChange={changeEnvironment} />
         </div>
       </Div>
-      <TransitionGroup className="loadPatter-section_list">
+      <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
         {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (
-          <CSSTransition key={pewpewVar.id} timeout={300} classNames="load">
+          <CSSTransition key={pewpewVar.id} timeout={300} classNames="load" nodeRef={nodeRef}>
             <Div>
               <Span>
                 <Label> Name: </Label>

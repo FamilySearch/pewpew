@@ -1,3 +1,4 @@
+import type { Compilation, Compiler, Configuration } from "webpack";
 import { access, symlink } from "fs/promises";
 import CopyPlugin from "copy-webpack-plugin";
 import type { NextConfig } from "next";
@@ -36,12 +37,15 @@ const nextConfig: NextConfig = {
     typedRoutes: true
     // instrumentationHook: true,
   },
-  webpack: (config, { isServer, dir: optionsDir }) => {
+  // Defaults to any but is actually type { import('webpack').Configuration }
+  webpack: (config: Configuration, { isServer, dir: optionsDir }) => {
     const wasmExtensionRegExp = /\.wasm$/;
 
+    if (!config.resolve) { config.resolve = {}; }
+    if (!config.resolve.extensions) { config.resolve.extensions = []; }
     config.resolve.extensions.push(".wasm");
 
-    config.module.rules.forEach((rule: any) => {
+    config.module?.rules?.forEach((rule: any) => {
       (rule.oneOf || []).forEach((oneOf: any) => {
         if (oneOf.loader && oneOf.loader.indexOf("file-loader") >= 0) {
           // Make file-loader ignore WASM files
@@ -50,6 +54,7 @@ const nextConfig: NextConfig = {
       });
     });
 
+    if (!config.output) { config.output = {}; }
     config.output.webassemblyModuleFilename = "static/wasm/[modulehash].wasm";
     if (!config.experiments) { config.experiments = {}; }
     config.experiments.asyncWebAssembly = true;
@@ -58,6 +63,7 @@ const nextConfig: NextConfig = {
     // Compiling we run into an issue where it can't find the config wasm.
     // On Linux the workaround is to create a symlink to the correct location
     // On Windows, the symlinks fail so we must copy the file
+    if (!config.plugins) { config.plugins = []; }
     config.plugins.push(
       platform() === "win32"
       // https://github.com/vercel/next.js/issues/25852#issuecomment-1727385542
@@ -68,13 +74,12 @@ const nextConfig: NextConfig = {
       })
       // https://github.com/vercel/next.js/issues/25852#issuecomment-1057059000
       : new (class {
-        apply (compiler: any) {
+        apply (compiler: Compiler) {
           compiler.hooks.afterEmit.tapPromise(
             "SymlinkWebpackPlugin",
-            // eslint-disable-next-line @typescript-eslint/no-shadow
-            async (compiler: any) => {
+            async (compilation: Compilation) => {
               if (isServer) {
-                const from = join(compiler.options.output.path, "config_wasm_bg.wasm");
+                const from = join(compilation.options.output.path!, "config_wasm_bg.wasm");
                 const to = join(optionsDir, "../lib/config-wasm/pkg/config_wasm_bg.wasm");
                 // options.dir /.../pewpew/controller
                 // console.log(`from/to: ${from} -> ${to}`);

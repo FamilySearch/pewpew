@@ -1,3 +1,4 @@
+import type { Configuration } from "webpack";
 import type { StorybookConfig } from "@storybook/nextjs";
 
 const config: StorybookConfig = {
@@ -16,7 +17,7 @@ const config: StorybookConfig = {
       propFilter: prop => prop.parent ? !/node_modules/.test(prop.parent.fileName) : true
     }
   },
-  webpackFinal: async config => {
+  webpackFinal: async (config: Configuration) => {
     if (!config.experiments) {
       config.experiments = {};
     }

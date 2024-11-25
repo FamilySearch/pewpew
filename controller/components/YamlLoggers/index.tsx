@@ -220,6 +220,9 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
     modalRef.current?.openModal();
   };
 
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
     <InputsDiv>
     <button onClick={() => props.addLogger(newLogger())}>
@@ -246,9 +249,9 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
       <QuestionBubble text="test_end logs status errors 500 and above and kills test with too many errors"></QuestionBubble>
       <Checkbox type="checkbox" id={KILL_LOGGER} onChange={handleClickDefault} checked={state.killLogger} />
     </Div>
-    <TransitionGroup className="loadPatter-section_list">
+    <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
       {Array.from(loggerMap.values()).map((logger: PewPewLogger) => (
-        <CSSTransition key={logger.id} timeout={300} classNames="load">
+        <CSSTransition key={logger.id} timeout={300} classNames="load" nodeRef={nodeRef}>
           <BorderDiv>
               <Span style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "7px"}}> Name: </label>

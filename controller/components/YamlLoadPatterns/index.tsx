@@ -1,6 +1,6 @@
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { Checkbox, Div, InputsDiv, Label, Span} from "../YamlStyles";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { PewPewLoadPattern } from "../../types/yamlwriter";
 import QuestionBubble from "../YamlQuestionBubble";
 import { uniqueId } from "../../pages/api/util/clientutil";
@@ -86,6 +86,9 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
     props.clearAllPatterns();
   };
 
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
   <InputsDiv>
     <button onClick={() => props.addPattern(newLoadPattern())}>
@@ -101,13 +104,13 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
     <QuestionBubble text="Set Default load and ramp time patterns"></QuestionBubble>
     <Checkbox type="checkbox" id="defaultPatterns" name="defaultPatterns" onChange={handleClickDefault} checked={state.defaultPatterns} />
 
-    <TransitionGroup className="loadPatter-section_list">
+    <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
       {Array.from(loadPatternsMap.values()).map((pewpewPattern: PewPewLoadPattern) => {
         // TODO: Do we want to check if they're greater than 0?
         const validFrom: boolean = !pewpewPattern.from || NUMBER_REGEX.test(pewpewPattern.from);
         const validTo: boolean = NUMBER_REGEX.test(pewpewPattern.to);
         const validOver: boolean = OVER_REGEX.test(pewpewPattern.over);
-        return <CSSTransition key={pewpewPattern.id} timeout={300} classNames="load">
+        return <CSSTransition key={pewpewPattern.id} timeout={300} classNames="load" nodeRef={nodeRef}>
           <Div>
             <Span>
               <Label> From: </Label>

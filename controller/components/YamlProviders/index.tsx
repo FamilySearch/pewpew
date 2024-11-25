@@ -1,7 +1,7 @@
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { Div, InputsDiv} from "../YamlStyles";
 import { ProviderType, ProviderTypes } from "./ProviderTypes";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { PewPewProvider } from "../../types/yamlwriter";
 import QuestionBubble from "../YamlQuestionBubble";
 import styled from "styled-components";
@@ -112,6 +112,9 @@ export function Providers ({ providers, ...props }: ProviderMainProps) {
   //   setState((prevState) => ({...prevState, providers }));
   // };
 
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <button onClick={() => addProviderDropDown()}>
@@ -141,9 +144,9 @@ export function Providers ({ providers, ...props }: ProviderMainProps) {
           </ProviderInputsDiv>
         }
       </Div>
-      <TransitionGroup className="loadPatter-section_list">
+      <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
         {Array.from(providersMap.values()).map((provider: PewPewProvider) => (
-          <CSSTransition key={provider.id} timeout={300} classNames="load">
+          <CSSTransition key={provider.id} timeout={300} classNames="load" nodeRef={nodeRef}>
             <ProviderTypes
               deleteProvider={props.deleteProvider}
               changeProvider={props.changeProvider}

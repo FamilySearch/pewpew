@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.3.3",
+  "version": "3.3.4",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -127,6 +127,7 @@
     "set-value": "^4.1.0",
     "storybook": "~8.4.0",
     "trim": "^1.0.1",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "webpack": "^5.0.0"
   }
 }

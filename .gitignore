@@ -21,3 +21,4 @@ testmerge.json
 .env.test.local*
 .env.production.local*
 .DS_Store
+package-lock.json.scripting

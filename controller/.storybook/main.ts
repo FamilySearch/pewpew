@@ -1,3 +1,4 @@
+import type { Configuration } from "webpack";
 import type { StorybookConfig } from "@storybook/nextjs";
 
 const config: StorybookConfig = {
@@ -19,22 +20,22 @@ const config: StorybookConfig = {
       propFilter: prop => prop.parent ? !/node_modules/.test(prop.parent.fileName) : true
     }
   },
-  webpackFinal: (config) => {
-    if (!config.resolve) { config.resolve = {}; }
-    config.resolve.fallback = {
-      ...(config.resolve.fallback || {}),
+  webpackFinal: (webpackConfig: Configuration) => {
+    if (!webpackConfig.resolve) { webpackConfig.resolve = {}; }
+    webpackConfig.resolve.fallback = {
+      ...(webpackConfig.resolve.fallback || {}),
       "fs": false,
       "util": false,
       "path": false,
       "assert": false,
-      "crypto": false,
+      "crypto": false
     };
-    if (!config.experiments) { config.experiments = {}; }
-    config.experiments.asyncWebAssembly = true;
-    if (!config.output) { config.output = {}; }
+    if (!webpackConfig.experiments) { webpackConfig.experiments = {}; }
+    webpackConfig.experiments.asyncWebAssembly = true;
+    if (!webpackConfig.output) { webpackConfig.output = {}; }
     // config.output.publicPath = "/";
-    config.output.webassemblyModuleFilename = 'static/wasm/[modulehash].wasm';
-    return config;
+    webpackConfig.output.webassemblyModuleFilename = "static/wasm/[modulehash].wasm";
+    return webpackConfig;
   },
   framework: {
     name: "@storybook/nextjs",

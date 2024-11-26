@@ -80,7 +80,7 @@ export async function createSecret (secretKeyName: string, value: string | Buffe
   try {
     const input: CreateSecretCommandInput = {
       Name: secretKeyName,
-      Description: "Testing Secrets Manager for PerformanceQA/Pewpew",
+      Description: "Testing Secrets Manager for Performance/Pewpew",
       SecretString: typeof value === "string" ? value : undefined,
       SecretBinary: typeof value !== "string" ? new Uint8Array(value.buffer) : undefined
     };
@@ -141,7 +141,7 @@ export async function deleteSecret (secretKeyName: string, force?: boolean): Pro
 }
 
 export async function getSecretValue (secretKeyName: string): Promise<string> {
-  log(`getKey(${secretKeyName})`, LogLevel.DEBUG);
+  log(`getSecretValue(${secretKeyName})`, LogLevel.DEBUG);
   try {
     // Try secrets manager first
     init();
@@ -285,7 +285,7 @@ export async function decryptFile (encryptedFilePath: string, decryptedFilePath?
         decryptedFileContents = await readFile(decryptedFilePath, "utf8");
         log("Using the fallback " + decryptedFilePath, LogLevel.WARN);
       } catch (error) {
-        log(`Could load ${decryptedFilePath}, encryptionKey === undefined && IS_RUNNING_IN_AWS === false`, LogLevel.ERROR, error);
+        log(`Could not load ${decryptedFilePath}, encryptionKey === undefined && IS_RUNNING_IN_AWS === false`, LogLevel.ERROR, error);
         log(`Please see the README for setting up a Secrets Key override file or create the ${decryptedFilePath} from the template`, LogLevel.ERROR);
       }
     }

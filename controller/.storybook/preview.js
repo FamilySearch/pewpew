@@ -5,8 +5,8 @@ import { RouterContext } from "next/dist/shared/lib/router-context.shared-runtim
 /** @type { import('@storybook/react').Preview } */
 const preview = {
   nextRouter: {
-    Provider: RouterContext.Provider,
-  },
+    Provider: RouterContext.Provider
+  }
   // Can't get this to work
   // https://storybook.js.org/blog/integrate-nextjs-and-storybook-automatically/
   // nextjs: {

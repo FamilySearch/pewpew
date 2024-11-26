@@ -92,6 +92,7 @@ interface ModalProps {
   submitText?: string;
   children?: React.ReactNode;
   isReady?: boolean;
+  scrollable?: boolean;
 }
 
 export interface ModalObject {
@@ -134,7 +135,8 @@ export const Modal = forwardRef(({
   onSubmit,
   submitText = "submit",
   children,
-  isReady
+  isReady,
+  scrollable
 }: ModalProps, ref: Ref<ModalObject>) => {
   const [display, setDisplay] = useState(false);
   let windowOffset: number = 0;
@@ -177,10 +179,15 @@ export const Modal = forwardRef(({
   };
 
   const submit = (event?: React.MouseEvent<HTMLButtonElement>) => {
-    const scrollY = document.getElementById("root")!.style.top;
-    document.getElementById("root")!.style.position = "";
-    document.getElementById("root")!.style.top = "";
-    window.scrollTo(0, parseInt(scrollY || "0", 10) * -1);
+    const root = document.getElementById("root");
+    if (root) {
+      const scrollY = root.style.top;
+      root.style.position = "";
+      root.style.top = "";
+      window.scrollTo(0, parseInt(scrollY || "0", 10) * -1);
+    } else {
+      log("Cannot find element #root", LogLevel.DEBUG);
+    }
     if (onSubmit) {
       onSubmit(event).finally(() => setDisplay(false));
     } else {
@@ -195,7 +202,7 @@ export const Modal = forwardRef(({
   <ModalStyle>
     <ModalDiv id="modal">
       {title && <ModalTitle>{title}</ModalTitle>}
-      <ModalContent>{children}</ModalContent>{/* Any elements that are children of modal will be rendered here */}
+      <ModalContent style={!scrollable ? {overflow: "unset"} : {}}>{children}</ModalContent>{/* Any elements that are children of modal will be rendered here */}
       <ModalActions>
         {onSubmit &&
           <button className="toggle-button" id="submitBtn" onClick={submit} disabled={!isReady}>

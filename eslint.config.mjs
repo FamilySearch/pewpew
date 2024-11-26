@@ -25,8 +25,7 @@ export default [{
     "common/lib",
     "controller/lib",
     "controller/storybook-static",
-    "controller/.storybook",
-    "controller/**/**.js",
+    "controller/test/**.js",
     "controller/next-env.d.ts",
     "eslint.config.mjs"
   ],
@@ -50,7 +49,8 @@ export default [{
         "./common/tsconfig.json",
         "./agent/tsconfig.json",
         "./controller/tsconfig.json",
-        "./controller/tsconfig.test.json"
+        "./controller/tsconfig.test.json",
+        "./controller/.storybook/tsconfig.json",
       ],
     },
   },

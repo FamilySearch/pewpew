@@ -69,12 +69,17 @@ export interface TestResultProps {
 
 export interface TestResultState {
   defaultMessage: string;
+  /** Filters the results Data by a tag equalling this value. I.e. 'method', 'url', '_id' */
   summaryTagFilter: string;
+  /** Filters the results Data by a summaryTagFilter's value containing this value */
   summaryTagValueFilter: string;
   resultsPath: string | undefined;
   resultsText: string | undefined;
+  /** All endpoints from the results file */
   resultsData: ParsedFileEntry[] | undefined;
+  /** Filtered list based on the values from summaryTagFilter and summaryTagValueFilter */
   filteredData: ParsedFileEntry[] | undefined;
+  /** Overall merged stats from all filteredData */
   summaryData: ParsedFileEntry | undefined;
   minMaxTime: MinMaxTime | undefined;
   error: string | undefined;
@@ -114,7 +119,6 @@ const minMaxTime = (testResults: any) => {
 
   let startTime2 = Infinity;
   let endTime2 = -Infinity;
-
 
   for (const [_, dataPoints] of testResults) {
     for (const point of dataPoints) {
@@ -183,6 +187,7 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
       }
     }
   }
+  log("freeHistograms finished", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
 };
 
 const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
@@ -211,7 +216,7 @@ const getFilteredEndpoints = ({
 }): ParsedFileEntry[] | undefined => {
   if (!summaryTagFilter) {
     log("getFilteredEndpoints no filter", LogLevel.DEBUG, { summaryTagFilter });
-    return resultsData;
+    return undefined;
   }
   if (resultsData && resultsData.length > 0) {
     const filteredEntries: ParsedFileEntry[] = [];
@@ -314,8 +319,6 @@ export const TestResults = ({ testData }: TestResultProps) => {
         .map((s) => JSON.parse(s));
       const model = await import("./model");
       let resultsData: ParsedFileEntry[];
-      // Free the old ones
-      freeHistograms(state.resultsData, state.summaryData);
       const testStartKeys = ["test", "bin", "bucketSize"];
       const isOnlyTestStart: boolean = results.length === 1
         && Object.keys(results[0]).length === testStartKeys.length
@@ -328,22 +331,28 @@ export const TestResults = ({ testData }: TestResultProps) => {
         // new stats format
         resultsData = model.processNewJson(results);
       }
+      setState((oldState: TestResultState) => {
+        // Free the old ones
+      freeHistograms(oldState.resultsData, oldState.summaryData);
+
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
-      const { summaryTagFilter, summaryTagValueFilter } = state;
-      const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+      const { summaryTagFilter, summaryTagValueFilter } = oldState;
+      const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
       const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
       log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
-      updateState({
+      return {
+        ...oldState,
         resultsData,
         filteredData,
         resultsText,
         summaryData,
         error: undefined,
         minMaxTime: startEndTime
+        };
       });
     } catch (error) {
-      log("Error Fetching Data: " + state.resultsPath, LogLevel.ERROR, error);
+      log("Error Fetching Data: " + s3ResultPath, LogLevel.ERROR, error);
       updateState({
         error: formatError(error)
       });
@@ -361,17 +370,20 @@ export const TestResults = ({ testData }: TestResultProps) => {
     if (event.target.selectedIndex !== 0) {
       await fetchData(event.target.value);
     } else {
-      // Free the old data
-      freeHistograms(state.resultsData, state.summaryData);
-      updateState({
-        defaultMessage: defaultMessage(),
-        resultsPath: undefined,
-        resultsData: undefined,
-        filteredData: undefined,
-        resultsText: undefined,
-        summaryData: undefined,
-        error: undefined,
-        minMaxTime: undefined
+      setState((oldState: TestResultState) => {
+        // Free the old data
+        freeHistograms(oldState.resultsData, oldState.summaryData);
+        return {
+          ...oldState,
+          defaultMessage: defaultMessage(),
+          resultsPath: undefined,
+          resultsData: undefined,
+          filteredData: undefined,
+          resultsText: undefined,
+          summaryData: undefined,
+          error: undefined,
+          minMaxTime: undefined
+        };
       });
     }
   };
@@ -404,13 +416,16 @@ export const TestResults = ({ testData }: TestResultProps) => {
     }
     log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
 
-    // Free the old data (only the summary)
-    freeHistograms(undefined, state.summaryData);
-    const summaryData = getSummaryData({ filteredData: filteredData || state.resultsData, summaryTagFilter, summaryTagValueFilter });
-    updateState({
-      [stateName]: newValue,
-      filteredData,
-      summaryData
+    setState((oldState: TestResultState) => {
+      // Free the old data (only the summary)
+      freeHistograms(undefined, oldState.summaryData);
+      const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
+      return {
+        ...oldState,
+        [stateName]: newValue,
+        filteredData,
+        summaryData
+      };
     });
   };
 

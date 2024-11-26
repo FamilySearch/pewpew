@@ -18,6 +18,7 @@
   },
   "include": [
     "./*.ts",
+    "./*.js",
     "../types/**/*.ts",
     "../components/**/*.ts",
     "../components/**/*.tsx"

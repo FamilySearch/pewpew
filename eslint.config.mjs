@@ -25,6 +25,7 @@ export default [{
     "common/lib",
     "controller/lib",
     "controller/storybook-static",
+    "controller/test/**.js",
     "controller/next-env.d.ts",
     "eslint.config.mjs"
   ],

@@ -155,6 +155,7 @@ const minMaxTime = (testResults: any) => {
 
   const startTime3: Date = new Date(startTime2);
   const endTime3: Date = new Date(endTime2);
+
   const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
   testTimes.startTime = dateToString(startTime3, includeDateWithStart);
   testTimes.endTime = dateToString(endTime3, false);
@@ -196,6 +197,7 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
       }
     }
   }
+  log("freeHistograms finished", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
 };
 
 const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
@@ -224,7 +226,7 @@ const getFilteredEndpoints = ({
 }): ParsedFileEntry[] | undefined => {
   if (!summaryTagFilter) {
     log("getFilteredEndpoints no filter", LogLevel.DEBUG, { summaryTagFilter });
-    return resultsData;
+    return undefined;
   }
   if (resultsData && resultsData.length > 0) {
     const filteredEntries: ParsedFileEntry[] = [];
@@ -300,19 +302,17 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
 
-  const updateResultsData = async (resultsPath: string): Promise<void> => {
+  const updateResultsData = async (text: string): Promise<void> => {
     updateState({
       defaultMessage: "Results Loading..."
     });
     try {
       // if there are multiple jsons (new format), split them up and parse them separately
-      const results = resultsPath.replace(/}{/g, "}\n{")
+      const results = text.replace(/}{/g, "}\n{")
         .split("\n")
         .map((s) => JSON.parse(s));
       const model = await import("./model");
       let resultsData: ParsedFileEntry[];
-      // Free the old ones
-      freeHistograms(state.resultsData, state.summaryData);
       const testStartKeys = ["test", "bin", "bucketSize"];
       const isOnlyTestStart: boolean = results.length === 1
         && Object.keys(results[0]).length === testStartKeys.length
@@ -325,19 +325,25 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
         // new stats format
         resultsData = model.processNewJson(results);
       }
+      setState((oldState: TestResultState) => {
+        // Free the old ones
+      freeHistograms(oldState.resultsData, oldState.summaryData);
+
       const startEndTime: MinMaxTime = minMaxTime(resultsData);
-      const { summaryTagFilter, summaryTagValueFilter } = state;
-      const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+      const { summaryTagFilter, summaryTagValueFilter } = oldState;
+      const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
       const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
       log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
-      updateState({
+      return {
+        ...oldState,
         defaultMessage,
         resultsData,
         filteredData,
         summaryData,
         error: undefined,
         minMaxTime: startEndTime
+        };
       });
     } catch (error) {
       log("Error parsing Data", LogLevel.ERROR, error);
@@ -376,13 +382,16 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     }
     log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
 
-    // Free the old data (only the summary)
-    freeHistograms(undefined, state.summaryData);
-    const summaryData = getSummaryData({ filteredData, summaryTagFilter, summaryTagValueFilter });
-    updateState({
-      [stateName]: newValue,
-      filteredData,
-      summaryData
+    setState((oldState: TestResultState) => {
+      // Free the old data (only the summary)
+      freeHistograms(undefined, oldState.summaryData);
+      const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
+      return {
+        ...oldState,
+        [stateName]: newValue,
+        filteredData,
+        summaryData
+      };
     });
   };
 
@@ -437,7 +446,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
           })}
         </TIMETAKEN>
       ) : (
-        <p>{state.defaultMessage}</p>
+        <h4>{state.defaultMessage}</h4>
       )}
     </React.Fragment>
   );
@@ -577,6 +586,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </H3>
         <UL>
           {Object.entries(bucketId).map(([key, value], idx) => {
+
             if (key !== "method" && key !== "url") {
               return (
                 <li key={idx}>

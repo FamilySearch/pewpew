@@ -13,11 +13,6 @@ const ModalInput = styled.div`
   flex-direction: column;
   margin-bottom: 10px;
 `;
-const ModalHitMethodInput = styled.div`
-  display: flex;
-  flex-direction: row;
-  margin: 25px 0;
-`;
 const EndpointDisplay = styled.span`
   margin-right: 5px;
   max-width: 450px;

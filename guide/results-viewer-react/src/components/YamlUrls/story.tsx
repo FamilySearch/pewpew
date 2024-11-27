@@ -89,12 +89,14 @@ export const Default: StoryFn = () => {
   const addHeaders = (urlId: string, newHeaders: PewPewHeader[]) => {
     const url = state;
     url.headers = [...url.headers, ...newHeaders];
+    url.id = urlId;
     setState(url);
   };
 
   const deleteHeader = (urlId: string, headerId: string) => {
     const url = state;
     url.headers = url.headers.filter((header) => header.id !== headerId);
+    url.id = urlId;
     setState(url);
   };
 

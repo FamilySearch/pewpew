@@ -43,14 +43,6 @@ export interface UrlState {
   passed: boolean;
 }
 
-interface RequestOptions extends AxiosRequestConfig {
-  method: Method;
-  url: string;
-  headers?: Record<string, string>;
-  data?: any;
-  params?: any;
-}
-
 export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$");
 export const URLS = "urls";
 const EMPTY_HEADER = "emptyHeader";
@@ -152,7 +144,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   }, [props.defaultHeaders]);
 
   async function makeRequest () {
-    const request: RequestOptions = {
+    const request: AxiosRequestConfig = {
       method,
       url,
       headers: headersList.reduce((acc, header) => {

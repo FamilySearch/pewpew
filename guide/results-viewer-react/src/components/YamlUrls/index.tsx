@@ -3,8 +3,9 @@ import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import { PewPewAPI, PewPewHeader } from "../../util/yamlwriter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import axios, { AxiosRequestConfig, Method } from "axios";
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, Method } from "axios";
 import QuestionBubble from "../YamlQuestionBubble";
+import RequestDetailsTabs from "./RequestDetailsTabs";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
@@ -15,8 +16,8 @@ const ModalInput = styled.div`
 `;
 const EndpointDisplay = styled.span`
   margin-right: 5px;
-  max-width: 450px;
-  width: 450px;
+  max-width: 60%;
+  min-width: 450px;
   white-space: nowrap;
   overflow: hidden;
 `;
@@ -50,9 +51,10 @@ const DEFAULT_HEADERS = "defaultHeaders";
 export const AUTHENTICATED = "authenticated";
 const ACCEPT_LANGUAGE = "acceptLanguage";
 const CONTENT_TYPE = "contentType";
-type HeaderType = "defaultHeaders" | "authenticated" | "acceptLanguage" | "contentType";
-type PewPewApiStringType = "url" | "method" | "hitRate";
-type PewPewHeaderStringType = "name" | "value";
+export type HeaderType = "defaultHeaders" | "authenticated" | "acceptLanguage" | "contentType";
+export type PewPewApiStringType = "url" | "method" | "hitRate";
+export type PewPewHeaderStringType = "name" | "value";
+export type TabType = "Headers" | "Response"
 
 export const newHeader = () => ({ id: uniqueId(), name: "", value: "" });
 export const getAuthorizationHeader = (): PewPewHeader => ({ id: AUTHENTICATED, name: "Authorization", value: "Bearer ${sessionId}" });
@@ -101,8 +103,9 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const [url, setUrl] = useState(data.url);
   const [method, setMethod] = useState(data.method as Method);
   const [headersList, setHeadersList] = useState<PewPewHeader[]>(headers);
-  const [lastResponse, setLastResponse] = useState<Record<string, any>>();
-  const [lastResponseCode, setLastResponseCode] = useState<string>();
+  const [lastResponse, setLastResponse] = useState<AxiosResponse>();
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [activeTab, setActiveTab] = useState<TabType>("Headers");
   const enableSubmit = useMemo(() => isValidUrl(url), [url]);
   // /** Map to keep id's unique */
   const headersMap = new Map(headers.map((header) => ([header.id, header])));
@@ -110,6 +113,10 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const [state, _setState] = useState(defaultState);
   const modalRef = useRef<ModalObject| null>(null);
   useEffectModal(modalRef);
+
+  useEffect(() => {
+    modalRef.current?.openModal();
+  }, []);
 
   // Changes the state of authenticated button when default is checked or unchecked
   useEffect(() => {
@@ -150,16 +157,27 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
       headers: headersList.reduce((acc, header) => {
         acc[header.name] = header.value;
         return acc;
-      }, {} as Record<string, string>),
-      validateStatus: () => true
+      }, {} as Record<string, string>)
+      // validateStatus: () => true
     };
     try {
       const response = await axios(request);
-      setLastResponseCode(response.status + " " + response.statusText);
-      setLastResponse(response.data);
-      return response.data;
+      setLastResponse(response);
+      setActiveTab("Response");
     } catch (error) {
-      throw error;
+      if ((error as AxiosError).isAxiosError) {
+        if ((error as AxiosError).response) {
+          setLastResponse((error as AxiosError).response);
+        } else {
+          setErrorMessage("Error: " + (error as AxiosError).message + ". This is likely a CORS issue.");
+          setLastResponse(undefined);
+        }
+        setActiveTab("Response");
+      } else {
+        setErrorMessage("Error: " + error);
+        setLastResponse(undefined);
+        setActiveTab("Response");
+      }
     }
   }
 
@@ -210,6 +228,8 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
     return Promise.resolve();
   };
 
+  const handleChangeTab = (tab: TabType) => setActiveTab(tab);
+
   const checked = state.passed ? " Passed" : "";
   const invalidUrl: boolean = !isValidUrl(url);
   const urlStyle: React.CSSProperties = getUrlStyle(invalidUrl);
@@ -217,6 +237,8 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const invalidHitRate = !HIT_RATE_REGEX.test(data.hitRate);
   return (
     <Div>
+      <button onClick={() => modalRef.current?.openModal()} style={{marginRight: "5px"}}>Edit</button>
+      <button id={data.id} onClick={() => props.deleteUrl(data.id)} style={{marginRight: "5px"}}>Delete</button>
       <EndpointDisplay style={urlStyle} title={urlTitle}>
         {data.url ? data.url : "Url"}
       </EndpointDisplay>
@@ -262,135 +284,10 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
               </ModalInput>
             </Span>
         </Row>
-        <RequestDetailsTabs id={data.id} headersList={headersList} removeHeader={removeHeader} changeHeader={changeHeader} addHeader={addHeader} responseCode={lastResponseCode} response={lastResponse} />
+        <RequestDetailsTabs id={data.id} headersList={headersList} removeHeader={removeHeader} changeHeader={changeHeader} addHeader={addHeader} response={lastResponse} error={errorMessage} activeTab={activeTab} handleChangeTab={handleChangeTab} />
       </Modal>
-      <button onClick={() => modalRef.current?.openModal()}>Edit</button>
-      <button id={data.id} onClick={() => props.deleteUrl(data.id)}>X</button>
     </Div>
   );
 }
 
 export default Urls;
-
-interface RequestDetailsTabsProps extends HeadersViewProps, ResponseViewProps {}
-
-function RequestDetailsTabs ({ id, headersList, removeHeader, changeHeader, addHeader, responseCode, response }: RequestDetailsTabsProps): JSX.Element {
-  type tabType = "Headers" | "Response"
-  const [activeTab, setActiveTab] = useState<tabType>("Headers");
-  const tabs: tabType[] = ["Headers", "Response"];
-
-  return (
-    <div>
-      <div role="tablist" className="tab-list">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            role="tab"
-            aria-selected={activeTab === tab}
-            aria-controls={`tabpanel-${tab}`}
-            id={`tab-${tab}`}
-            onClick={() => setActiveTab(tab)}
-            className={`tab ${activeTab === tab ? "active" : ""}`}
-            disabled={activeTab === tab}
-            style={{width: `${100 / tabs.length}%`}}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
-        {activeTab === "Headers" && <HeadersView id={id} headersList={headersList} removeHeader={removeHeader} changeHeader={changeHeader} addHeader={addHeader} />}
-        {activeTab === "Response" && <ResponseView responseCode={responseCode} response={response} />}
-      </div>
-    </div>
-  );
-}
-
-interface HeadersViewProps {
-  id: string;
-  headersList: PewPewHeader[];
-  removeHeader: (headerId: string) => void;
-  changeHeader: (headerIndex: number, type: PewPewHeaderStringType, value: string) => void;
-  addHeader: (headerType?: HeaderType) => void;
-}
-
-function HeadersView ({ id, headersList, removeHeader, changeHeader, addHeader }: HeadersViewProps): JSX.Element {
-  const styles: Record<string, React.CSSProperties> = {
-    headersDisplay: {
-      marginTop: "10px",
-      maxHeight: "300px",
-      overflow: "auto"
-    },
-    gridContainer: {
-      display: "grid",
-      gap: "10px"
-    },
-    gridHeader: {
-      display: "grid",
-      gridTemplateColumns: "auto 1fr 2fr",
-      gap: "10px",
-      fontWeight: "bold",
-      height: "20px"
-    },
-    gridRows: {
-      display: "grid",
-      gridTemplateColumns: "auto 1fr 2fr",
-      gap: "10px",
-      alignItems: "stretch"
-    },
-    input: {
-      boxSizing: "border-box"
-    },
-    button: {
-      boxSizing: "border-box",
-      whiteSpace: "nowrap"
-    }
-  };
-  return (
-    <React.Fragment>
-        <div style={styles.headersDisplay}>
-          <div style={styles.gridContainer}>
-            <div style={styles.gridHeader}>
-              <span><button name={id} onClick={() => addHeader()}>+</button></span>
-              <span>Name</span>
-              <span>Value</span>
-            </div>
-            {headersList.length === 0 && <span>No Headers yet, click "+" to create one</span>}
-            {headersList.map((header: PewPewHeader, index: number) => (
-              <div key={index} style={styles.gridRows}>
-                <button style={styles.button} onClick={() => removeHeader(header.id)}>X</button>
-                <input style={styles.input} id={`urlHeaderKey@${index}`} name={id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} />
-                <input style={styles.input} id={`urlHeaderValue@${index}`} name={id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} />
-              </div>
-            ))}
-          </div>
-        </div>
-    </React.Fragment>
-  );
-}
-
-interface ResponseViewProps {
-  responseCode: string | undefined;
-  response: Record<string, any> | undefined;
-}
-
-function ResponseView ({ responseCode, response }: ResponseViewProps): JSX.Element {
-  const responseDisplayStyle: React.CSSProperties = {
-    maxHeight: "300px",
-    overflow: "auto",
-    border: "1px solid #ccc",
-    padding: "10px",
-    backgroundColor: "#2e3438"
-  };
-
-  return (
-    <React.Fragment>
-      <p style={{ fontSize: "14px" }}>Code: {responseCode}</p>
-      <div style={responseDisplayStyle}>
-        <pre>
-          {JSON.stringify(response, null, 2)}
-        </pre>
-      </div>
-    </React.Fragment>
-  );
-}

@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "npm run lint && webpack serve --port 3001 --mode development --open --hot",
+    "dev-lint": "npm run lint && webpack serve --port 3001 --mode development --open --hot",
+    "dev": "webpack serve --port 3001 --mode development --open --hot --watch",
     "watch": "webpack --watch",
     "build": "webpack --mode production",
     "lint": "eslint --fix .",

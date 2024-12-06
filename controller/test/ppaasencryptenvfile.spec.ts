@@ -40,8 +40,8 @@ const UNIT_TEST_FILENAME: string = "unittest.json";
 const overrideTags = new Map<string, string>([["unittest", "true"]]);
 const testFileTags: Map<string, string> = defaultTestFileTags();
 const testFileTagsSize: number = testFileTags.size;
-const blueprintTags = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
-const allTags = new Map<string, string>([...testFileTags, ...blueprintTags]);
+const additionalTagsOnAll = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
+const allTags = new Map<string, string>([...testFileTags, ...additionalTagsOnAll]);
 
 function validateTags (actual: Map<string, string>, expected: Map<string, string>) {
   log("validateTags", LogLevel.DEBUG, { actual: Array.from(actual), expected: Array.from(expected) });
@@ -517,7 +517,7 @@ describe("PpaasEncryptEnvironmentFile", () => {
 
     it("Upload a test file force should upload unchanged files", (done: Mocha.Done) => {
       const lastModified: number = Date.now();
-      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified);
+      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified - 1);
       testPpaasEncryptEnvironmentFileUpload.upload(true).then(() => {
         log("testPpaasEncryptEnvironmentFileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified

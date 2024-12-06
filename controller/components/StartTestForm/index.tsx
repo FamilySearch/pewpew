@@ -65,7 +65,6 @@ const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <I
     {username ? `'${username}'` : "User"} is not authorized to run tests.<br/>
     Please request 'Pewpew - User' permission if you need to be able to run tests.
   </p>
-  <Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning>
   </Column>
   </Info>;
 

@@ -4,11 +4,12 @@ import {
   SESSION_EXPIRED_MESSAGE,
   logout as authLogout
 } from "./api/util/authclient";
-import { Alert, Danger, Info, Warning } from "../components/Alert";
-import {
+import { Alert, Danger, Info } from "../components/Alert";
+import type {
   GetServerSideProps,
   GetServerSidePropsContext,
-  GetServerSidePropsResult
+  GetServerSidePropsResult,
+  NextApiRequest
 } from "next";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
@@ -47,8 +48,8 @@ export interface LoginProps {
   errorLoading: string | undefined;
 }
 
-const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please request 'Pewpew - User' permission if you need to be able to run tests.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
-const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please request either the 'Pewpew Test - User' (run tests) or 'Pewpew - Read Only' (view results) permission.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
+const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please request 'Pewpew - User' permission if you need to be able to run tests.</p></>;
+const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please request either the 'Pewpew Test - User' (run tests) or 'Pewpew - Read Only' (view results) permission.</p></>;
 
 const Login = ({ token, redirectUrl, errorLoading }: LoginProps): JSX.Element => {
   log("redirectUrl: " + redirectUrl, LogLevel.DEBUG);
@@ -113,7 +114,7 @@ export const getServerSideProps: GetServerSideProps =
 
     // 1. Check the query for a code on redirect back from AUTH
     if (ctx.query.code && !Array.isArray(ctx.query.code)) {
-      const tokenResponse: TokenResponse = await getTokenFromCode({ ...ctx.req, query: ctx.query, headers: ctx.req.headers } as any);
+      const tokenResponse: TokenResponse = await getTokenFromCode({ ...(ctx.req), query: ctx.query, headers: ctx.req.headers } as NextApiRequest);
       const { token, refreshToken: newRefreshToken, hintToken } = tokenResponse;
       if (token) {
         logServer("auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken: newRefreshToken, hintToken });

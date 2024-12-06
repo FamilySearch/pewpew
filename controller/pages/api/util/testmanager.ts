@@ -446,7 +446,7 @@ export async function validateYamlfile (
   if (bypassParser) {
     if (authPermissions.authPermission < AuthPermission.Admin) {
       log("Unauthorized User attempted to bypass the config parser.", LogLevel.WARN, { yamlFile, userId: authPermissions.userId });
-      return { json: { message: "User is not authorized to bypass the config parser. If you think this is an error, please contact the PerformanceQA team." }, status: 403 };
+      return { json: { message: "User is not authorized to bypass the config parser. If you think this is an error, please contact the Performance team." }, status: 403 };
     }
   } else {
     // bypassPaser is false or undefined, run the parser
@@ -1167,7 +1167,7 @@ export abstract class TestManager {
           } else if (PEWPEW_BINARY_EXECUTABLE_NAMES.includes(file.originalFilename)) {
             if (authPermission < AuthPermission.Admin) {
               log("Unauthorized User attempted to use custom pewpew binary.", LogLevel.WARN, { yamlFile });
-              return { json: { message: "User is not authorized to use custom pewpew binaries. If you think this is an error, please contact the PerformanceQA team." }, status: 403 };
+              return { json: { message: "User is not authorized to use custom pewpew binaries. If you think this is an error, please contact the Performance team." }, status: 403 };
             }
             log("Authorized user uploaded custom binary.", LogLevel.INFO, { yamlFile });
             additionalFileNames.push(file.originalFilename);
@@ -1511,7 +1511,7 @@ export abstract class TestManager {
         if (bypassParser) {
           if (authPermission < AuthPermission.Admin) {
             log("Unauthorized User attempted to bypass the config parser.", LogLevel.WARN, { yamlFile });
-            return { json: { message: "User is not authorized to bypass the config parser. If you think this is an error, please contact the PerformanceQA team." }, status: 403 };
+            return { json: { message: "User is not authorized to bypass the config parser. If you think this is an error, please contact the Performance team." }, status: 403 };
           }
         } else {
           // Read in the actual variables so we can inject them and make sure it's valid.

@@ -19,6 +19,7 @@ const props: UrlProps = {
  changeUrl: (pewpewUrl: PewPewAPI) => {
    // eslint-disable-next-line no-console
    console.log("changing url", pewpewUrl);
+  //  TODO: Update the URL properly
  },
  addHeaders: (urlId: string, newHeaders: PewPewHeader[]) => {
    // eslint-disable-next-line no-console
@@ -82,16 +83,33 @@ export default {
   title: "YamlUrls"
 } as Meta<typeof Urls>;
 
-export const Default: StoryFn = () => (
+export const Default: StoryFn = () => {
+  const [state, setState] = useState(props.data);
+
+  const addHeaders = (urlId: string, newHeaders: PewPewHeader[]) => {
+    const url = state;
+    url.headers = [...url.headers, ...newHeaders];
+    url.id = urlId;
+    setState(url);
+  };
+
+  const deleteHeader = (urlId: string, headerId: string) => {
+    const url = state;
+    url.headers = url.headers.filter((header) => header.id !== headerId);
+    url.id = urlId;
+    setState(url);
+  };
+
+  return (
   <React.Fragment>
     <GlobalStyle />
     <DisplayDivMain>
       <UrlsDiv>
-        <Urls {...props}></Urls>
+        <Urls {...props} addHeaders={addHeaders} deleteHeader={deleteHeader}></Urls>
       </UrlsDiv>
     </DisplayDivMain>
   </React.Fragment>
-);
+);};
 
 export const Loaded: StoryFn = () => (
   <React.Fragment>

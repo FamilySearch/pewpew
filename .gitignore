@@ -13,6 +13,7 @@
 node_modules
 .nyc_output/
 coverage/
+mutants.out/
 /controller/aws*.sh
 testmerge.json
 .env.local*
@@ -20,3 +21,4 @@ testmerge.json
 .env.test.local*
 .env.production.local*
 .DS_Store
+package-lock.json.scripting

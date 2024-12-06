@@ -14,11 +14,11 @@ A *provider_name* is any string except for "request", "response", "stats" and "f
 Example:
 ```yaml
 providers:
-  - session:
-    - response:
-        auto_return: force
-  - username:
-    - file:
+  session:
+    response:
+      auto_return: force
+  username:
+    file:
       path: "usernames.csv"
       repeat: true
 ```

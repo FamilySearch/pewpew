@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-common",
-  "version": "3.3.1",
+  "version": "3.3.4",
   "description": "Common Code for the PewPewController and PewPewAgent",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -23,16 +23,16 @@
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
   "engines": {
-    "node": ">=18.0.0 <21.0.0"
+    "node": ">=18.0.0 <23.0.0"
   },
   "nyc": {
+    "reporter": ["lcov", "text"],
     "exclude": "**/*.spec.ts"
   },
   "peerDependencies": {
     "@fs/config-wasm": "*"
   },
   "dependencies": {
-    "@aws-sdk/client-ec2": "^3.363.0",
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-sqs": "^3.363.0",
     "@aws-sdk/lib-storage": "^3.363.0",
@@ -46,16 +46,15 @@
     "@fs/config-wasm": "*",
     "@types/bunyan": "~1.8.8",
     "@types/chai": "^4.3.5",
-    "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.0",
     "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
     "aws-sdk-client-mock": "^4.0.0",
     "chai": "^4.3.7",
     "dotenv": "^16.0.0",
     "dotenv-flow": "^4.0.1",
-    "eslint": "^9.8.0",
+    "eslint": "^9.15.0",
     "mocha": "^10.2.0",
     "nyc": "^17.0.0",
     "typescript": "^5.3.0"

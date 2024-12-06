@@ -35,8 +35,8 @@ const QuestionBubbleStyling = styled.span`
 export function QuestionBubble ({ text, href }: QuestionBubbleProps) {
   return (
     <QuestionBubbleStyling>
-    {href && <span style={{marginRight: "8px"}} className="questionHover"><a href={href} target="_blank"><i style={{fontFamily: "Arial"}}>?</i></a><span className="questionHoverText">{text}</span></span>}
-    {!href && <span style={{marginRight: "8px"}} className="questionHover"><i style={{fontFamily: "Arial"}}>?</i><span className="questionHoverText">{text}</span></span>}
+    {href && <span style={{marginRight: "8px"}} className="questionHover"><a href={href} target="_blank"><i style={{fontFamily: "Arial", fontSize: "14px"}}>?</i></a><span className="questionHoverText">{text}</span></span>}
+    {!href && <span style={{marginRight: "8px"}} className="questionHover"><i style={{fontFamily: "Arial", fontSize: "14px"}}>?</i><span className="questionHoverText">{text}</span></span>}
     </QuestionBubbleStyling>
     );
 }

@@ -17,8 +17,8 @@ const MAX_POLL_WAIT: number = parseInt(process.env.MAX_POLL_WAIT || "0", 10) || 
 const UNIT_TEST_FILENAME: string = "unittest.json";
 const testFileTags: Map<string, string> = defaultTestFileTags();
 const testFileTagsSize: number = testFileTags.size;
-const blueprintTags = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
-const allTags = new Map<string, string>([...testFileTags, ...blueprintTags]);
+const additionalTagsOnAll = new Map<string, string>(ADDITIONAL_TAGS_ON_ALL);
+const allTags = new Map<string, string>([...testFileTags, ...additionalTagsOnAll]);
 
 function validateTags (actual: Map<string, string>, expected: Map<string, string>) {
   expect(actual.size, "validateTags size").to.equal(expected.size);

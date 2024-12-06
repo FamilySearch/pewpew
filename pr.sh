@@ -23,6 +23,7 @@ cargo clippy --all -- -D warnings
 TZ=UTC cargo test --all
 cargo test --all --doc
 
+# cargo install cargo-deny
 cargo deny check --hide-inclusion-graph license sources advisories
 
 CWD=$(pwd)
@@ -86,6 +87,7 @@ if [[ "$choice" == [Yy]* ]]; then
   done
   set -e
   echo Hit Ctrl-C when acceptance tests finish
+  export ACCEPTANCE_AWS_PERMISSIONS=true
   npm run acceptance:all
   read -e -p "Grab screenshot then hit enter to continue." choice
 fi

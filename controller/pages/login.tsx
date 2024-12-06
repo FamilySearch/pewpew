@@ -4,7 +4,7 @@ import {
   SESSION_EXPIRED_MESSAGE,
   logout as authLogout
 } from "./api/util/authclient";
-import { Alert, Danger, Info, Warning } from "../components/Alert";
+import { Alert, Danger, Info } from "../components/Alert";
 import type {
   GetServerSideProps,
   GetServerSidePropsContext,
@@ -48,8 +48,8 @@ export interface LoginProps {
   errorLoading: string | undefined;
 }
 
-const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please request 'Pewpew - User' permission if you need to be able to run tests.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
-const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please request either the 'Pewpew Test - User' (run tests) or 'Pewpew - Read Only' (view results) permission.</p><Warning>DO NOT request 'Non Prod' Permissions. Those are for internal authentication testing only.</Warning></>;
+const NOT_AUTHORIZED_MESSAGE_AUTHENTICATION: JSX.Element = <><p>Please request 'Pewpew - User' permission if you need to be able to run tests.</p></>;
+const ACCESS_DENIED_AUTHENTICATION_MESSAGE: JSX.Element = <><p>Please request either the 'Pewpew Test - User' (run tests) or 'Pewpew - Read Only' (view results) permission.</p></>;
 
 const Login = ({ token, redirectUrl, errorLoading }: LoginProps): JSX.Element => {
   log("redirectUrl: " + redirectUrl, LogLevel.DEBUG);

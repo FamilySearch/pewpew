@@ -24,6 +24,7 @@ export const defaultButtonTheme: LinkButtonTheme = { buttonFontSize: ".8rem", bu
 export interface LinkButtonProps {
   name?: string;
   href: string;
+  target?: string;
   title?: string;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   theme?: LinkButtonTheme;
@@ -33,6 +34,7 @@ export interface LinkButtonProps {
 export const LinkButton = ({
   name,
   href,
+  target,
   title,
   onClick,
   theme,
@@ -41,8 +43,8 @@ export const LinkButton = ({
   return (
     <React.Fragment>
       {/* https://nextjs.org/docs/messages/invalid-new-link-with-extra-anchor */}
-      <Link href={href} as={formatPageHref(href)} title={title} legacyBehavior>
-        <a href={formatPageHref(href)} title={title}>
+      <Link href={href} as={formatPageHref(href)} title={title} passHref legacyBehavior>
+        <a href={formatPageHref(href)} title={title} target={target}>
           <Button name={name} theme={{...defaultButtonTheme, ...theme}} onClick={onClick}>{children}</Button>
         </a>
       </Link>

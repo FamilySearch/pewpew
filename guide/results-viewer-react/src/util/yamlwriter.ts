@@ -93,6 +93,3 @@ export const SESSION_ID_DEFAULT = "${e:SESSIONID}";
 export const RAMP_TIME_DEFAULT = "${e:RAMP_TIME}";
 export const LOAD_TIME_DEFAULT = "${e:LOAD_TIME}";
 export const PEAK_LOAD_DEFAULT = "${e:PEAK_LOAD}";
-
-export const DEV_KEY_BETA = "WCQY-7J1Q-GKVV-7DNM-SQ5M-9Q5H-JX3H-CMJK";
-export const DEV_KEY_PROD = "Q4JW-NBZX-TWHZ-ZZDJ-LSP9-G15N-NLC8-P1M3";

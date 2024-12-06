@@ -1,17 +1,14 @@
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { Checkbox, Div, InputsDiv, Label, Span} from "../YamlStyles";
 import {
-  DEV_KEY_BETA,
   LOAD_TIME_DEFAULT,
   PEAK_LOAD_DEFAULT,
   PewPewVars,
   RAMP_TIME_DEFAULT,
   SESSION_ID_DEFAULT
 } from "../../util/yamlwriter";
-import { LogLevel, log } from "../../util/log";
 import React, { useEffect, useRef, useState } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
-import VarsDropDown from "./DropDown";
 import { uniqueId } from "../../util/clientutil";
 
 export type PewPewVarsStringType = "name" | "value";
@@ -20,20 +17,17 @@ interface DefaultVariables {
   rampTime: boolean;
   loadTime: boolean;
   peakLoad: boolean;
-  devKey: boolean;
 }
 
 type DefaultVariablesType = keyof DefaultVariables;
 
 // This is the default state of all checkboxes and drop downs when the UI is initially loaded
 const defaultUI: DefaultVariables = {
-  devKey: false,
   rampTime: true,
   loadTime: true,
   peakLoad: true,
   sessionId: true
 };
-const defaultEnvironment = DEV_KEY_BETA;
 
 export interface VarsProps {
   addVar: (pewpewVar: PewPewVars) => void;
@@ -49,24 +43,21 @@ interface VarsState extends DefaultVariables {
   nameReady: boolean;
   valueReady: boolean;
   defaultVars: boolean;
-  environment: string;
 }
 export const VARS = "vars";
 const SESSION_ID = "sessionId";
 const RAMP_TIME = "rampTime";
 const LOAD_TIME = "loadTime";
 const PEAK_LOAD = "peakLoad";
-const DEV_KEY = "devKey";
 const DEFAULT_VARS = "defaultVars";
 
 export const emptyVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
-export const devKeyVar = (environment: string): PewPewVars => ({ id: DEV_KEY, name: DEV_KEY, value: environment });
 export const rampTimeVar = (): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: RAMP_TIME_DEFAULT });
 export const loadTimeVar = (): PewPewVars => ({ id: LOAD_TIME, name: LOAD_TIME, value: LOAD_TIME_DEFAULT });
 export const peakLoadVar = (): PewPewVars => ({ id: PEAK_LOAD, name: PEAK_LOAD, value: PEAK_LOAD_DEFAULT });
 export const sessionIdVar = (): PewPewVars => ({ id: SESSION_ID, name: SESSION_ID, value: SESSION_ID_DEFAULT });
 
-function getDefaultVar (varName: DefaultVariablesType, environment: string): PewPewVars {
+function getDefaultVar (varName: DefaultVariablesType): PewPewVars {
   switch (varName) {
     case SESSION_ID:
       return sessionIdVar();
@@ -76,18 +67,16 @@ function getDefaultVar (varName: DefaultVariablesType, environment: string): Pew
       return loadTimeVar();
     case PEAK_LOAD:
       return peakLoadVar();
-    case DEV_KEY:
-      return devKeyVar(environment);
     default:
       throw new Error("getDefaultVar Invalid varName: " + varName);
   }
 }
 
-export function getDefaultVars (defaultVars: DefaultVariables = defaultUI, environment: string = defaultEnvironment): PewPewVars[] {
+export function getDefaultVars (defaultVars: DefaultVariables = defaultUI): PewPewVars[] {
   const pewpewVars: PewPewVars[] = [];
   for (const [varName, isEnabled] of Object.entries(defaultVars)) {
     if (isEnabled) {
-      pewpewVars.push(getDefaultVar(varName as DefaultVariablesType, environment));
+      pewpewVars.push(getDefaultVar(varName as DefaultVariablesType));
     }
   }
 
@@ -99,8 +88,7 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     nameReady: false,
     valueReady: false,
     defaultVars: defaultYaml,
-    ...defaultUI,
-    environment: defaultEnvironment
+    ...defaultUI
   };
   /** Map to keep id's unique */
   const varsMap = new Map(props.vars.map((pewpewVar) => ([pewpewVar.id, pewpewVar])));
@@ -142,7 +130,7 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     // Add/delete from varsMap/vars
     if (newChecked && !varsMap.has(varsType)) {
       // Add it (will update the map when it comes back in via props)
-      const defaultVar = getDefaultVar(varsType, state.environment);
+      const defaultVar = getDefaultVar(varsType);
       props.addVar(defaultVar);
     } else if (!newChecked && varsMap.has(varsType)) {
       // Remove it (will update the map when it comes back in via props)
@@ -165,19 +153,8 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
   };
 
   const clearAllVars = () => {
-    updateState({ defaultVars: false, sessionId: false, rampTime: false, loadTime: false, peakLoad: false, devKey: false });
+    updateState({ defaultVars: false, sessionId: false, rampTime: false, loadTime: false, peakLoad: false });
     props.clearAllVars();
-  };
-
-  const changeEnvironment = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    updateState({ environment: event.target.value });
-    const devKey = varsMap.get(DEV_KEY);
-    if (devKey) {
-      devKey.value = event.target.value;
-      props.changeVar(devKey);
-    } else {
-      log("Environment changed without devKey variable existing", LogLevel.WARN);
-    }
   };
 
   // https://github.com/reactjs/react-transition-group/issues/904
@@ -219,14 +196,6 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
           <QuestionBubble text="peakLoad included"></QuestionBubble>
           <Checkbox type="checkbox" id={PEAK_LOAD} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(PEAK_LOAD, event.target.checked)} checked={state.peakLoad}/>
         </Span>
-        <div>
-          <Span>
-            <Label htmlFor={DEV_KEY}> devkey: </Label>
-            <QuestionBubble text="devKey included"></QuestionBubble>
-            <input type="checkbox" id={DEV_KEY} onChange={(event) => switchDefault(DEV_KEY, event.target.checked)} checked={state.devKey}/>
-          </Span>
-          <VarsDropDown display={state.devKey} onChange={changeEnvironment} />
-        </div>
       </Div>
       <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
         {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (

@@ -114,10 +114,6 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
   const modalRef = useRef<ModalObject| null>(null);
   useEffectModal(modalRef);
 
-  useEffect(() => {
-    modalRef.current?.openModal();
-  }, []);
-
   // Changes the state of authenticated button when default is checked or unchecked
   useEffect(() => {
     // Add/delete from headersMap/headers
@@ -250,6 +246,7 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
         onSubmit={updateEndpointHandler}
         isReady={enableSubmit}
         scrollable={false}
+        initialDisplay={true}
         >
         <Row style={{ alignItems: "start"}}>
             <Span style={{ margin: 0 }}>

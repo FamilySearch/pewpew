@@ -2,7 +2,6 @@ export const PAGE_START_TEST: string = "/test";
 export const PAGE_TEST_HISTORY: string = "/";
 export const PAGE_TEST_UPDATE: string = "/testupdate";
 export const PAGE_CALENDAR: string = "/calendar";
-export const PAGE_YAML_WRITER: string = "/yamlwriter";
 export const PAGE_ADMIN: string = "/admin";
 export const PAGE_LOGIN: string = "/login";
 

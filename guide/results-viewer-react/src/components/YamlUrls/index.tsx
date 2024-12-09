@@ -266,8 +266,22 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
                 <Label style={{ fontSize: "14px" }} htmlFor="urlUrl"> Endpoint {checked}</Label>
                 <p style={{ fontSize: "10px", margin: 0 }}> (must be in the form "https://www.[url]" or "http://www.[url]")</p>
               </Row>
-              <Row>
+              <Row style={{ position: "relative"}}>
                 <input style={{ ...urlStyle, width: "100%" }} onChange={(event) => setUrl(event.target.value)} title={urlTitle} name={data.id} value={url} id="urlUrl" type="text" />
+                {url && (
+                  <button
+                    onClick={() => setUrl("")}
+                    style={{
+                      position: "absolute",
+                      right: "45px",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer"
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
                 <button style={{ cursor: "pointer" }} onClick={makeRequest} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"} type="submit">Test</button>
               </Row>
             </ModalInput>

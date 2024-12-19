@@ -1,3 +1,4 @@
+import { LogLevel, log } from "../../util/log";
 import React from "react";
 
 export interface RequestBodyViewProps {
@@ -27,7 +28,7 @@ function RequestBodyView ({ requestBody, updateRequestBody }: RequestBodyViewPro
         try {
             updateRequestBody(JSON.parse(newRequestBody));
         } catch (error) {
-            console.error(error);
+            log("Invalid JSON", LogLevel.WARN, error);
         }
     };
 

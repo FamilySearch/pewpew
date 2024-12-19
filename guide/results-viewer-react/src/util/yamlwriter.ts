@@ -13,7 +13,7 @@ export interface Har {
     pages: Page[],
   }
 }
-/** This is the type for all headers added to any anypoints */
+/** This is the type for all headers added to any endpoints */
 export interface HarHeader {
   name: string;
   value: string;
@@ -21,6 +21,14 @@ export interface HarHeader {
 export interface PewPewHeader extends HarHeader {
   id: string;
 }
+
+/** This is the type for all query params added to any endpoints */
+export interface PewPewQueryParam {
+  id: string;
+  name: string;
+  value: string;
+}
+
 /** This is what an endpoint looks like from an incoming Har file */
 export interface HarEndpoint {
   id: string;
@@ -35,6 +43,7 @@ export interface PewPewAPI {
   id: string;
   url: string;
   headers: PewPewHeader[];
+  requestBody?: object;
   method: string;
   hitRate: string;
   authorization: null;

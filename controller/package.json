@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.3.4",
+  "version": "3.3.5",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -121,7 +121,7 @@
     "immer": "^10.0.2",
     "jsdom": ">=23.0.0",
     "jsdom-global": "^3.0.2",
-    "mocha": "^10.2.0",
+    "mocha": "^11.0.0",
     "nyc": "^17.0.0",
     "postcss": "^8.4.24",
     "set-value": "^4.1.0",

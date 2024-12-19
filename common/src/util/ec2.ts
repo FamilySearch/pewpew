@@ -1,4 +1,5 @@
 import { LogLevel, log } from "./log";
+import { IS_RUNNING_IN_AWS } from "./util";
 import { MetadataService } from "@aws-sdk/ec2-metadata-service";
 import { exec as _exec } from "child_process";
 import { promisify } from "util";
@@ -16,9 +17,9 @@ const metadata: MetadataService = new MetadataService({
   // host: "169.254.169.254"
 });
 
-// Our current mocks do not support the metadata service. bypassMetaDataService to bypass so we don't timeout on integration tests
-export async function getInstanceId (bypassMetaDataService?: boolean): Promise<string> {
-  if (!bypassMetaDataService) {
+export async function getInstanceId (): Promise<string> {
+  // Our current mocks do not support the metadata service. bypass when not in AWS so we don't timeout on integration and unit tests
+  if (IS_RUNNING_IN_AWS) {
     try {
       // curl http://169.254.169.254/latest/meta-data/instance-id -> "i-0cfd3309705a3ce79"
       const instanceId: string = await metadata.request("/latest/meta-data/instance-id", {});

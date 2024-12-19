@@ -3,7 +3,8 @@ import { expect } from "chai";
 
 describe("EC2 Integration", () => {
   it("getInstanceId should get instanceId", (done: Mocha.Done) => {
-    ec2.getInstanceId().then((result: string) => {
+    // Our current mocks do not support the metadata service. bypassMetaDataService to bypass so we don't timeout on integration tests
+    ec2.getInstanceId(true).then((result: string) => {
       log("getInstanceId", LogLevel.INFO, { result });
       expect(result, "result").to.not.equal(undefined);
       expect(ec2.INSTANCE_ID_REGEX.test(result), `${ec2.INSTANCE_ID_REGEX}.test("${result}")`).to.equal(true);

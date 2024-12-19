@@ -93,6 +93,7 @@ interface ModalProps {
   children?: React.ReactNode;
   isReady?: boolean;
   scrollable?: boolean;
+  initialDisplay?: boolean;
 }
 
 export interface ModalObject {
@@ -136,9 +137,10 @@ export const Modal = forwardRef(({
   submitText = "submit",
   children,
   isReady,
-  scrollable
+  scrollable,
+  initialDisplay = false
 }: ModalProps, ref: Ref<ModalObject>) => {
-  const [display, setDisplay] = useState(false);
+  const [display, setDisplay] = useState(initialDisplay);
   let windowOffset: number = 0;
 
   useImperativeHandle(ref, () => {

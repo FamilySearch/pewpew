@@ -44,7 +44,7 @@ export interface UrlState {
   passed: boolean;
 }
 
-export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$");
+export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$|^[a-zA-Z][a-zA-Z0-9]*$");
 export const URLS = "urls";
 const EMPTY_HEADER = "emptyHeader";
 const DEFAULT_HEADERS = "defaultHeaders";

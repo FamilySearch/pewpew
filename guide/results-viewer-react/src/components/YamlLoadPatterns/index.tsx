@@ -1,7 +1,7 @@
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { Checkbox, Div, InputsDiv, Label, Span} from "../YamlStyles";
+import { PewPewLoadPattern, PewPewVars } from "../../util/yamlwriter";
 import React, { useEffect, useRef, useState } from "react";
-import { PewPewLoadPattern } from "../../util/yamlwriter";
 import QuestionBubble from "../YamlQuestionBubble";
 import { uniqueId } from "../../util/clientutil";
 
@@ -14,13 +14,14 @@ export interface LoadPatternProps {
   changePattern: (pewpewPattern: PewPewLoadPattern) => void;
   defaultYaml: boolean;
   patterns: PewPewLoadPattern[];
+  vars: PewPewVars[];
 }
 
 interface LoadPatternState {
   defaultPatterns: boolean;
 }
 
-export const OVER_REGEX = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$");
+export const OVER_REGEX = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$|^[a-zA-Z][a-zA-Z0-9]*$");
 export const NUMBER_REGEX = new RegExp("^[+]?([0-9]+(?:[\\.][0-9]*)?|\\.[0-9]+)$");
 export const PATTERNS = "patterns";
 export const RAMP_PATTERN = "rampPattern";
@@ -33,7 +34,7 @@ export const newLoadLoadPattern = (): PewPewLoadPattern => ({ id: LOAD_PATTERN, 
 
 const errorColor: React.CSSProperties = { color: "red" };
 
-export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternProps) {
+export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPatternProps) {
   const defaultState: LoadPatternState = {
       defaultPatterns: defaultYaml
   };
@@ -67,6 +68,29 @@ export function LoadPatterns ({ defaultYaml, patterns, ...props }: LoadPatternPr
       props.deletePattern(LOAD_PATTERN);
     }
     updateState({ defaultPatterns: newChecked });
+  };
+
+  useEffect(() => {
+    const rampTime = vars.find((pewpewVar) => pewpewVar.id === "rampTime");
+    const loadTime = vars.find((pewpewVar) => pewpewVar.id === "loadTime");
+    handleRampTimeChange(rampTime);
+    handleLoadTimeChange(loadTime);
+  }, [vars]);
+
+  const handleRampTimeChange = (rampTime: PewPewVars | undefined) => {
+    if (!loadPatternsMap.has(RAMP_PATTERN)) {
+      props.addPattern(rampTime ? {...newRampLoadPattern(), over: rampTime.name} : newRampLoadPattern());
+    } else {
+      changePattern(loadPatternsMap.get(RAMP_PATTERN) as PewPewLoadPattern, "over", rampTime ? rampTime.name : "15m");
+    }
+  };
+
+  const handleLoadTimeChange = (loadTime: PewPewVars | undefined) => {
+    if (!loadPatternsMap.has(LOAD_PATTERN)) {
+      props.addPattern(loadTime ? {...newLoadLoadPattern(), over: loadTime.name} : newLoadLoadPattern());
+    } else {
+      changePattern(loadPatternsMap.get(LOAD_PATTERN) as PewPewLoadPattern, "over", loadTime ? loadTime.name : "15m");
+    }
   };
 
   const changePattern = (pewpewPattern: PewPewLoadPattern, type: PewPewLoadPatternStringType, value: string) => {

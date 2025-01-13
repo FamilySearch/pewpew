@@ -9,6 +9,7 @@ import {
 } from "../../util/yamlwriter";
 import React, { useEffect, useRef, useState } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
+import VarInput from "./VarInput";
 import { uniqueId } from "../../util/clientutil";
 
 export type PewPewVarsStringType = "name" | "value";
@@ -176,57 +177,22 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
       <Checkbox type="checkbox" id={DEFAULT_VARS} onChange={handleClickDefault} checked={state.defaultVars} />
 
       <Div>
-        <Span>
-          <Label htmlFor={SESSION_ID}> sessionId: </Label>
-          <QuestionBubble text="sessionId included"></QuestionBubble>
-          <Checkbox type="checkbox" id={SESSION_ID} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(SESSION_ID, event.target.checked)} checked={state.sessionId}/>
-        </Span>
-        <Span>
-          <Label htmlFor={RAMP_TIME}> ramptime: </Label>
-          <QuestionBubble text="rampTime included"></QuestionBubble>
-          <Checkbox type="checkbox" id={RAMP_TIME} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(RAMP_TIME, event.target.checked)} checked={state.rampTime}/>
-        </Span>
-        <Span>
-          <Label htmlFor={LOAD_TIME}> loadtime: </Label>
-          <QuestionBubble text="loadTime included"></QuestionBubble>
-          <Checkbox type="checkbox" id={LOAD_TIME} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(LOAD_TIME, event.target.checked)} checked={state.loadTime}/>
-        </Span>
-        <Span>
-          <Label htmlFor={PEAK_LOAD}> peakload: </Label>
-          <QuestionBubble text="peakLoad included"></QuestionBubble>
-          <Checkbox type="checkbox" id={PEAK_LOAD} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(PEAK_LOAD, event.target.checked)} checked={state.peakLoad}/>
-        </Span>
+        {[SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].map((varName) => {
+          const stateKey = varName as DefaultVariablesType;
+          // TODO: Should these be read only?
+          return (
+            <Span>
+              <Label htmlFor={varName}> {varName}: </Label>
+              <QuestionBubble text={`${varName} included`}></QuestionBubble>
+              <Checkbox type="checkbox" id={varName} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(varName as keyof DefaultVariables, event.target.checked)} checked={state[stateKey]}/>
+            </Span>
+          );
+        })}
       </Div>
       <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
         {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (
           <CSSTransition key={pewpewVar.id} timeout={300} classNames="load" nodeRef={nodeRef}>
-            <Div>
-              <Span>
-                <Label> Name: </Label>
-                <QuestionBubble text="Required | name of variable"></QuestionBubble>
-                <input
-                  type="text"
-                  style={{width: "130px"}}
-                  onChange={(event) => changeVars(pewpewVar, "name", event.target.value)}
-                  name={pewpewVar.id}
-                  value={pewpewVar.name}
-                  id="name"
-                />
-              </Span>
-              <Span>
-                <Label> Value: </Label>
-                <QuestionBubble text="Required | value of variable"></QuestionBubble>
-                <input
-                  type="text"
-                  style={{width: "130px"}}
-                  onChange={(event) => changeVars(pewpewVar, "value", event.target.value)}
-                  name={pewpewVar.id}
-                  value={pewpewVar.value}
-                  id="value"
-                />
-              </Span>
-              <button id={pewpewVar.id} onClick={() => deleteVar(pewpewVar.id)}>X</button>
-            </Div>
+            <VarInput pewpewVar={pewpewVar} changeVars={changeVars} deleteVar={deleteVar} />
           </CSSTransition>
         ))}
       </TransitionGroup>

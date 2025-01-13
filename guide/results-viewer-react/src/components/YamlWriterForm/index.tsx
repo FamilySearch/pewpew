@@ -436,6 +436,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           defaultYaml={state.default}
           authenticated={state.authenticated}
           urls={state.urls}
+          peakLoad={state.vars.find((variable) => variable.name === "peakLoad")?.name || "1hpm"}
         />
         <Vars
           addVar={addVar}
@@ -453,6 +454,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           changePattern={changePattern}
           defaultYaml={state.default}
           patterns={state.patterns}
+          vars={state.vars}
         />
         <Providers
           addProvider={addProvider}

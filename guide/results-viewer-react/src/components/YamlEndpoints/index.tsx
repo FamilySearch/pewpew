@@ -63,9 +63,9 @@ export interface EndpointsProps extends Pick<UrlProps, "deleteUrl" | "changeUrl"
   clearAllUrls: () => void;
   defaultYaml: boolean;
   /** State of Authenticated checkbox */
-  authenticated: boolean
-  urls: PewPewAPI[],
-  peakLoad: string
+  authenticated: boolean;
+  urls: PewPewAPI[];
+  peakLoad?: string | undefined;
 }
 
 export interface EndpointsState {
@@ -73,7 +73,7 @@ export interface EndpointsState {
     defaultHeaders: boolean;
 }
 
-export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad: string, point?: HarEndpoint): PewPewAPI => {
+export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad?: string, point?: HarEndpoint): PewPewAPI => {
   const pointHeaders: PewPewHeader[] = point?.headers.map(({ name, value }: HarHeader): PewPewHeader => ({ id: uniqueId(), name, value })) || [];
   const pewpewHeaders: PewPewHeader[] = deaultHeaders
     ? getDefaultHeaders(authenticated)
@@ -81,7 +81,7 @@ export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad:
   return {
     id: uniqueId(),
     url: point?.url || "",
-    hitRate: peakLoad,
+    hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
     headers: [...pewpewHeaders, ...pointHeaders],
     method: point?.method || "GET",
     authorization: null
@@ -90,7 +90,7 @@ export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad:
 
 export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   const defaultState: EndpointsState = {
-      hitRate: peakLoad,
+      hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
       defaultHeaders: props.defaultYaml
   };
   /** Map to keep id's unique */
@@ -106,7 +106,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   }, [props.defaultYaml]);
 
   useEffect(() => {
-    updateState({ hitRate: peakLoad });
+    updateState({ hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm" });
   }, [peakLoad]);
 
   const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,7 +117,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   // Adds endpoint to array
   // Called from clicking add button, or when endpoints are sent from App.js through refs.child.updatePoints
   const addUrl = () => {
-    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad));
+    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? "${" + peakLoad + "}" : "1hpm"));
   };
 
   // Updates the hit rate for each endpoint when "update" button is pressed

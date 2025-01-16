@@ -114,7 +114,7 @@ describe("S3Util Integration", () => {
 
   before (async () => {
     // This test was failing until we reset everything. I don't know why and it bothers me.
-    s3Config.s3Client = undefined as any;
+    s3Config.s3Client = undefined;
     initS3();
     defaultTagKey = initTags();
     expect(defaultTagKey, "defaultTagKey").to.not.equal(undefined);

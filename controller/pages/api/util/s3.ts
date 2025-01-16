@@ -50,12 +50,12 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       // https://stackoverflow.com/questions/74699607/how-to-pipe-to-next-js-13-api-response
       if (redirectToS3) {
         try {
-          s3.init();
+          const s3Client = s3.init();
           const command = new GetObjectCommand({
             Bucket: s3.BUCKET_NAME,
             Key: key.startsWith(s3.KEYSPACE_PREFIX) ? key : (s3.KEYSPACE_PREFIX + key)
           });
-          const presignedUrl = await getSignedUrl(s3.config.s3Client, command, { expiresIn: 60 });
+          const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
           log(`${key} presignedUrl: ${presignedUrl}`, LogLevel.DEBUG, presignedUrl);
           response.writeHead(302, { Location: presignedUrl });
           response.end();

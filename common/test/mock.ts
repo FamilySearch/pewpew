@@ -75,12 +75,15 @@ export function mockS3 (): AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3
     return _mockedS3Instance;
   }
   // _mockedS3Instance = mockClient(S3Client);
-  s3Config.s3Client = undefined as any;
-  initS3();
+  // Forced reset Create a new client instance
+  s3Config.s3Client = undefined;
+  const s3Client = initS3();
+  _mockedS3Instance = mockClient(s3Client);
+  // Instead of creating a new client each time, return this one that is mocked
+  s3Config.s3Client = () => s3Client;
   UNIT_TEST_BUCKET_NAME = s3.BUCKET_NAME;
   UNIT_TEST_BUCKET_URL = `${UNIT_TEST_BUCKET_NAME}.s3.us-east-1.amazonaws.com`;
   UNIT_TEST_KEYSPACE_PREFIX = s3.KEYSPACE_PREFIX;
-  _mockedS3Instance = mockClient(s3Config.s3Client);
   _mockedS3Instance.on(DeleteObjectCommand).resolves({});
   // There's no parameters, so just mock it
   _mockedS3Instance.on(PutObjectTaggingCommand).resolves({});
@@ -91,7 +94,7 @@ export function mockS3 (): AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3
 export function resetMockS3 (): void {
   if (_mockedS3Instance !== undefined) {
     _mockedS3Instance.reset();
-    s3Config.s3Client = undefined as any;
+    s3Config.s3Client = undefined;
     _mockedS3Instance = undefined;
   }
 }
@@ -226,9 +229,12 @@ export function mockSqs (): AwsStub<SQSServiceInputTypes, SQSServiceOutputTypes,
     return _mockedSqsInstance;
   }
   // _mockedSqsInstance = mockClient(SQSClient);
-  sqsConfig.sqsClient = undefined as any;
-  initSqs();
-  _mockedSqsInstance = mockClient(sqsConfig.sqsClient);
+  // Forced reset Create a new client instance
+  sqsConfig.sqsClient = undefined;
+  const sqsClient = initSqs();
+  _mockedSqsInstance = mockClient(sqsClient);
+  // Instead of creating a new client each time, return this one that is mocked
+  sqsConfig.sqsClient = () => sqsClient;
   log("mockSqs created", LogLevel.DEBUG, { mockedSqsInstance: _mockedSqsInstance, sqs: sqsConfig.sqsClient });
   // Always mock deleteMessage so we don't accidentally call it behind the scenes. Don't expose the call like the others
   _mockedSqsInstance.on(DeleteMessageCommand).resolves({});
@@ -242,7 +248,7 @@ export function resetMockSqs (): void {
   if (_mockedSqsInstance !== undefined) {
     _mockedSqsInstance.reset();
     _mockedSqsInstance.restore();
-    sqsConfig.sqsClient = undefined as any;
+    sqsConfig.sqsClient = undefined;
     _mockedSqsInstance = undefined;
   }
 }

@@ -117,7 +117,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   // Adds endpoint to array
   // Called from clicking add button, or when endpoints are sent from App.js through refs.child.updatePoints
   const addUrl = () => {
-    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? "${" + peakLoad + "}" : "1hpm"));
+    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? peakLoad : "1hpm"));
   };
 
   // Updates the hit rate for each endpoint when "update" button is pressed

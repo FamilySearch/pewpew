@@ -73,7 +73,7 @@ export function getHostUrl (req: IncomingMessage | undefined): string {
  */
 export function formatError (error: unknown): string {
   // Check if it's an AxiosError
-  if ((error as AxiosError).isAxiosError) {
+  if ((error as AxiosError)?.isAxiosError) {
     const axiosError: AxiosError = error as AxiosError;
     log("formatError AxiosError", LogLevel.DEBUG, { config: axiosError.config , response: axiosError.response });
     const methodText = `${axiosError.config?.method?.toUpperCase() || ""} ${axiosError.config?.url || "request"} failed`;

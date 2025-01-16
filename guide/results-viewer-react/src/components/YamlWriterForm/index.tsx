@@ -23,7 +23,9 @@ import {
   NUMBER_REGEX,
   OVER_REGEX,
   PATTERNS,
-  RAMP_PATTERN
+  RAMP_PATTERN,
+  newLoadLoadPattern,
+  newRampLoadPattern
 } from "../YamlLoadPatterns";
 import { LOGGERS, Loggers, getDefaultLoggers } from "../YamlLoggers";
 import { LogLevel, log } from "../../util/log";
@@ -102,7 +104,7 @@ type YamlWriterBooleanState = "default" | "filterHeaders" | "authenticated";
 export const YamlWriterForm = (props: YamlWriterFormProps) => {
   const defaultState: YamlWriterFormState = {
       urls: [],
-      patterns: [],
+      patterns: [newRampLoadPattern(), newLoadLoadPattern()],
       vars: getDefaultVars(),
       providers: [],
       loggers: getDefaultLoggers(),
@@ -436,6 +438,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           defaultYaml={state.default}
           authenticated={state.authenticated}
           urls={state.urls}
+          peakLoad={state.vars.find((variable) => variable.name === "peakLoad")?.name}
         />
         <Vars
           addVar={addVar}
@@ -453,6 +456,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           changePattern={changePattern}
           defaultYaml={state.default}
           patterns={state.patterns}
+          vars={state.vars}
         />
         <Providers
           addProvider={addProvider}

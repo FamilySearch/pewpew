@@ -22,7 +22,7 @@ import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { useEffect, useState } from "react";
-import axios, { AxiosResponse } from "axios";
+import axios, { AxiosError, AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestData } from "./api/util/clientutil";
 import Div from "../components/Div";
 import { Layout } from "../components/Layout";
@@ -70,6 +70,7 @@ export interface TestStatusState {
   searchTestResult: TestData[] | undefined;
   pewpewStdErrors?: string[];
   pewpewStdErrorsTruncated?: boolean;
+  pewpewStdErrorsRedirect?: boolean;
   error: string | undefined;
 }
 
@@ -90,6 +91,7 @@ const TestStatusPage = ({
     searchTestResult: propsSearchTestResult,
     pewpewStdErrors: undefined,
     pewpewStdErrorsTruncated: undefined,
+    pewpewStdErrorsRedirect: undefined,
     error: errorLoading
   };
   const [state, setFormData] = useState(defaultState);
@@ -166,13 +168,27 @@ const TestStatusPage = ({
             return line;
           });
           log("pewpewStdErrors", LogLevel.DEBUG, pewpewStdErrors.length);
-          setState({ pewpewStdErrors, pewpewStdErrorsTruncated });
+          setState({
+            pewpewStdErrors,
+            pewpewStdErrorsTruncated,
+            pewpewStdErrorsRedirect: undefined
+          });
         } else {
-          setState({ pewpewStdErrors: undefined, pewpewStdErrorsTruncated: undefined });
+          setState({
+            pewpewStdErrors: undefined,
+            pewpewStdErrorsTruncated: undefined,
+            pewpewStdErrorsRedirect: undefined
+          });
         }
       }).catch((error: unknown) => {
         log("Could not retrieve the console errors", LogLevel.WARN, error);
-        setState({ pewpewStdErrors: ["Could not retrieve the console errors:", formatError(error)], pewpewStdErrorsTruncated: true });
+        setState({
+          pewpewStdErrors: ["Could not retrieve the console errors:", formatError(error)],
+          pewpewStdErrorsTruncated: true,
+          pewpewStdErrorsRedirect: (error as AxiosError)?.isAxiosError
+            ? (error as AxiosError).response?.status === 413
+            : undefined
+        });
       });
     } else {
       setState({ pewpewStdErrors: undefined, pewpewStdErrorsTruncated: undefined });
@@ -199,8 +215,10 @@ const TestStatusPage = ({
             <TestStatusSection>
             Pewpew Console Standard Errors
             {state.pewpewStdErrorsTruncated && /** If pewpewStdErrors are truncated, link to full results */
-              <a href={formatPageHref(API_ERROR_FORMAT(testData.s3Folder))} target="_blank">Errors Truncated - Click for full log</a>
-            }
+              <a href={formatPageHref(API_ERROR_FORMAT(testData.s3Folder)) + (state.pewpewStdErrorsRedirect ? "?redirect" : "")} target="_blank">
+              Errors Truncated - Click for full log
+            </a>
+          }
             <ul>
               {state.pewpewStdErrors.map((error: string, index: number) => <li key={"error" + index}>{error}</li>)}
             </ul>

@@ -135,7 +135,8 @@ const TestStatusPage = ({
   // Lazy load the console errors on the client-side
   useEffect(() => {
     log("console errors useEffect", LogLevel.DEBUG, testData?.s3Folder);
-    if (testData) {
+    // If it's not running yet there's no file
+    if (testData?.status && (testData.status === TestStatus.Running || testData.status === TestStatus.Finished || testData.status === TestStatus.Failed)) {
       const url = formatPageHref(API_ERROR_FORMAT(testData.s3Folder));
       log("console errors url", LogLevel.DEBUG, url);
       // If we're client-side the cookie gets passed automatically

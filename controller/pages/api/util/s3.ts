@@ -16,6 +16,8 @@ const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig 
 // If REDIRECT_TO_S3 is turned on, it must also be turned on for the acceptance tests
 const REDIRECT_TO_S3: boolean = publicRuntimeConfig.REDIRECT_TO_S3 === "true";
 const UNZIP_S3_FILES: boolean = publicRuntimeConfig.UNZIP_S3_FILES === "true";
+// Next.js Max API size is 4MB
+const MAX_API_SIZE = 4 * 1024 * 1024;
 
 // We can't pull in BUCKET_URL and KEYSPACE_PREFIX here because they're not set until init
 const { getObject, listFiles } = s3;
@@ -65,6 +67,12 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
           throw error;
         }
       }
+      // Check for too large of file AFTER the redirect. Only limit on our own API. Redirect can bypass with auth
+      if (files.length === 1 && files[0].Size && files[0].Size >= MAX_API_SIZE) {
+        // Too Large
+        response.status(413).json({ message: `Reponse is too large - Size: ${files[0].Size}, Max: ${MAX_API_SIZE}` });
+        return true;
+      }
       let s3Object: GetObjectCommandOutput | undefined;
       try {
         s3Object = await getObject(key);
@@ -72,6 +80,12 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
         log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files.map((file) => file.Key));
       }
       if (s3Object && s3Object.Body) {
+        // If listFiles somehow found more than 1 file, check size again here
+        if (s3Object.ContentLength && s3Object.ContentLength >= MAX_API_SIZE) {
+          // Too Large
+          response.status(413).json({ message: `Reponse is too large - Size: ${s3Object.ContentLength}, Max: ${MAX_API_SIZE}` });
+          return true;
+        }
         let content: GetObjectCommandOutput["Body"] | Buffer = s3Object.Body;
         log("s3Object: " + s3Object, LogLevel.DEBUG, { ...s3Object, Body: !!s3Object.Body });
         // res.writeHead and res.send don't mix so we have to set each header separately

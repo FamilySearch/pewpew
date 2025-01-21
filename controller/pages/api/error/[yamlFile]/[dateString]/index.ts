@@ -41,14 +41,17 @@ export default async (request: NextApiRequest, response: NextApiResponse<GetObje
     }
     try {
       const {
-        query: { yamlFile, dateString }
+        query: { yamlFile, dateString, redirect }
       } = request;
       const testId = `${yamlFile}${dateString}`;
       log(`yamlFile: ${yamlFile}, dateString: ${dateString}, testId: ${testId}`, LogLevel.DEBUG, { query: request.query });
       if (yamlFile && !Array.isArray(yamlFile) && dateString && !Array.isArray(dateString)) {
         const filename: string = logger.pewpewStdErrFilename(testId);
         const s3Folder: string = `${yamlFile}/${dateString}`;
-        const found = await getS3Response({ request, response, filename, s3Folder});
+        // If it's a string treat it as truthy. I.e. ?redirect will redirect. Only ?redirect=false
+        // Any non string fall back to the default
+        const redirectToS3: boolean | undefined = typeof redirect === "string" ? redirect.toLowerCase() !== "false" : undefined;
+        const found = await getS3Response({ request, response, filename, s3Folder, redirectToS3 });
         if (found) { return; }
 
         response.status(404).json({ message: `No error file found for ${request.method} ${request.url}` });

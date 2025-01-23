@@ -44,8 +44,8 @@ config:
       Accept: application/json
       User-Agent: PPAAS Agent Performance Test
   general:
-    bucket_size: 1m
-    log_provider_stats: 1m
+    bucket_size: 5s
+    log_provider_stats: 5s
 endpoints:
   - method: GET
     url: http://\${serviceUrlAgent}/healthcheck

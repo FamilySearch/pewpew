@@ -349,6 +349,7 @@ export class PewPewTest {
 
   /** * Launches the pewpew process and waits for it to complete, throws on error ** */
   public async launch (): Promise<void> {
+    this.log(`PewpewTest.launch() at ${Date.now()}`, LogLevel.DEBUG);
     try {
       // Keep alive
       await this.refreshTestScalingMessage();
@@ -369,6 +370,7 @@ export class PewPewTest {
       this.log(`fs.access(${yamlLocalPath}) stats = ${JSON.stringify(await fs.access(yamlLocalPath))}`, LogLevel.DEBUG);
 
       let pewpewPath = PEWPEW_PATH;
+      this.log(`pewpewPath: ${pewpewPath}`, LogLevel.DEBUG, { PEWPEW_PATH, DOWNLOAD_PEWPEW });
       // Download the pewpew executable if needed
       if (DOWNLOAD_PEWPEW) {
         // version check in the test message

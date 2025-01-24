@@ -37,6 +37,7 @@ describe("PewPewTest Integration Test", () => {
   let hostname: string;
 
   before(async () => {
+    sqs.config.sqsClient = undefined;
     sqs.init();
     log("smoke queue url=" + [...sqs.QUEUE_URL_TEST], LogLevel.DEBUG);
 
@@ -179,6 +180,7 @@ describe("PewPewTest Integration Test", () => {
           expect(stderrtags!.get(tagKeyExtra), `stderrtags!.get("${tagKeyExtra}")`).to.equal(tagValueExtra);
           done();
       }).catch((error) => {
+        log("Test Failed", LogLevel.WARN, error);
         done(error);
       });
     });
@@ -215,6 +217,7 @@ describe("PewPewTest Integration Test", () => {
         done();
       })
       .catch((error) => {
+        log("Test Failed", LogLevel.WARN, error);
         done(error);
       });
     });
@@ -257,6 +260,7 @@ describe("PewPewTest Integration Test", () => {
         done();
       })
       .catch((error) => {
+        log("Test Failed", LogLevel.WARN, error);
         done(error);
       });
     });

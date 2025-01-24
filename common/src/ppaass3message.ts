@@ -122,11 +122,7 @@ export class PpaasS3Message implements CommunicationsMessage {
 
   public async send (): Promise<string | undefined> {
     // Send the S3 Message
-    const communicationsMessage: CommunicationsMessage = {
-      testId: this.testId,
-      messageType: this.messageType,
-      messageData: this.messageData
-    };
+    const communicationsMessage: CommunicationsMessage = this.getCommunicationsMessage();
     if (this.messageData instanceof Map || this.messageData instanceof Set) {
       communicationsMessage.messageData = [...this.messageData]; // Need to cast it to an array
     }

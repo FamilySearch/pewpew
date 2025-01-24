@@ -96,9 +96,15 @@ export function mockS3 (): AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3
 }
 
 export function resetMockS3 (): void {
+  log("resetMockS3 enter", LogLevel.DEBUG);
+  s3Config.s3Client = undefined;
   if (_mockedS3Instance !== undefined) {
-    _mockedS3Instance.reset();
-    s3Config.s3Client = undefined;
+    log("resetMockS3 exists", LogLevel.DEBUG);
+    try {
+      _mockedS3Instance.reset();
+      _mockedS3Instance.restore();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) { /* swallow */ }
     _mockedS3Instance = undefined;
   }
 }
@@ -283,10 +289,14 @@ export function mockSqs (): AwsStub<SQSServiceInputTypes, SQSServiceOutputTypes,
 
 export function resetMockSqs (): void {
   log("resetMockSqs enter", LogLevel.DEBUG);
+  sqsConfig.sqsClient = undefined;
   if (_mockedSqsInstance !== undefined) {
-    _mockedSqsInstance.reset();
-    _mockedSqsInstance.restore();
-    sqsConfig.sqsClient = undefined;
+    log("resetMockSqs exists", LogLevel.DEBUG);
+    try {
+      _mockedSqsInstance.reset();
+      _mockedSqsInstance.restore();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) { /* swallow */ }
     _mockedSqsInstance = undefined;
   }
   log("resetMockSqs exit", LogLevel.DEBUG);

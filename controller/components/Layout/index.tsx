@@ -4,8 +4,7 @@ import {
   PAGE_ADMIN,
   PAGE_CALENDAR,
   PAGE_START_TEST,
-  PAGE_TEST_HISTORY,
-  PAGE_YAML_WRITER
+  PAGE_TEST_HISTORY
 } from "../../types";
 import { Button, LinkButton, defaultButtonTheme } from "../LinkButton";
 import React, { useEffect } from "react";
@@ -19,6 +18,8 @@ import getConfig from "next/config";
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
 const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 const HIDE_ENVIRONMENT: unknown = publicRuntimeConfig.HIDE_ENVIRONMENT;
+
+export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/results-viewer-react/yaml.html";
 
 export type OtherControllers = Record<string, {
     url: string;
@@ -154,7 +155,7 @@ export const Layout = ({
             <LinkButton href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_YAML_WRITER} title="Convert a HAR file to a YAML load test">Yaml Writer</LinkButton>
+            <LinkButton href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">Yaml Writer</LinkButton>
           </LinkDiv>
           {authPermission === AuthPermission.Admin &&
             <LinkDiv>

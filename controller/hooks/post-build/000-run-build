@@ -9,8 +9,8 @@ nvm install v18
 export NODE_ENV=production
 export BASE_PATH=/pewpew/load-test
 export AUTH_MODE=okta
-export LoggingLevel=info
-export LoggingLevelConsole=fatal
+export LOGGING_LEVEL=info
+export LOGGING_LEVEL_CONSOLE=fatal
 echo "BASE_PATH: \"${BASE_PATH}\""
 
 # Now run whatever node or npm commands you need to run

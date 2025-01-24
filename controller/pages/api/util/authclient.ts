@@ -32,7 +32,7 @@ export const ACCESS_DENIED_AUTHENTICATION: string = "access_denied"; // error_de
 export const IS_RUNNING_IN_AWS: boolean = publicRuntimeConfig.APPLICATION_NAME !== undefined && publicRuntimeConfig.SYSTEM_NAME !== undefined;
 const AUTH_COOKIE_PATH: string = publicRuntimeConfig.AUTH_COOKIE_PATH
   ? publicRuntimeConfig.AUTH_COOKIE_PATH.toLowerCase()
-  : "/status/";
+  : "/pewpew/";
 export const AUTH_COOKIE_NAME: string = publicRuntimeConfig.AUTH_COOKIE_NAME
   ? publicRuntimeConfig.AUTH_COOKIE_NAME.toLowerCase()
   : "perftesttoken";
@@ -50,7 +50,7 @@ export const AUTH_HEADER_HOST: string = "authhost";
 export const COOKIE_DURATION_DAYS: number = parseInt(publicRuntimeConfig.COOKIE_DURATION_DAYS || "0", 10) || 1;
 export const REFRESH_COOKIE_DURATION_DAYS: number = parseInt(publicRuntimeConfig.REFRESH_COOKIE_DURATION_DAYS || "0", 10) || 1;
 
-// Allow fslocal and familysearch. During development allow localhost
+// Allow internal and external. During development allow localhost
 export const VALID_DOMAINS: string[] = [CNAME_DOMAIN, ROUTING_DOMAIN];
 if (isAuthDevelopment()) { VALID_DOMAINS.push(LOCALHOST_DOMAIN); }
 log("VALID_DOMAINS=" + VALID_DOMAINS, LogLevel.DEBUG, { VALID_DOMAINS, isAuthEnabled: isAuthEnabled(), AUTH_MODE });
@@ -64,7 +64,7 @@ export function getDomain (req?: IncomingMessage): string {
 
 /**
  * Checks if we have a basepath and are not on the CNAME. If we do have a basepath and are not on the
- * CNAME, return the AUTH_COOKIE_PATH ("/status/");
+ * CNAME, return the AUTH_COOKIE_PATH ("/pewpew/");
  * @param req {IncomingMessage} optional request object if we're server side
  * @returns {string} a path if we have one, or undefined if we shouldn't use one.
  */

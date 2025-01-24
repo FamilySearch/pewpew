@@ -23,7 +23,8 @@ const props: LoadPatternProps = {
     console.log("changing LoadPattern " + pewpewPattern.id, pewpewPattern);
   },
   defaultYaml: false,
-  patterns: []
+  patterns: [],
+  vars: []
 };
 
 const propsDefault: LoadPatternProps = { ...props,

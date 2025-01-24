@@ -4,8 +4,8 @@ nvm install v18
  
 # Environment variables are not passed to our run-build hook/script. Hard code them in the script
 export NODE_ENV=production
-export LoggingLevel=info
-export LoggingLevelConsole=warn
+export LOGGING_LEVEL=info
+export LOGGING_LEVEL_CONSOLE=warn
 
 # Now run whatever node or npm commands you need to run
 npm run build

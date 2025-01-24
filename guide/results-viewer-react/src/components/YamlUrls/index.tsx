@@ -1,30 +1,31 @@
 import { Div, Label, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
-import { PewPewAPI, PewPewHeader } from "../../util/yamlwriter";
-import React, { useEffect, useRef, useState } from "react";
+import { PewPewAPI, PewPewHeader, PewPewQueryParam } from "../../util/yamlwriter";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, Method } from "axios";
 import QuestionBubble from "../YamlQuestionBubble";
+import RequestDetailsTabs from "./RequestDetailsTabs";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
-// import axios from "axios";
-
-const ModalEndpointInput = styled.div`
+const ModalInput = styled.div`
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   margin-bottom: 10px;
-`;
-const ModalHitMethodInput = styled.div`
-  display: flex;
-  flex-direction: row;
-  margin: 25px 0;
 `;
 const EndpointDisplay = styled.span`
   margin-right: 5px;
-  max-width: 450px;
-  width: 450px;
+  max-width: 60%;
+  min-width: 450px;
   white-space: nowrap;
   overflow: hidden;
+`;
+const Row = styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 5px;
 `;
 
 export interface UrlProps {
@@ -43,16 +44,18 @@ export interface UrlState {
   passed: boolean;
 }
 
-export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$");
+export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");
 export const URLS = "urls";
 const EMPTY_HEADER = "emptyHeader";
 const DEFAULT_HEADERS = "defaultHeaders";
 export const AUTHENTICATED = "authenticated";
 const ACCEPT_LANGUAGE = "acceptLanguage";
 const CONTENT_TYPE = "contentType";
-type HeaderType = "defaultHeaders" | "authenticated" | "acceptLanguage" | "contentType";
-type PewPewApiStringType = "url" | "method" | "hitRate";
-type PewPewHeaderStringType = "name" | "value";
+export type HeaderType = "defaultHeaders" | "authenticated" | "acceptLanguage" | "contentType";
+export type PewPewApiStringType = "url" | "method" | "hitRate";
+export type PewPewHeaderStringType = "name" | "value";
+export type PewPewQueryParamStringType = "name" | "value";
+export type TabType = "Headers" | "Query Params" | "Request Body" | "Response";
 
 export const newHeader = () => ({ id: uniqueId(), name: "", value: "" });
 export const getAuthorizationHeader = (): PewPewHeader => ({ id: AUTHENTICATED, name: "Authorization", value: "Bearer ${v:sessionId}" });
@@ -94,10 +97,29 @@ export function isValidUrl (url: string): boolean {
   }
 }
 
-export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
+export function Urls ({ data: { headers, requestBody, ...data }, ...props }: UrlProps) {
   const defaultState: UrlState = {
     passed: false
   };
+  const [url, setUrl] = useState(data.url);
+  const [method, setMethod] = useState(data.method as Method);
+  const [headersList, setHeadersList] = useState<PewPewHeader[]>(headers);
+  const queryParamsFromUrl = useMemo<PewPewQueryParam[]>(() => {
+    const queryParamsText = data.url.split("?")[1];
+    if (queryParamsText) {
+      return queryParamsText.split("&").map((param) => {
+        const [name, value] = param.split("=");
+        return { id: uniqueId(), name, value };
+      });
+    }
+    return [];
+  }, [data.url]);
+  const [queryParamsList, setQueryParamsList] = useState<PewPewQueryParam[]>(queryParamsFromUrl);
+  const [requestBodyObject, setRequestBodyObject] = useState<object>(requestBody || {});
+  const [lastResponse, setLastResponse] = useState<AxiosResponse>();
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [activeTab, setActiveTab] = useState<TabType>("Headers");
+  const enableSubmit = useMemo(() => isValidUrl(url), [url]);
   // /** Map to keep id's unique */
   const headersMap = new Map(headers.map((header) => ([header.id, header])));
 
@@ -137,64 +159,58 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
     }
   }, [props.defaultHeaders]);
 
-  // Currently unoperational. Needs a server to access websites correctly.
-  // Would recommend simply using Postman instead of getting this function to work.
-  // Postman is already used by a lot of the FamilySearch org and does what this function below would do and more.
-  // Users can also simply create the testing script, test endpoints locally with pew pew, and edit the endpoints as needed.
-  const checkUrl = () => {
-    alert("Currently not working. Sorry!");
-    // console.log(data.url);
-    // const myUrl = `https://cors-escape-git-master.shalvah.now.sh/${data.url}`;
-    // console.log(myUrl);
-    /* let xhr = new XMLHttpRequest();
-    xhr.onreadystatechange = function () {
-      if (readyState === 4 && status === 200) {
-        let response = responseText;
-        console.log(response);
+  async function makeRequest () {
+    const request: AxiosRequestConfig = {
+      method,
+      url,
+      headers: headersList.reduce((acc, header) => {
+        acc[header.name] = header.value;
+        return acc;
+      }, {} as Record<string, string>),
+      data: requestBodyObject
+    };
+    try {
+      const response = await axios(request);
+      setLastResponse(response);
+      setActiveTab("Response");
+    } catch (error) {
+      if ((error as AxiosError).isAxiosError) {
+        if ((error as AxiosError).response) {
+          setLastResponse((error as AxiosError).response);
+        } else {
+          setErrorMessage("Error: " + (error as AxiosError).message + ". This is likely a CORS issue.");
+          setLastResponse(undefined);
+        }
+        setActiveTab("Response");
+      } else {
+        setErrorMessage("Error: " + error);
+        setLastResponse(undefined);
+        setActiveTab("Response");
       }
     }
-    xhr.open("GET", myUrl);
-    xhr.setRequestHeader("Accept", "application/json");
-    xhr.send(); */
+  }
 
-    /* fetch(myUrl, {
-      method: "POST",
-      headers: {
-        "Accept-Language": "en-us",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      },
-      redirect: "follow",
-    })
-      .then(response => {
-        console.log(response);
-        if (response.ok) {
-          response.text().then(text => {
-            console.log(text);
-            //setState((prevState: UrlState): UrlState => ({...prevState, passed: true}));
-          })
-        }
-      })
-      .catch(error => console.error(error));
-  } */
-    /* axios.defaults.headers.post["Content-Type"] = "application/x-www-form-urlencoded";
-    axios.get(myUrl)
-      .then((response) => {
-        console.log(response);
-        if (response.statusText === "OK") {
-          setState((prevState: UrlState): UrlState => ({...prevState, passed: true }));
-        } else {
-          setState((prevState: UrlState): UrlState => ({...prevState, passed: false }));
-        }
-      })
-      .catch((error) => {
-        console.error(error);
-        setState((prevState: UrlState): UrlState => ({...prevState, passed: false }));
-      })
-      .finally(() => {
-        props.updateReady(state.urlReady && state.hitReady);
+  const changeUrlObject = (type: PewPewApiStringType, value: string) => {
+    data[type] = value;
+    props.changeUrl({ ...data, headers });
+  };
+
+  const changeUrl = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const urlText = event.target.value;
+    const queryParamsText = urlText.split("?")[1];
+    if (queryParamsText) {
+      const queries = queryParamsText.split("&").map((param) => {
+        const [name, value] = param.split("=");
+        return { id: uniqueId(), name, value };
       });
-      */
+      setQueryParamsList(queries);
+    }
+    setUrl(urlText);
+  };
+
+  const clearUrl = () => {
+    setUrl("");
+    setQueryParamsList([]);
   };
 
   // Adds header to array in given url
@@ -204,10 +220,10 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
     // Adding header when Authenticated option is checked
     if (headerType === DEFAULT_HEADERS) {
       // add all
-      props.addHeaders(data.id, getDefaultHeaders());
+      setHeadersList((prevHeadersList) => prevHeadersList.concat(getDefaultHeaders(props.authenticated)));
     } else {
       // put at end
-      props.addHeaders(data.id, [getHeader(headerType)]);
+      setHeadersList((prevHeadersList) => prevHeadersList.concat(getHeader(headerType)));
     }
   };
 
@@ -218,87 +234,162 @@ export function Urls ({ data: { headers, ...data }, ...props }: UrlProps) {
     log("removeHeader " + headerId, LogLevel.DEBUG);
     if (headerId === DEFAULT_HEADERS) {
       // Remove both!
-      props.deleteHeader(data.id, ACCEPT_LANGUAGE);
-      props.deleteHeader(data.id, CONTENT_TYPE);
+      setHeadersList((prevHeadersList) => prevHeadersList.filter((header) => header.id !== ACCEPT_LANGUAGE && header.id !== CONTENT_TYPE));
     } else {
-      props.deleteHeader(data.id, headerId);
+      setHeadersList((prevHeadersList) => prevHeadersList.filter((header) => header.id !== headerId));
     }
   };
 
-  const changeUrl = (type: PewPewApiStringType, value: string) => {
-    data[type] = value;
-    props.changeUrl({ ...data, headers });
+  const changeHeader = (headerIndex: number, type: PewPewHeaderStringType, value: string) => {
+    setHeadersList((prevHeadersList) => {
+      const newHeadersList = [...prevHeadersList];
+      newHeadersList[headerIndex][type] = value;
+      return newHeadersList;
+    });
   };
 
-  const changeHeader = (headerIndex: number, type: PewPewHeaderStringType, value: string) => {
-    // const header: PewPewHeader = headers[headerIndex];
-    // // type = "name" or "value"
-    // header[type] = value;
-    // Typechecking above ^ for next line
-    headers[headerIndex][type] = value;
-    props.changeUrl({ ...data, headers });
+  const addQueryParam = () => {
+    setQueryParamsList((prevQueryParamsList) => prevQueryParamsList.concat({ id: uniqueId(), name: "", value: "" }));
   };
+
+  const removeQueryParam = (param: PewPewQueryParam) => {
+    setUrl((prevUrl) => prevUrl.replace(`&${param.name}=${param.value}`, ""));
+    setQueryParamsList((prevQueryParamsList) => prevQueryParamsList.filter((p) => p.id !== param.id));
+  };
+
+  const changeQueryParam = (paramIndex: number, type: PewPewQueryParamStringType, value: string) => {
+    const paramToReplace = `&${queryParamsList[paramIndex].name}=${queryParamsList[paramIndex].value}`;
+    if (type === "name") {
+      const replacementParam = `&${value}=${queryParamsList[paramIndex].value}`;
+      setUrl((prevUrl) => {
+        if (!prevUrl.includes(paramToReplace)) {return `${prevUrl}${!prevUrl.includes("?") ? "?" : "" }${replacementParam}`;}
+        else {return prevUrl.replace(paramToReplace, replacementParam);}
+      });
+    } else if (type === "value") {
+      const replacementParam = `&${queryParamsList[paramIndex].name}=${value}`;
+      setUrl((prevUrl) => {
+        if (!prevUrl.includes(paramToReplace)) {return `${prevUrl}${!prevUrl.includes("?") ? "?" : "" }${replacementParam}`;}
+        else {return prevUrl.replace(paramToReplace, replacementParam);}
+      });
+    }
+    setQueryParamsList((prevQueryParamsList) => {
+      const newQueryParamsList = [...prevQueryParamsList];
+      newQueryParamsList[paramIndex][type] = value;
+      return newQueryParamsList;
+    });
+  };
+
+  const updateRequestBody = (newRequestBody: object) => {
+    setRequestBodyObject(newRequestBody);
+  };
+
+  const updateEndpointHandler = () => {
+    changeUrlObject("method", method);
+    changeUrlObject("url", url);
+    props.changeUrl({ ...data, headers: headersList });
+    return Promise.resolve();
+  };
+
+  const resetModalState = () => {
+    setUrl(data.url);
+    setMethod(data.method as Method);
+    setHeadersList(headers);
+    setQueryParamsList(queryParamsFromUrl);
+    setLastResponse(undefined);
+    setErrorMessage(undefined);
+    setActiveTab("Headers");
+  };
+
+  const handleChangeTab = (tab: TabType) => setActiveTab(tab);
 
   const checked = state.passed ? " Passed" : "";
-  const invalidUrl: boolean = !isValidUrl(data.url);
+  const invalidUrl: boolean = !isValidUrl(url);
   const urlStyle: React.CSSProperties = getUrlStyle(invalidUrl);
   const urlTitle: string | undefined = getUrlTitle(invalidUrl);
   const invalidHitRate = !HIT_RATE_REGEX.test(data.hitRate);
   return (
     <Div>
+      <button onClick={() => modalRef.current?.openModal()} style={{marginRight: "5px"}}>Edit</button>
+      <button id={data.id} onClick={() => props.deleteUrl(data.id)} style={{marginRight: "5px"}}>Delete</button>
       <EndpointDisplay style={urlStyle} title={urlTitle}>
         {data.url ? data.url : "Url"}
       </EndpointDisplay>
-      <Modal ref={modalRef} title="Edit Endpoint" closeText="Close">
-        <ModalEndpointInput>
-          <Label> Endpoint: {checked}</Label>
-          <input style={{ ...urlStyle, width: "500px" }} onChange={(event) => changeUrl("url", event.target.value)} title={urlTitle} name={data.id} value={data.url} id="urlUrl" />
-          <button onClick={checkUrl} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"}>Test</button>
-          <p style={{ marginLeft: "10px", fontSize: "11px" }}>Endpoint must be in the form "https://www.(url)" or "http://www.(url)" </p>
-        </ModalEndpointInput>
-        <ModalHitMethodInput>
-          <Span>
-            <Label> Hit Rate: </Label>
-            <QuestionBubble text="Required | Number, then hph, hpm, or hps"></QuestionBubble>
-            <input style={{ ...getHitRateStyle(invalidHitRate), width: "75px" }} onChange={(event) => changeUrl("hitRate", event.target.value)} name={data.id} value={data.hitRate} id="urlHitrate" title={getHitRateTitle(invalidHitRate)} />
-          </Span>
-          <Span>
-            <Label> Method: </Label>
-            <select onChange={(event) => changeUrl("method", event.target.value)} name={data.id} value={data.method} id="urlMethod">
-              <option value="GET"> Get </option>
-              <option value="POST"> Post </option>
-              <option value="PUT"> Put </option>
-              <option value="DELETE"> Delete </option>
-              <option value="PATCH"> Patch </option>
-            </select>
-          </Span>
-          <button name={data.id} style={{ marginRight: "10px" }} onClick={() => addHeader()}>Add Header</button>
-        </ModalHitMethodInput>
-        <div>
-          <table>
-            <thead>
-              <tr>
-                <th></th>
-                <th>Name</th>
-                <th>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {headers.map((header: PewPewHeader, index: number) => {
-                // This maps out all of the headers uploaded from har file
-                return (
-                  <tr key={header.id}>
-                    <td><button onClick={() => removeHeader(header.id)}>X</button></td>
-                    <td style={{ alignSelf: "center" }}><input id={`urlHeaderKey@${index}`} name={data.id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} /></td>
-                    <td><textarea style={{ width: "450px", resize: "none" }} id={`urlHeaderValue@${index}`} name={data.id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} /></td>
-                  </tr>);
-              })}
-            </tbody>
-          </table>
-        </div>
+      <Modal
+        ref={modalRef}
+        title="Edit Endpoint"
+        closeText="Close"
+        submitText="Update Endpoint"
+        onSubmit={updateEndpointHandler}
+        onClose={resetModalState}
+        isReady={enableSubmit}
+        scrollable={false}
+        initialDisplay={true}
+        >
+        <Row style={{ alignItems: "start"}}>
+            <Span style={{ margin: 0 }}>
+              <ModalInput>
+                <Label style={{ fontSize: "14px", marginBottom: "5px" }} htmlFor="urlMethod"> Method </Label>
+                <select onChange={(event) => setMethod(event.target.value as Method)} name={data.id} value={method} id="urlMethod">
+                  <option value="GET"> Get </option>
+                  <option value="POST"> Post </option>
+                  <option value="PUT"> Put </option>
+                  <option value="DELETE"> Delete </option>
+                  <option value="PATCH"> Patch </option>
+                </select>
+              </ModalInput>
+            </Span>
+            <ModalInput style={{ flexGrow: 1 }}>
+              <Row>
+                <Label style={{ fontSize: "14px" }} htmlFor="urlUrl"> Endpoint {checked}</Label>
+                <p style={{ fontSize: "10px", margin: 0 }}> (must be in the form "https://www.[url]" or "http://www.[url]")</p>
+              </Row>
+              <Row style={{ position: "relative"}}>
+                <input style={{ ...urlStyle, width: "100%" }} onChange={changeUrl} title={urlTitle} name={data.id} value={url} id="urlUrl" type="text" />
+                {url && (
+                  <button
+                    onClick={clearUrl}
+                    style={{
+                      position: "absolute",
+                      right: "45px",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer"
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+                <button style={{ cursor: "pointer" }} onClick={makeRequest} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"} type="submit">Test</button>
+              </Row>
+            </ModalInput>
+            <Span style={{ marginRight: 0, marginLeft: "10px" }}>
+              <ModalInput>
+                <Row>
+                  <Label htmlFor="urlHitrate" style={{ fontSize: "14px" }}> Hit Rate </Label>
+                  <QuestionBubble text="Required | Number, then hph, hpm, or hps"></QuestionBubble>
+                </Row>
+                <input style={{ ...getHitRateStyle(invalidHitRate), width: "75px" }} onChange={(event) => changeUrlObject("hitRate", event.target.value)} name={data.id} value={data.hitRate} id="urlHitrate" title={getHitRateTitle(invalidHitRate)} />
+              </ModalInput>
+            </Span>
+        </Row>
+        <RequestDetailsTabs
+          id={data.id}
+          headersList={headersList}
+          removeHeader={removeHeader}
+          changeHeader={changeHeader}
+          addHeader={addHeader}
+          response={lastResponse}
+          error={errorMessage}
+          activeTab={activeTab}
+          handleChangeTab={handleChangeTab}
+          queryParamList={queryParamsList}
+          removeParam={removeQueryParam}
+          changeParam={changeQueryParam}
+          addParam={addQueryParam}
+          requestBody={requestBodyObject}
+          updateRequestBody={updateRequestBody}
+        />
       </Modal>
-      <button onClick={() => modalRef.current?.openModal()}>Edit</button>
-      <button id={data.id} onClick={() => props.deleteUrl(data.id)}>X</button>
     </Div>
   );
 }

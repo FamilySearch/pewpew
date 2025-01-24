@@ -7,6 +7,7 @@ export const CONTROLLER_APPLICATION_PREFIX: string = CONTROLLER_APPLICATION_NAME
 export const SYSTEM_NAME: string = process.env.SYSTEM_NAME || "unittests";
 export const CONTROLLER_ENV = process.env.CONTROLLER_ENV;
 export const AGENT_ENV = process.env.AGENT_ENV;
+export const IS_RUNNING_IN_AWS: boolean = process.env.APPLICATION_NAME !== undefined && process.env.SYSTEM_NAME !== undefined;
 
 export const PEWPEW_BINARY_FOLDER: string = "pewpew";
 export const PEWPEW_VERSION_LATEST: string = "latest";

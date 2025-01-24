@@ -16,16 +16,22 @@ interface Size {
   height: number | undefined;
 }
 
-const minRows: number = 20;
-const maxRows: number = 80;
-
 export const YamlViewer = ({ yamlFilename, yamlContents, loading, error }: YamlViewerProps): JSX.Element => {
   const size: Size = useWindowSize();
   if (!size.width || size.width > 800) {
     size.width = 800;
   }
-  const yamlRows = yamlContents ? yamlContents.split("\n").length : minRows;
-  const rowCount = Math.min(maxRows, yamlRows);
+
+  const previewStyle: React.CSSProperties = {
+    maxHeight: "270px",
+    overflow: "auto",
+    border: "1px solid #ccc",
+    padding: "10px",
+    backgroundColor: "#2e3438",
+    textAlign: "start",
+    minWidth: "500px",
+    maxWidth: "700px"
+  };
 
   return (
     <Column>
@@ -34,15 +40,11 @@ export const YamlViewer = ({ yamlFilename, yamlContents, loading, error }: YamlV
       </Row>}
       {error && <Danger>Error: {error}</Danger>}
       {(loading || yamlContents) && <Row>
-        <textarea
-          title={yamlFilename}
-          value={yamlContents}
-          placeholder={loading && "Loading Data..."}
-          readOnly={true}
-          rows={rowCount}
-          wrap="off"
-          style={{ resize: "both", width: size.width && `${size.width}px` }}
-        />
+        <div style={previewStyle}>
+            <pre>
+            {yamlContents}
+            </pre>
+        </div>
       </Row>}
       {!error && !loading && !yamlContents && <Warning>No Data</Warning>}
     </Column>

@@ -17,24 +17,22 @@ export default [{
   "ignores": [
     "guide",
     "lib",
-    "coverage/**",
+    "**/coverage/**",
     "**/dist/**",
     "target/**",
     "tests/**",
     "next-env.d.ts",
-    "next.config.js",
-    "**/setup.js",
     "common/lib",
     "controller/lib",
     "controller/storybook-static",
-    "controller/.storybook",
-    "controller/**/**.js",
+    "controller/test/**.js",
     "controller/next-env.d.ts",
     "eslint.config.mjs"
   ],
 }, ...compat.extends(
   "eslint:recommended",
   "plugin:@typescript-eslint/stylistic",
+  "plugin:@typescript-eslint/eslint-recommended",
   "plugin:@typescript-eslint/recommended",
 ), {
   "plugins": {
@@ -51,7 +49,8 @@ export default [{
         "./common/tsconfig.json",
         "./agent/tsconfig.json",
         "./controller/tsconfig.json",
-        "./controller/tsconfig.test.json"
+        "./controller/tsconfig.test.json",
+        "./controller/.storybook/tsconfig.json",
       ],
     },
   },

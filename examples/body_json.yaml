@@ -24,7 +24,10 @@ endpoints:
         "c": true,
         "d": ["array","of","values"],
         "e": ${v:port},
-        "f": { g: "sub", h: "object" }
+        "f": {
+          "g": "sub",
+          "h": "object"
+        }
       }'
     peak_load: 1hps
     logs:

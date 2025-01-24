@@ -17,7 +17,7 @@ import {
   PewPewHeader
 } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { QuestionBubble } from "../YamlQuestionBubble";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -63,8 +63,9 @@ export interface EndpointsProps extends Pick<UrlProps, "deleteUrl" | "changeUrl"
   clearAllUrls: () => void;
   defaultYaml: boolean;
   /** State of Authenticated checkbox */
-  authenticated: boolean
-  urls: PewPewAPI[],
+  authenticated: boolean;
+  urls: PewPewAPI[];
+  peakLoad?: string | undefined;
 }
 
 export interface EndpointsState {
@@ -72,7 +73,7 @@ export interface EndpointsState {
     defaultHeaders: boolean;
 }
 
-export const newUrl = (deaultHeaders: boolean, authenticated: boolean, point?: HarEndpoint): PewPewAPI => {
+export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad?: string, point?: HarEndpoint): PewPewAPI => {
   const pointHeaders: PewPewHeader[] = point?.headers.map(({ name, value }: HarHeader): PewPewHeader => ({ id: uniqueId(), name, value })) || [];
   const pewpewHeaders: PewPewHeader[] = deaultHeaders
     ? getDefaultHeaders(authenticated)
@@ -80,16 +81,16 @@ export const newUrl = (deaultHeaders: boolean, authenticated: boolean, point?: H
   return {
     id: uniqueId(),
     url: point?.url || "",
-    hitRate: "1hpm",
+    hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
     headers: [...pewpewHeaders, ...pointHeaders],
     method: point?.method || "GET",
     authorization: null
   };
 };
 
-export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
+export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   const defaultState: EndpointsState = {
-      hitRate: "",
+      hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
       defaultHeaders: props.defaultYaml
   };
   /** Map to keep id's unique */
@@ -104,6 +105,10 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
     updateState({ defaultHeaders: props.defaultYaml });
   }, [props.defaultYaml]);
 
+  useEffect(() => {
+    updateState({ hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm" });
+  }, [peakLoad]);
+
   const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateState({ defaultHeaders: event.target.checked });
     // URLs will update via the props passed in
@@ -112,7 +117,7 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
   // Adds endpoint to array
   // Called from clicking add button, or when endpoints are sent from App.js through refs.child.updatePoints
   const addUrl = () => {
-    props.addUrl(newUrl(state.defaultHeaders, props.authenticated));
+    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? peakLoad : "1hpm"));
   };
 
   // Updates the hit rate for each endpoint when "update" button is pressed
@@ -124,7 +129,6 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
         props.changeUrl({ ...url, hitRate });
       }
     }
-    updateState({ hitRate: "" });
   };
 
   // Updates the value of hit rate to be changed in all urls when update button is pressed or enter key is pressed
@@ -142,6 +146,9 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
   const invalidHitRate = !HIT_RATE_REGEX.test(state.hitRate);
   const hitRateStyle: React.CSSProperties = getHitRateStyle(invalidHitRate);
   const hitRateTitle: string | undefined = state.hitRate === "" ? "Please enter a Hit Rate" : (getHitRateTitle(invalidHitRate) || "Update all hit rates");
+  // https://github.com/reactjs/react-transition-group/issues/904
+  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
+  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <button onClick={() => addUrl()}>
@@ -167,9 +174,9 @@ export const Endpoints = ({ urls, ...props }: EndpointsProps) => {
           </button>
         </NonFlexSpan>
       </HitratesDiv>
-      <TransitionGroup className="endpoints-section_list">
+      <TransitionGroup className="endpoints-section_list" nodeRef={nodeRef}>
         {Array.from(urlsMap.values()).map((url) => (
-          <CSSTransition key={url.id} timeout={300} classNames="point">
+          <CSSTransition key={url.id} timeout={300} classNames="point" nodeRef={nodeRef}>
             <Urls
               deleteUrl={props.deleteUrl}
               changeUrl={props.changeUrl}

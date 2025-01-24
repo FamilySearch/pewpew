@@ -1,29 +1,38 @@
 import { LogLevel, log } from "./log";
-import {
-  EC2Client
-} from "@aws-sdk/client-ec2";
+import { IS_RUNNING_IN_AWS } from "./util";
+import { MetadataService } from "@aws-sdk/ec2-metadata-service";
 import { exec as _exec } from "child_process";
 import { promisify } from "util";
 import { readFile } from "fs/promises";
 const exec = promisify(_exec);
 
-// Create these later so the profile can be set dynamically
-let ec2Client: EC2Client;
-
-// Init function to initialize these after we've started but on first access
-export function init (): void {
-  if (!ec2Client) {
-    ec2Client = new EC2Client({
-      region: "us-east-1"
-    });
-  }
-}
-
 export const INSTANCE_ID_FILE = "/var/lib/cloud/data/instance-id";
 export const INSTANCE_ID_REGEX = /^i-[0-9a-z]+$/;
 export const INSTANCE_FILE_REGEX = /^instance-id:\s*(i-[0-9a-z]+)$/;
 export const INSTANCE_ID_COMMAND = "ec2-metadata --instance-id";
+
+// Putting back code removed by https://github.com/fs-eng/ppaas-common/commit/397d38e31ebafa9551dec8d9a2082140e8d949ae#diff-b0083bb9a17262c7a014463e8dee3fd0489cad8cb220d19531f295b9592826a0L14
+// AWS SDK V3 finally supports the MetadataService
+const metadata: MetadataService = new MetadataService({
+  // host: "169.254.169.254"
+});
+
 export async function getInstanceId (): Promise<string> {
+  // Our current mocks do not support the metadata service. bypass when not in AWS so we don't timeout on integration and unit tests
+  if (IS_RUNNING_IN_AWS) {
+    try {
+      // curl http://169.254.169.254/latest/meta-data/instance-id -> "i-0cfd3309705a3ce79"
+      const instanceId: string = await metadata.request("/latest/meta-data/instance-id", {});
+      log("getInstanceId MetadataService /latest/meta-data/instance-id: " + instanceId, LogLevel.WARN, instanceId);
+      if (!INSTANCE_ID_REGEX.test(instanceId)) {
+        log(`InstanceId did not match regex [${instanceId}]`, LogLevel.WARN, { match: instanceId?.match(INSTANCE_ID_REGEX), INSTANCE_ID_REGEX });
+        throw new Error("InstanceId did not match regex");
+      }
+      return instanceId;
+    } catch (error: unknown) {
+      log("Could not load instanceId metadata", LogLevel.WARN, error);
+    }
+  }
   // Try to load from file first
   // $ cat /var/lib/cloud/data/instance-id -> "i-0cfd3309705a3ce79"
   try {

@@ -105,7 +105,10 @@ export class YamlParser {
           config = new Config(
             fileBuffer,
             varMap,
-            typeof logConfig.LoggingLevel === "number" ? undefined : logConfig.LoggingLevel,
+            // If RUST_LOG is set use that, otherwise use LoggingLevel
+            process.env.RUST_LOG || (typeof logConfig.LoggingLevel === "number"
+              ? undefined
+              : logConfig.LoggingLevel),
             validateLegacyOnly
           );
           yamlValid = true;

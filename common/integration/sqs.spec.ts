@@ -96,7 +96,7 @@ describe("SqsUtil Integration", () => {
 
   before(async () => {
     // reset everything in case the mocks ran.
-    sqsConfig.sqsClient = undefined as any;
+    sqsConfig.sqsClient = undefined;
     initSqs();
     log("QUEUE_URL_TEST=" + [...QUEUE_URL_TEST], LogLevel.DEBUG);
     log("QUEUE_URL_SCALE=" + [...QUEUE_URL_SCALE_IN], LogLevel.DEBUG);

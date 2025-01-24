@@ -8,7 +8,7 @@ This allows us to run load tests using [pewpew](https://github.com/FamilySearch/
 Shared code for the agent and the controller are found in [ppaas-common](https://github.com/FamilySearch/pewpew/common)
 
 ## Environment Config
-For your full deployment you should have environment variables injected into CloudFormation to set up the S3 bucket and SQS queues. For local development, copy the `.sample-env` file to `.env.local` (or run `node setup.js`). Then modify the .env.local file to point to your S3 bucket and your SQS queues. You can also override the default AWS profile for your local testing via the `AWS_PROFILE` variable if you are not using `default`.
+For your full deployment you should have environment variables injected into CloudFormation to set up the S3 bucket and SQS queues. For local development, copy the `.sample-env` file to `.env.local`. Then modify the .env.local file to point to your S3 bucket and your SQS queues. You can also override the default AWS profile for your local testing via the `AWS_PROFILE` variable if you are not using `default`.
 
 ## Build
 ```bash
@@ -39,14 +39,14 @@ $ PORT=8081 npm run acceptance
 You also need to configure your Secrets Overrides. You have two options, get the real key from someone who has it, or generate your own key for testing/development but any files stored encrypted in s3 will only be accessible by you. For the OpenId secret, you will need the real one.
 
 ### Generate your own encryption key for testing
-1. If you haven't created a `.env.local` run `node setup.js`
+1. If you haven't created a `.env.local` run `cp -i .sample-env .env.local`
 2. Uncomment the `PEWPEW_ENCRYPT_KEY_OVERRIDE` from `.env.local`
 3. Run `openssl rand -hex 16` and copy the value into the quotes for `PEWPEW_ENCRYPT_KEY_OVERRIDE`. Should be something like `a5158c830ac558b21baddb79803105fb`.
 
 ### Add your own OpenId Secret
-1. If you haven't created a `.env.local` run `node setup.js`
-2. Uncomment the `SECRETS_OPENID_CLIENT_SECRET_NAME` from `.env.local`
-3. Enter the value for your secret into the quotes for `SECRETS_OPENID_CLIENT_SECRET_NAME`.
+1. If you haven't created a `.env.local` run `cp -i .sample-env .env.local`
+2. Uncomment the `PEWPEW_OPENID_SECRET_OVERRIDE` from `.env.local`
+3. Enter the value for your secret into the quotes for `PEWPEW_OPENID_SECRET_OVERRIDE`.
 
 ## Integration Tests
 ```bash
@@ -70,7 +70,7 @@ To start the server, run one of the following commands:
  Use http://localhost:8081/healthcheck/ after running the above command.
 
 ## Run the local server with authentication
-Running locally, only dev/integ/okta-np will let you redict back to localhost. Current users set up for dev/integration are ppaasadmin and ppaasuser with the usual test password. okta-np requires "Performance Test Non-Prod" permissions from the tools portal.
+Running locally, only dev/integ/okta-np will let you redict back to localhost.
 
 To start the server, run one of the following commands:
  ```bash
@@ -145,8 +145,8 @@ See [ServerFalt](https://serverfault.com/questions/536576/nginx-how-do-i-forward
 
 ```bash
 # Install nginx
-$ sudo apt-get update
-$ sudo apt-get install nginx
+$ sudo apt update
+$ sudo apt install nginx
 $ sudo vi /etc/nginx/sites-available/default
 ```
 
@@ -180,7 +180,7 @@ location /pewpew/load-test/ {
   proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 
-location /status/performance-test2/ {
+location /pewpew/performance-test2/ {
   proxy_pass      http://nodejs2/;
   proxy_set_header   Connection "";
   proxy_http_version 1.1;

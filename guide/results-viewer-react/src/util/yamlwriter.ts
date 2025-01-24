@@ -13,7 +13,7 @@ export interface Har {
     pages: Page[],
   }
 }
-/** This is the type for all headers added to any anypoints */
+/** This is the type for all headers added to any endpoints */
 export interface HarHeader {
   name: string;
   value: string;
@@ -21,6 +21,14 @@ export interface HarHeader {
 export interface PewPewHeader extends HarHeader {
   id: string;
 }
+
+/** This is the type for all query params added to any endpoints */
+export interface PewPewQueryParam {
+  id: string;
+  name: string;
+  value: string;
+}
+
 /** This is what an endpoint looks like from an incoming Har file */
 export interface HarEndpoint {
   id: string;
@@ -35,6 +43,7 @@ export interface PewPewAPI {
   id: string;
   url: string;
   headers: PewPewHeader[];
+  requestBody?: object;
   method: string;
   hitRate: string;
   authorization: null;
@@ -93,6 +102,3 @@ export const SESSION_ID_DEFAULT = "${e:SESSIONID}";
 export const RAMP_TIME_DEFAULT = "${e:RAMP_TIME}";
 export const LOAD_TIME_DEFAULT = "${e:LOAD_TIME}";
 export const PEAK_LOAD_DEFAULT = "${e:PEAK_LOAD}";
-
-export const DEV_KEY_BETA = "WCQY-7J1Q-GKVV-7DNM-SQ5M-9Q5H-JX3H-CMJK";
-export const DEV_KEY_PROD = "Q4JW-NBZX-TWHZ-ZZDJ-LSP9-G15N-NLC8-P1M3";

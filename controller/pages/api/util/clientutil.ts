@@ -48,7 +48,7 @@ export function formatPageHref (href: string): string {
     return href;
   }
   // If the href doesn't start with a / we need to insert one and strip it from the start
-  return href && !href.startsWith("/") ? `${basePath.substring(1)}/${href}` : `${basePath}${href}`;
+  return basePath && href && !href.startsWith("/") ? `${basePath.substring(1)}/${href}` : `${basePath}${href}`;
 }
 
 export function getHostUrl (req: IncomingMessage | undefined): string {
@@ -60,7 +60,7 @@ export function getHostUrl (req: IncomingMessage | undefined): string {
   if (req && req.headers.host) {
     return `${protocol}://${req.headers.host}`;
   }
-   if (typeof window !== "undefined") {
+  if (typeof window !== "undefined") {
     return window.location.origin;
   }
   throw new Error("Could not determine host url. No request provided and no windows object");
@@ -73,7 +73,7 @@ export function getHostUrl (req: IncomingMessage | undefined): string {
  */
 export function formatError (error: unknown): string {
   // Check if it's an AxiosError
-  if ((error as AxiosError).isAxiosError) {
+  if ((error as AxiosError)?.isAxiosError) {
     const axiosError: AxiosError = error as AxiosError;
     log("formatError AxiosError", LogLevel.DEBUG, { config: axiosError.config , response: axiosError.response });
     const methodText = `${axiosError.config?.method?.toUpperCase() || ""} ${axiosError.config?.url || "request"} failed`;

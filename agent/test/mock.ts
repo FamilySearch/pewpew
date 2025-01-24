@@ -104,9 +104,9 @@ export function resetMockS3 (): void {
 }
 
 export function mockListObject ({
-  filename, folder, lastModified = new Date(), keyMatch
+  filename, folder, lastModified = new Date(), keyMatch, once
 }: {
-  filename: string, folder: string, lastModified?: Date, keyMatch?: string
+  filename: string, folder: string, lastModified?: Date, keyMatch?: string, once?: boolean
 }) {
   const s3Object: S3Object = {
     Key: `${folder}/${filename}`,
@@ -114,14 +114,21 @@ export function mockListObject ({
     Size: 1,
     StorageClass: "STANDARD"
   };
-  mockListObjects({ contents: [s3Object], keyMatch });
+  mockListObjects({ contents: [s3Object], keyMatch, once });
 }
 
-export function mockListObjects ({ contents, truncated, keyMatch }: { contents?: S3Object[], truncated?: boolean, keyMatch?: string } = {}) {
+export function mockListObjects ({
+  contents, truncated, keyMatch, once
+}: {
+  contents?: S3Object[], truncated?: boolean, keyMatch?: string, once?: boolean
+} = {}) {
   log("mockListObjects", LogLevel.DEBUG, { contents, truncated, keyMatch });
   const mockedS3Instance: AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3ClientResolvedConfig> = mockS3();
   mockedS3Instance.on(ListObjectsV2Command, { Prefix: keyMatch }).callsFake(() => {
     log("mockListObjects.promise mock called", LogLevel.DEBUG, { contents, truncated, keyMatch });
+    if (once) {
+      mockedS3Instance.on(ListObjectsV2Command, { Prefix: keyMatch }).resolves({ Contents: undefined });
+    }
     return { Contents: contents, IsTruncated: truncated };
   });
 }
@@ -210,10 +217,11 @@ export function mockGetObject ({
 
 export function mockGetObjectError ({
   statusCode = 304,
-  code = "NotModified"
-}: { statusCode?: number, code?: string } =  {}) {
+  code = "NotModified",
+  keyMatch
+}: { statusCode?: number, code?: string, keyMatch?: string } =  {}) {
   const mockedS3Instance: AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3ClientResolvedConfig> = mockS3();
-  mockedS3Instance.on(GetObjectCommand).rejects({
+  mockedS3Instance.on(GetObjectCommand, { Key: keyMatch }).rejects({
     name: `${statusCode}`,
     Code: code,
     "$fault": "client"

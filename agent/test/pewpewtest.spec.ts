@@ -372,6 +372,12 @@ describe("PewPewTest", () => {
     const createTestFilename = BASIC_TEST_FILENAME;
 
     before(() => {
+      mockS3();
+      mockSqs();
+      mockSendMessage();
+      mockUploadObject();
+      mockCopyObject();
+      mockGetObjectTagging();
       // Prepopulate PpaasTestStatus and make sure all expected data is still there after run
       expectedTestStatusMessage = {
         instanceId: "bogus",

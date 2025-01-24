@@ -32,9 +32,6 @@ jobs:
 
       - name: Get changed files
         id: changes
-        # Set outputs using the command.
-        # export all_files=$(git diff --name-only --diff-filter=ACMRT $(git rev-parse <branch>) $(git rev-parse origin/master) | xargs)
-        # export agent_files=$(git diff --name-only --diff-filter=ACMRT $(git rev-parse <branch>) $(git rev-parse origin/master) | grep "^wdiotest/" | grep ".spec.ts$" | xargs)
         run: |
           export all_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | xargs)
           # Send to outside variable
@@ -42,10 +39,8 @@ jobs:
           echo "all_files=$all_files"
           export agent_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^agent/createtest/" | grep ".spec.ts$" | xargs)
           echo "agent_files=$agent_files"
-          echo "agent_package=[[ "${all_files[@]}" =~ "agent/package.json" ]]"
-          if [[ -z "${agent_files[@]}" ]] && [[ "${all_files[@]}" =~ "agent/package.json" ]]; then
-            echo "No test files changed, but changed package.json. Test Home:LoggedOut"
-            # One unauthenticated, one authenticated
+          if [[ -z "${agent_files[@]}" ]] && ([[ "${all_files[@]}" =~ "agent/package.json" ]] || [[ "${all_files[@]}" =~ "agent/src/pewpewtest.ts" ]]); then
+            echo "No test files changed, but changed package.json or pewpewtest.ts"
             export agent_files="agent/package.json"
           fi
           if [[ "${all_files[@]}" =~ "package-lock.json" ]]; then
@@ -126,3 +121,6 @@ jobs:
         run: npm run build:react
       - name: Run Tests
         run: NODE_ENV=test npm test
+      - name: Run Agent CreateTest
+        if: ${{ needs.changedfiles.outputs.agent_files }}
+        run: cd agent/ && NODE_ENV=test npm run createtest

@@ -121,7 +121,16 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
         for (const header of url.headers) {
           if (header.name && header.value) {
             if (myYaml.endpoints) {
-              myYaml.endpoints[myYaml.endpoints.length - 1].headers[header.name.toString()] = `${header.value.toString()}`;
+              let value = header.value.toString().replace(/"/g, "\\\"");
+              if (value === "?0") {
+                value = "false";
+              } else if (value === "?1") {
+                value = "true";
+              }
+              if (value.startsWith("@") || value.startsWith("*")) {
+                value = `"${value}"`;
+              }
+              myYaml.endpoints[myYaml.endpoints.length - 1].headers[header.name.toString()] = value;
             }
           }
         }

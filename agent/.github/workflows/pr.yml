@@ -26,7 +26,7 @@ jobs:
           echo "all_files=$all_files"
           export agent_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^createtest/" | grep ".spec.ts$" | xargs)
           echo "agent_files=$agent_files"
-          if [[ ! -z "${agent_files[@]}" ]] || ([[ "${all_files[@]}" =~ "package.json" ]] || [[ "${all_files[@]}" =~ "src/pewpewtest.ts" ]]); then
+          if [[ ! -z "${agent_files[@]}" ]] || ([[ "${all_files[@]}" =~ "package.json" ]] || [[ "${all_files[@]}" =~ "package-lock.json" ]] || [[ "${all_files[@]}" =~ "src/pewpewtest.ts" ]]); then
             echo "Createtest test files changed, changed package.json, or changed pewpewtest.ts"
             echo "create_test=true" >> $GITHUB_OUTPUT
             echo "create_test=true"

@@ -28,6 +28,7 @@ import {
 import {
   mockCopyObject,
   mockGetObject,
+  mockGetObjectError,
   mockGetObjectTagging,
   mockListObject,
   mockListObjects,
@@ -361,22 +362,16 @@ describe("PewPewTest", () => {
   });
 
   // rm app-ppaas*; DOWNLOAD_PEWPEW=false PEWPEW_PATH=./test/pewpew  npm run test
-  describe("PewPewTest Integration Test", () => {
+  describe("PewPewTest Run Pewpew Test", () => {
     let ppaasTestId: PpaasTestId | undefined;
     // let s3File: PpaasS3File | undefined;
     let expectedTestMessage: Required<TestMessage>;
     let expectedTestStatusMessage: Required<TestStatusMessage>;
     let ipAddress: string;
     let hostname: string;
+    const createTestFilename = BASIC_TEST_FILENAME;
 
-    before(async () => {
-      // Mock the pewpew file download
-      mockGetObject({
-        body: await readFile(PEWPEW_PATH),
-        contentType: "application/octet-stream",
-        keyMatch: `${s3.KEYSPACE_PREFIX}${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}/${util.PEWPEW_BINARY_EXECUTABLE}`
-      });
-
+    before(() => {
       // Prepopulate PpaasTestStatus and make sure all expected data is still there after run
       expectedTestStatusMessage = {
         instanceId: "bogus",
@@ -400,104 +395,107 @@ describe("PewPewTest", () => {
       }
     });
 
-    describe("Get Test from Real SQS Queue", () => {
-      const createTestFilename = BASIC_TEST_FILENAME;
-      beforeEach(async () => {
-        ppaasTestId = PpaasTestId.makeTestId(createTestFilename);
-        const s3Folder = ppaasTestId.s3Folder;
-        // Yaml file
-        mockGetObject({ body: await readFile(join(UNIT_TEST_FILEDIR, createTestFilename)), contentType: "text/yaml", keyMatch: `${s3.KEYSPACE_PREFIX}${s3Folder}/${createTestFilename}` });
-        // .info
-        const now = Date.now();
-        const basicTestStatusMessage: TestStatusMessage = {
-          startTime: now + 1,
-          endTime: now + 2,
-          resultsFilename: [],
-          status: TestStatus.Created
-        };
-        const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(ppaasTestId, basicTestStatusMessage);
-        const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(ppaasTestId);
-        mockListObject({ filename: createS3FilenameTestStatus(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
-        mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
-        mockListObjects({ keyMatch: s3.KEYSPACE_PREFIX + getKeyS3Message(ppaasTestId) });
-        // .msg
-
-        // Prepopulate PpaasTestStatus and make sure all expected data is still there after run
-        const writeResult = await new PpaasTestStatus(ppaasTestId, expectedTestStatusMessage).writeStatus();
-        log("PpaasTestStatus.writeStatus() success", LogLevel.DEBUG, { expectedTestStatusMessage, writeResult });
-
-        expectedTestMessage = {
-          testId: ppaasTestId.testId,
-          s3Folder,
-          yamlFile: createTestFilename,
-          testRunTimeMn: 1,
-          version: PEWPEW_VERSION_LATEST,
-          envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
-          restartOnFailure: false,
-          additionalFiles: [],
-          bucketSizeMs: 5000,
-          bypassParser: false,
-          userId: "unittestuser"
-        };
-        const testMessage: PpaasTestMessage = new PpaasTestMessage(expectedTestMessage);
-        log("Send Test request", LogLevel.DEBUG, testMessage.sanitizedCopy());
-        // await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value);
-        mockReceiveMessage({
-          testId: ppaasTestId.testId,
-          testMessage: JSON.stringify(testMessage.getTestMessage()),
-          queueUrlMatch: sqs.QUEUE_URL_TEST.values().next().value
-        });
-        mockReceiveMessage({
-          testId: ppaasTestId.testId,
-          queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
-        });
+    beforeEach(async () => {
+      // Mock the pewpew file download each time to reset the stream
+      mockGetObject({
+        body: await readFile(PEWPEW_PATH),
+        contentType: "application/octet-stream",
+        keyMatch: `${s3.KEYSPACE_PREFIX}${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}/${util.PEWPEW_BINARY_EXECUTABLE}`
       });
 
-      it("Retrieve Test and launch should succeed", (done: Mocha.Done) => {
-        PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
-          log("PewPewTest.retrieve Success: " + test?.toString(), LogLevel.DEBUG);
-          expect(test).to.not.equal(undefined);
-          expect(test!.getTestId()).to.equal(ppaasTestId!.testId);
-          expect(test!.getYamlFile()).to.not.equal(undefined);
-          expect(test!.getResultsFile()).to.equal(undefined);
-          const constructorTestStatusMessage = test!.getTestStatusMessage();
-          log("test.getTestStatusMessage: " + constructorTestStatusMessage?.toString(), LogLevel.DEBUG);
-          expect(constructorTestStatusMessage, "constructorTestStatusMessage").to.not.equal(undefined);
-          expect(constructorTestStatusMessage.hostname, "constructorTestStatusMessage.hostname").to.equal(hostname);
-          expect(constructorTestStatusMessage.ipAddress, "constructorTestStatusMessage.ipAddress").to.equal(ipAddress);
-          expect(constructorTestStatusMessage.startTime, "constructorTestStatusMessage.startTime").to.be.greaterThan(expectedTestStatusMessage.startTime);
-          const beforeStartTime = constructorTestStatusMessage.startTime;
-          expect(constructorTestStatusMessage.endTime, "constructorTestStatusMessage.endTime").to.equal(getEndTime(constructorTestStatusMessage.startTime, expectedTestMessage.testRunTimeMn));
-          // const beforeEndTime = constructorTestStatusMessage.endTime;
-          expect(Array.isArray(constructorTestStatusMessage.resultsFilename), "Array.isArray constructorTestStatusMessage.resultsFilename").to.equal(true);
-          expect(constructorTestStatusMessage.resultsFilename.length, "constructorTestStatusMessage.resultsFilename.length").to.equal(0);
-          expect(constructorTestStatusMessage.status, "constructorTestStatusMessage.status").to.equal(TestStatus.Created);
-          expect(constructorTestStatusMessage.errors, "constructorTestStatusMessage.errors").to.equal(undefined);
-          expect(constructorTestStatusMessage.version, "constructorTestStatusMessage.version").to.equal(expectedTestMessage.version);
-          expect(constructorTestStatusMessage.queueName, "constructorTestStatusMessage.queueName").to.equal(PpaasTestMessage.getAvailableQueueNames()[0]);
-          expect(constructorTestStatusMessage.userId, "constructorTestStatusMessage.userId").to.equal(expectedTestStatusMessage.userId);
+      ppaasTestId = PpaasTestId.makeTestId(createTestFilename);
+      const s3Folder = ppaasTestId.s3Folder;
+      // Yaml file
+      mockGetObject({ body: await readFile(join(UNIT_TEST_FILEDIR, createTestFilename)), contentType: "text/yaml", keyMatch: `${s3.KEYSPACE_PREFIX}${s3Folder}/${createTestFilename}` });
+      // .info
+      const now = Date.now();
+      const basicTestStatusMessage: TestStatusMessage = {
+        startTime: now + 1,
+        endTime: now + 2,
+        resultsFilename: [],
+        status: TestStatus.Created
+      };
+      const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(ppaasTestId, basicTestStatusMessage);
+      const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(ppaasTestId);
+      mockListObject({ filename: createS3FilenameTestStatus(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
+      mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
+      // .msg
+      const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(ppaasTestId);
+      mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
+      mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
 
-          log("Test retrieved: " + test!.getYamlFile(), LogLevel.DEBUG);
-          await test!.launch();
-            expect(test!.getResultsFile()).to.not.equal(undefined);
-            // Start and endtime will have updated again. Status will be finished and endTime will be actual endtime
-            const finishedTestStatusMessage = test!.getTestStatusMessage();
-            expect(finishedTestStatusMessage, "finishedTestStatusMessage").to.not.equal(undefined);
-            expect(finishedTestStatusMessage.hostname, "finishedTestStatusMessage.hostname").to.equal(hostname);
-            expect(finishedTestStatusMessage.ipAddress, "finishedTestStatusMessage.ipAddress").to.equal(ipAddress);
-            expect(finishedTestStatusMessage.startTime, "finishedTestStatusMessage.startTime").to.be.greaterThan(beforeStartTime);
-            expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeStartTime + 29); // Test is only 30 seconds long
-            expect(Array.isArray(finishedTestStatusMessage.resultsFilename), "Array.isArray finishedTestStatusMessage.resultsFilename").to.equal(true);
-            expect(finishedTestStatusMessage.resultsFilename.length, "finishedTestStatusMessage.resultsFilename.length").to.equal(1);
-            expect(finishedTestStatusMessage.status, "finishedTestStatusMessage.status").to.equal(TestStatus.Finished);
-            expect(finishedTestStatusMessage.errors, "finishedTestStatusMessage.errors: " + JSON.stringify(finishedTestStatusMessage.errors)).to.equal(undefined);
-            expect(finishedTestStatusMessage.version, "finishedTestStatusMessage.version").to.equal(expectedTestMessage.version);
-            expect(finishedTestStatusMessage.queueName, "finishedTestStatusMessage.queueName").to.equal(PpaasTestMessage.getAvailableQueueNames()[0]);
-            expect(finishedTestStatusMessage.userId, "finishedTestStatusMessage.userId").to.equal(expectedTestStatusMessage.userId);
-            done();
-        }).catch((error) => {
-          done(error);
-        });
+      expectedTestMessage = {
+        testId: ppaasTestId.testId,
+        s3Folder,
+        yamlFile: createTestFilename,
+        testRunTimeMn: 1,
+        version: PEWPEW_VERSION_LATEST,
+        envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
+        restartOnFailure: false,
+        additionalFiles: [],
+        bucketSizeMs: 5000,
+        bypassParser: false,
+        userId: "unittestuser"
+      };
+      const testMessage: PpaasTestMessage = new PpaasTestMessage(expectedTestMessage);
+      log("Send Test request", LogLevel.DEBUG, testMessage.sanitizedCopy());
+      // await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value);
+      mockReceiveMessage({
+        testId: ppaasTestId.testId,
+        testMessage: JSON.stringify(testMessage.getTestMessage()),
+        queueUrlMatch: sqs.QUEUE_URL_TEST.values().next().value
+      });
+      mockReceiveMessage({
+        testId: ppaasTestId.testId,
+        queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
+      });
+    });
+
+    it("Retrieve Test and launch should succeed", (done: Mocha.Done) => {
+      PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
+        log("PewPewTest.retrieve Success: " + test?.toString(), LogLevel.DEBUG);
+        expect(test).to.not.equal(undefined);
+        expect(test!.getTestId()).to.equal(ppaasTestId!.testId);
+        expect(test!.getYamlFile()).to.not.equal(undefined);
+        expect(test!.getResultsFile()).to.equal(undefined);
+        const constructorTestStatusMessage = test!.getTestStatusMessage();
+        log("test.getTestStatusMessage: " + constructorTestStatusMessage?.toString(), LogLevel.DEBUG);
+        expect(constructorTestStatusMessage, "constructorTestStatusMessage").to.not.equal(undefined);
+        expect(constructorTestStatusMessage.hostname, "constructorTestStatusMessage.hostname").to.equal(hostname);
+        expect(constructorTestStatusMessage.ipAddress, "constructorTestStatusMessage.ipAddress").to.equal(ipAddress);
+        expect(constructorTestStatusMessage.startTime, "constructorTestStatusMessage.startTime").to.be.greaterThan(expectedTestStatusMessage.startTime);
+        const beforeStartTime = constructorTestStatusMessage.startTime;
+        expect(constructorTestStatusMessage.endTime, "constructorTestStatusMessage.endTime").to.equal(getEndTime(constructorTestStatusMessage.startTime, expectedTestMessage.testRunTimeMn));
+        // const beforeEndTime = constructorTestStatusMessage.endTime;
+        expect(Array.isArray(constructorTestStatusMessage.resultsFilename), "Array.isArray constructorTestStatusMessage.resultsFilename").to.equal(true);
+        expect(constructorTestStatusMessage.resultsFilename.length, "constructorTestStatusMessage.resultsFilename.length").to.equal(0);
+        expect(constructorTestStatusMessage.status, "constructorTestStatusMessage.status").to.equal(TestStatus.Created);
+        expect(constructorTestStatusMessage.errors, "constructorTestStatusMessage.errors").to.equal(undefined);
+        expect(constructorTestStatusMessage.version, "constructorTestStatusMessage.version").to.equal(expectedTestMessage.version);
+        expect(constructorTestStatusMessage.queueName, "constructorTestStatusMessage.queueName").to.equal(PpaasTestMessage.getAvailableQueueNames()[0]);
+        expect(constructorTestStatusMessage.userId, "constructorTestStatusMessage.userId").to.equal(expectedTestStatusMessage.userId);
+
+        log("Test retrieved: " + test!.getYamlFile(), LogLevel.DEBUG);
+        await test!.launch();
+          expect(test!.getResultsFile()).to.not.equal(undefined);
+          // Start and endtime will have updated again. Status will be finished and endTime will be actual endtime
+          const finishedTestStatusMessage = test!.getTestStatusMessage();
+          expect(finishedTestStatusMessage, "finishedTestStatusMessage").to.not.equal(undefined);
+          expect(finishedTestStatusMessage.hostname, "finishedTestStatusMessage.hostname").to.equal(hostname);
+          expect(finishedTestStatusMessage.ipAddress, "finishedTestStatusMessage.ipAddress").to.equal(ipAddress);
+          expect(finishedTestStatusMessage.startTime, "finishedTestStatusMessage.startTime").to.be.greaterThan(beforeStartTime);
+          expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeStartTime + 29); // Test is only 30 seconds long
+          expect(Array.isArray(finishedTestStatusMessage.resultsFilename), "Array.isArray finishedTestStatusMessage.resultsFilename").to.equal(true);
+          expect(finishedTestStatusMessage.resultsFilename.length, "finishedTestStatusMessage.resultsFilename.length").to.equal(1);
+          expect(finishedTestStatusMessage.status, "finishedTestStatusMessage.status").to.equal(TestStatus.Finished);
+          expect(finishedTestStatusMessage.errors, "finishedTestStatusMessage.errors: " + JSON.stringify(finishedTestStatusMessage.errors)).to.equal(undefined);
+          expect(finishedTestStatusMessage.version, "finishedTestStatusMessage.version").to.equal(expectedTestMessage.version);
+          expect(finishedTestStatusMessage.queueName, "finishedTestStatusMessage.queueName").to.equal(PpaasTestMessage.getAvailableQueueNames()[0]);
+          expect(finishedTestStatusMessage.userId, "finishedTestStatusMessage.userId").to.equal(expectedTestStatusMessage.userId);
+          done();
+      }).catch((error) => {
+        log("Test Failed", LogLevel.WARN, error);
+        done(error);
       });
     });
 

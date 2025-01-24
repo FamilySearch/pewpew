@@ -21,8 +21,8 @@ jobs:
     # Map a step output to a job output
     outputs:
       all_files: ${{ steps.changes.outputs.all_files}}
-      agent_files: ${{ steps.changes.outputs.agent_files }}
       lock_file: ${{ steps.changes.outputs.lock_file }}
+      create_test: ${{ steps.changes.outputs.create_test }}
     steps:
         # Make sure we have some code to diff.
       - name: Checkout repository
@@ -39,17 +39,16 @@ jobs:
           echo "all_files=$all_files"
           export agent_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^agent/createtest/" | grep ".spec.ts$" | xargs)
           echo "agent_files=$agent_files"
-          if [[ -z "${agent_files[@]}" ]] && ([[ "${all_files[@]}" =~ "agent/package.json" ]] || [[ "${all_files[@]}" =~ "agent/src/pewpewtest.ts" ]]); then
-            echo "No test files changed, but changed package.json or pewpewtest.ts"
-            export agent_files="agent/package.json"
+          if [[ ! -z "${agent_files[@]}" ]] || ([[ "${all_files[@]}" =~ "agent/package.json" ]] || [[ "${all_files[@]}" =~ "agent/src/pewpewtest.ts" ]]); then
+            echo "Createtest test files changed, changed package.json, or changed pewpewtest.ts"
+            echo "create_test=true" >> $GITHUB_OUTPUT
+            echo "create_test=true"
           fi
           if [[ "${all_files[@]}" =~ "package-lock.json" ]]; then
-            echo "Lock file changed, need to test latest Chrome"
+            echo "Lock file changed"
             echo "lock_file=true" >> $GITHUB_OUTPUT
             echo "lock_file=true"
           fi
-          echo "agent_files=$agent_files" >> $GITHUB_OUTPUT
-          echo "agent_files=$agent_files"
 
   test-release:
     name: Build project
@@ -124,5 +123,5 @@ jobs:
       - name: Run Tests
         run: NODE_ENV=test npm test
       - name: Run Agent CreateTest
-        if: ${{ needs.changedfiles.outputs.agent_files }}
+        if: ${{ needs.changedfiles.outputs.create_test }}
         run: cd agent/ && NODE_ENV=test npm run createtest

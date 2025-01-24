@@ -77,7 +77,7 @@ pub fn parse_template_string<T: TemplateType>(
         .collect()
 }
 
-impl<'a, T: TemplateType, IN: Bool> TryFrom<ASeg<'a>> for Segment<T, IN> {
+impl<T: TemplateType, IN: Bool> TryFrom<ASeg<'_>> for Segment<T, IN> {
     type Error = TemplateParseError;
 
     fn try_from(value: ASeg) -> Result<Self, Self::Error> {
@@ -308,7 +308,7 @@ mod ast {
         EscapedDollarSign,
     }
 
-    impl<'a> Display for Raw<'a> {
+    impl Display for Raw<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
@@ -322,7 +322,7 @@ mod ast {
     }
 
     impl<'a> Raw<'a> {
-        fn escaped<E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, Self, E> {
+        fn escaped<E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Self, E> {
             value(Self::EscapedDollarSign, tag("$$"))(input)
         }
 
@@ -355,7 +355,7 @@ mod ast {
             ))
         }
 
-        pub fn parse_all(input: &'a str) -> Result<Vec<Segment>, NomError<&str>> {
+        pub fn parse_all(input: &'a str) -> Result<Vec<Segment<'a>>, NomError<&'a str>> {
             all_consuming(many0(Self::parse(false)))(input.trim())
                 .finish()
                 .map(|(_, v)| v)
@@ -369,7 +369,7 @@ mod ast {
     }
 
     impl<'a> TemplateSegment<'a> {
-        fn parse(input: &'a str) -> IResult<&str, Self> {
+        fn parse(input: &'a str) -> IResult<&'a str, Self> {
             delimited(
                 tag("${"),
                 separated_pair(anychar, tag(":"), many1(Segment::parse(true)))

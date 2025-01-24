@@ -59,6 +59,7 @@ const COMMUCATION_NO_MESSAGE_DELAY: number = parseInt(process.env.COMMUCATION_NO
 const VERSION_SPECIFIC_RESULTS_FILE: string = "0.5.4";
 const VERSION_RESTART_TEST_AT_TIME: string = "0.5.5";
 const TEN_MINUTES: number = 10 * 60000;
+export const BYPASS_PARSER_RUNTIME_DEFAULT: number = 60;
 
 // Export for testing
 export async function findYamlCreatedFiles (localPath: string, yamlFile: string, additionalFiles: string[] | undefined): Promise<string[] | undefined> {
@@ -171,9 +172,10 @@ export class PewPewTest {
       log("Could not retrieve ipAddress", LogLevel.ERROR, error);
     }
     // Save this data to put back in after we read the current info from s3 on delay
+    const startTime = Date.now();
     const newTestStatus: TestStatusMessage = {
-      startTime: Date.now(),
-      endTime: getEndTime(Date.now(), this.testMessage.testRunTimeMn || 60),
+      startTime,
+      endTime: getEndTime(startTime, this.testMessage.testRunTimeMn || BYPASS_PARSER_RUNTIME_DEFAULT),
       resultsFilename: [],
       status: TestStatus.Created,
       queueName: PpaasTestMessage.getAvailableQueueNames()[0], // Length will be 1 on the agents
@@ -349,6 +351,7 @@ export class PewPewTest {
 
   /** * Launches the pewpew process and waits for it to complete, throws on error ** */
   public async launch (): Promise<void> {
+    this.log(`PewpewTest.launch() at ${Date.now()}`, LogLevel.DEBUG);
     try {
       // Keep alive
       await this.refreshTestScalingMessage();
@@ -369,6 +372,7 @@ export class PewPewTest {
       this.log(`fs.access(${yamlLocalPath}) stats = ${JSON.stringify(await fs.access(yamlLocalPath))}`, LogLevel.DEBUG);
 
       let pewpewPath = PEWPEW_PATH;
+      this.log(`pewpewPath: ${pewpewPath}`, LogLevel.DEBUG, { PEWPEW_PATH, DOWNLOAD_PEWPEW });
       // Download the pewpew executable if needed
       if (DOWNLOAD_PEWPEW) {
         // version check in the test message

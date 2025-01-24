@@ -615,7 +615,7 @@ fn body_template_as_hyper_body(
     } else {
         *body_value = Some(body.clone());
         Either3::B(future::ok((
-            body.as_bytes().len() as u64,
+            body.len() as u64,
             body.map_err(|never| match never {}).boxed(),
         )))
     }

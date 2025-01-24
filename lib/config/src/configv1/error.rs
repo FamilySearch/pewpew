@@ -44,6 +44,7 @@ impl From<ExecutingExpressionError> for Error {
 //     }
 // }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Error {
     ExpressionErr(CreatingExpressionError),

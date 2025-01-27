@@ -1,13 +1,9 @@
 import {
-  LogLevel,
   PEWPEW_BINARY_FOLDER,
-  PEWPEW_VERSION_LATEST,
   PpaasTestId,
-  PpaasTestMessage,
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
-  log,
   logger,
   s3,
   sqs,
@@ -94,43 +90,7 @@ describe("Tests Build Test", () => {
     mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
     mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
 
-    // Prepopulate PpaasTestStatus and make sure all expected data is still there after run
-    const expectedTestStatusMessage = {
-      instanceId: "bogus",
-      hostname: "bogus",
-      ipAddress: "bogus",
-      startTime: Date.now() - 5000,
-      endTime: Date.now() - 5000,
-      resultsFilename: [],
-      status: TestStatus.Unknown,
-      errors: [],
-      version: "bogus",
-      queueName: "bogus",
-      userId: "unittestuser"
-    };
-    (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
-
-    const expectedTestMessage = {
-      testId: ppaasTestId.testId,
-      s3Folder,
-      yamlFile: buildTestYamlFile,
-      testRunTimeMn: 1,
-      version: PEWPEW_VERSION_LATEST,
-      envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
-      restartOnFailure: false,
-      additionalFiles: [],
-      bucketSizeMs: 60000,
-      bypassParser: false,
-      userId: "unittestuser"
-    };
-    const testMessage: PpaasTestMessage = new PpaasTestMessage(expectedTestMessage);
-    log("Send Test request", LogLevel.DEBUG, testMessage.sanitizedCopy());
-    // await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value);
-    mockReceiveMessage({
-      testId: ppaasTestId.testId,
-      testMessage: JSON.stringify(testMessage.getTestMessage()),
-      queueUrlMatch: sqs.QUEUE_URL_TEST.values().next().value
-    });
+    // Auto scale message
     mockReceiveMessage({
       testId: ppaasTestId.testId,
       queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value

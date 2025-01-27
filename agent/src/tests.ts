@@ -20,10 +20,10 @@ import { join as pathJoin } from "path";
 logger.config.LogFileName = "ppaas-agent";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const yamlFile = "basicwithenv.yaml";
-const version = PEWPEW_VERSION_LATEST;
+export const yamlFile = "basicwithenv.yaml";
+export const version = PEWPEW_VERSION_LATEST;
 export const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE);
-const buildTestContents = `
+export const buildTestContents = `
 vars:
   rampTime: 10s
   loadTime: 10s

@@ -20,10 +20,10 @@ import { join as pathJoin } from "path";
 logger.config.LogFileName = "ppaas-agent";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
-const yamlFile = "basicwithenv.yaml";
-const version = PEWPEW_VERSION_LATEST;
+export const yamlFile = "basicwithenv.yaml";
+export const version = PEWPEW_VERSION_LATEST;
 export const PEWPEW_PATH = process.env.PEWPEW_PATH || pathJoin(UNIT_TEST_FOLDER, util.PEWPEW_BINARY_EXECUTABLE);
-const buildTestContents = `
+export const buildTestContents = `
 vars:
   rampTime: 10s
   loadTime: 10s
@@ -44,8 +44,8 @@ config:
       Accept: application/json
       User-Agent: PPAAS Agent Performance Test
   general:
-    bucket_size: 1m
-    log_provider_stats: 1m
+    bucket_size: 5s
+    log_provider_stats: 5s
 endpoints:
   - method: GET
     url: http://\${serviceUrlAgent}/healthcheck

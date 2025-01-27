@@ -20,7 +20,7 @@ import {
 import { H1, H3 } from "../Headers";
 import { LogLevel, log } from "../../pages/api/util/log";
 import PewPewVersions, { VersionInitalProps } from "../PewPewVersions";
-import React, { useState } from "react";
+import React, { JSX, useState } from "react";
 import TestQueues, { QueueInitialProps } from "../TestQueues";
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import {

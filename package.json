@@ -1,6 +1,6 @@
 {
   "name": "@fs/monorepo",
-  "version": "3.3.6",
+  "version": "3.4.0",
   "description": "Service for running pewpew tests",
   "private": true,
   "workspaces": [
@@ -70,7 +70,9 @@
     "exclude": "**/*.spec.ts"
   },
   "overrides": {
-    "eslint": "^9.15.0"
+    "eslint": "^9.15.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "dependencies": {
   },

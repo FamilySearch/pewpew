@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "3.3.6",
+  "version": "3.4.0",
   "description": "Agent Service for running pewpew tests",
   "main": "dist/src/app.js",
   "scripts": {
@@ -8,11 +8,12 @@
     "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test -r dotenv-flow/config",
+    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
+    "testonly": "nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
     "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/createtest --timeout 500000 -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 500000 -r dotenv-flow/config",
+    "createtest": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "integration": "npm run build && nyc mocha --timeout 130000 ./dist/integration -r dotenv-flow/config",
     "clean": "rimraf dist/"
   },
   "repository": {
@@ -44,6 +45,9 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-sqs": "^3.363.0",
+    "@aws-sdk/credential-providers": "^3.363.0",
+    "@aws-sdk/ec2-metadata-service": "^3.363.0",
+    "@aws-sdk/lib-storage": "^3.363.0",
     "@aws-sdk/util-stream-node": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.8.0",
@@ -55,6 +59,7 @@
     "@types/semver": "^7.5.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
+    "aws-sdk-client-mock": "^4.0.0",
     "axios": "~1.7.0",
     "chai": "^4.3.7",
     "eslint": "^9.15.0",

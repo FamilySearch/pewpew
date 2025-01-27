@@ -28,7 +28,7 @@
     "lib": ["es2020", "esnext.asynciterable", "dom", "dom.iterable"]
   },
   "exclude": ["node_modules"],
-  "include": ["src/**/*", "test/**/*", "acceptance/**/*", "createtest/**/*"],
+  "include": ["src/**/*", "test/**/*", "acceptance/**/*", "createtest/**/*", "integration/**/*"],
   "compileOnSave": true,
   "buildOnSave": false
 }

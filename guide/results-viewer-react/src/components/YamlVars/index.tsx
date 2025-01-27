@@ -1,5 +1,4 @@
-import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Checkbox, Div, InputsDiv, Label, Span} from "../YamlStyles";
+import { Div, InputsDiv } from "../YamlStyles";
 import {
   LOAD_TIME_DEFAULT,
   PEAK_LOAD_DEFAULT,
@@ -7,7 +6,7 @@ import {
   RAMP_TIME_DEFAULT,
   SESSION_ID_DEFAULT
 } from "../../util/yamlwriter";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
 import VarInput from "./VarInput";
 import { uniqueId } from "../../util/clientutil";
@@ -40,17 +39,11 @@ export interface VarsProps {
   vars: PewPewVars[];
 }
 
-interface VarsState extends DefaultVariables {
-  nameReady: boolean;
-  valueReady: boolean;
-  defaultVars: boolean;
-}
 export const VARS = "vars";
 const SESSION_ID = "sessionId";
 const RAMP_TIME = "rampTime";
 const LOAD_TIME = "loadTime";
 const PEAK_LOAD = "peakLoad";
-const DEFAULT_VARS = "defaultVars";
 
 export const emptyVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
 export const rampTimeVar = (): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: RAMP_TIME_DEFAULT });
@@ -85,17 +78,8 @@ export function getDefaultVars (defaultVars: DefaultVariables = defaultUI): PewP
 }
 
 export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
-  const defaultState: VarsState = {
-    nameReady: false,
-    valueReady: false,
-    defaultVars: defaultYaml,
-    ...defaultUI
-  };
   /** Map to keep id's unique */
   const varsMap = new Map(props.vars.map((pewpewVar) => ([pewpewVar.id, pewpewVar])));
-
-  const [state, setState] = useState(defaultState);
-  const updateState = (newState: Partial<VarsState>) => setState((oldState): VarsState => ({ ...oldState, ...newState }));
 
   // The parent needs to prepopulate the vars based on the defaultYaml
 
@@ -109,10 +93,6 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     switchSessionId(authenticated);
   }, [authenticated]);
 
-  const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
-    switchAllDefaults(event.target.checked);
-  };
-
   const switchSessionId = (newChecked: boolean) => {
     switchDefault(SESSION_ID, newChecked);
   };
@@ -123,11 +103,9 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     switchDefault(LOAD_TIME, newChecked);
     switchDefault(RAMP_TIME, newChecked);
     switchDefault(PEAK_LOAD, newChecked);
-    updateState({ defaultVars: newChecked });
   };
 
   const switchDefault = (varsType: DefaultVariablesType, newChecked: boolean) => {
-    updateState({ [varsType]: newChecked });
     // Add/delete from varsMap/vars
     if (newChecked && !varsMap.has(varsType)) {
       // Add it (will update the map when it comes back in via props)
@@ -154,13 +132,9 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
   };
 
   const clearAllVars = () => {
-    updateState({ defaultVars: false, sessionId: false, rampTime: false, loadTime: false, peakLoad: false });
     props.clearAllVars();
   };
 
-  // https://github.com/reactjs/react-transition-group/issues/904
-  // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
-  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <button onClick={() => props.addVar(emptyVar())}>
@@ -168,34 +142,33 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
       </button>
       <button onClick={clearAllVars}>
         Clear All Vars
-      </button>&nbsp;&nbsp;
+      </button>
+      <button
+        onClick={() => switchAllDefaults(true)}
+        disabled={[RAMP_TIME, LOAD_TIME, PEAK_LOAD].every((varName) => varsMap.has(varName))}
+      >
+        Add Default Vars
+      </button>
+      <button
+        onClick={() => switchAllDefaults(false)}
+        disabled={![RAMP_TIME, LOAD_TIME, PEAK_LOAD].some((varName) => varsMap.has(varName))}
+      >
+        Remove Default Vars
+      </button>
+      &nbsp;&nbsp;
       <QuestionBubble text="Click here for more information about Variables" href="https://familysearch.github.io/pewpew/config/vars-section.html"></QuestionBubble>
       &nbsp;&nbsp;
 
-      <label htmlFor={DEFAULT_VARS}> Default Vars </label>
-      <QuestionBubble text="Default Vars include ramptime, loadtime, and peakload"></QuestionBubble>
-      <Checkbox type="checkbox" id={DEFAULT_VARS} onChange={handleClickDefault} checked={state.defaultVars} />
-
-      <Div>
-        {[SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].map((varName) => {
-          const stateKey = varName as DefaultVariablesType;
-          // TODO: Should these be read only?
-          return (
-            <Span>
-              <Label htmlFor={varName}> {varName}: </Label>
-              <QuestionBubble text={`${varName} included`}></QuestionBubble>
-              <Checkbox type="checkbox" id={varName} onChange={(event: React.ChangeEvent<HTMLInputElement>) => switchDefault(varName as keyof DefaultVariables, event.target.checked)} checked={state[stateKey]}/>
-            </Span>
-          );
-        })}
-      </Div>
-      <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
         {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (
-          <CSSTransition key={pewpewVar.id} timeout={300} classNames="load" nodeRef={nodeRef}>
             <VarInput pewpewVar={pewpewVar} changeVars={changeVars} deleteVar={deleteVar} />
-          </CSSTransition>
         ))}
-      </TransitionGroup>
+      {[SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].filter((value) => !varsMap.has(value)).map((varName) => {
+        return (
+          <Div key={varName}>
+            <button id={varName} onClick={() => switchDefault(varName as keyof DefaultVariables, true)}>Add {varName}</button>
+          </Div>
+        );
+      })}
     </InputsDiv>
   );
 }

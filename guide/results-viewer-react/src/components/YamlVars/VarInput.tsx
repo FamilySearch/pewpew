@@ -1,4 +1,5 @@
 import { Div, Label, Span} from "../YamlStyles";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewVars } from "../../util/yamlwriter";
 import { PewPewVarsStringType } from ".";
 import QuestionBubble from "../YamlQuestionBubble";
@@ -39,7 +40,9 @@ const VarInput = ({ pewpewVar, changeVars, deleteVar }: VarInputProps): JSX.Elem
               id="value"
             />
           </Span>
-          <button id={pewpewVar.id} onClick={() => deleteVar(pewpewVar.id)}>X</button>
+          <button id={pewpewVar.id} onClick={() => deleteVar(pewpewVar.id)}>
+            <DeleteIcon style={{ height: "15px", width: "15px" }}/>
+          </button>
         </Div>
     );
 };

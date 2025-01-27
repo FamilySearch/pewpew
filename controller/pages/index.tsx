@@ -21,7 +21,7 @@ import {
 import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
-import React, { useEffect, useState } from "react";
+import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosError, AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestData } from "./api/util/clientutil";
 import Div from "../components/Div";

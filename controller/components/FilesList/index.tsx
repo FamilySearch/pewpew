@@ -1,5 +1,5 @@
+import React, { JSX } from "react";
 import Div from "../Div";
-import React from "react";
 import styled from "styled-components";
 
 const FilesDiv = styled(Div)`

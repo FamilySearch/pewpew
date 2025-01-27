@@ -1,6 +1,6 @@
 import { Column, Row } from "../Div";
 import { Danger, Warning } from "../Alert";
-import React, { useEffect, useState } from "react";
+import React, { JSX, useEffect, useState } from "react";
 import { H3 } from "../Headers";
 
 // What this returns or calls from the parents

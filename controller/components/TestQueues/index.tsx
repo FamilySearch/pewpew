@@ -1,7 +1,7 @@
+import React, { JSX } from "react";
 import { AgentQueueDescription } from "@fs/ppaas-common/dist/types";
 import { Danger } from "../Alert";
 import Div from "../Div";
-import React from "react";
 import styled from "styled-components";
 
 const QueueDiv = styled(Div)`

@@ -1006,7 +1006,7 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
                 *is_eq
                     == tags
                         .get::<str>(key)
-                        .map_or(false, |left| regex.is_match(left))
+                        .is_some_and(|left| regex.is_match(left))
             })
     };
 

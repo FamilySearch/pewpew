@@ -89,7 +89,7 @@ impl LineReader {
                 self.position += (i + 1) as u64;
                 let mut raw_value = &self.byte_buffer[..i];
                 let mut i2 = i;
-                while raw_value.ends_with(&[b'\n']) || raw_value.ends_with(&[b'\r']) {
+                while raw_value.ends_with(b"\n") || raw_value.ends_with(b"\r") {
                     i2 -= 1;
                     raw_value = &self.byte_buffer[..i2];
                 }

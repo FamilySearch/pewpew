@@ -91,10 +91,7 @@ impl ModIntervalStreamState {
 
         // when we've reached the end of the current segment, get the next one
         if wait_time >= self.current_segment.duration {
-            let segment = match self.segments.pop_front() {
-                Some(s) => s,
-                None => return None,
-            };
+            let segment = self.segments.pop_front()?;
             wait_time -= self.current_segment.duration;
             self.x_offset += self.current_segment.duration;
             self.current_segment = segment;

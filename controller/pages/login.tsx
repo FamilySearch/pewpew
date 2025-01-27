@@ -13,6 +13,7 @@ import type {
 } from "next";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
+import React, { JSX } from "react";
 import { formatError, formatPageHref, getHostUrl } from "./api/util/clientutil";
 import {
   getLoginApiUrl,
@@ -24,7 +25,6 @@ import {
 } from "./api/util/authserver";
 import Div from "../components/Div";
 import { H1 } from "../components/Headers";
-import React from "react";
 import Router from "next/router";
 import { TokenResponse } from "../types";
 import styled from "styled-components";

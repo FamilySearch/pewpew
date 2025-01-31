@@ -38,6 +38,7 @@ export interface UrlProps {
   authenticated: boolean
   /** State of Default Headers checkbox */
   defaultHeaders: boolean,
+  initialDisplay?: boolean;
 }
 
 export interface UrlState {
@@ -323,7 +324,7 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
         onClose={resetModalState}
         isReady={enableSubmit}
         scrollable={false}
-        initialDisplay={true}
+        initialDisplay={props.initialDisplay}
         >
         <Row style={{ alignItems: "start"}}>
             <Span style={{ margin: 0 }}>

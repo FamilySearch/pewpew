@@ -430,9 +430,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <div style={{color: "rgb(242, 241, 239)"}}>
           Drag file to drop zone or click to select file to load. Currently will only load one file at a time.
         </div>
-        <div style={{ width: "90%", height: "250px" }}>
-          <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
-        </div>
+        <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
         <div>
           {state.file && (
             <div style={{paddingTop: "13px"}}>
@@ -450,6 +448,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         onSubmit={finalizeEndpoints}
         closeText="Cancel"
         isReady={true}
+        scrollable={true}
       >
         <AccordianStyleDiv style={{paddingRight: "20px"}}>
           <div>

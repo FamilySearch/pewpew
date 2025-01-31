@@ -98,6 +98,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   log("Endpoints", LogLevel.DEBUG, { urls, map: Array.from(urlsMap.values()) });
 
   const [state, setState] = useState(defaultState);
+  const initialDisplay = useRef(false);
   const updateState = (newState: Partial<EndpointsState>) => setState((oldState: EndpointsState) => ({ ...oldState, ...newState}));
 
   useEffect(() => {
@@ -117,7 +118,11 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   // Adds endpoint to array
   // Called from clicking add button, or when endpoints are sent from App.js through refs.child.updatePoints
   const addUrl = () => {
+    initialDisplay.current = true;
     props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? peakLoad : "1hpm"));
+    setTimeout(() => {
+      initialDisplay.current = false;
+    }, 3000);
   };
 
   // Updates the hit rate for each endpoint when "update" button is pressed
@@ -185,6 +190,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
               data={url}
               authenticated={props.authenticated}
               defaultHeaders={state.defaultHeaders}
+              initialDisplay={initialDisplay.current}
             />
           </CSSTransition>
         ))}

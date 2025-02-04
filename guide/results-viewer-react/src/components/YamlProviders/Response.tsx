@@ -1,7 +1,8 @@
-import { Div, Label, Span } from "../YamlStyles";
+import { Button, Div, Input, Label, Select, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { PewPewResponseProvider, ProviderProps} from "./ProviderTypes";
 import React, { useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
 
 interface ResponseProviderProps extends ProviderProps {
@@ -83,48 +84,48 @@ export function ResponseProvider ({ data, ...props }: ResponseProviderProps) {
       <Span>
         <Label> Name: </Label>
         <QuestionBubble text="Name of Provider"></QuestionBubble>
-        <input style={{width: "130px"}} type="text" name={data.id} onChange={(event) => changeProviderName(event.target.value)} value={data.name} />
+        <Input style={{width: "130px"}} type="text" name={data.id} onChange={(event) => changeProviderName(event.target.value)} value={data.name} />
       </Span>
       <Span>
         <Label> Response: </Label>
         { state.responseProviderType === ResponseProviderType.Empty &&
         <div>
-          <input style={{width: "82px", paddingLeft: "34px", marginRight: "5px"}}
+          <Input style={{width: "82px", paddingLeft: "34px", marginRight: "5px"}}
           name="providerResponseEmpty" value={"{}"} readOnly />
           <QuestionBubble text="Provider will pick up value as defined by endpoint"></QuestionBubble>
         </div>
         }
         { state.responseProviderType === ResponseProviderType.Auto_Return &&
         <div>
-          <select style={{width: "82px", height: "22px", fontSize: "12px", marginRight: "5px"}}
+          <Select style={{width: "82px", fontSize: "12px", marginRight: "5px"}}
           name={data.id} onChange={(event) => changeAutoReturnType(event.target.value as AutoReturnType)}>
             <option value={AutoReturnType.If_not_full}>If_not_full</option>
             <option value={AutoReturnType.Block}>Block</option>
             <option value={AutoReturnType.Force}>Force</option>
-          </select>
+          </Select>
           <QuestionBubble text="Defines more specifically how provider is retrieved from an endpoint"></QuestionBubble>
         </div>
         }
         { state.responseProviderType === ResponseProviderType.Buffer &&
         <div>
-          <input style={{width: "82px", marginRight: "5px"}} name={data.id} type="number" min="0" onChange={(event) => changeBufferSize(event.target.value)} value={state.bufferSize} placeholder={"auto"} />
+          <Input style={{width: "82px", marginRight: "5px"}} name={data.id} type="number" min="0" onChange={(event) => changeBufferSize(event.target.value)} value={state.bufferSize} placeholder={"auto"} />
           <QuestionBubble text="Specifies soft limit for a provider's buffer. Default auto"></QuestionBubble>
         </div>
         }
       </Span>
       <Span>
         <Label> empty: </Label>
-        <input type="radio" name={data.id} value={ResponseProviderType.Empty} onChange={(event) => handleClick(event.target.value as ResponseProviderType)} defaultChecked/>
+        <Input type="radio" name={data.id} value={ResponseProviderType.Empty} onChange={(event) => handleClick(event.target.value as ResponseProviderType)} defaultChecked/>
       </Span>
       <Span>
         <Label> auto_return: </Label>
-        <input type="radio" name={data.id} value={ResponseProviderType.Auto_Return} onChange={(event) => handleClick(event.target.value as ResponseProviderType)}/>
+        <Input type="radio" name={data.id} value={ResponseProviderType.Auto_Return} onChange={(event) => handleClick(event.target.value as ResponseProviderType)}/>
       </Span>
       <Span>
         <Label> buffer: </Label>
-        <input type="radio" name={data.id} value={ResponseProviderType.Buffer} onChange={(event) => handleClick(event.target.value as ResponseProviderType)} />
+        <Input type="radio" name={data.id} value={ResponseProviderType.Buffer} onChange={(event) => handleClick(event.target.value as ResponseProviderType)} />
       </Span>
-      <button style={{marginLeft: "auto"}} id={data.id} onClick={deleteProvider}>X</button>
+      <Button style={{marginLeft: "auto"}} id={data.id} onClick={deleteProvider}><DeleteIcon /></Button>
     </Div>
   );
 }

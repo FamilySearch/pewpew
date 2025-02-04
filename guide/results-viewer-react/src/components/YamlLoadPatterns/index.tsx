@@ -1,7 +1,8 @@
+import { Button, Checkbox, Div, Input, InputsDiv, Label, Span} from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Checkbox, Div, InputsDiv, Label, Span} from "../YamlStyles";
 import { PewPewLoadPattern, PewPewVars } from "../../util/yamlwriter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
 import { uniqueId } from "../../util/clientutil";
 
@@ -115,12 +116,12 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
   const nodeRef = useRef(null);
   return (
   <InputsDiv>
-    <button onClick={() => props.addPattern(newLoadPattern())}>
+    <Button onClick={() => props.addPattern(newLoadPattern())}>
       Add Pattern
-    </button>
-    <button onClick={clearAllPatterns}>
+    </Button>
+    <Button onClick={clearAllPatterns}>
       Clear All Patterns
-    </button>&nbsp;&nbsp;
+    </Button>&nbsp;&nbsp;
     <QuestionBubble text="Click here for more information about Load Patterns" href="https://familysearch.github.io/pewpew/config/load_pattern-section.html"></QuestionBubble>
     &nbsp;&nbsp;
 
@@ -139,7 +140,7 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
             <Span>
               <Label> From: </Label>
               <QuestionBubble text="Optional | Percent load start"></QuestionBubble>
-              <input
+              <Input
                 type="text"
                 style={{ width: "170px", color: validFrom ? undefined : errorColor.color }}
                 onChange={(event) => changePattern(pewpewPattern, "from", event.target.value)}
@@ -153,7 +154,7 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
             <Span>
               <Label> To: </Label>
               <QuestionBubble text="Required | Percent load end"></QuestionBubble>
-              <input
+              <Input
                 type="text"
                 style={{ width: "170px", color: validTo ? undefined : errorColor.color }}
                 onChange={(event) => changePattern(pewpewPattern, "to", event.target.value)}
@@ -167,7 +168,7 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
             <Span>
               <Label> Over: </Label>
               <QuestionBubble text="Required | See link for accepted input" href="https://familysearch.github.io/pewpew/config/common-types.html#duration"></QuestionBubble>
-              <input
+              <Input
                 type="text"
                 style={{ width: "170px", color: validOver ? undefined : errorColor.color }}
                 onChange={(event) => changePattern(pewpewPattern, "over", event.target.value)}
@@ -177,7 +178,7 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
                 title={validOver ? undefined : "Invalid Over"}
               />
             </Span>
-            <button id={pewpewPattern.id} onClick={() => deletePattern(pewpewPattern.id)}>X</button>
+            <Button id={pewpewPattern.id} onClick={() => deletePattern(pewpewPattern.id)}><DeleteIcon /></Button>
           </Div>
         </CSSTransition>;
       })}

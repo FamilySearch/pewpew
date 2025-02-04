@@ -1,10 +1,11 @@
+import { Button, Checkbox, Div, Input, InputsDiv, Label, NonFlexSpan, Span } from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Checkbox, Div, InputsDiv, Label, NonFlexSpan, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { LoggerModal, debugLoggerSelect, errorLoggerSelect, killLoggerSelect } from "./LoggerModal";
 import { LoggerSelectEntry, PewPewLogger } from "../../util/yamlwriter";
 import { ModalObject, useEffectModal } from "../Modal";
 import React, { useEffect, useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -14,9 +15,6 @@ const BorderDiv = styled.div`
   padding-top: 12px;
   border-top: 2px dotted rgb(206, 199, 199);
   margin-top: 5px;
-`;
-const EditListButton = styled.button`
-  width: 100px;
 `;
 
 export const LOGGERS = "loggers";
@@ -225,12 +223,12 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
   const nodeRef = useRef(null);
   return (
     <InputsDiv>
-    <button onClick={() => props.addLogger(newLogger())}>
+    <Button onClick={() => props.addLogger(newLogger())}>
       Add Loggers
-    </button>
-    <button onClick={props.clearAllLoggers}>
+    </Button>
+    <Button onClick={props.clearAllLoggers}>
       Clear All Loggers
-    </button>&nbsp;&nbsp;
+    </Button>&nbsp;&nbsp;
     <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
     &nbsp;&nbsp;
     <label htmlFor={DEFAULT_LOGGERS}> Default Loggers </label>
@@ -256,39 +254,39 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
               <Span style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "7px"}}> Name: </label>
                 <QuestionBubble text="Name of Logger"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="name" name={logger.id} onChange={(event) => changeLogger(logger, "name", event.target.value)} value={logger.name} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="name" name={logger.id} onChange={(event) => changeLogger(logger, "name", event.target.value)} value={logger.name} />
 
                 <label style={{marginRight: "5px"}}> Select: </label>
                 <QuestionBubble text="Select data to be logged"></QuestionBubble>
-                <EditListButton onClick={() => openModal(logger)}>
+                <Button onClick={() => openModal(logger)}>
                   Edit List
-                </EditListButton>
+                </Button>
               </Span>
               <NonFlexSpan style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "5px"}}> Where: </label>
                 <QuestionBubble text="Only log data that meets where clause"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="where" name={logger.id} onChange={(event) => changeLogger(logger, "where", event.target.value)} value={logger.where} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="where" name={logger.id} onChange={(event) => changeLogger(logger, "where", event.target.value)} value={logger.where} />
 
                 <label style={{marginRight: "17px"}}> Limit: </label>
                 <QuestionBubble text="Integer indicates logger will only log up to n values"></QuestionBubble>
-                <input type="text" style={{width: "100px"}} id="limit" name={logger.id} min="0" onChange={(event) => changeLogger(logger, "limit", event.target.value)} value={logger.limit} />
+                <Input type="text" style={{width: "100px"}} id="limit" name={logger.id} min="0" onChange={(event) => changeLogger(logger, "limit", event.target.value)} value={logger.limit} />
 
-                <button style={{marginLeft: "200px"}} id={logger.id} onClick={() => deleteLogger(logger.id)}>X</button>
+                <Button style={{marginLeft: "200px"}} id={logger.id} onClick={() => deleteLogger(logger.id)}><DeleteIcon /></Button>
               </NonFlexSpan>
               <Span style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "34.5px"}}> To: </label>
                 <QuestionBubble text="Where you want data logged to (File, splunk, etc.)"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="to" name={logger.id} onChange={(event) => changeLogger(logger, "to", event.target.value)} value={logger.to} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="to" name={logger.id} onChange={(event) => changeLogger(logger, "to", event.target.value)} value={logger.to} />
                 <div>
                   <span >
                     <label htmlFor={logger.id + "kill"} style={{marginRight: "5px"}}> Kill: </label>
                     <QuestionBubble text="Optional | end test after limit is reached"></QuestionBubble>
-                    <input style={{marginRight: "15px"}} type="checkbox" id="kill" name={logger.id} onChange={(event) => handleClickLogger(logger, "kill", event.target.checked)} checked={logger.kill} />
+                    <Input style={{marginRight: "15px"}} type="checkbox" id="kill" name={logger.id} onChange={(event) => handleClickLogger(logger, "kill", event.target.checked)} checked={logger.kill} />
                   </span>
                   <span>
                     <label htmlFor={logger.id + "pretty"} style={{marginRight: "5px"}}> Pretty: </label>
                     <QuestionBubble text="Optional | display results on separate lines (Do not use if logging to splunk)"></QuestionBubble>
-                    <input style={{marginRight: "15px"}} type="checkbox" id="pretty" name={logger.id} onChange={(event) => handleClickLogger(logger, "pretty", event.target.checked)} checked={logger.pretty} />
+                    <Input style={{marginRight: "15px"}} type="checkbox" id="pretty" name={logger.id} onChange={(event) => handleClickLogger(logger, "pretty", event.target.checked)} checked={logger.pretty} />
                   </span>
                 </div>
               </Span>

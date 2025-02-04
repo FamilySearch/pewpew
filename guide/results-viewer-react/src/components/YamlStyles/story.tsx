@@ -1,5 +1,6 @@
-import { Checkbox, Div, Input, InputPropsText, InputsDiv, Label, NonFlexSpan, Span } from ".";
+import { Button, Checkbox, Div, Input, InputsDiv, Label, NonFlexSpan, Span } from ".";
 import type { Meta, StoryFn } from "@storybook/react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { DisplayDivMain } from "../YamlWriterForm";
 import { GlobalStyle } from "../Global";
 import React from "react";
@@ -15,12 +16,6 @@ const onChange = () => {
   console.log("Change value of input");
 };
 
-const inputProps: InputPropsText = {
-  type: "text",
-  onChange,
-  dataType: "this is a data type value"
-};
-
 export default {
   title: "YamlStyles"
 } as Meta<typeof Input>;
@@ -33,9 +28,9 @@ export const Default: StoryFn = () => (
       <Div>
       <Span>
         <Label htmlFor="testFor"> Here is a Label: </Label>
-        <Input {...inputProps}/>
+        <Input type="text" onChange={onChange}/>
         <Checkbox type="checkbox" id="testFor"/>
-        <button>X</button>
+        <Button><DeleteIcon /></Button>
         </Span>
       </Div>
     </InputsDiv>
@@ -51,9 +46,9 @@ export const _NonFlexSpan: StoryFn = () => (
       <Div>
       <NonFlexSpan>
         <Label htmlFor="testFor"> Here is a Label: </Label>
-        <Input {...inputProps}/>
+        <Input type="text" onChange={onChange}/>
         <Checkbox type="checkbox" id="testFor"/>
-        <button>X</button>
+        <Button><DeleteIcon /></Button>
       </NonFlexSpan>
       </Div>
     </InputsDiv>
@@ -69,9 +64,9 @@ export const FilledAndChecked: StoryFn = () => (
       <Div>
         <Span>
         <Label htmlFor="testFor"> Here is a Label: </Label>
-        <Input type="text" onChange={onChange} dataType="Example" value={"Here is an input"}/>
+        <Input type="text" onChange={onChange} value={"Here is an input"}/>
         <Checkbox type="checkbox" id="testFor" defaultChecked/>
-        <button>X</button>
+        <Button><DeleteIcon /></Button>
         </Span>
       </Div>
     </InputsDiv>

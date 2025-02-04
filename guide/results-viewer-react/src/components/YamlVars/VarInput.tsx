@@ -1,9 +1,9 @@
-import { Div, Label, Span} from "../YamlStyles";
+import { Button, Div, Input, Label, Span} from "../YamlStyles";
+import React, { ChangeEvent } from "react";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewVars } from "../../util/yamlwriter";
 import { PewPewVarsStringType } from ".";
 import QuestionBubble from "../YamlQuestionBubble";
-import React from "react";
 
 
 interface VarInputProps {
@@ -19,10 +19,10 @@ const VarInput = ({ pewpewVar, changeVars, deleteVar }: VarInputProps): JSX.Elem
           <Span>
             <Label> Name: </Label>
             <QuestionBubble text="Required | name of variable"></QuestionBubble>
-            <input
+            <Input
               type="text"
               style={{width: "130px"}}
-              onChange={(event) => changeVars(pewpewVar, "name", event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => changeVars(pewpewVar, "name", event.target.value)}
               name={pewpewVar.id}
               value={pewpewVar.name}
               id="name"
@@ -31,18 +31,18 @@ const VarInput = ({ pewpewVar, changeVars, deleteVar }: VarInputProps): JSX.Elem
           <Span>
             <Label> Value: </Label>
             <QuestionBubble text="Required | value of variable"></QuestionBubble>
-            <input
+            <Input
               type="text"
               style={{width: "130px"}}
-              onChange={(event) => changeVars(pewpewVar, "value", event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => changeVars(pewpewVar, "value", event.target.value)}
               name={pewpewVar.id}
               value={pewpewVar.value}
               id="value"
             />
           </Span>
-          <button id={pewpewVar.id} onClick={() => deleteVar(pewpewVar.id)}>
-            <DeleteIcon style={{ height: "15px", width: "15px" }}/>
-          </button>
+          <Button id={pewpewVar.id} onClick={() => deleteVar(pewpewVar.id)}>
+            <DeleteIcon />
+          </Button>
         </Div>
     );
 };

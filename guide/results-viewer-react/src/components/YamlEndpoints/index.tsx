@@ -1,5 +1,5 @@
+import { Button, Checkbox, Input, InputsDiv, Label, NonFlexSpan } from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Checkbox, InputsDiv, Label, NonFlexSpan } from "../YamlStyles";
 import {
   HIT_RATE_REGEX,
   UrlProps,
@@ -156,12 +156,12 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   const nodeRef = useRef(null);
   return (
     <InputsDiv>
-      <button onClick={() => addUrl()}>
+      <Button onClick={() => addUrl()}>
         Add Endpoint
-      </button>
-      <button onClick={props.clearAllUrls}>
+      </Button>
+      <Button onClick={props.clearAllUrls}>
         Clear All Endpoints
-      </button>&nbsp;&nbsp;
+      </Button>&nbsp;&nbsp;
       <QuestionBubble text="Click here for more information about Endpoints" href="https://familysearch.github.io/pewpew/config/endpoints-section.html"></QuestionBubble>
       &nbsp;&nbsp;
 
@@ -173,10 +173,10 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
         <NonFlexSpan>
           <Label> Change All Hitrates: </Label>
           <QuestionBubble text="Required | How many hits per minute (hpm) or hits per second (hps)"></QuestionBubble>
-          <input onChange={updateHitRate} value={state.hitRate} id="urlHitRateMaster" onKeyUp={handleKeyUp} style={hitRateStyle} title={hitRateTitle} />
-          <button value={state.hitRate} onClick={updateAllUrl} disabled={invalidHitRate} title={hitRateTitle}>
+          <Input onChange={updateHitRate} value={state.hitRate} id="urlHitRateMaster" onKeyUp={handleKeyUp} style={hitRateStyle} title={hitRateTitle} />
+          <Button value={state.hitRate} onClick={updateAllUrl} disabled={invalidHitRate} title={hitRateTitle} style={{ height: "20px", marginLeft: "5px" }}>
             Update
-          </button>
+          </Button>
         </NonFlexSpan>
       </HitratesDiv>
       <TransitionGroup className="endpoints-section_list" nodeRef={nodeRef}>

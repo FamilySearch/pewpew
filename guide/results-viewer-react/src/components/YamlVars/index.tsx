@@ -1,4 +1,4 @@
-import { Div, InputsDiv } from "../YamlStyles";
+import { Button, Div, InputsDiv } from "../YamlStyles";
 import {
   LOAD_TIME_DEFAULT,
   PEAK_LOAD_DEFAULT,
@@ -137,24 +137,24 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
 
   return (
     <InputsDiv>
-      <button onClick={() => props.addVar(emptyVar())}>
+      <Button onClick={() => props.addVar(emptyVar())}>
         Add Vars
-      </button>
-      <button onClick={clearAllVars}>
+      </Button>
+      <Button onClick={clearAllVars}>
         Clear All Vars
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() => switchAllDefaults(true)}
         disabled={[RAMP_TIME, LOAD_TIME, PEAK_LOAD].every((varName) => varsMap.has(varName))}
       >
         Add Default Vars
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() => switchAllDefaults(false)}
         disabled={![RAMP_TIME, LOAD_TIME, PEAK_LOAD].some((varName) => varsMap.has(varName))}
       >
         Remove Default Vars
-      </button>
+      </Button>
       &nbsp;&nbsp;
       <QuestionBubble text="Click here for more information about Variables" href="https://familysearch.github.io/pewpew/config/vars-section.html"></QuestionBubble>
       &nbsp;&nbsp;
@@ -165,7 +165,7 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
       {[SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].filter((value) => !varsMap.has(value)).map((varName) => {
         return (
           <Div key={varName}>
-            <button id={varName} onClick={() => switchDefault(varName as keyof DefaultVariables, true)}>Add {varName}</button>
+            <Button id={varName} onClick={() => switchDefault(varName as keyof DefaultVariables, true)}>Add {varName}</Button>
           </Div>
         );
       })}

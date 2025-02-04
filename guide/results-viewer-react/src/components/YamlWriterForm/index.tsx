@@ -6,7 +6,7 @@ import {
   getDefaultHeaders,
   isValidUrl
 } from "../YamlUrls";
-import { Checkbox, Div, InputsDiv, Label } from "../YamlStyles";
+import { Button, Checkbox, Div, Input, InputsDiv, Label } from "../YamlStyles";
 import {
   HarEndpoint,
   HarHeader,
@@ -59,14 +59,6 @@ export const DisplayDivMain = styled.div`
 export const DisplayDivBody = styled.div`
 display: flex;
 flex-direction: column;
-#createYaml {
-  cursor: pointer;
-  color: rgb(200, 200, 200);
-  }
-#createYaml:disabled {
-  cursor: default;
-  color: black;
-}
 `;
 export const UrlsDiv = styled.div`
   border-right: 2px solid black;
@@ -412,12 +404,12 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
     <DisplayDivMain>
       <DisplayDivBody>
         <InputsDiv>
-          <button id="createYaml" onClick={() => modalRef.current?.openModal()}>
+          <Button onClick={() => modalRef.current?.openModal()}>
             Create Yaml
-          </button>
-          <button id="createYaml" onClick={openPreviewModal}>
+          </Button>
+          <Button onClick={openPreviewModal}>
             Preview Yaml
-          </button>
+          </Button>
           <label htmlFor={DEFAULT}> Default Yaml </label>
           <QuestionBubble text="Includes default, easy to use values for Variables, Load Patterns, and Loggers. Also includes authenticated headers"></QuestionBubble>
           <Checkbox type="checkbox" id={DEFAULT} onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleClick(DEFAULT, event.target.checked)} checked={state.default} />
@@ -489,7 +481,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           </>}
           <Label>
             File Name:&nbsp;
-            <input style={{width: "150px"}} onChange={changeFile} value={state.fileName} />.yaml
+            <Input style={{width: "150px"}} onChange={changeFile} value={state.fileName} />.yaml
           </Label>
         </Modal>
         <Modal

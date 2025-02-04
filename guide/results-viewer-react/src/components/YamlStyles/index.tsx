@@ -1,4 +1,3 @@
-import React from "react";
 import styled from "styled-components";
 
 export const Div = styled.div`
@@ -6,11 +5,13 @@ export const Div = styled.div`
   display: flex;
   flex-direction: row;
 `;
+
 export const Label = styled.label`
   margin-right: 8px;
   display: flex;
   flex-direction: row;
 `;
+
 export const Span = styled.span`
   display: flex;
   flex-direction: row;
@@ -18,6 +19,7 @@ export const Span = styled.span`
   align-items: center;
   margin-right: 15px;
 `;
+
 export const NonFlexSpan = styled.span`
   display: flex;
   flex-direction: row;
@@ -25,9 +27,11 @@ export const NonFlexSpan = styled.span`
   align-items: center;
   margin-right: 15px;
 `;
+
 export const Checkbox = styled.input`
 margin-right: 15px;
 `;
+
 export const InputsDiv = styled.div`
   display: inline-block;
   border-right: 2px solid black;
@@ -39,42 +43,35 @@ export const InputsDiv = styled.div`
   margin-bottom: 10px;
 `;
 
-export interface InputPropsText {
-  style?: React.CSSProperties;
-  id?: string;
-  type: "text" | "number";
-  name?: string;
-  value?: string | number;
-  onChange: (event: React.ChangeEvent<HTMLInputElement>, type: string) => void;
-  dataType: string;
-  defaultValue?: number | string;
-  min?: string;
-  max?: string;
-  defaultChecked?: boolean;
-  title?: string;
-}
+export const Button = styled.button`
+  border-radius: 5px;
+  background: gray;
+  border: none;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  margin-right: 5px;
+  color: white;
+  &:disabled {
+    cursor: not-allowed;
+    color: black;
+    background: none;
+  }
+  &[data-emphasis="low"] {
+    background: none;
+    border: 2px solid gray;
+  }
+`;
 
-export const Input = (props: InputPropsText) => {
+export const Input = styled.input`
+  border-radius: 5px;
+  border: 2px solid gray;
+  padding: 5px 10px;
+`;
 
-  const changeInput = (event: React.ChangeEvent<HTMLInputElement>, type: string) => {
-    props.onChange(event, type);
-  };
-
-  return (
-    <input
-      style={props.style}
-      id={props.id}
-      type={props.type}
-      name={props.name}
-      value={props.value}
-      min={props.min}
-      max={props.max}
-      onChange={(event: React.ChangeEvent<HTMLInputElement>) => changeInput(event, props.dataType)}
-      defaultValue={props.defaultValue}
-      defaultChecked={props.defaultChecked}
-      title={props.title}
-    />
-  );
-};
-
-export default Input;
+export const Select = styled.select`
+  border-radius: 5px;
+  border: 2px solid gray;
+  padding: 5px 10px;
+`;

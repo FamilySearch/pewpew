@@ -118,7 +118,7 @@ export function Providers ({ providers, ...props }: ProviderMainProps) {
   return (
     <InputsDiv>
       <Button onClick={() => addProviderDropDown()}>
-        Add Providers
+        Add Provider
       </Button>
       <Button onClick={clearProviders}>
         Clear All Providers

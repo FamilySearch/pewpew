@@ -1,12 +1,14 @@
-import { Button, Checkbox, Div, Input, InputsDiv, Label, NonFlexSpan, Span } from "../YamlStyles";
+import { Button, Div, Input, InputsDiv, NonFlexSpan, Span, TipButton } from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { LogLevel, log } from "../../util/log";
 import { LoggerModal, debugLoggerSelect, errorLoggerSelect, killLoggerSelect } from "./LoggerModal";
 import { LoggerSelectEntry, PewPewLogger } from "../../util/yamlwriter";
 import { ModalObject, useEffectModal } from "../Modal";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
+import { Row } from "../Div";
+import ToggleDefaults from "../ToggleDefaults/ToggleDefaults";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
@@ -18,10 +20,12 @@ const BorderDiv = styled.div`
 `;
 
 export const LOGGERS = "loggers";
-const DEBUG_LOGGER = "debugLogger";
-const ERROR_LOGGER = "errorLogger";
-const KILL_LOGGER = "killLogger";
-const DEFAULT_LOGGERS = "defaultLoggers";
+
+export enum LoggerType {
+  DEBUG_LOGGER = "debugLogger",
+  ERROR_LOGGER = "errorLogger",
+  KILL_LOGGER = "killLogger"
+}
 
 export type DefaultLoggerTypeAll = DefaultVariablesType | "defaultLoggers";
 export type PewPewLoggerBooleanType = "kill" | "pretty";
@@ -53,7 +57,7 @@ export const newLogger = (loggerId: string = uniqueId()): PewPewLogger => ({
 });
 
 export const debugLoggerVar = (): PewPewLogger => ({
-  id: DEBUG_LOGGER,
+  id: LoggerType.DEBUG_LOGGER,
   name: "httpAll",
   where: "",
   to: "stdout",
@@ -63,7 +67,7 @@ export const debugLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const errorLoggerVar = (): PewPewLogger => ({
-  id: ERROR_LOGGER,
+  id: LoggerType.ERROR_LOGGER,
   name: "httpErrors",
   where: "response.status >= 400",
   to: "stderr",
@@ -73,7 +77,7 @@ export const errorLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const killLoggerVar = (): PewPewLogger => ({
-  id: KILL_LOGGER,
+  id: LoggerType.KILL_LOGGER,
   name: "testEnd",
   where: "response.status >= 500",
   to: "stderr",
@@ -85,11 +89,11 @@ export const killLoggerVar = (): PewPewLogger => ({
 
 function getDefaultLogger (loggerName: DefaultVariablesType): PewPewLogger {
   switch (loggerName) {
-    case DEBUG_LOGGER:
+    case LoggerType.DEBUG_LOGGER:
       return debugLoggerVar();
-    case ERROR_LOGGER:
+    case LoggerType.ERROR_LOGGER:
       return errorLoggerVar();
-    case KILL_LOGGER:
+    case LoggerType.KILL_LOGGER:
       return killLoggerVar();
     default:
       throw new Error("getDefaultLogger Invalid loggerName: " + loggerName);
@@ -113,20 +117,16 @@ export interface LoggerProps {
   clearAllLoggers: () => void;
   deleteLogger: (loggerId: string) => void;
   changeLogger: (pewpewLogger: PewPewLogger) => void;
-  defaultYaml: boolean;
   loggers: PewPewLogger[];
 }
 
 interface LoggerState extends DefaultVariables {
-  /** State of the "Default Loggers" checkbox */
-  defaultLoggers: boolean;
   /** This should be a PewPewLogger.id */
   currentLogger: PewPewLogger;
 }
 
-export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
+export function Loggers ({ ...props }: LoggerProps) {
   const defaultState: LoggerState = {
-    defaultLoggers: defaultYaml,
     currentLogger: newLogger(),
     ...defaultUI
   };
@@ -138,28 +138,10 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
   const modalRef = useRef<ModalObject| null>(null);
   useEffectModal(modalRef);
 
-  // Prepopulate the loggers based on the defaultYaml
-  useEffect(() => {
-    switchAllDefaults(defaultYaml);
-  }, [defaultYaml]);
-
-  const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const target = event.target as HTMLInputElement;
-    const id = target.id as DefaultLoggerTypeAll;
-    const checked = target.checked;
-    log("handleClickDefault", LogLevel.DEBUG, { id, checked });
-    if (id === DEFAULT_LOGGERS) {
-      switchAllDefaults(checked);
-    } else {
-      switchDefault(id, checked);
-    }
-  };
-
   const switchAllDefaults = (newChecked: boolean) => {
     log("switchAllDefaults", LogLevel.DEBUG, { newChecked });
     switchDefault("errorLogger", newChecked);
     switchDefault("killLogger", newChecked);
-    updateState({ defaultLoggers: newChecked });
   };
 
   const switchDefault = (loggerType: DefaultVariablesType, newChecked: boolean) => {
@@ -218,35 +200,41 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
     modalRef.current?.openModal();
   };
 
+  const getDefaultLoggerExplanation = (type: LoggerType) => {
+    switch (type) {
+      case LoggerType.DEBUG_LOGGER:
+        return "http_all logs everything for debugging";
+      case LoggerType.ERROR_LOGGER:
+        return "http_errors logs everything that includes an error status";
+      case LoggerType.KILL_LOGGER:
+        return "test_end logs status errors 500 and above and kills tests with too many errors";
+    }
+  };
+
   // https://github.com/reactjs/react-transition-group/issues/904
   // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
   const nodeRef = useRef(null);
   return (
     <InputsDiv>
-    <Button onClick={() => props.addLogger(newLogger())}>
-      Add Loggers
-    </Button>
-    <Button onClick={props.clearAllLoggers}>
-      Clear All Loggers
-    </Button>&nbsp;&nbsp;
-    <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
-    &nbsp;&nbsp;
-    <label htmlFor={DEFAULT_LOGGERS}> Default Loggers </label>
-    <QuestionBubble text="Default loggers include an error logger and a kill logger"></QuestionBubble>
-    <Checkbox type="checkbox" id={DEFAULT_LOGGERS} onChange={handleClickDefault} checked={state.defaultLoggers} />
-    <Div>
-      <Label htmlFor={DEBUG_LOGGER}> Debug Logger </Label>
-      <QuestionBubble text="http_all logs everything for debugging"></QuestionBubble>
-      <Checkbox type="checkbox" id={DEBUG_LOGGER} onChange={handleClickDefault} checked={state.debugLogger} />
-
-      <Label htmlFor={ERROR_LOGGER}> Error Logger </Label>
-      <QuestionBubble text="http_errors logs everything that includes an error status"></QuestionBubble>
-      <Checkbox type="checkbox" id={ERROR_LOGGER} onChange={handleClickDefault} checked={state.errorLogger} />
-
-      <Label htmlFor={KILL_LOGGER}> Kill Logger </Label>
-      <QuestionBubble text="test_end logs status errors 500 and above and kills test with too many errors"></QuestionBubble>
-      <Checkbox type="checkbox" id={KILL_LOGGER} onChange={handleClickDefault} checked={state.killLogger} />
-    </Div>
+    <Row style={{ justifyContent: "start" }}>
+      <Button onClick={() => props.addLogger(newLogger())}>
+        Add Logger
+      </Button>
+      <Button onClick={props.clearAllLoggers}>
+        Clear All Loggers
+      </Button>&nbsp;&nbsp;
+      <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
+    </Row>
+    <Row style={{ justifyContent: "start" }}>
+      <ToggleDefaults
+        title="Loggers"
+        handleAddMissing={() => switchAllDefaults(true)}
+        handleDeleteAll={() => switchAllDefaults(false)}
+        addDisabled={state.errorLogger && state.killLogger}
+        deleteDisabled={!state.errorLogger || !state.killLogger}
+      />
+      <QuestionBubble text="Default loggers include an error logger and a kill logger"></QuestionBubble>
+    </Row>
     <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
       {Array.from(loggerMap.values()).map((logger: PewPewLogger) => (
         <CSSTransition key={logger.id} timeout={300} classNames="load" nodeRef={nodeRef}>
@@ -300,6 +288,17 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
         onClose={changeLoggerSelectOnClose}
       />
     </TransitionGroup>
+
+    {[LoggerType.DEBUG_LOGGER, LoggerType.ERROR_LOGGER, LoggerType.KILL_LOGGER].filter((value) => !loggerMap.has(value)).map((loggerName) => {
+      return (
+        <Div key={loggerName}>
+          <TipButton id={loggerName} onClick={() => switchDefault(loggerName as keyof DefaultVariables, true)}>
+            Add {loggerName.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase())}
+            <span>{getDefaultLoggerExplanation(loggerName)}</span>
+          </TipButton>
+        </Div>
+      );
+    })}
   </InputsDiv>
   );
 }

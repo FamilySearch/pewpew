@@ -53,15 +53,44 @@ export const Button = styled.button`
   cursor: pointer;
   margin-right: 5px;
   color: white;
+  &:hover {
+    background: lightgray;
+  }
+  &:active {
+    background: darkgray;
+  }
   &:disabled {
     cursor: not-allowed;
     color: black;
     background: none;
   }
+  &:disabled span {
+    color: darkgray;
+  }
   &[data-emphasis="low"] {
     background: none;
     border: 2px solid gray;
   }
+`;
+
+export const TipButton = styled(Button)`
+    position: relative;
+    span {
+      visibility: hidden;
+      position: absolute;
+      bottom: 25px;
+      max-width: 500px;
+      background-color: black;
+      padding: 5px;
+      border: 1px solid white;
+      border-radius: 5px;
+      display: inline-block;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    &:hover span {
+      visibility: visible;
+    }
 `;
 
 export const Input = styled.input`

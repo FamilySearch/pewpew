@@ -1,9 +1,11 @@
-import { Button, Checkbox, Div, Input, InputsDiv, Label, Span} from "../YamlStyles";
+import { Button, Div, Input, InputsDiv, Label, Span} from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 import { PewPewLoadPattern, PewPewVars } from "../../util/yamlwriter";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
+import { Row } from "../Div";
+import ToggleDefaults from "../ToggleDefaults/ToggleDefaults";
 import { uniqueId } from "../../util/clientutil";
 
 export type PewPewLoadPatternStringType = "from" | "to" | "over";
@@ -13,13 +15,8 @@ export interface LoadPatternProps {
   clearAllPatterns: () => void;
   deletePattern: (id: string) => void;
   changePattern: (pewpewPattern: PewPewLoadPattern) => void;
-  defaultYaml: boolean;
   patterns: PewPewLoadPattern[];
   vars: PewPewVars[];
-}
-
-interface LoadPatternState {
-  defaultPatterns: boolean;
 }
 
 export const OVER_REGEX = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");
@@ -34,26 +31,12 @@ export const newLoadLoadPattern = (): PewPewLoadPattern => ({ id: LOAD_PATTERN, 
 
 const errorColor: React.CSSProperties = { color: "red" };
 
-export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPatternProps) {
-  const defaultState: LoadPatternState = {
-      defaultPatterns: defaultYaml
-  };
+export function LoadPatterns ({ patterns, vars, ...props }: LoadPatternProps) {
   /** Map to keep id's unique */
   // const loadPatternsMap = new Map(patterns.map((pewpewPattern) => ([pewpewPattern.id, pewpewPattern])));
 
-  const [state, setState] = useState(defaultState);
-  const updateState = (newState: Partial<LoadPatternState>) => setState((oldState): LoadPatternState => ({ ...oldState, ...newState }));
-
   const rampTime = useMemo(() => vars.find((pewpewVar) => pewpewVar.id === "rampTime"), [vars]);
   const loadTime = useMemo(() => vars.find((pewpewVar) => pewpewVar.id === "loadTime"), [vars]);
-
-  useEffect(() => {
-    switchDefault(defaultYaml);
-  }, [defaultYaml]);
-
-  const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
-    switchDefault(event.target.checked);
-  };
 
   const switchDefault = (newChecked: boolean) => {
     if (newChecked && !patterns.find((p) => p.id === RAMP_PATTERN)) {
@@ -70,7 +53,6 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
       // Remove it (will update the map when it comes back in via props)
       props.deletePattern(LOAD_PATTERN);
     }
-    updateState({ defaultPatterns: newChecked });
   };
 
   useEffect(() => {
@@ -100,14 +82,10 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
   };
 
   const deletePattern = (patternId: string) => {
-    if (patternId === RAMP_PATTERN || patternId === LOAD_PATTERN) {
-      updateState({ defaultPatterns: false });
-    }
     props.deletePattern(patternId);
   };
 
   const clearAllPatterns = () => {
-    updateState({ defaultPatterns: false });
     props.clearAllPatterns();
   };
 
@@ -116,18 +94,27 @@ export function LoadPatterns ({ defaultYaml, patterns, vars, ...props }: LoadPat
   const nodeRef = useRef(null);
   return (
   <InputsDiv>
-    <Button onClick={() => props.addPattern(newLoadPattern())}>
-      Add Pattern
-    </Button>
-    <Button onClick={clearAllPatterns}>
-      Clear All Patterns
-    </Button>&nbsp;&nbsp;
-    <QuestionBubble text="Click here for more information about Load Patterns" href="https://familysearch.github.io/pewpew/config/load_pattern-section.html"></QuestionBubble>
-    &nbsp;&nbsp;
+    <Row style={{ justifyContent: "start" }}>
+      <Button onClick={() => props.addPattern(newLoadPattern())}>
+        Add Pattern
+      </Button>
+      <Button onClick={clearAllPatterns}>
+        Clear All Patterns
+      </Button>&nbsp;&nbsp;
+      <QuestionBubble text="Click here for more information about Load Patterns" href="https://familysearch.github.io/pewpew/config/load_pattern-section.html"></QuestionBubble>
+      &nbsp;&nbsp;
+    </Row>
 
-    <label htmlFor="defaultPatterns"> Default Patterns </label>
-    <QuestionBubble text="Set Default load and ramp time patterns"></QuestionBubble>
-    <Checkbox type="checkbox" id="defaultPatterns" name="defaultPatterns" onChange={handleClickDefault} checked={state.defaultPatterns} />
+    <Row style={{ justifyContent: "start" }}>
+      <ToggleDefaults
+        title="Load Patterns"
+        handleAddMissing={() => switchDefault(true)}
+        handleDeleteAll={() => switchDefault(false)}
+        addDisabled={patterns.find((p) => p.id === RAMP_PATTERN) !== undefined && patterns.find((p) => p.id === LOAD_PATTERN) !== undefined}
+        deleteDisabled={!patterns.find((p) => p.id === RAMP_PATTERN) || !patterns.find((p) => p.id === LOAD_PATTERN)}
+      />
+      <QuestionBubble text="Set Default load and ramp time patterns"></QuestionBubble>
+    </Row>
 
     <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
       {Array.from(patterns.values()).map((pewpewPattern: PewPewLoadPattern) => {

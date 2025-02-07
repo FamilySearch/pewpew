@@ -335,7 +335,7 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
                 <Label style={{ fontSize: "14px", marginBottom: "5px" }} htmlFor="urlMethod"> Method </Label>
                 <Select
                   id="urlMethod"
-                  style={{ height: "16px", marginRight: "5px" }}
+                  style={{ height: "30px", marginRight: "5px", boxSizing: "revert" }}
                   onChange={(event) => setMethod(event.target.value as Method)}
                   name={data.id}
                   value={method}
@@ -370,7 +370,15 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
                     <XIcon />
                   </Button>
                 )}
-                <Button style={{ cursor: "pointer" }} onClick={makeRequest} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"} type="submit">Test</Button>
+                <Button
+                  style={{ cursor: "pointer", height: "30px", boxSizing: "revert" }}
+                  onClick={makeRequest}
+                  disabled={invalidUrl}
+                  title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"}
+                  type="submit"
+                >
+                  Test
+                </Button>
               </Row>
             </ModalInput>
             <Span style={{ marginRight: 0, marginLeft: "10px" }}>

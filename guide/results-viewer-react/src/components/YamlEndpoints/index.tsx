@@ -1,5 +1,4 @@
 import { Button, Checkbox, Input, InputsDiv, Label, NonFlexSpan } from "../YamlStyles";
-import { CSSTransition, TransitionGroup } from "react-transition-group";
 import {
   HIT_RATE_REGEX,
   UrlProps,
@@ -153,7 +152,6 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   const hitRateTitle: string | undefined = state.hitRate === "" ? "Please enter a Hit Rate" : (getHitRateTitle(invalidHitRate) || "Update all hit rates");
   // https://github.com/reactjs/react-transition-group/issues/904
   // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
-  const nodeRef = useRef(null);
   return (
     <InputsDiv>
       <Button onClick={() => addUrl()}>
@@ -179,22 +177,18 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
           </Button>
         </NonFlexSpan>
       </HitratesDiv>
-      <TransitionGroup className="endpoints-section_list" nodeRef={nodeRef}>
-        {Array.from(urlsMap.values()).map((url) => (
-          <CSSTransition key={url.id} timeout={300} classNames="point" nodeRef={nodeRef}>
-            <Urls
-              deleteUrl={props.deleteUrl}
-              changeUrl={props.changeUrl}
-              addHeaders={props.addHeaders}
-              deleteHeader={props.deleteHeader}
-              data={url}
-              authenticated={props.authenticated}
-              defaultHeaders={state.defaultHeaders}
-              initialDisplay={initialDisplay.current}
-            />
-          </CSSTransition>
-        ))}
-      </TransitionGroup>
+      {Array.from(urlsMap.values()).map((url) => (
+        <Urls
+          deleteUrl={props.deleteUrl}
+          changeUrl={props.changeUrl}
+          addHeaders={props.addHeaders}
+          deleteHeader={props.deleteHeader}
+          data={url}
+          authenticated={props.authenticated}
+          defaultHeaders={state.defaultHeaders}
+          initialDisplay={initialDisplay.current}
+        />
+      ))}
     </InputsDiv>
   );
 };

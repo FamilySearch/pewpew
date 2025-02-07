@@ -2,8 +2,8 @@ import React from "react";
 
 export const DeleteIcon = (props: React.SVGProps<SVGSVGElement>): JSX.Element => {
     return <svg
-        width="800px"
-        height="800px"
+        width="15px"
+        height="15px"
         viewBox="0 0 24 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

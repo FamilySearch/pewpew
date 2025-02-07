@@ -22,13 +22,15 @@ const props: VarsProps = {
     // eslint-disable-next-line no-console
     console.log("changing variable: " + pewpewVar.id, pewpewVar);
   },
-  defaultYaml: false,
   authenticated: false,
+  setAuthenticated: (authenticated: boolean) => {
+    // eslint-disable-next-line no-console
+    console.log("Setting authenticated to: " + authenticated);
+  },
   vars: []
 };
 
 const propsLoaded: VarsProps = { ...props,
-  defaultYaml: true,
   authenticated: true,
   vars: [
     { id: "0", name: "", value: "" },

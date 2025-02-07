@@ -1,7 +1,8 @@
-import { Div, Label, Span } from "../YamlStyles";
+import { Button, Div, Input, Label, Span } from "../YamlStyles";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import { PewPewListProvider, PewPewProvidersBooleanType, PewPewProvidersStringType, ProviderProps } from "./ProviderTypes";
 import React, { useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { ProviderListEntry } from "../../util/yamlwriter";
 import QuestionBubble from "../YamlQuestionBubble";
 import { uniqueId } from "../../util/clientutil";
@@ -64,26 +65,26 @@ export function ListProvider ({ data, ...props }: ListProviderProps) {
       <Span>
         <Label> Name: </Label>
         <QuestionBubble text="Name of Provider"></QuestionBubble>
-        <input type="text" style={{width: "130px"}} onChange={(event) => changeProvider("name", event.target.value)} name={data.id} value={data.name} />
+        <Input type="text" style={{width: "130px"}} onChange={(event) => changeProvider("name", event.target.value)} name={data.id} value={data.name} />
       </Span>
       <Span>
         <Label> List: </Label>
         <QuestionBubble text="Values to be included in list"></QuestionBubble>
-          <button onClick={() => modalRef.current?.openModal()}>
+          <Button onClick={() => modalRef.current?.openModal()}>
             Edit List
-          </button>
+          </Button>
       </Span>
         <Modal
         ref={modalRef}
         title="Edit List"
         closeText="Close"
         >
-        <div>
+        <div style={{ display: "flex" }}>
           Add values to your List provider&nbsp;&nbsp;
-            <input id="providerList" name={data.id} value={state.value} onChange={handleChangeModalValue} onKeyUp={onKeyUp}/>
-            <button id="providerList" name={data.id} value={state.value} onClick={addListItem} >
+            <Input id="providerList" name={data.id} value={state.value} onChange={handleChangeModalValue} onKeyUp={onKeyUp}/>
+            <Button id="providerList" name={data.id} value={state.value} onClick={addListItem} style={{ marginLeft: "5px" }} >
                 Add
-            </button>
+            </Button>
         </div>
         <table>
           <thead>
@@ -96,7 +97,7 @@ export function ListProvider ({ data, ...props }: ListProviderProps) {
             {(data.list).map((item: ProviderListEntry) => {
               return (
                 <tr key={item.id}>
-                  <td className="tableButton"><button id="providerList" name={data.id} value={item.id} onClick={deleteListItem}>X</button></td>
+                  <td className="tableButton"><Button id="providerList" name={data.id} value={item.id} onClick={deleteListItem}><DeleteIcon /></Button></td>
                   <td className="tableListItem">{item.value}</td>
                 </tr>);
             })}
@@ -106,14 +107,14 @@ export function ListProvider ({ data, ...props }: ListProviderProps) {
       <Span>
           <Label> Repeat </Label>
           <QuestionBubble text="Optional | Want random to be true"></QuestionBubble>
-          <input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("repeat", event.target.checked)} checked={data.repeat}/>
+          <Input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("repeat", event.target.checked)} checked={data.repeat}/>
       </Span>
       <Span>
           <Label> Random </Label>
           <QuestionBubble text="Optional | Want random to be true"></QuestionBubble>
-          <input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("random", event.target.checked)} checked={data.random}/>
+          <Input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("random", event.target.checked)} checked={data.random}/>
       </Span>
-      <button style={{marginLeft: "auto"}} id={data.id} onClick={deleteProvider}>X</button>
+      <Button style={{marginLeft: "auto"}} id={data.id} onClick={deleteProvider}><DeleteIcon /></Button>
     </Div>
   );
 }

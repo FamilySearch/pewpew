@@ -6,6 +6,7 @@ import React, {
   useImperativeHandle,
   useState
 } from "react";
+import { Button } from "../YamlStyles";
 import styled from "styled-components";
 
 const ModalDiv = styled.div`
@@ -207,13 +208,13 @@ export const Modal = forwardRef(({
       <ModalContent style={!scrollable ? {overflow: "unset"} : {}}>{children}</ModalContent>{/* Any elements that are children of modal will be rendered here */}
       <ModalActions>
         {onSubmit &&
-          <button className="toggle-button" id="submitBtn" onClick={submit} disabled={!isReady}>
+          <Button onClick={submit} disabled={!isReady}>
             {submitText}
-          </button>
+          </Button>
           }
-        <button className="toggle-button" id="closeBtn" onClick={close}>
+        <Button data-emphasis="low" onClick={close}>
           {closeText}
-        </button>
+        </Button>
       </ModalActions>
     </ModalDiv>
   </ModalStyle>

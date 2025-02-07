@@ -1,4 +1,4 @@
-import { Div, InputsDiv } from "../YamlStyles";
+import { Button, Div, InputsDiv, TipButton } from "../YamlStyles";
 import {
   LOAD_TIME_DEFAULT,
   PEAK_LOAD_DEFAULT,
@@ -8,6 +8,8 @@ import {
 } from "../../util/yamlwriter";
 import React, { useEffect } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
+import { Row } from "../Div";
+import ToggleDefaults from "../ToggleDefaults/ToggleDefaults";
 import VarInput from "./VarInput";
 import { uniqueId } from "../../util/clientutil";
 
@@ -34,16 +36,16 @@ export interface VarsProps {
   clearAllVars: () => void;
   deleteVar: (varId: string) => void;
   changeVar: (pewpewVar: PewPewVars) => void;
-  defaultYaml: boolean;
   authenticated: boolean;
+  setAuthenticated: (authenticated: boolean) => void;
   vars: PewPewVars[];
 }
 
 export const VARS = "vars";
-const SESSION_ID = "sessionId";
-const RAMP_TIME = "rampTime";
-const LOAD_TIME = "loadTime";
-const PEAK_LOAD = "peakLoad";
+export const SESSION_ID = "sessionId";
+export const RAMP_TIME = "rampTime";
+export const LOAD_TIME = "loadTime";
+export const PEAK_LOAD = "peakLoad";
 
 export const emptyVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
 export const rampTimeVar = (): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: RAMP_TIME_DEFAULT });
@@ -77,16 +79,9 @@ export function getDefaultVars (defaultVars: DefaultVariables = defaultUI): PewP
   return pewpewVars;
 }
 
-export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
+export function Vars ({ authenticated, ...props }: VarsProps) {
   /** Map to keep id's unique */
   const varsMap = new Map(props.vars.map((pewpewVar) => ([pewpewVar.id, pewpewVar])));
-
-  // The parent needs to prepopulate the vars based on the defaultYaml
-
-  // Change when the parent changes
-  useEffect(() => {
-    switchAllDefaults(defaultYaml);
-  }, [defaultYaml]);
 
   // Change when the parent changes
   useEffect(() => {
@@ -103,9 +98,13 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     switchDefault(LOAD_TIME, newChecked);
     switchDefault(RAMP_TIME, newChecked);
     switchDefault(PEAK_LOAD, newChecked);
+    switchDefault(SESSION_ID, newChecked);
   };
 
   const switchDefault = (varsType: DefaultVariablesType, newChecked: boolean) => {
+    if (varsType === SESSION_ID) {
+      props.setAuthenticated(newChecked);
+    }
     // Add/delete from varsMap/vars
     if (newChecked && !varsMap.has(varsType)) {
       // Add it (will update the map when it comes back in via props)
@@ -135,37 +134,52 @@ export function Vars ({ authenticated, defaultYaml, ...props }: VarsProps) {
     props.clearAllVars();
   };
 
+  const getDefaultVarExplanation = (varName: DefaultVariablesType): string => {
+    switch (varName) {
+      case SESSION_ID:
+        return "Session ID is the authentication token for the endpoints.";
+      case RAMP_TIME:
+        return "Ramp Time is the time it takes to ramp up to the peak load.";
+      case LOAD_TIME:
+        return "Load Time is the time the peak load is sustained.";
+      case PEAK_LOAD:
+        return "Peak Load is the maximum number of requests per minute.";
+      default:
+        throw new Error("getDefaultVarExplanation Invalid varName: " + varName);
+    }
+  };
+
   return (
     <InputsDiv>
-      <button onClick={() => props.addVar(emptyVar())}>
-        Add Vars
-      </button>
-      <button onClick={clearAllVars}>
-        Clear All Vars
-      </button>
-      <button
-        onClick={() => switchAllDefaults(true)}
-        disabled={[RAMP_TIME, LOAD_TIME, PEAK_LOAD].every((varName) => varsMap.has(varName))}
-      >
-        Add Default Vars
-      </button>
-      <button
-        onClick={() => switchAllDefaults(false)}
-        disabled={![RAMP_TIME, LOAD_TIME, PEAK_LOAD].some((varName) => varsMap.has(varName))}
-      >
-        Remove Default Vars
-      </button>
-      &nbsp;&nbsp;
-      <QuestionBubble text="Click here for more information about Variables" href="https://familysearch.github.io/pewpew/config/vars-section.html"></QuestionBubble>
-      &nbsp;&nbsp;
+      <Row style={{ justifyContent: "start" }}>
+        <Button onClick={() => props.addVar(emptyVar())}>
+          Add Var
+        </Button>
+        <Button onClick={clearAllVars}>
+          Clear All Vars
+        </Button>
+      </Row>
+      <Row style={{ justifyContent: "start" }}>
+        <ToggleDefaults
+          title="Vars"
+          handleAddMissing={() => switchAllDefaults(true)}
+          handleDeleteAll={() => switchAllDefaults(false)}
+          addDisabled={[RAMP_TIME, LOAD_TIME, PEAK_LOAD].every((varName) => varsMap.has(varName))}
+          deleteDisabled={![RAMP_TIME, LOAD_TIME, PEAK_LOAD].some((varName) => varsMap.has(varName))}
+        />
+        <QuestionBubble text="Click here for more information about Variables" href="https://familysearch.github.io/pewpew/config/vars-section.html"></QuestionBubble>
+      </Row>
 
-        {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (
-            <VarInput pewpewVar={pewpewVar} changeVars={changeVars} deleteVar={deleteVar} />
-        ))}
+      {Array.from(varsMap.values()).map((pewpewVar: PewPewVars) => (
+          <VarInput pewpewVar={pewpewVar} changeVars={changeVars} deleteVar={deleteVar} />
+      ))}
       {[SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].filter((value) => !varsMap.has(value)).map((varName) => {
         return (
           <Div key={varName}>
-            <button id={varName} onClick={() => switchDefault(varName as keyof DefaultVariables, true)}>Add {varName}</button>
+            <TipButton id={varName} onClick={() => switchDefault(varName as keyof DefaultVariables, true)}>
+              Add {varName}
+              <span>{getDefaultVarExplanation(varName as DefaultVariablesType)}</span>
+            </TipButton>
           </Div>
         );
       })}

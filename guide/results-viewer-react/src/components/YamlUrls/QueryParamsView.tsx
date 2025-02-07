@@ -1,4 +1,7 @@
+import { Button, Input } from "../YamlStyles";
 import { PewPewHeader, PewPewQueryParam } from "../../util/yamlwriter";
+import { AddIcon } from "../Icons/AddIcon";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewQueryParamStringType } from ".";
 import React from "react";
 
@@ -26,7 +29,9 @@ function QueryParamsView ({ id, queryParamList, removeParam, changeParam, addPar
         gridTemplateColumns: "auto 1fr 2fr",
         gap: "10px",
         fontWeight: "bold",
-        height: "20px"
+        height: "20px",
+        marginBottom: "5px",
+        alignItems: "flex-end"
         },
         gridRows: {
         display: "grid",
@@ -47,16 +52,16 @@ function QueryParamsView ({ id, queryParamList, removeParam, changeParam, addPar
             <div style={styles.headersDisplay}>
             <div style={styles.gridContainer}>
                 <div style={styles.gridHeader}>
-                <span><button name={id} onClick={() => addParam()}>+</button></span>
+                <Button name={id} onClick={() => addParam()}><AddIcon /></Button>
                 <span>Name</span>
                 <span>Value</span>
                 </div>
-                {queryParamList.length === 0 && <span>No Query Params yet, click "+" to create one</span>}
+                {queryParamList.length === 0 && <span>No Query Params yet, click <AddIcon /> to create one</span>}
                 {queryParamList.map((param: PewPewHeader, index: number) => (
                 <div key={index} style={styles.gridRows}>
-                    <button style={styles.button} onClick={() => removeParam(param)}>X</button>
-                    <input style={styles.input} id={`urlHeaderKey@${index}`} name={id} value={param.name} onChange={(event) => changeParam(index, "name", event.target.value)} />
-                    <input style={styles.input} id={`urlHeaderValue@${index}`} name={id} value={param.value} onChange={(event) => changeParam(index, "value", event.target.value)} />
+                    <Button style={styles.button} onClick={() => removeParam(param)}><DeleteIcon /></Button>
+                    <Input style={styles.input} id={`urlHeaderKey@${index}`} name={id} value={param.name} onChange={(event) => changeParam(index, "name", event.target.value)} />
+                    <Input style={styles.input} id={`urlHeaderValue@${index}`} name={id} value={param.value} onChange={(event) => changeParam(index, "value", event.target.value)} />
                 </div>
                 ))}
             </div>

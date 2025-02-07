@@ -1,5 +1,6 @@
-import { Div, Label, Span } from "../YamlStyles";
+import { Button, Div, Input, Label, Span } from "../YamlStyles";
 import { PewPewFileProvider, PewPewProvidersBooleanType, PewPewProvidersStringType, ProviderProps} from "./ProviderTypes";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
 import React from "react";
 
@@ -26,24 +27,24 @@ export function FileProvider ({ data, ...props }: FileProviderProps) {
         <Span>
           <Label> Name: </Label>
           <QuestionBubble text="Name of Provider"></QuestionBubble>
-          <input type="text" style={{width: "130px"}} name={data.id} onChange={(event) => changeProvider("name", event.target.value)} value={data.name}/>
+          <Input type="text" style={{width: "130px"}} name={data.id} onChange={(event) => changeProvider("name", event.target.value)} value={data.name}/>
         </Span>
         <Span>
           <Label> File Path: </Label>
           <QuestionBubble text="Path to file | Can be file.csv or /file/"></QuestionBubble>
-          <input type="text" style={{width: "130px"}} name={data.id} onChange={(event) => changeProvider("file", event.target.value)} value={data.file} />
+          <Input type="text" style={{width: "130px"}} name={data.id} onChange={(event) => changeProvider("file", event.target.value)} value={data.file} />
         </Span>
         <Span>
           <Label> Repeat: </Label>
           <QuestionBubble text="Optional | Want repeat to be true"></QuestionBubble>
-          <input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("repeat", event.target.checked)} checked={data.repeat}/>
+          <Input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("repeat", event.target.checked)} checked={data.repeat}/>
         </Span>
         <Span>
           <Label> Random: </Label>
           <QuestionBubble text="Optional | Want repeat to be true"></QuestionBubble>
-          <input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("random", event.target.checked)} checked={data.random}/>
+          <Input style={{marginRight: "15px"}} type="checkbox" name={data.id} onChange={(event) => handleClick("random", event.target.checked)} checked={data.random}/>
         </Span>
-        <button style={{marginLeft: "auto"}} id={data.id} onClick={deleteSelf}>X</button>
+        <Button style={{marginLeft: "auto"}} id={data.id} onClick={deleteSelf}><DeleteIcon /></Button>
       </Div>
   );
 }

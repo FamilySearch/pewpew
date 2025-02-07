@@ -2,6 +2,7 @@ import HeadersView, { HeadersViewProps } from "./HeadersView";
 import QueryParamsView, { QueryParamsViewProps } from "./QueryParamsView";
 import RequestBodyView, { RequestBodyViewProps } from "./RequestBodyView";
 import ResponseView, { ResponseViewProps } from "./ResponseView";
+import { Button } from "../YamlStyles";
 import React from "react";
 import { TabType } from ".";
 
@@ -33,7 +34,7 @@ interface RequestDetailsTabsProps extends HeadersViewProps, ResponseViewProps, Q
       <div>
         <div role="tablist" className="tab-list" style={{display: "flex"}}>
           {tabs.map((tab) => (
-            <button
+            <Button
               key={tab}
               role="tab"
               aria-selected={activeTab === tab}
@@ -45,14 +46,14 @@ interface RequestDetailsTabsProps extends HeadersViewProps, ResponseViewProps, Q
               style={{width: `${100 / tabs.length}%`}}
             >
               {tab}
-            </button>
+            </Button>
           ))}
         </div>
         <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
           {activeTab === "Headers" && <HeadersView id={id} headersList={headersList} removeHeader={removeHeader} changeHeader={changeHeader} addHeader={addHeader} />}
-          {activeTab === "Response" && <ResponseView response={response} error={error} />}
           {activeTab === "Query Params" && <QueryParamsView id={id} queryParamList={queryParamList} removeParam={removeParam} changeParam={changeParam} addParam={addParam} />}
           {activeTab === "Request Body" && <RequestBodyView requestBody={requestBody} updateRequestBody={updateRequestBody} />}
+          {activeTab === "Response" && <ResponseView response={response} error={error} />}
         </div>
       </div>
     );

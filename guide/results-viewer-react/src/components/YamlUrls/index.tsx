@@ -1,11 +1,14 @@
-import { Div, Label, Span } from "../YamlStyles";
+import { Button, Div, Input, Label, Select, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import { PewPewAPI, PewPewHeader, PewPewQueryParam } from "../../util/yamlwriter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, Method } from "axios";
+import { DeleteIcon } from "../Icons/DeleteIcon";
+import { EditIcon } from "../Icons/EditIcon";
 import QuestionBubble from "../YamlQuestionBubble";
 import RequestDetailsTabs from "./RequestDetailsTabs";
+import { XIcon } from "../Icons/XIcon";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
@@ -310,8 +313,8 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
   const invalidHitRate = !HIT_RATE_REGEX.test(data.hitRate);
   return (
     <Div>
-      <button onClick={() => modalRef.current?.openModal()} style={{marginRight: "5px"}}>Edit</button>
-      <button id={data.id} onClick={() => props.deleteUrl(data.id)} style={{marginRight: "5px"}}>Delete</button>
+      <Button onClick={() => modalRef.current?.openModal()} style={{marginRight: "5px"}}><EditIcon /></Button>
+      <Button id={data.id} onClick={() => props.deleteUrl(data.id)} style={{marginRight: "5px"}}><DeleteIcon /></Button>
       <EndpointDisplay style={urlStyle} title={urlTitle}>
         {data.url ? data.url : "Url"}
       </EndpointDisplay>
@@ -330,13 +333,19 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
             <Span style={{ margin: 0 }}>
               <ModalInput>
                 <Label style={{ fontSize: "14px", marginBottom: "5px" }} htmlFor="urlMethod"> Method </Label>
-                <select onChange={(event) => setMethod(event.target.value as Method)} name={data.id} value={method} id="urlMethod">
+                <Select
+                  id="urlMethod"
+                  style={{ height: "30px", marginRight: "5px", boxSizing: "revert" }}
+                  onChange={(event) => setMethod(event.target.value as Method)}
+                  name={data.id}
+                  value={method}
+                >
                   <option value="GET"> Get </option>
                   <option value="POST"> Post </option>
                   <option value="PUT"> Put </option>
                   <option value="DELETE"> Delete </option>
                   <option value="PATCH"> Patch </option>
-                </select>
+                </Select>
               </ModalInput>
             </Span>
             <ModalInput style={{ flexGrow: 1 }}>
@@ -345,22 +354,31 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
                 <p style={{ fontSize: "10px", margin: 0 }}> (must be in the form "https://www.[url]" or "http://www.[url]")</p>
               </Row>
               <Row style={{ position: "relative"}}>
-                <input style={{ ...urlStyle, width: "100%" }} onChange={changeUrl} title={urlTitle} name={data.id} value={url} id="urlUrl" type="text" />
+                <Input style={{ ...urlStyle, width: "100%" }} onChange={changeUrl} title={urlTitle} name={data.id} value={url} id="urlUrl" type="text" />
                 {url && (
-                  <button
+                  <Button
                     onClick={clearUrl}
                     style={{
                       position: "absolute",
-                      right: "45px",
+                      right: "35px",
+                      top: "4px",
                       border: "none",
                       background: "transparent",
                       cursor: "pointer"
                     }}
                   >
-                    ×
-                  </button>
+                    <XIcon />
+                  </Button>
                 )}
-                <button style={{ cursor: "pointer" }} onClick={makeRequest} disabled={invalidUrl} title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"} type="submit">Test</button>
+                <Button
+                  style={{ cursor: "pointer", height: "30px", boxSizing: "revert" }}
+                  onClick={makeRequest}
+                  disabled={invalidUrl}
+                  title={invalidUrl ? "Endpoint URL is not valid" : "Attempt to call this Endpoint"}
+                  type="submit"
+                >
+                  Test
+                </Button>
               </Row>
             </ModalInput>
             <Span style={{ marginRight: 0, marginLeft: "10px" }}>
@@ -369,7 +387,7 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
                   <Label htmlFor="urlHitrate" style={{ fontSize: "14px" }}> Hit Rate </Label>
                   <QuestionBubble text="Required | Number, then hph, hpm, or hps"></QuestionBubble>
                 </Row>
-                <input style={{ ...getHitRateStyle(invalidHitRate), width: "75px" }} onChange={(event) => changeUrlObject("hitRate", event.target.value)} name={data.id} value={data.hitRate} id="urlHitrate" title={getHitRateTitle(invalidHitRate)} />
+                <Input style={{ ...getHitRateStyle(invalidHitRate), width: "85px" }} onChange={(event) => changeUrlObject("hitRate", event.target.value)} name={data.id} value={data.hitRate} id="urlHitrate" title={getHitRateTitle(invalidHitRate)} />
               </ModalInput>
             </Span>
         </Row>

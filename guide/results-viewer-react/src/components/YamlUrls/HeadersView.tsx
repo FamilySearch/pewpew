@@ -1,4 +1,7 @@
+import { Button, Input } from "../YamlStyles";
 import { HeaderType, PewPewHeaderStringType } from ".";
+import { AddIcon } from "../Icons/AddIcon";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewHeader } from "../../util/yamlwriter";
 import React from "react";
 
@@ -26,7 +29,9 @@ function HeadersView ({ id, headersList, removeHeader, changeHeader, addHeader }
         gridTemplateColumns: "auto 1fr 2fr",
         gap: "10px",
         fontWeight: "bold",
-        height: "20px"
+        height: "20px",
+        marginBottom: "5px",
+        alignItems: "flex-end"
         },
         gridRows: {
         display: "grid",
@@ -45,21 +50,21 @@ function HeadersView ({ id, headersList, removeHeader, changeHeader, addHeader }
     return (
         <React.Fragment>
             <div style={styles.headersDisplay}>
-            <div style={styles.gridContainer}>
-                <div style={styles.gridHeader}>
-                <span><button name={id} onClick={() => addHeader()}>+</button></span>
-                <span>Name</span>
-                <span>Value</span>
+                <div style={styles.gridContainer}>
+                    <div style={styles.gridHeader}>
+                        <Button name={id} onClick={() => addHeader()}><AddIcon /></Button>
+                        <span>Name</span>
+                        <span>Value</span>
+                    </div>
+                    {headersList.length === 0 && <span>No Headers yet, click <AddIcon /> to create one</span>}
+                    {headersList.map((header: PewPewHeader, index: number) => (
+                    <div key={index} style={styles.gridRows}>
+                        <Button style={styles.button} onClick={() => removeHeader(header.id)}><DeleteIcon /></Button>
+                        <Input style={styles.input} id={`urlHeaderKey@${index}`} name={id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} />
+                        <Input style={styles.input} id={`urlHeaderValue@${index}`} name={id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} />
+                    </div>
+                    ))}
                 </div>
-                {headersList.length === 0 && <span>No Headers yet, click "+" to create one</span>}
-                {headersList.map((header: PewPewHeader, index: number) => (
-                <div key={index} style={styles.gridRows}>
-                    <button style={styles.button} onClick={() => removeHeader(header.id)}>X</button>
-                    <input style={styles.input} id={`urlHeaderKey@${index}`} name={id} value={header.name} onChange={(event) => changeHeader(index, "name", event.target.value)} />
-                    <input style={styles.input} id={`urlHeaderValue@${index}`} name={id} value={header.value} onChange={(event) => changeHeader(index, "value", event.target.value)} />
-                </div>
-                ))}
-            </div>
             </div>
         </React.Fragment>
     );

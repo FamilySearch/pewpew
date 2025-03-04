@@ -206,7 +206,7 @@ export function mockGetObject ({
     Body: sdkStream,
     AcceptRanges: "bytes",
     LastModified: lastModified,
-    ContentLength: 78,
+    ContentLength: body.length,
     ETag: "etag",
     CacheControl: "max-age=60",
     ContentType: contentType,

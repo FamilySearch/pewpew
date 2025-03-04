@@ -79,8 +79,14 @@ export function start (): Application {
 export function stop (): Promise<void> {
   log("server quitting");
   return new Promise((resolve) => server.close((error) => {
-    if (error && error.message) {
+    // Server is not running is the error if it's already stopped from a scale in event
+    if (error && !`${error}`.includes("is not running")) {
       log("error stopping node server", LogLevel.ERROR, error);
+      // Add a kill switch if the server hangs. We should exit.
+      setTimeout(() => {
+        log("server didn't stop, killing process", LogLevel.FATAL, error);
+        process.exit(1);
+      }, 3000);
     }
     resolve(); // Always swallow the error, don't throw it
   }));

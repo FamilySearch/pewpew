@@ -37,24 +37,32 @@ process.on("SIGUSR2", (signal) => {
   stop();
 });
 process.on("SIGINT", (signal) => {
-  log("Agent Service Received SIGINT", LogLevel.ERROR, { signal });
+  log("Agent Service Received SIGINT", LogLevel.WARN, { signal });
   shutdown = true;
   stop();
 });
 process.on("SIGTERM", (signal) => {
-  log("Agent Service Received SIGTERM", LogLevel.ERROR, { signal });
+  log("Agent Service Received SIGTERM", LogLevel.WARN, { signal });
   shutdown = true;
   stop();
 });
-process.on("unhandledRejection", (e: any) => {
+process.on("unhandledRejection", (e: unknown) => {
   log(`process unhandledRejection: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
+  if (e instanceof Error && e.stack) {
+    // eslint-disable-next-line no-console
+    console.error(e.stack);
+  }
 });
-process.on("uncaughtException", (e: any) => {
+process.on("uncaughtException", (e: unknown) => {
   log(`process uncaughtException: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
   log(`process uncaughtException: ${e instanceof Error ? e.message : e}`, LogLevel.FATAL, e);
+  if (e instanceof Error && e.stack) {
+    // eslint-disable-next-line no-console
+    console.error(e.stack);
+  }
   shutdown = true;
   healthcheckConfig.failHealthCheck = true;
-  healthcheckConfig.failHealthCheckMessage = e?.message || `${e}`;
+  healthcheckConfig.failHealthCheckMessage = (e as Error)?.message || `${e}`;
   stop();
 });
 

@@ -19,7 +19,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
     }: Partial<CommunicationsMessage>) {
     if (!testId || !messageType) {
       // Don't log the messageData
-      log("PpaasCommunicationsMessage was missing data", LogLevel.ERROR, { testId, messageType });
+      log("PpaasCommunicationsMessage was missing data", LogLevel.WARN, { testId, messageType });
       throw new Error("PpaasCommunicationsMessage was missing testId, sender, recipient, or message");
     }
     this.testId = testId;
@@ -52,7 +52,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
 
   protected static async parseSqsMessage (sqsMessage: SQSMessage): Promise<PpaasCommunicationsMessage | undefined> {
     if (!sqsMessage.MessageAttributes) {
-      log("SQSMessage.MessageAttributes cannot be null.", LogLevel.ERROR, sqsMessage);
+      log("SQSMessage.MessageAttributes cannot be null.", LogLevel.WARN, sqsMessage);
       throw new Error("SQSMessage.MessageAttributes cannot be null.");
     }
     const messageAttributes: Record<string, MessageAttributeValue> = sqsMessage.MessageAttributes;
@@ -70,7 +70,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
           temp = JSON.parse(Buffer.from(value.BinaryValue!).toString());
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.DEBUG, temp);
         } catch (error: unknown) {
-          log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.ERROR, error);
+          log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.WARN, error);
           throw new Error(`New Communications Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`);
         }
         switch (key) {
@@ -79,7 +79,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
             messageData = temp;
             break;
           default:
-            log(`New Communications Message Attribute was not a known Binary messageAttribute: messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.ERROR, { key, value });
+            log(`New Communications Message Attribute was not a known Binary messageAttribute: messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.WARN, { key, value });
             break;
         }
         continue;
@@ -97,7 +97,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
             try {
               messageType = MessageType[(value.StringValue || "") as keyof typeof MessageType];
             } catch (error: unknown) {
-              log(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}`, LogLevel.ERROR, error);
+              log(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}`, LogLevel.WARN, error);
               throw new Error(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}, error: ${error}`);
             }
             break;
@@ -106,11 +106,11 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
             messageData = value.StringValue;
             break;
           default:
-            log(`New Communications Message Attribute was not a known String messageAttribute: messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.ERROR, { key, value });
+            log(`New Communications Message Attribute was not a known String messageAttribute: messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.WARN, { key, value });
             break;
         }
       } else {
-        log(`messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.ERROR);
+        log(`messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.WARN);
         throw new Error(`New Communications Message Attribute was not type String or Binary: messageAttributes[${key}].DataType = ${value.DataType}`);
       }
     }
@@ -123,7 +123,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
       log(`Removing Integration Test Communications Message from queue ${receiptHandle}`, LogLevel.INFO);
       // Only delete it if it's a test message
       await deleteMessageByHandle({ messageHandle: receiptHandle, sqsQueueType: SqsQueueType.Communications })
-      .catch((error) => log(`Could not remove Integration Test message from from queue: ${receiptHandle}`, LogLevel.ERROR, error));
+      .catch((error) => log(`Could not remove Integration Test message from from queue: ${receiptHandle}`, LogLevel.WARN, error));
       return undefined;
     }
     const newMessage: PpaasCommunicationsMessage = new PpaasCommunicationsMessage({ testId, messageType, messageData });

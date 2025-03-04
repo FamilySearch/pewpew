@@ -428,7 +428,7 @@ export async function getTags ({ filename, s3Folder }: GetTagsOptions): Promise<
     }
     return tags;
   } catch (error: unknown) {
-    log(`getTags(${filename}, ${s3Folder}) ERROR`, LogLevel.ERROR, error);
+    log(`getTags(${filename}, ${s3Folder}) ERROR`, LogLevel.WARN, error);
     throw error;
   }
 }
@@ -491,7 +491,7 @@ export async function listObjects (options?: string | ListObjectsOptions): Promi
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("listObjects failed on prefix: " + prefix, LogLevel.ERROR, error);
+    log("listObjects failed on prefix: " + prefix, LogLevel.WARN, error);
     throw error;
   }
 }

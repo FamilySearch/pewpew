@@ -314,8 +314,14 @@ export function getClientSecretOpenId (): string {
 const SECRETS_RETRY_MAX_TRIES = 5;
 const SECRETS_RETRY_DELAY = 500;
 
-export async function waitForSecrets (): Promise<void> {
-  log("waitForSecrets start", LogLevel.DEBUG);
+export async function waitForSecrets ({ retries, delay }: { retries?: number, delay?: number } = {}): Promise<void> {
+  log("waitForSecrets start", LogLevel.DEBUG, { retries, delay });
+  if (retries === undefined) {
+    retries = SECRETS_RETRY_MAX_TRIES;
+  }
+  if (delay === undefined) {
+    delay = SECRETS_RETRY_DELAY;
+  }
   let loop = 0;
   do {
     loop++;
@@ -331,9 +337,9 @@ export async function waitForSecrets (): Promise<void> {
       return; // Success!
     } catch (error) {
       log("Could not Load Secrets keys", LogLevel.DEBUG, error);
-      await util.sleep(SECRETS_RETRY_DELAY);
+      await util.sleep(delay);
     }
-  } while (loop < SECRETS_RETRY_MAX_TRIES);
+  } while (loop < retries);
   log("waitForSecrets fail", LogLevel.DEBUG, { loop });
-  throw new Error(`Could not load Secrets Keys after ${loop} retries`);
+  throw new Error(`Could not load Secrets Keys after ${loop} attempts`);
 }

@@ -1,5 +1,5 @@
-import { LogLevel, ec2, log, logger, s3, sqs } from "@fs/ppaas-common";
-import { getClientSecretOpenId, getEncryptionKey } from "./secrets";
+import { LogLevel, SqsQueueType, ec2, log, logger, s3, sqs } from "@fs/ppaas-common";
+import { waitForSecrets as _waitForSecrets, getClientSecretOpenId, getEncryptionKey } from "./secrets";
 
 // We have to set this before we make any log calls
 logger.config.LogFileName = "ppaas-controller";
@@ -101,6 +101,38 @@ export async function pingS3 (): Promise<boolean> {
     return true;
   } catch (error) {
     log("pingS3 failed", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
+  }
+}
+
+// Shared function for the SQS healthcheck and normal healthcheck if accessSQSPass fails
+export async function pingSQS (): Promise<boolean> {
+  log("Pinging SQS at " + new Date(), LogLevel.DEBUG);
+  // Ping SQS and update the lastSQSAccess if it works
+  try {
+    const map = await sqs.getQueueAttributesMap(SqsQueueType.Communications);
+    if (map === undefined) {
+      throw new Error("getQueueAttributesMap did not return results");
+    }
+    log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
+    log("pingSQS getQueueAttributesMap", LogLevel.INFO, map);
+    return true;
+  } catch (error) {
+    log("pingSQS failed", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
+  }
+}
+
+// Shared function for the normal healthcheck if accessEncryptionKeyPass fails
+export async function waitForSecrets (): Promise<boolean> {
+  log("Waiting for Secrets at " + new Date(), LogLevel.DEBUG);
+  try {
+    await _waitForSecrets({ retries: 1, delay: 100 });
+    return true;
+  } catch (error) {
+    log("waitForSecrets failed", LogLevel.WARN, error);
     // DO NOT REJECT. Just return false
     return false;
   }

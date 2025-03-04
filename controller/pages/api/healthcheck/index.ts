@@ -6,7 +6,9 @@ import {
   accessS3Pass,
   accessSqsPass,
   getGlobalHealthcheckConfig,
-  pingS3
+  pingS3,
+  pingSQS,
+  waitForSecrets
 } from "../util/healthcheck";
 import { start as startCommuncations } from "../util/communications";
 
@@ -23,13 +25,10 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     log("failHealthCheck", LogLevel.FATAL, getGlobalHealthcheckConfig());
     res.status(500).json(getGlobalHealthcheckConfig());
   } else {
-    let s3Pass: boolean = accessS3Pass();
-    const sqsPass: boolean = accessSqsPass();
-    if (!s3Pass) {
-      s3Pass = await pingS3();
-    }
-    const encryptPass = accessEncryptionKeyPass();
-    const openIdPass = accessOpenIdSecretPass();
+    const s3Pass: boolean = accessS3Pass() || await pingS3();
+    const sqsPass: boolean = accessSqsPass() || await pingSQS();
+    const encryptPass = accessEncryptionKeyPass() || await waitForSecrets();
+    const openIdPass = accessOpenIdSecretPass() || await waitForSecrets();
     const healthcheckPass = s3Pass && sqsPass && encryptPass && openIdPass;
     log("healthCheck", healthcheckPass ? LogLevel.DEBUG : LogLevel.ERROR, { s3Pass, sqsPass, encryptPass, openIdPass, ...getGlobalHealthcheckConfig() });
     res.status(healthcheckPass ? 200 : 500).json({ ...(getGlobalHealthcheckConfig()), s3: s3Pass || false, sqs: sqsPass || false, encrypt: encryptPass || false, auth: openIdPass || false });

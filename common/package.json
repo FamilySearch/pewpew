@@ -39,7 +39,7 @@
     "@aws-sdk/ec2-metadata-service": "^3.363.0",
     "@aws-sdk/lib-storage": "^3.363.0",
     "bunyan": "~1.8.0",
-    "rimraf": "^5.0.0"
+    "rimraf": "^6.0.0"
   },
   "devDependencies": {
     "@aws-sdk/util-stream-node": "^3.363.0",

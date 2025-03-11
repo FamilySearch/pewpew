@@ -13,7 +13,7 @@ logger.config.LogFileName = "ppaas-agent";
 start();
 log("PewPewTest.serverStart: " + PewPewTest.serverStart, LogLevel.DEBUG, PewPewTest.serverStart);
 
-const WARN_IF_NO_MESSAGE_DELAY = parseInt(process.env.WARN_IF_NO_MESSAGE_DELAY || "0", 10) || (15 * 60 * 1000);
+const WARN_IF_NO_MESSAGE_DELAY: number | undefined = parseInt(process.env.WARN_IF_NO_MESSAGE_DELAY || "0", 10) || undefined;
 
 // Start with "Now" so we don't initially fail out.
 let lastMessageTime = new Date();
@@ -113,7 +113,7 @@ process.on("uncaughtException", (e: unknown) => {
       }
     } else {
       log(`No test received at ${lastMessageTime}`, LogLevel.DEBUG);
-      if (Date.now() - lastMessageTime.getTime() > WARN_IF_NO_MESSAGE_DELAY) {
+      if (WARN_IF_NO_MESSAGE_DELAY && Date.now() - lastMessageTime.getTime() > WARN_IF_NO_MESSAGE_DELAY) {
         log(`No new test to run since ${lastMessageTime}`, LogLevel.WARN);
       }
     }

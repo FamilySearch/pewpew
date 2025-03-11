@@ -494,7 +494,7 @@ export class PewPewTest {
               this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
             }
             if (code === 0 || signal === "SIGINT") {
-              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.INFO);
+              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.DEBUG);
               // We still want to resolve on SIGINT (stop called) so we don't get errors down the line. Just log one warning here
               resolve();
             } else {
@@ -527,7 +527,7 @@ export class PewPewTest {
             // If we're less than a minute before what should be the end and we exited gracefully, log it
             const message = "Pewpew exited gracefully early without stop being called. Check the loggers and providers.";
             this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
-            this.log(message, LogLevel.WARN);
+            this.log(message, LogLevel.DEBUG);
           }
         } catch (error: unknown) {
           if (!this.stopCalled && this.testMessage.restartOnFailure && Date.now() > minTimeForRetry && (this.testMessage.bypassParser || Date.now() < this.testEnd)) {
@@ -614,7 +614,7 @@ export class PewPewTest {
       try {
         this.log(`Stopping pewpew process with SIGINT ${this.pewpewProcess.pid}`, LogLevel.INFO);
         const intResult = this.pewpewProcess.kill("SIGINT"); // We be nice to them if they be nice to us.
-        this.log(`pewpew process SIGINT result: ${intResult}`, intResult ? LogLevel.INFO : LogLevel.WARN);
+        this.log(`pewpew process SIGINT result: ${intResult}`, intResult ? LogLevel.DEBUG : LogLevel.WARN);
         // Poll for the process to stop.
         // eslint-disable-next-line require-await
         await poll(async (): Promise<boolean | undefined> => {
@@ -809,7 +809,7 @@ export class PewPewTest {
   /** * Polls the communications queue for messages from the controller ** */
   protected async pollCommunications (): Promise<void> {
     this.communicationsRunning = true;
-    log("Starting Communications Loop", LogLevel.INFO);
+    log("Starting Communications Loop", LogLevel.DEBUG);
     try {
       let iteration = 0;
       // Keep running until the pewpew process ends, or we're more than the allowed overrage. Then upload everything regardless and exit
@@ -826,7 +826,7 @@ export class PewPewTest {
           await sleep(5000);
         }
         if (messageToHandle) {
-          this.log(`New message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle.sanitizedCopy());
+          this.log(`PewpewTest - New Communications message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle.sanitizedCopy());
           // Process message and start a test
           try {
             switch (messageToHandle.messageType) {
@@ -855,7 +855,7 @@ export class PewPewTest {
                     if (newRuntime !== this.testMessage.testRunTimeMn && this.startTime) {
                       this.testMessage.testRunTimeMn = newRuntime;
                       this.testEnd = getEndTime(this.startTime.getTime(), this.testMessage.testRunTimeMn);
-                      this.log(`${this.getYamlFile()} new testRunTimeMn ${newRuntime}. Updating.`, LogLevel.INFO,
+                      this.log(`${messageToHandle.messageType}: ${this.getYamlFile()} new testRunTimeMn ${newRuntime}. Updating.`, LogLevel.INFO,
                         { testRunTimeMn: this.testMessage.testRunTimeMn, startTime: this.startTime.getTime(), testEnd: this.testEnd });
                       this.ppaasTestStatus.endTime = this.testEnd;
                       await this.writeTestStatus();

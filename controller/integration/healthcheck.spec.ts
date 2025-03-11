@@ -1,8 +1,5 @@
 import { getGlobalHealthcheckConfig, pingS3 } from "../pages/api/util/healthcheck";
 import { expect } from "chai";
-import { logger } from "@fs/ppaas-common";
-
-logger.config.LogFileName = "ppaas-controller";
 
 describe("Healthcheck Integration", () => {
   it("Pinging s3 should succeed and update config on success", (done: Mocha.Done) => {

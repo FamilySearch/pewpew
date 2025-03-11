@@ -1,14 +1,11 @@
 import "dotenv-flow/config";
 import { IS_RUNNING_IN_AWS, PewPewTest } from "./pewpewtest";
-import { LogLevel, log, logger, util } from "@fs/ppaas-common";
+import { LogLevel, log, util } from "@fs/ppaas-common";
 import { config as serverConfig, start, stop } from "./server";
 import { buildTest } from "./tests";
 import { config as healthcheckConfig } from "./healthcheck";
 
 const sleep = util.sleep;
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-agent";
 
 start();
 log("PewPewTest.serverStart: " + PewPewTest.serverStart, LogLevel.DEBUG, PewPewTest.serverStart);

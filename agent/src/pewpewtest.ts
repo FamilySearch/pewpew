@@ -26,7 +26,6 @@ import { join as pathJoin } from "path";
 import { platform } from "os";
 import semver from "semver";
 
-logger.config.LogFileName = "ppaas-agent";
 const logConfig = logger.config;
 const { deleteTestScalingMessage, refreshTestScalingMessage } = sqs;
 const { poll, sleep } = util;

@@ -1,10 +1,8 @@
-import { LogLevel, PpaasTestId, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log, s3, util } from "@fs/ppaas-common";
 import { PpaasEncryptS3File, PpaasEncryptS3FileParams } from "../pages/api/util/ppaasencrypts3file";
 import { decrypt, waitForSecrets } from "../pages/api/util/secrets";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { deleteObject, listFiles, ADDITIONAL_TAGS_ON_ALL } = s3;
 const { poll } = util;

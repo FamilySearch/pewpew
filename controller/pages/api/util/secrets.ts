@@ -13,12 +13,10 @@ import {
   TagResourceCommandInput,
   TagResourceCommandOutput
 } from "@aws-sdk/client-secrets-manager";
-import { LogLevel, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, log, s3, util } from "@fs/ppaas-common";
 import { IS_RUNNING_IN_AWS } from "./authclient";
 import crypto from "crypto";
 import { readFile } from "fs/promises";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export const OVERRIDE = "_OVERRIDE";
 

@@ -1,4 +1,4 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   accessEncryptionKeyPass,
@@ -11,8 +11,6 @@ import {
   waitForSecrets
 } from "../util/healthcheck";
 import { start as startCommuncations } from "../util/communications";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
   // We have to start the communications loop somewhere, and the healthcheck should be the first thing called

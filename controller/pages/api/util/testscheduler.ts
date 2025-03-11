@@ -29,7 +29,6 @@ import {
   TestMessage,
   TestStatus,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -40,8 +39,6 @@ import { IS_RUNNING_IN_AWS } from "./authclient";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
 
 const { sleep } = util;
-logger.config.LogFileName = "ppaas-controller";
-
 const TEST_SCHEDULER_POLL_INTERVAL_MS: number = parseInt(process.env.TEST_SCHEDULER_POLL_INTERVAL_MS || "0", 10) || 60000;
 const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH?.toLowerCase() === "true";
 const HISTORICAL_SEARCH_MAX_FILES: number = parseInt(process.env.HISTORICAL_SEARCH_MAX_FILES || "0", 10) || 100000;

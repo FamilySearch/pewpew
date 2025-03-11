@@ -1,7 +1,6 @@
 import {
   LogLevel,
-  log,
-  logger
+  log
 } from "@fs/ppaas-common";
 import {
   publicRuntimeConfig as clientPublicRuntimeConfig,
@@ -14,8 +13,6 @@ import {
   versionSort
 } from "../pages/api/util/clientutil";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 describe("Client Utils", () => {
   const publicRuntimeConfig: Record<string, string | undefined> = clientPublicRuntimeConfig;

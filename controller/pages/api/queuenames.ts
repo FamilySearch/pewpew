@@ -1,8 +1,6 @@
-import { LogLevel, PpaasTestMessage, logger } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestMessage } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { createErrorResponse } from "./util/util";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default (req: NextApiRequest, res: NextApiResponse): void => {
   try {

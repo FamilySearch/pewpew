@@ -29,16 +29,13 @@ import {
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
-  log,
-  logger
+  log
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
 import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { expect } from "chai";
 import path from "path";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const localDirectory: string = path.resolve(process.env.UNIT_TEST_FOLDER || "test");
 const BASIC_YAML_FILE: string = "basic.yaml";

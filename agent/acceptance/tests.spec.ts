@@ -1,13 +1,10 @@
 import {
   LogLevel,
   log,
-  logger,
   util
 } from "@fs/ppaas-common";
 import axios, { AxiosError, AxiosResponse as Response } from "axios";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-agent";
 
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8080"}`);
 log("integrationUrl = " + integrationUrl);

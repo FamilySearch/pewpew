@@ -1,14 +1,11 @@
 import { AuthPermission, AuthPermissions, TestManagerError } from "../../../../../types";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { authApi } from "../../../util/authserver";
 import { createErrorResponse } from "../../../util/util";
 import { getS3Response } from "../../../util/s3";
 import { isYamlFile } from "../../../util/clientutil";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (request: NextApiRequest, response: NextApiResponse<GetObjectCommandOutput["Body"] | Buffer | TestManagerError>) => {
   if (request.method === "GET") {

@@ -6,7 +6,6 @@ import {
   SqsQueueType,
   TestStatusMessage,
   log,
-  logger,
   sqs,
   util
 } from "@fs/ppaas-common";
@@ -14,7 +13,6 @@ import { TestManager } from "./testmanager";
 import { TestScheduler } from "./testscheduler";
 import { getGlobalHealthcheckConfig } from "./healthcheck";
 
-const logConfig = logger.config;
 const { sleep } = util;
 const { getQueueAttributesMap } = sqs;
 
@@ -22,9 +20,6 @@ const { getQueueAttributesMap } = sqs;
 const COMMUCATION_NO_MESSAGE_DELAY = parseInt(process.env.COMMUCATION_NO_MESSAGE_DELAY || "0", 10) || (5 * 1000);
 const AGENT_QUEUE_POLL_INTERVAL_MN = parseInt(process.env.AGENT_QUEUE_POLL_INTERVAL_MN || "0", 10) || 1;
 const AGENT_QUEUE_STUCK_MESSAGE_WARN_MS = parseInt(process.env.AGENT_QUEUE_STUCK_MESSAGE_WARN_MS || "0", 10) || (20 * 60 * 1000);
-
-// We have to set this before we make any log calls
-logConfig.LogFileName = "ppaas-controller";
 
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {

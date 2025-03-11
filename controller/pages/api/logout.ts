@@ -1,9 +1,7 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { createErrorResponse } from "./util/util";
 import { getLogoutUrl } from "./util/authserver";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 

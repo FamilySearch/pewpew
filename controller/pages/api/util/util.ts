@@ -7,7 +7,6 @@ import {
   LogLevel,
   PpaasS3File,
   log,
-  logger,
   sleep
 } from "@fs/ppaas-common";
 import { Entry as ZipEntry, ZipFile, Options as ZipOptions, open as _yauzlOpen } from "yauzl";
@@ -27,9 +26,6 @@ import fs from "fs/promises";
 import { promisify } from "util";
 
 const yauzlOpen: (path: string, options: ZipOptions) => Promise<ZipFile | undefined> = promisify(_yauzlOpen);
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 export const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || tmpdir() || "/tmp";
 const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || "0") || 500;
 const MAX_ZIP_FILE_COUNT = 10;

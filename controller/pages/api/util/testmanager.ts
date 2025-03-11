@@ -56,8 +56,6 @@ import { createS3Filename as createS3MessageFilename } from "@fs/ppaas-common/di
 import { createS3Filename as createS3StatusFilename } from "@fs/ppaas-common/dist/src/ppaasteststatus";
 import fs from "fs/promises";
 
-logger.config.LogFileName = "ppaas-controller";
-
 const sendTestScalingMessage = sqs.sendTestScalingMessage;
 const createStatsFileName = util.createStatsFileName;
 export const MAX_SAVED_TESTS_RECENT: number = parseInt(process.env.MAX_SAVED_TESTS_RECENT || "0", 10) || 10;

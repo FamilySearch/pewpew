@@ -1,4 +1,4 @@
-import { LogLevel, log, logger, util } from "@fs/ppaas-common";
+import { LogLevel, log, util } from "@fs/ppaas-common";
 import {
   IV_LENGTH as SECRET_LENGTH,
   decrypt,
@@ -12,8 +12,6 @@ import {
 import { mockGetSecretValue, mockSecrets, resetMockSecrets } from "./mock";
 import crypto from "crypto";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const ENVIRONMENT_OVERRIDE_KEY = "test-override-key";
 const ENVIRONMENT_OVERRIDE_VALUE = "test-override-value";

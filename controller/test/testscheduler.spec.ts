@@ -16,7 +16,6 @@ import {
   TestMessage,
   TestStatus,
   log,
-  logger,
   util
 } from "@fs/ppaas-common";
 import {
@@ -28,8 +27,6 @@ import {
 import { getHourMinuteFromTimestamp, latestPewPewVersion } from "../pages/api/util/clientutil";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const BASIC_YAML_FILE: string = "basic.yaml";

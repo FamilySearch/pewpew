@@ -33,7 +33,7 @@ import {
   UserinfoResponse
 } from "openid-client";
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from "next";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { parse as cookieParse, serialize as cookieSerialize } from "cookie";
 import { formatPageHref, getHostUrl } from "./clientutil";
 import { IncomingMessage } from "http";
@@ -43,8 +43,6 @@ import nextCookie from "next-cookies";
 
 // server side we want to use process.env rather than publicRuntimeConfig
 const publicRuntimeConfig: NodeJS.ProcessEnv = process.env;
-
-logger.config.LogFileName = "ppaas-controller";
 
 const AUTH_CALLBACK_PAGE_NAME = PAGE_LOGIN;
 const OPENID_CLIENT_ID: string = `${publicRuntimeConfig.OPENID_CLIENT_ID}`;

@@ -1,5 +1,5 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse, PageConfig } from "next";
 import {
   ParsedForm,
@@ -10,8 +10,6 @@ import {
 } from "./util/util";
 import TestManager from "./util/testmanager";
 import { authApi } from "./util/authserver";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view the schedule, but not modify

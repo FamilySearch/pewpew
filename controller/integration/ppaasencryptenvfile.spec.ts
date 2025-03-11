@@ -3,13 +3,11 @@ import {
   PpaasEncryptEnvironmentFile,
   PpaasEncryptEnvironmentFileParams
 } from "../pages/api/util/ppaasencryptenvfile";
-import { LogLevel, PpaasTestId, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log, s3, util } from "@fs/ppaas-common";
 import { decrypt, waitForSecrets } from "../pages/api/util/secrets";
 import { EnvironmentVariablesFile } from "../types";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { deleteObject, listFiles, ADDITIONAL_TAGS_ON_ALL, defaultTestFileTags } = s3;
 const { poll } = util;

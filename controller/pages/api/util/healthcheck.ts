@@ -1,8 +1,5 @@
-import { LogLevel, SqsQueueType, ec2, log, logger, s3, sqs } from "@fs/ppaas-common";
+import { LogLevel, SqsQueueType, ec2, log, s3, sqs } from "@fs/ppaas-common";
 import { waitForSecrets as _waitForSecrets, getClientSecretOpenId, getEncryptionKey } from "./secrets";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
 
 const listObjects = s3.listObjects;
 const setS3AccessCallback = s3.setAccessCallback;

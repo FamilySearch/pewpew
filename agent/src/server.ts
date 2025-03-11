@@ -1,4 +1,4 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { Address } from "cluster";
 import { Application } from "express";
 import { PewPewTest } from "./pewpewtest";
@@ -6,9 +6,6 @@ import { Server } from "http";
 import express from "express";
 import { init as initHealthcheck } from "./healthcheck";
 import { init as initTests } from "./tests";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-agent";
 
 const PORT: number = parseInt(process.env.PORT || "0", 10) || 8080;
 const TIMEOUT: number = parseInt(process.env.TIMEOUT || "0", 10) || 30000;

@@ -1,8 +1,6 @@
-import { LogLevel, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, log, s3, util } from "@fs/ppaas-common";
 import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { decrypt, encrypt } from "./secrets";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { getFileContents, getTags, init, KEYSPACE_PREFIX, listFiles, uploadFileContents } = s3;
 const { sleep } = util;

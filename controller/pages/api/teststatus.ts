@@ -1,11 +1,9 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
-import { LogLevel, logger } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
-import TestManager from "./util/testmanager";
+import { LogLevel } from "@fs/ppaas-common";
+import { TestManager } from "./util/testmanager";
 import { authApi } from "./util/authserver";
 import { createErrorResponse } from "./util/util";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view

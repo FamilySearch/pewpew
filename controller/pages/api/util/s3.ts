@@ -1,14 +1,11 @@
 import { GetObjectCommand, GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { LogLevel, log, logger, s3 } from "@fs/ppaas-common";
+import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { TestManagerError } from "../../../types";
 import getConfig from "next/config";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";
 import { gunzip as zlibGunzip} from "zlib";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
 const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;

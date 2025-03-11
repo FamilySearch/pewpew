@@ -1,11 +1,9 @@
 import type { File, Files } from "formidable";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { createFormidableFile, parseZip, unzipFile } from "../pages/api/util/util";
 import { expect } from "chai";
 import fs from "fs/promises";
 import path from "path";
-
-logger.config.LogFileName = "ppaas-controller";
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 const UNIT_TEST_FOLDER: string = process.env.UNIT_TEST_FOLDER || "test";

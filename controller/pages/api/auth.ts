@@ -1,10 +1,8 @@
 import { AuthPermissions, TokenResponse } from "../../types";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { getTokenFromCode, getTokenFromRefreshToken, validateToken } from "./util/authserver";
 import { createErrorResponse } from "./util/util";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 

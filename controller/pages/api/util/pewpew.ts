@@ -17,7 +17,6 @@ import {
   PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   log,
-  logger,
   s3
 } from "@fs/ppaas-common";
 import { latestPewPewVersion, versionSort } from "./clientutil";
@@ -29,9 +28,6 @@ import { promisify } from "util";
 import semver from "semver";
 
 const execFile = promisify(_execFile);
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 const deleteS3 = s3.deleteObject;
 export const VERSION_TAG_NAME: string = "version";
 

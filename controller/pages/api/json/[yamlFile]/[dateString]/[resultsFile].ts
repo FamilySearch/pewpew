@@ -1,13 +1,10 @@
 import { AuthPermission, AuthPermissions, TestManagerError } from "../../../../../types";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { authApi } from "../../../util/authserver";
 import { createErrorResponse } from "../../../util/util";
 import { getS3Response } from "../../../util/s3";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
 
 async function getOrRedirect ({ request, response, resultsFile: filename, s3Folder, redirectToS3 }: {
   request: NextApiRequest,

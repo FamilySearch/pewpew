@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "nyc": {
     "reporter": ["lcov", "text"],

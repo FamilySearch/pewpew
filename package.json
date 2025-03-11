@@ -50,7 +50,7 @@
     "coverage:controller": "cd controller && npm run coverage",
     "testcleanup": "cd controller && npm run testcleanup",
     "clean:all": "npm-run-all --parallel clean clean:logs clean:npm",
-    "clean:logs": "rimraf coverage/ mutants.out/ common/app-ppaas-*.json agent/app-ppaas-*.json controller/app-ppaas-*.json examples/stats-*.json examples/*_*.yaml.out examples/log-results-* examples/search-results-*",
+    "clean:logs": "rimraf coverage/ mutants.out/ common/app-ppaas-*.json* agent/app-ppaas-*.json* controller/app-ppaas-*.json* examples/stats-*.json examples/*_*.yaml.out examples/log-results-* examples/search-results-*",
     "clean:npm": "rimraf node_modules/ package-lock.json controller/node_modules/ agent/node_modules/ common/node_modules/",
     "clean": "rimraf common/dist/ agent/dist/ controller/dist/"
   },
@@ -63,7 +63,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": ">=18.0.0 <23.0.0"
+    "node": ">=20.0.0 <23.0.0"
   },
   "nyc": {
     "reporter": ["lcov", "text"],

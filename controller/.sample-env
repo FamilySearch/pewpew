@@ -39,3 +39,5 @@ OPENID_HOST="my.login.service.com"
 OPENID_PERMISSIONS_READONLY="<openId profile for read_only>"
 OPENID_PERMISSIONS_USER="<openId profile for user>"
 OPENID_PERMISSIONS_ADMIN="<openId profile for administrator>"
+
+LOG_FILE_NAME="ppaas-controller"

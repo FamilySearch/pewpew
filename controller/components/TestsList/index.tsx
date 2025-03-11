@@ -67,7 +67,7 @@ export const TestsList = ({
         if (response.status === 200) {
           if (!isTestManagerMessage(response.data)) {
             const errorString = API_TEST_STATUS + " did not return a TestManagerMessage object";
-            log(errorString, LogLevel.ERROR, response.data);
+            log(errorString, LogLevel.WARN, response.data);
             throw new Error(errorString);
           }
           const testManagerMessage: TestManagerMessage = response.data;

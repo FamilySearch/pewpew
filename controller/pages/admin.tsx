@@ -170,7 +170,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
         onUploadProgress: (progressEvent) => {
           const { loaded, total } = progressEvent || {};
           if (typeof loaded !== "number" || typeof total !== "number") {
-            log("onUploadProgress invalid loaded or total type", LogLevel.ERROR, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
+            log("onUploadProgress invalid loaded or total type", LogLevel.WARN, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
             return;
           }
           const percent = Math.floor((loaded / total) * 100);
@@ -182,7 +182,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
       // log("Admin post response", LogLevel.DEBUG, response);
       if (!isTestManagerError(response.data)) {
         const errorString = API_PEWPEW + " did not return a TestManagerError object";
-        log(errorString, LogLevel.ERROR, response.data);
+        log(errorString, LogLevel.WARN, response.data);
         throw new Error(errorString);
       }
       const testData: TestManagerError = response.data;
@@ -195,7 +195,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
         error: undefined
       });
     } catch (error) {
-      log("Error uploading pewpew files", LogLevel.ERROR, error);
+      log("Error uploading pewpew files", LogLevel.WARN, error);
       setState({
         error: formatError(error)
       });
@@ -242,7 +242,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
       // log("Admin post response", LogLevel.DEBUG, response);
       if (!isTestManagerError(response.data)) {
         const errorString = API_PEWPEW + " did not return a TestManagerError object";
-        log(errorString, LogLevel.ERROR, response.data);
+        log(errorString, LogLevel.WARN, response.data);
         throw new Error(errorString);
       }
       const testData: TestManagerError = response.data;
@@ -262,7 +262,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
         };
       });
     } catch (error) {
-      log("Error uploading pewpew files", LogLevel.ERROR, error);
+      log("Error uploading pewpew files", LogLevel.WARN, error);
       setState({
         error: formatError(error)
       });

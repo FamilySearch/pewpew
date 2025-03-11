@@ -247,7 +247,7 @@ export const getServerSideProps: GetServerSideProps =
       };
     }
   } catch (error) {
-    logServer("Error loading permissions", LogLevelServer.ERROR, error);
+    logServer("Error loading permissions", LogLevelServer.WARN, error);
     throw error;
   }
 };

@@ -264,7 +264,7 @@ export class PpaasTestStatus implements TestStatusMessage {
       tags: this.tags
     });
     this.lastModifiedRemote = newDate; // Update the last modified
-    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.DEBUG, this.sanitizedCopy());
     return this.url;
   }
   // Unlike messages, we don't want to delete this

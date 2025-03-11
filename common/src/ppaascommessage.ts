@@ -183,7 +183,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
     }
     log("PpaasCommunicationsMessage.send messageAttributes", LogLevel.DEBUG, Object.assign({}, messageAttributes, { MessageData: undefined }));
     const messageId: string | undefined = await sendNewCommunicationsMessage(messageAttributes);
-    log(`PpaasCommunicationsMessage.send messageId: ${messageId}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasCommunicationsMessage.send messageId: ${messageId}`, LogLevel.DEBUG, this.sanitizedCopy());
     return messageId;
   }
 

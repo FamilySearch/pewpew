@@ -137,7 +137,7 @@ export class PpaasS3Message implements CommunicationsMessage {
       tags: defaultTestExtraFileTags()
     });
     this.inS3 = true;
-    log(`PpaasS3Message.send url: ${url}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasS3Message.send url: ${url}`, LogLevel.DEBUG, this.sanitizedCopy());
     return url;
   }
 

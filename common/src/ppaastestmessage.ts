@@ -197,7 +197,7 @@ export class PpaasTestMessage implements TestMessage {
       return undefined;
     }
     // The sanitizedCopy wipes out the envVariables (which may have passwords) from the logs
-    log(`New TestMessage received at ${Date.now()}: ${testId}`, LogLevel.INFO, newTest.sanitizedCopy());
+    log(`New TestMessage received at ${Date.now()}: ${testId}`, LogLevel.DEBUG, newTest.sanitizedCopy());
     return newTest;
   }
 
@@ -228,7 +228,7 @@ export class PpaasTestMessage implements TestMessage {
     }
     log("PpaasTestMessage.send messageAttributes", LogLevel.DEBUG, Object.assign({}, messageAttributes, { EnvironmentVariables: undefined }));
     this.messageId = await sendNewTestToRun(messageAttributes, queueName);
-    log(`PpaasTestMessage.send messageId: ${this.messageId}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasTestMessage.send messageId: ${this.messageId}`, LogLevel.DEBUG, this.sanitizedCopy());
   }
 
   public async extendMessageLockout (): Promise<void> {

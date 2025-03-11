@@ -28,8 +28,7 @@ async function getOrRedirect ({ request, response, resultsFile: filename, s3Fold
     // 404 - Not Found
     response.status(404).json({ message: `No results file found for ${request.method} ${request.url}` });
   } catch (error) {
-    log(`${request.method} ${request.url} failed: ${error}`, LogLevel.ERROR, error);
-    response.status(500).json(createErrorResponse(request, error));
+    response.status(500).json(createErrorResponse(request, error, LogLevel.ERROR));
   }
 }
 
@@ -56,8 +55,7 @@ export default async (request: NextApiRequest, response: NextApiResponse<GetObje
         response.status(400).json({ message: `method ${request.method} must have a json file` });
       }
     } catch (error) {
-      log(`${request.method} ${request.url} failed: ${error}`, LogLevel.ERROR, error);
-      response.status(500).json(createErrorResponse(request, error));
+      response.status(500).json(createErrorResponse(request, error, LogLevel.ERROR));
     }
   } else {
     response.status(400).json({ message: `method ${request.method} is not supported for this endpoint` });

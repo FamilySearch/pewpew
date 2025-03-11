@@ -56,7 +56,7 @@ export async function getPewPewVersionsInS3 (): Promise<string[]> {
     log("pewpewVersions: " + pewpewVersions, LogLevel.DEBUG, pewpewVersions);
     return pewpewVersions;
   } catch (error) {
-    log("Could not load pewpew versions from S3", LogLevel.ERROR, error);
+    log("Could not load pewpew versions from S3", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -70,7 +70,7 @@ export async function getPewpew (): Promise<ErrorResponse | PewPewVersionsRespon
     const pewpewVersions: string[] = await getPewPewVersionsInS3();
     return { json: pewpewVersions, status: 200 };
   } catch (error) {
-    log(`getPewpew failed: ${error}`, LogLevel.ERROR, error);
+    log(`getPewpew failed: ${error}`, LogLevel.WARN, error);
     throw error;
   }
 }
@@ -164,7 +164,7 @@ export async function postPewPew (parsedForm: ParsedForm, authPermissions: AuthP
     }
   } catch (error) {
     // If we get here it's a 500. All the "bad requests" are handled above
-    log(`postPewPew failed: ${error}`, LogLevel.ERROR, error);
+    log(`postPewPew failed: ${error}`, LogLevel.WARN, error);
     throw error;
   }
 }
@@ -218,7 +218,7 @@ export async function deletePewPew (query: Partial<Record<string, string | strin
     }
   } catch (error) {
     // If we get here it's a 500. All the "bad requests" are handled above
-    log(`deletePewPew failed: ${error}`, LogLevel.ERROR, error);
+    log(`deletePewPew failed: ${error}`, LogLevel.WARN, error);
     throw error;
   }
 }
@@ -240,7 +240,7 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
     }
     return global.currentLatestVersion;
   } catch (error) {
-    log("Could not load latest pewpew in file for currentLatestVersion", LogLevel.ERROR, error);
+    log("Could not load latest pewpew in file for currentLatestVersion", LogLevel.WARN, error);
     throw error;
   }
 }

@@ -499,7 +499,7 @@ export class TestScheduler implements TestSchedulerItem {
       }
       TestScheduler.updateNextStart();
     } catch (error) {
-      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} from s3`, LogLevel.ERROR, error);
+      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} from s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -524,7 +524,7 @@ export class TestScheduler implements TestSchedulerItem {
         await this.scheduledEncryptFile.upload(force, true);
       }
     } catch (error) {
-      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} to s3`, LogLevel.ERROR, error);
+      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} to s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -691,7 +691,7 @@ export class TestScheduler implements TestSchedulerItem {
               s3Files.filter((s3File) => s3File.Key)
               .map((s3File) => s3.deleteObject(s3File.Key!)
                 .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
-                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.ERROR, error, { s3Folder, s3File }))
+                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.WARN, error, { s3Folder, s3File }))
               )
             );
             const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
@@ -700,7 +700,7 @@ export class TestScheduler implements TestSchedulerItem {
             }
           }
           ).catch((error) => {
-            log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error);
+            log(`removeTest ${testId} failed to find s3 files`, LogLevel.WARN, error);
             throw error;
           });
         }
@@ -754,7 +754,7 @@ export class TestScheduler implements TestSchedulerItem {
       TestScheduler.historicalTests!.set(testId, event);
       await TestScheduler.saveHistoricalToS3().catch(() => {/* noop logs itself */});
     } catch (error) {
-      log(`TestScheduler: Could not addHistoricalTest ${testId} to the schedule`, LogLevel.ERROR, error);
+      log(`TestScheduler: Could not addHistoricalTest ${testId} to the schedule`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -840,7 +840,7 @@ export class TestScheduler implements TestSchedulerItem {
               parsedCount = 0; // Save to s3 every 50
               await TestScheduler.saveHistoricalToS3().catch(() => { /* noop, this already logs */ });
             }
-          }).catch((error) => log("runHistoricalSearch: Error retrieving ppaas test status", LogLevel.ERROR, error)));
+          }).catch((error) => log("runHistoricalSearch: Error retrieving ppaas test status", LogLevel.WARN, error)));
         }
         await Promise.all(parsedPromises);
         // After each batch of X, save them
@@ -851,7 +851,7 @@ export class TestScheduler implements TestSchedulerItem {
       log("foundStatus iterations " + iteration, LogLevel.DEBUG, { foundStatusPromises: JSON.stringify(foundStatusPromises) });
       log("Finished Test Historical Search", LogLevel.INFO, { sizeAfter: TestScheduler.historicalTests!.size });
     } catch (error) {
-      log("Error running historical search", LogLevel.ERROR, error);
+      log("Error running historical search", LogLevel.WARN, error);
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }
@@ -879,7 +879,7 @@ export class TestScheduler implements TestSchedulerItem {
       log("Finished Test Historical Delete", LogLevel.INFO, { deletedCount, sizeBefore, sizeAfter: TestScheduler.historicalTests!.size });
       return deletedCount;
     } catch (error) {
-      log("Error running Historical Delete", LogLevel.ERROR, error, { deletedCount });
+      log("Error running Historical Delete", LogLevel.WARN, error, { deletedCount });
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }
@@ -912,7 +912,7 @@ export class TestScheduler implements TestSchedulerItem {
         TestScheduler.historicalTests = new Map<string, TestSchedulerItem>();
       }
     } catch (error) {
-      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} from s3`, LogLevel.ERROR, error);
+      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} from s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -937,7 +937,7 @@ export class TestScheduler implements TestSchedulerItem {
         await this.historicalEncryptFile.upload(force, true);
       }
     } catch (error) {
-      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} to s3`, LogLevel.ERROR, error);
+      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} to s3`, LogLevel.WARN, error);
       throw error;
     }
   }

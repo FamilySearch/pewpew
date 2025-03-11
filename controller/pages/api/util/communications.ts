@@ -102,7 +102,7 @@ export function startCommuncationsLoop (): boolean {
 
 const testQueueNames: string[] = [];
 
-function setAvailableQueueNames () {
+function getAvailableQueueNames () {
   if (testQueueNames.length === 0) {
     try {
       testQueueNames.push(...PpaasTestMessage.getAvailableQueueNames());
@@ -156,7 +156,7 @@ function startTestQueueLoop (): boolean {
     while (global.testLoopRunning) {
       log("Test Queue Monitor Loop", LogLevel.DEBUG, { now: Date.now(), nextLoopStart });
       // Initialize the list of queuenames once we've started
-      setAvailableQueueNames();
+      getAvailableQueueNames();
       try {
         // Load each queue status
         const promises: Promise<void>[] = [
@@ -166,7 +166,7 @@ function startTestQueueLoop (): boolean {
         ];
         await Promise.all(promises);
       } catch (error) {
-        log("Error trying to get Test SQS queue status", LogLevel.ERROR, error);
+        log("Error trying to get Test SQS queue status", LogLevel.WARN, error);
       }
       if (Date.now() < nextLoopStart) {
         // Sleep until the next loop

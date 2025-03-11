@@ -13,7 +13,6 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       log(`${req.method} ${req.url} logoutUrl response: ${logoutUrl}`, LogLevel.DEBUG);
       res.redirect(302, logoutUrl);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
   } else {

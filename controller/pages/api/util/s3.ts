@@ -77,7 +77,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       try {
         s3Object = await getObject(key);
       } catch (error) {
-        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files.map((file) => file.Key));
+        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files.map((file) => file.Key));
       }
       if (s3Object && s3Object.Body) {
         // If listFiles somehow found more than 1 file, check size again here

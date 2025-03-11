@@ -25,7 +25,7 @@ export async function getPewPewErrors ({ yamlFile, dateString }: { yamlFile: str
     try {
       return await getFileContents({ filename, s3Folder, maxLength: 5000 });
     } catch (error) {
-      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files);
+      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files);
     }
   }
 }

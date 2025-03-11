@@ -24,8 +24,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       const testManagerResponse: TestManagerResponse = await getPewpew();
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
 
   } else if (req.method === "POST" || req.method === "DELETE") {
@@ -58,8 +57,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       }
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     } finally {
       // Delete any and all of the temporary files and remove the directory
       await cleanupTestFolder(localPath);

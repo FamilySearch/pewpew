@@ -296,7 +296,7 @@ export async function decryptFile (encryptedFilePath: string, decryptedFilePath?
     // log(`decryptedFileContents: ${decryptedFileContents}`, LogLevel.DEBUG, { decryptedFileContents });
     return decryptedFileContents;
   } catch (error) {
-    log(`Could not decrypt ${encryptedFilePath}`, LogLevel.ERROR, error);
+    log(`Could not decrypt ${encryptedFilePath}`, LogLevel.WARN, error);
     throw error;
   }
 }

@@ -35,7 +35,6 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         res.status(400).json({ message: `method ${req.method} must have a code or token queryparam` });
       }
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
   } else {

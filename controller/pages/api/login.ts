@@ -13,7 +13,6 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       log(`${req.method} ${req.url} authUrl response: ${authUrl}`, LogLevel.DEBUG);
       res.redirect(302, authUrl);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
   } else {

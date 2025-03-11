@@ -1,4 +1,4 @@
-import { AgentQueueDescription, LogLevel, PpaasTestMessage, log, logger } from "@fs/ppaas-common";
+import { AgentQueueDescription, LogLevel, PpaasTestMessage, logger } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { createErrorResponse } from "./util/util";
 
@@ -9,7 +9,6 @@ export default (req: NextApiRequest, res: NextApiResponse): void => {
     const queues: AgentQueueDescription = PpaasTestMessage.getAvailableQueueMap();
     res.status(200).json(queues);
   } catch (error) {
-    log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-    res.status(500).json(createErrorResponse(req, error));
+    res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
   }
 };

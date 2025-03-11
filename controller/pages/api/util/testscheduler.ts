@@ -269,7 +269,7 @@ export class TestScheduler implements TestSchedulerItem {
     };
     const { queueName, testMessage, environmentVariables: environmentVariablesFile } = testToRun.scheduledTestData;
     const { testId, envVariables, restartOnFailure, version, bypassParser, yamlFile, additionalFiles } = testMessage;
-    log("Test Scheduler Loop: startNewTest", LogLevel.INFO, { testId, authPermissions, queueName, version, yamlFile });
+    log("Test Scheduler Loop: startNewTest", LogLevel.DEBUG, { testId, authPermissions, queueName, version, yamlFile });
     let localPath: string | undefined;
     try {
       // If it's recurring and we have a nextStart, clone the directory and create a new testId to use
@@ -329,7 +329,7 @@ export class TestScheduler implements TestSchedulerItem {
     };
     const { queueName, testMessage } = testToRun.scheduledTestData;
     const { testId, testRunTimeMn } = testMessage;
-    log("Test Scheduler Loop: startExistingTest", LogLevel.INFO, { testId, authPermissions, queueName });
+    log("Test Scheduler Loop: startExistingTest", LogLevel.DEBUG, { testId, authPermissions, queueName });
     try {
       // Not recurring, or the last run for this set, use the same dir and message
       const testData: StoredTestData = await TestManager.sendTestToQueue(testMessage, queueName, PpaasTestId.getFromTestId(testId), testRunTimeMn, authPermissions);
@@ -384,7 +384,7 @@ export class TestScheduler implements TestSchedulerItem {
       return global.testSchedulerLoopRunning;
     }
     global.testSchedulerLoopRunning = true;
-    log("Starting Test Scheduler Loop", LogLevel.INFO);
+    log("Starting Test Scheduler Loop", LogLevel.DEBUG);
     if (RUN_HISTORICAL_SEARCH) {
       TestScheduler.runHistoricalSearch().catch(() => { /* already logs error, swallow */ });
     }
@@ -429,7 +429,7 @@ export class TestScheduler implements TestSchedulerItem {
           if (TestScheduler.nextStart && Date.now() >= TestScheduler.nextStart) {
             // We have tests to run
             const testsToRun: TestSchedulerItem[] = getTestsToRun(TestScheduler.scheduledTests);
-            log("Test Scheduler Loop: testsToRun " + testsToRun.length, LogLevel.INFO, testsToRun
+            log("Test Scheduler Loop: testsToRun " + testsToRun.length, testsToRun.length > 0 ? LogLevel.INFO : LogLevel.DEBUG, testsToRun
             .map((item) => ({
               userId: item.userId,
               testId: item.scheduledTestData.testMessage.testId,
@@ -809,7 +809,7 @@ export class TestScheduler implements TestSchedulerItem {
     try {
       // Load existing ones
       await TestScheduler.loadHistoricalFromS3();
-      log("Starting Test Historical Search", LogLevel.INFO, { sizeBefore: TestScheduler.historicalTests!.size });
+      log("Starting Test Historical Search", LogLevel.DEBUG, { sizeBefore: TestScheduler.historicalTests!.size });
       // Create an ignore list
       const ignoreList: string[] = Array.from((TestScheduler.historicalTests || new Map<string, EventInput>()).keys());
       // Get X files, and parse them
@@ -829,7 +829,7 @@ export class TestScheduler implements TestSchedulerItem {
             if (ppaasTestStatus.status === TestStatus.Failed || ppaasTestStatus.status === TestStatus.Finished) {
               const yamlFile = PpaasTestId.getFromTestId(testId).yamlFile;
               const eventInput: EventInput = createHistoricalEvent(testId, yamlFile, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status);
-              log("Found Historical Test " + testId, LogLevel.INFO, eventInput);
+              log("Found Historical Test " + testId, LogLevel.DEBUG, eventInput);
               TestScheduler.historicalTests!.set(testId, eventInput);
             } else {
               log("Found Non Historical Test " + testId, LogLevel.DEBUG, ppaasTestStatus.sanitizedCopy());
@@ -863,7 +863,7 @@ export class TestScheduler implements TestSchedulerItem {
       await TestScheduler.loadHistoricalFromS3();
       const oldDatetime: number = Date.now() - (deleteOldFilesDays * ONE_DAY);
       const sizeBefore = TestScheduler.historicalTests!.size;
-      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore, oldDatetime: new Date(oldDatetime), oldDatetimeTs: oldDatetime, deleteOldFilesDays });
+      log("Starting Test Historical Delete", LogLevel.DEBUG, { sizeBefore, oldDatetime: new Date(oldDatetime), oldDatetimeTs: oldDatetime, deleteOldFilesDays });
 
       // Delete old ones off the historical Calendar. These will be cleaned up in S3 by Bucket Expiration Policy
       for (const [testId, eventInput] of TestScheduler.historicalTests!) {

@@ -43,7 +43,7 @@ export function startCommuncationsLoop (): boolean {
     return global.communicationsRunning;
   }
   global.communicationsRunning = true;
-  log("Starting Communications Loop", LogLevel.INFO);
+  log("Starting Communications Loop", LogLevel.DEBUG);
   (async () => {
     // We'll never set this to true unless something really bad happens
     getGlobalHealthcheckConfig().failHealthCheck = false;
@@ -57,7 +57,11 @@ export function startCommuncationsLoop (): boolean {
         await sleep(COMMUCATION_NO_MESSAGE_DELAY);
       }
       if (messageToHandle) {
-        log(`New message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.INFO, messageToHandle.sanitizedCopy());
+        log(
+          `Controller - New Communications message received at ${new Date()}: ${messageToHandle.messageType}`,
+          messageToHandle.messageType !== MessageType.TestStatus ? LogLevel.INFO : LogLevel.DEBUG,
+          messageToHandle.sanitizedCopy()
+        );
         try {
           // Process message and handle it
           switch (messageToHandle.messageType) {
@@ -67,7 +71,7 @@ export function startCommuncationsLoop (): boolean {
             case MessageType.TestFailed:
               // eslint-disable-next-line no-case-declarations
               const testStatus: TestStatusMessage = messageToHandle.messageData as TestStatusMessage;
-              log(`${messageToHandle.messageType} for ${messageToHandle.testId}}`, LogLevel.INFO, { testStatus });
+              log(`startCommuncationsLoop messageType ${messageToHandle.messageType} for ${messageToHandle.testId}}`, LogLevel.DEBUG, { testStatus });
               TestManager.updateRunningTest(messageToHandle.testId, testStatus, messageToHandle.messageType)
               .catch(() => { /* no-op */ });
               break;
@@ -77,7 +81,6 @@ export function startCommuncationsLoop (): boolean {
           }
 
           await messageToHandle.deleteMessageFromQueue();
-          // log(`handleMessage Complete ${messageToHandle.message}`, LogLevel.INFO, messageToHandle);
         } catch (error) {
           log("Error handling message", LogLevel.ERROR, error);
           // Report to Controller
@@ -147,7 +150,7 @@ function startTestQueueLoop (): boolean {
     return global.testLoopRunning;
   }
   global.testLoopRunning = true;
-  log("Starting Test Queue Monitor Loop", LogLevel.INFO);
+  log("Starting Test Queue Monitor Loop", LogLevel.DEBUG);
   (async () => {
     // We'll never set this to true unless something really bad happens
     const agentPollIntervalMs = AGENT_QUEUE_POLL_INTERVAL_MN * 60 * 1000;

@@ -116,7 +116,7 @@ export async function pingSQS (): Promise<boolean> {
       throw new Error("getQueueAttributesMap did not return results");
     }
     log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
-    log("pingSQS getQueueAttributesMap", LogLevel.INFO, map);
+    log("pingSQS getQueueAttributesMap", LogLevel.DEBUG, map);
     return true;
   } catch (error) {
     log("pingSQS failed", LogLevel.WARN, error);

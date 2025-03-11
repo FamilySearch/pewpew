@@ -174,7 +174,7 @@ export class PpaasEncryptS3File implements s3.S3File {
       return;
     }
     // If it's retry it's the last time, log it for real
-    log(`Uploading ${this.filename}`, retry ? LogLevel.INFO : LogLevel.DEBUG);
+    log(`Uploading ${this.filename}`, LogLevel.DEBUG);
     let retryCount: number = 0;
     let caughtError: any;
     let uploaded: boolean = false;

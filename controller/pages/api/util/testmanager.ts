@@ -1314,7 +1314,7 @@ export abstract class TestManager {
         }
         const s3Folder: string = ppaasTestId.s3Folder;
         log(`new test s3Folder: ${s3Folder}`, LogLevel.DEBUG);
-        log(`${yamlFile.originalFilename} testId: ${testId}`, LogLevel.INFO);
+        log(`${yamlFile.originalFilename} testId: ${testId}`, LogLevel.DEBUG);
 
         // Upload files
         const uploadPromises: Promise<PpaasS3File | void>[] = [uploadFile(yamlFile, s3Folder, fileTags)];
@@ -1440,7 +1440,7 @@ export abstract class TestManager {
     // Put a message on the scale in queue so we don't scale back in
     await sendTestScalingMessage(queueName);
     // We succeeded! Yay!
-    log ("New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
+    log ("TestManager: New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
 
     // Add it to the runningTests
     // We don't want to remove any since the communications loop will do it.

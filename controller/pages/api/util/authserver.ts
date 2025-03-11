@@ -158,8 +158,9 @@ async function getSessionFromToken (token: string): Promise<UserinfoResponse | u
     const userInfo: UserinfoResponse = await openIdClient.userinfo(token);
     log("userInfo", LogLevel.DEBUG, userInfo);
     return userInfo;
-  } catch (error) {
-    log(`Token is not valid: ${(error as any)?.message || error}`, LogLevel.WARN, error);
+  } catch (error: unknown) {
+    const message = `${error instanceof Error ? error.message : error}`;
+    log(`Token is not valid: ${message}`, message.includes("expired") ? LogLevel.DEBUG : LogLevel.WARN, error);
     return undefined;
   }
 }

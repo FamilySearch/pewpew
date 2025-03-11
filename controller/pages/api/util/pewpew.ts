@@ -236,7 +236,7 @@ export async function getCurrentPewPewLatestVersion (): Promise<string | undefin
     if (global.currentLatestVersion) {
       log("Sucessfully retrieved currentLatestVersion: " + global.currentLatestVersion, LogLevel.INFO, global.currentLatestVersion);
     } else {
-      log("Failed to retriev currentLatestVersion: " + global.currentLatestVersion, LogLevel.WARN, global.currentLatestVersion);
+      log("Failed to retrieve currentLatestVersion: " + global.currentLatestVersion, LogLevel.WARN, global.currentLatestVersion);
     }
     return global.currentLatestVersion;
   } catch (error) {

@@ -15,3 +15,5 @@ AGENT_DESC="c5n.large"
 PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewagent-unittests-sqs-scale-out"
 PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewagent-unittests-sqs-scale-in"
 PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewcontroller-unittests-sqs-communication"
+
+LOG_FILE_NAME="ppaas-agent"

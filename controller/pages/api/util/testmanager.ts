@@ -56,8 +56,6 @@ import { createS3Filename as createS3MessageFilename } from "@fs/ppaas-common/di
 import { createS3Filename as createS3StatusFilename } from "@fs/ppaas-common/dist/src/ppaasteststatus";
 import fs from "fs/promises";
 
-logger.config.LogFileName = "ppaas-controller";
-
 const sendTestScalingMessage = sqs.sendTestScalingMessage;
 const createStatsFileName = util.createStatsFileName;
 export const MAX_SAVED_TESTS_RECENT: number = parseInt(process.env.MAX_SAVED_TESTS_RECENT || "0", 10) || 10;
@@ -197,7 +195,7 @@ async function getUpdatedTestDataFromStoredData (storedTestData: StoredTestData)
       ppaasTestStatus.status = TestStatus.Failed;
       ppaasTestStatus.errors = [...(ppaasTestStatus.errors || []), "End time or last status update were more than fifteen minutes ago, status manually changed to Failed"];
       storedTestData.lastChecked = new Date();
-      ppaasTestStatus.writeStatus().catch((error: unknown) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.ERROR, error));
+      ppaasTestStatus.writeStatus().catch((error: unknown) => log("Could not write testStatus to S3 for testId " + storedTestData.testId, LogLevel.WARN, error));
       TestScheduler.addHistoricalTest(ppaasTestStatus.getTestId(), undefined, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status)
       .catch(() => { /* noop */ });
     }
@@ -242,7 +240,7 @@ async function parseEnvironmentVariablesFile (filePath: string, filename?: strin
     log("parseEnvironmentVariables", LogLevel.DEBUG, environmentVariables);
     return environmentVariables;
   } catch (error) {
-    log("Could not parse environment variables file: " + (filename || filePath), LogLevel.ERROR, error);
+    log("Could not parse environment variables file: " + (filename || filePath), LogLevel.WARN, error);
     throw error;
   }
 }
@@ -410,11 +408,11 @@ export async function downloadPriorTestId (
         }
         log("postTest environmentVariable names for testid " + priorTestId, LogLevel.DEBUG, { testId: priorTestId, envVariableNames: Object.keys(environmentVariables) });
       } else {
-        log("postTest could not load for testid " + priorTestId, LogLevel.ERROR, { testId: priorTestId, existsInS3, fileContents: vars });
+        log("postTest could not load for testid " + priorTestId, LogLevel.WARN, { testId: priorTestId, existsInS3, fileContents: vars });
       }
     }
   } catch (error) {
-    log("postTest Could not load encrypted environment variables file for testId " + priorTestId, LogLevel.ERROR, error, { testId: priorTestId });
+    log("postTest Could not load encrypted environment variables file for testId " + priorTestId, LogLevel.WARN, error, { testId: priorTestId });
     // Swallow
   }
   return {
@@ -636,7 +634,7 @@ export abstract class TestManager {
         currentCacheLocation = foundTest.cacheLocation;
       }
     } catch (error) {
-      log(`addToStoredTest could not getFromList(${testId})`, LogLevel.ERROR, error);
+      log(`addToStoredTest could not getFromList(${testId})`, LogLevel.WARN, error);
       // Swallow
     }
     // Remove it from the old list unless we're adding to search, then don't add it
@@ -721,7 +719,7 @@ export abstract class TestManager {
       .then((ppaasTestStatus: PpaasTestStatus | undefined) => {
         if (testData && ppaasTestStatus) { testData.ppaasTestStatus = ppaasTestStatus; }
       })
-      .catch((error) => log(`Could not load PpaasTestStatus from s3 for testId ${testId}`, LogLevel.ERROR, error));
+      .catch((error) => log(`Could not load PpaasTestStatus from s3 for testId ${testId}`, LogLevel.WARN, error));
     }
     // Check if it's in running
     if (!foundTest || foundTest.cacheLocation !== CacheLocation.Running) {
@@ -820,7 +818,7 @@ export abstract class TestManager {
           return { json: testData, status: 200 };
       }
     } catch (error) {
-      log(`TestManager.getTest(${testId}) failed: ${error}`, LogLevel.ERROR, error);
+      log(`TestManager.getTest(${testId}) failed: ${error}`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -876,7 +874,7 @@ export abstract class TestManager {
         return { json: { message: "Must provide a testId minimally" }, status: 400 };
       }
     } catch (error) {
-      log(`TestManager.getTestStatus(${testId}) failed: ${error}`, LogLevel.ERROR, error);
+      log(`TestManager.getTestStatus(${testId}) failed: ${error}`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -973,7 +971,7 @@ export abstract class TestManager {
             log("getTestData environmentVariable names for testid " + testId, LogLevel.DEBUG, { testId, envVariableNames: environmentVariables, envFile: envFile.sanitizedCopy() });
           }
         } catch (error) {
-          log("getTestData Could not load encrypted environment variables file for testId " + testId, LogLevel.ERROR, error, { testId });
+          log("getTestData Could not load encrypted environment variables file for testId " + testId, LogLevel.WARN, error, { testId });
           // Swallow
         }
       }
@@ -988,7 +986,7 @@ export abstract class TestManager {
         status: 200
       };
     } catch (error) {
-      log(`TestManager.getTest(${testId}) failed: ${error}`, LogLevel.ERROR, error);
+      log(`TestManager.getTest(${testId}) failed: ${error}`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -1314,7 +1312,7 @@ export abstract class TestManager {
         }
         const s3Folder: string = ppaasTestId.s3Folder;
         log(`new test s3Folder: ${s3Folder}`, LogLevel.DEBUG);
-        log(`${yamlFile.originalFilename} testId: ${testId}`, LogLevel.INFO);
+        log(`${yamlFile.originalFilename} testId: ${testId}`, LogLevel.DEBUG);
 
         // Upload files
         const uploadPromises: Promise<PpaasS3File | void>[] = [uploadFile(yamlFile, s3Folder, fileTags)];
@@ -1374,7 +1372,7 @@ export abstract class TestManager {
       }
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`TestManger.postTest failed: ${error}`, LogLevel.ERROR, error, getLogAuthPermissions(authPermissions));
+      log(`TestManger.postTest failed: ${error}`, LogLevel.WARN, error, getLogAuthPermissions(authPermissions));
       throw error;
     }
   }
@@ -1440,7 +1438,7 @@ export abstract class TestManager {
     // Put a message on the scale in queue so we don't scale back in
     await sendTestScalingMessage(queueName);
     // We succeeded! Yay!
-    log ("New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
+    log ("TestManager: New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
 
     // Add it to the runningTests
     // We don't want to remove any since the communications loop will do it.
@@ -1548,7 +1546,7 @@ export abstract class TestManager {
       }
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`Testmanager.putTest failed: ${error}`, LogLevel.ERROR, error, getLogAuthPermissions(authPermissions));
+      log(`Testmanager.putTest failed: ${error}`, LogLevel.WARN, error, getLogAuthPermissions(authPermissions));
       throw error;
     }
   }
@@ -1599,7 +1597,7 @@ export abstract class TestManager {
       }
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`TestManager.stopTest(${testIdString}) failed: ${error}`, LogLevel.ERROR, error, getLogAuthPermissions(authPermissions));
+      log(`TestManager.stopTest(${testIdString}) failed: ${error}`, LogLevel.WARN, error, getLogAuthPermissions(authPermissions));
       throw error;
     }
   }
@@ -1674,7 +1672,7 @@ export abstract class TestManager {
       }
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`TestManager.searchTests(${s3FolderQuery}, ${maxResultsQuery}) failed: ${error}`, LogLevel.ERROR, error);
+      log(`TestManager.searchTests(${s3FolderQuery}, ${maxResultsQuery}) failed: ${error}`, LogLevel.WARN, error);
       throw error;
     }
   }

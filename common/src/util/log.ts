@@ -6,10 +6,13 @@ import { join as pathJoin } from "path";
 export { LogLevel } ;
 
 export const config = {
-  LogFileName: process.env.LOG_FILE_NAME || process.env.LogFileName || "ppaas-common",
+  LogFileName: process.env.LOG_FILE_NAME
+    || process.env.LogFileName
+    || process.env.APPLICATION_NAME?.toLowerCase().replace(/_/g, "-")
+    || "ppaas-common",
   LoggingLevel: process.env.LOGGING_LEVEL as Logger.LogLevel || process.env.LoggingLevel as Logger.LogLevel || "info",
   LoggingLevelConsole: process.env.LOGGING_LEVEL_CONSOLE as Logger.LogLevel || process.env.LoggingLevelConsole as Logger.LogLevel || "warn",
-  LogFileLocation: process.env.LOG_FILE_LOCATION || "."
+  LogFileLocation: process.env.LOG_FILE_LOCATION || ""
 };
 
 export const pewpewStdOutFilename = (testId: string) => `app-ppaas-pewpew-${testId}-out.json`;

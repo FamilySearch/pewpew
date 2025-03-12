@@ -216,9 +216,9 @@ const TestStatusPage = ({
             Pewpew Console Standard Errors
             {state.pewpewStdErrorsTruncated && /** If pewpewStdErrors are truncated, link to full results */
               <a href={formatPageHref(API_ERROR_FORMAT(testData.s3Folder)) + (state.pewpewStdErrorsRedirect ? "?redirect" : "")} target="_blank">
-              Errors Truncated - Click for full log
-            </a>
-          }
+                Errors Truncated - Click for full log
+              </a>
+            }
             <ul>
               {state.pewpewStdErrors.map((error: string, index: number) => <li key={"error" + index}>{error}</li>)}
             </ul>

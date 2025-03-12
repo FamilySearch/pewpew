@@ -1,8 +1,6 @@
-import { EnvironmentVariables, LogLevel, log, logger, s3 } from "@fs/ppaas-common";
+import { EnvironmentVariables, LogLevel, log, s3 } from "@fs/ppaas-common";
 import { EnvironmentVariablesFile, PreviousEnvironmentVariables } from "../../../types";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export const ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME = "environmentvariables.json";
 
@@ -32,7 +30,7 @@ export class PpaasEncryptEnvironmentFile extends PpaasEncryptS3File {
       // Stringify and parse so we create a copy
       this.environmentVariablesFile = environmentVariablesFile !== undefined ? JSON.parse(JSON.stringify(environmentVariablesFile)) : undefined;
     } catch (error) {
-      log("PpaasEncryptEnvironmentFile throw parsing environmentVariablesFile", LogLevel.ERROR, error);
+      log("PpaasEncryptEnvironmentFile throw parsing environmentVariablesFile", LogLevel.WARN, error);
       throw error;
     }
   }
@@ -48,7 +46,7 @@ export class PpaasEncryptEnvironmentFile extends PpaasEncryptS3File {
         return newFile;
       });
     } catch (error) {
-      log(`PpaasEncryptEnvironmentFile.getAllFilesInS3(${s3Folder}) failed`, LogLevel.ERROR, error);
+      log(`PpaasEncryptEnvironmentFile.getAllFilesInS3(${s3Folder}) failed`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -122,7 +120,7 @@ export class PpaasEncryptEnvironmentFile extends PpaasEncryptS3File {
       try {
         this.environmentVariablesFile = JSON.parse(this.fileContents);
       } catch (error) {
-        log(`Error download and parsing ${this.key}`, LogLevel.ERROR, error);
+        log(`Error download and parsing ${this.key}`, LogLevel.WARN, error);
         throw error;
       }
     }

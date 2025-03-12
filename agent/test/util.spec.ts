@@ -1,8 +1,6 @@
-import { LogLevel, log, logger, util } from "@fs/ppaas-common";
+import { LogLevel, log, util } from "@fs/ppaas-common";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util";
-
-logger.config.LogFileName = "ppaas-agent";
 
 describe("Util", () => {
   let ipAddress: string | undefined;

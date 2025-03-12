@@ -9,7 +9,6 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
-  logger,
   s3,
   sqs,
   util
@@ -52,8 +51,6 @@ import { join } from "path";
 export const UNIT_TEST_FILENAME: string = process.env.UNIT_TEST_FILENAME || "s3test.txt";
 export const UNIT_TEST_FILEDIR: string = process.env.UNIT_TEST_FILEDIR || "test/";
 const BASIC_TEST_FILENAME: string = process.env.BASIC_TEST_FILENAME || "basic.yaml";
-
-logger.config.LogFileName = "ppaas-agent";
 
 describe("PewPewTest", () => {
   before(() => {

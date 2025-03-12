@@ -7,7 +7,7 @@ async function log (message: string, level?: LogLevel | undefined, ...datas: any
     if (logFunction === undefined && process.env.NEXT_RUNTIME === "nodejs") {
       try {
         ({ log: logFunction, logger } = await import("@fs/ppaas-common"));
-        logger.config.LogFileName = "ppaas-controller";
+        // logger.config.LogFileName = "ppaas-controller";
         logFunction("Instrumentation register log imported", logger?.LogLevel.DEBUG);
       } catch (error) {
         // eslint-disable-next-line no-console

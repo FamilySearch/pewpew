@@ -1,5 +1,5 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse, PageConfig } from "next";
 import {
   ParsedForm,
@@ -10,8 +10,6 @@ import {
 } from "./util/util";
 import TestManager from "./util/testmanager";
 import { authApi } from "./util/authserver";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view the schedule, but not modify
@@ -33,8 +31,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         : TestManager.getAllTest();
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
 
   } else if (req.method === "POST") {
@@ -55,8 +52,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     } finally {
       // Delete any and all of the temporary files and remove the directory
       await cleanupTestFolder(localPath);
@@ -81,8 +77,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     } finally {
       // Delete any and all of the temporary files and remove the directory
       await cleanupTestFolder(localPath);

@@ -12,7 +12,6 @@ import {
   PEWPEW_BINARY_FOLDER,
   PpaasS3File,
   log,
-  logger,
   sleep
 } from "@fs/ppaas-common";
 import { ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
@@ -30,8 +29,6 @@ import path from "path";
 import { platform } from "os";
 import semver from "semver";
 import { waitForSecrets } from "../pages/api/util/secrets";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_FILEPATH = process.env.PEWPEW_ZIP_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");

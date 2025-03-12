@@ -54,7 +54,7 @@ jobs:
     name: Build project
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [20.x, 22.x]
       fail-fast: false
     needs: changedfiles
     runs-on: ubuntu-latest

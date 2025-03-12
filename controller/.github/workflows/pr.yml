@@ -7,7 +7,7 @@ jobs:
     name: Build project
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [20.x, 22.x]
       fail-fast: false
     runs-on: ubuntu-latest
 
@@ -20,16 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-
-      - name: Setup Artifactory
-        env:
-          CI_USER_TOKEN: ${{ secrets.CI_USER_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo -e "machine github.com\n  login $CI_USER_TOKEN" > ~/.netrc
-          echo "//familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          echo "@fs:registry=https://familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/" >> ~/.npmrc
-          echo git config --global --add url."https://$CI_USER_TOKEN@github.com/".insteadOf "https://github.com/"
 
       - name: Install NPM Dependencies
         run: npm ci

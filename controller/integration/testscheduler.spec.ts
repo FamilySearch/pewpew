@@ -18,7 +18,6 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -28,7 +27,6 @@ import { expect } from "chai";
 import { getHourMinuteFromTimestamp } from "../pages/api/util/clientutil";
 import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
 
-logger.config.LogFileName = "ppaas-controller";
 const sleep = util.sleep;
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it

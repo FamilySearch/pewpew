@@ -6,7 +6,6 @@ import {
   SqsQueueType,
   TestStatusMessage,
   log,
-  logger,
   sqs,
   util
 } from "@fs/ppaas-common";
@@ -14,7 +13,6 @@ import { TestManager } from "./testmanager";
 import { TestScheduler } from "./testscheduler";
 import { getGlobalHealthcheckConfig } from "./healthcheck";
 
-const logConfig = logger.config;
 const { sleep } = util;
 const { getQueueAttributesMap } = sqs;
 
@@ -22,9 +20,6 @@ const { getQueueAttributesMap } = sqs;
 const COMMUCATION_NO_MESSAGE_DELAY = parseInt(process.env.COMMUCATION_NO_MESSAGE_DELAY || "0", 10) || (5 * 1000);
 const AGENT_QUEUE_POLL_INTERVAL_MN = parseInt(process.env.AGENT_QUEUE_POLL_INTERVAL_MN || "0", 10) || 1;
 const AGENT_QUEUE_STUCK_MESSAGE_WARN_MS = parseInt(process.env.AGENT_QUEUE_STUCK_MESSAGE_WARN_MS || "0", 10) || (20 * 60 * 1000);
-
-// We have to set this before we make any log calls
-logConfig.LogFileName = "ppaas-controller";
 
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {
@@ -43,7 +38,7 @@ export function startCommuncationsLoop (): boolean {
     return global.communicationsRunning;
   }
   global.communicationsRunning = true;
-  log("Starting Communications Loop", LogLevel.INFO);
+  log("Starting Communications Loop", LogLevel.DEBUG);
   (async () => {
     // We'll never set this to true unless something really bad happens
     getGlobalHealthcheckConfig().failHealthCheck = false;
@@ -57,7 +52,11 @@ export function startCommuncationsLoop (): boolean {
         await sleep(COMMUCATION_NO_MESSAGE_DELAY);
       }
       if (messageToHandle) {
-        log(`New message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.INFO, messageToHandle.sanitizedCopy());
+        log(
+          `Controller - New Communications message received at ${new Date()}: ${messageToHandle.messageType}`,
+          messageToHandle.messageType !== MessageType.TestStatus ? LogLevel.INFO : LogLevel.DEBUG,
+          messageToHandle.sanitizedCopy()
+        );
         try {
           // Process message and handle it
           switch (messageToHandle.messageType) {
@@ -67,7 +66,7 @@ export function startCommuncationsLoop (): boolean {
             case MessageType.TestFailed:
               // eslint-disable-next-line no-case-declarations
               const testStatus: TestStatusMessage = messageToHandle.messageData as TestStatusMessage;
-              log(`${messageToHandle.messageType} for ${messageToHandle.testId}}`, LogLevel.INFO, { testStatus });
+              log(`startCommuncationsLoop messageType ${messageToHandle.messageType} for ${messageToHandle.testId}}`, LogLevel.DEBUG, { testStatus });
               TestManager.updateRunningTest(messageToHandle.testId, testStatus, messageToHandle.messageType)
               .catch(() => { /* no-op */ });
               break;
@@ -77,7 +76,6 @@ export function startCommuncationsLoop (): boolean {
           }
 
           await messageToHandle.deleteMessageFromQueue();
-          // log(`handleMessage Complete ${messageToHandle.message}`, LogLevel.INFO, messageToHandle);
         } catch (error) {
           log("Error handling message", LogLevel.ERROR, error);
           // Report to Controller
@@ -102,7 +100,7 @@ export function startCommuncationsLoop (): boolean {
 
 const testQueueNames: string[] = [];
 
-function setAvailableQueueNames () {
+function getAvailableQueueNames () {
   if (testQueueNames.length === 0) {
     try {
       testQueueNames.push(...PpaasTestMessage.getAvailableQueueNames());
@@ -147,7 +145,7 @@ function startTestQueueLoop (): boolean {
     return global.testLoopRunning;
   }
   global.testLoopRunning = true;
-  log("Starting Test Queue Monitor Loop", LogLevel.INFO);
+  log("Starting Test Queue Monitor Loop", LogLevel.DEBUG);
   (async () => {
     // We'll never set this to true unless something really bad happens
     const agentPollIntervalMs = AGENT_QUEUE_POLL_INTERVAL_MN * 60 * 1000;
@@ -156,7 +154,7 @@ function startTestQueueLoop (): boolean {
     while (global.testLoopRunning) {
       log("Test Queue Monitor Loop", LogLevel.DEBUG, { now: Date.now(), nextLoopStart });
       // Initialize the list of queuenames once we've started
-      setAvailableQueueNames();
+      getAvailableQueueNames();
       try {
         // Load each queue status
         const promises: Promise<void>[] = [
@@ -166,7 +164,7 @@ function startTestQueueLoop (): boolean {
         ];
         await Promise.all(promises);
       } catch (error) {
-        log("Error trying to get Test SQS queue status", LogLevel.ERROR, error);
+        log("Error trying to get Test SQS queue status", LogLevel.WARN, error);
       }
       if (Date.now() < nextLoopStart) {
         // Sleep until the next loop

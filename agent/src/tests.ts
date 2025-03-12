@@ -6,7 +6,6 @@ import {
   PpaasTestMessage,
   TestMessage,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -15,9 +14,6 @@ import ExpiryMap from "expiry-map";
 import { PewPewTest } from "./pewpewtest";
 import { config as healthcheckConfig } from "./healthcheck";
 import { join as pathJoin } from "path";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-agent";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 export const yamlFile = "basicwithenv.yaml";

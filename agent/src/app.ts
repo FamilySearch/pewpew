@@ -1,19 +1,16 @@
 import "dotenv-flow/config";
 import { IS_RUNNING_IN_AWS, PewPewTest } from "./pewpewtest";
-import { LogLevel, log, logger, util } from "@fs/ppaas-common";
+import { LogLevel, log, util } from "@fs/ppaas-common";
 import { config as serverConfig, start, stop } from "./server";
 import { buildTest } from "./tests";
 import { config as healthcheckConfig } from "./healthcheck";
 
 const sleep = util.sleep;
 
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-agent";
-
 start();
 log("PewPewTest.serverStart: " + PewPewTest.serverStart, LogLevel.DEBUG, PewPewTest.serverStart);
 
-const WARN_IF_NO_MESSAGE_DELAY = parseInt(process.env.WARN_IF_NO_MESSAGE_DELAY || "0", 10) || (15 * 60 * 1000);
+const WARN_IF_NO_MESSAGE_DELAY: number | undefined = parseInt(process.env.WARN_IF_NO_MESSAGE_DELAY || "0", 10) || undefined;
 
 // Start with "Now" so we don't initially fail out.
 let lastMessageTime = new Date();
@@ -37,24 +34,32 @@ process.on("SIGUSR2", (signal) => {
   stop();
 });
 process.on("SIGINT", (signal) => {
-  log("Agent Service Received SIGINT", LogLevel.ERROR, { signal });
+  log("Agent Service Received SIGINT", LogLevel.WARN, { signal });
   shutdown = true;
   stop();
 });
 process.on("SIGTERM", (signal) => {
-  log("Agent Service Received SIGTERM", LogLevel.ERROR, { signal });
+  log("Agent Service Received SIGTERM", LogLevel.WARN, { signal });
   shutdown = true;
   stop();
 });
-process.on("unhandledRejection", (e: any) => {
+process.on("unhandledRejection", (e: unknown) => {
   log(`process unhandledRejection: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
+  if (e instanceof Error && e.stack) {
+    // eslint-disable-next-line no-console
+    console.error(e.stack);
+  }
 });
-process.on("uncaughtException", (e: any) => {
+process.on("uncaughtException", (e: unknown) => {
   log(`process uncaughtException: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
   log(`process uncaughtException: ${e instanceof Error ? e.message : e}`, LogLevel.FATAL, e);
+  if (e instanceof Error && e.stack) {
+    // eslint-disable-next-line no-console
+    console.error(e.stack);
+  }
   shutdown = true;
   healthcheckConfig.failHealthCheck = true;
-  healthcheckConfig.failHealthCheckMessage = e?.message || `${e}`;
+  healthcheckConfig.failHealthCheckMessage = (e as Error)?.message || `${e}`;
   stop();
 });
 
@@ -105,7 +110,7 @@ process.on("uncaughtException", (e: any) => {
       }
     } else {
       log(`No test received at ${lastMessageTime}`, LogLevel.DEBUG);
-      if (Date.now() - lastMessageTime.getTime() > WARN_IF_NO_MESSAGE_DELAY) {
+      if (WARN_IF_NO_MESSAGE_DELAY && Date.now() - lastMessageTime.getTime() > WARN_IF_NO_MESSAGE_DELAY) {
         log(`No new test to run since ${lastMessageTime}`, LogLevel.WARN);
       }
     }

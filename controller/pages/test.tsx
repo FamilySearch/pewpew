@@ -44,7 +44,7 @@ export const getServerSideProps: GetServerSideProps =
   async (ctx: GetServerSidePropsContext): Promise<GetServerSidePropsResult<StartTestPageProps>> => {
   let authPermissions: AuthPermissions | string | undefined;
   let queueInitialProps: QueueInitialProps = { queueName: "", loading: false, testQueues: {}, error: true };
-  let versionInitalProps: VersionInitalProps = { pewpewVersion: "", loading: false, pewpewVersions: [], error: true };
+  let versionInitalProps: VersionInitalProps = { pewpewVersion: "", loading: false, pewpewVersions: [], latestPewPewVersion: "", error: true };
   let queryScheduleDate: number | undefined;
   let previousTestData: PreviousTestData | undefined;
   let editSchedule: boolean | undefined;
@@ -78,7 +78,7 @@ export const getServerSideProps: GetServerSideProps =
           queryScheduleDate = scheduleDate.getTime();
         }
       } catch (error) {
-        logServer("Error parsing date", LogLevelServer.ERROR, error);
+        logServer("Error parsing date", LogLevelServer.WARN, error);
         queryScheduleDate = undefined;
       }
     }
@@ -112,7 +112,7 @@ export const getServerSideProps: GetServerSideProps =
       }
     };
   } catch (error) {
-    logServer("Error loading previousTestData, queues, or versions", LogLevelServer.ERROR, error);
+    logServer("Error loading previousTestData, queues, or versions", LogLevelServer.WARN, error);
     return {
       props: {
         formKey: Date.now(),

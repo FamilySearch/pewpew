@@ -177,8 +177,9 @@ export function getQueueUrl (sqsQueueType: SqsQueueType, sqsQueueName?: string):
     }
   } else {
     if (QUEUE_URL_TEST.size !== 1 || QUEUE_URL_SCALE_IN.size !== 1) {
-      log(`Only Agents with a single QUEUE_URL_TEST can getQueueUrl() without providing a queue name: QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`, LogLevel.ERROR, QUEUE_URL_TEST);
-      throw new Error(`Only Agents with a single QUEUE_URL_TEST can getQueueUrl() without providing a queue name: QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`);
+      const message = `Only Agents with a single QUEUE_URL_TEST can getQueueUrl() without providing a queue name: QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`;
+      log(message, LogLevel.WARN, QUEUE_URL_TEST);
+      throw new Error(message);
     }
     queueUrl = (sqsQueueType === SqsQueueType.Scale ? QUEUE_URL_SCALE_IN : QUEUE_URL_TEST).values().next().value;
   }
@@ -197,8 +198,9 @@ export async function getNewTestToRun (): Promise<SQSMessage | undefined> {
   init(); // We have to call init to populate QUEUE_URL_TEST
   // If you try to call this from a controller (that has multiple queues) we should throw.
   if (QUEUE_URL_TEST.size !== 1) {
-    log(`Only Agents with a single QUEUE_URL_TEST can getNewTestsToRun(): QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`, LogLevel.ERROR, QUEUE_URL_TEST);
-    throw new Error(`Only Agents with a single QUEUE_URL_TEST can getNewTestsToRun(): QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`);
+    const message = `Only Agents with a single QUEUE_URL_TEST can getNewTestsToRun(): QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`;
+    log(message, LogLevel.WARN, QUEUE_URL_TEST);
+    throw new Error(message);
   }
   const queueUrlTest = QUEUE_URL_TEST.values().next().value;
   const params: ReceiveMessageCommandInput = {
@@ -267,7 +269,7 @@ export async function sendNewTestToRun (messageAttributes: Record<string, Messag
     log(`sendNewTestToRun result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
   } catch (error: unknown) {
-    log("Could not send new Test to Run Message", LogLevel.ERROR, error);
+    log("Could not send new Test to Run Message", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -295,7 +297,7 @@ export async function sendNewCommunicationsMessage (messageAttributes: Record<st
     log(`sendNewCommunicationsMessage result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
   } catch (error: unknown) {
-    log("Could not send communications Message", LogLevel.ERROR, error);
+    log("Could not send communications Message", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -369,8 +371,9 @@ export async function getTestScalingMessage (): Promise<SQSMessage | undefined> 
   init(); // We have to call init to populate QUEUE_URL_TEST
   // If you try to call this from a controller (that has multiple queues) we should throw.
   if (QUEUE_URL_SCALE_IN.size !== 1) {
-    log(`Only Agents with a single QUEUE_URL_SCALE_IN can getTestScalingMessage(): QUEUE_URL_SCALE_IN.size=${QUEUE_URL_SCALE_IN.size}`, LogLevel.ERROR, QUEUE_URL_SCALE_IN);
-    throw new Error(`Only Agents with a single QUEUE_URL_SCALE_IN can getTestScalingMessage(): QUEUE_URL_SCALE_IN.size=${QUEUE_URL_SCALE_IN.size}`);
+    const message = `Only Agents with a single QUEUE_URL_SCALE_IN can getTestScalingMessage(): QUEUE_URL_SCALE_IN.size=${QUEUE_URL_SCALE_IN.size}`;
+    log(message, LogLevel.WARN, QUEUE_URL_SCALE_IN);
+    throw new Error(message);
   }
   const queueUrlScale = QUEUE_URL_SCALE_IN.values().next().value;
   const params: ReceiveMessageCommandInput = {
@@ -422,7 +425,7 @@ export async function sendTestScalingMessage (sqsQueueName?: string): Promise<st
     log(`sendTestScalingMessage result.MessageId: ${result.MessageId}`, LogLevel.DEBUG);
     return result.MessageId;
   } catch (error: unknown) {
-    log("Could not send new Test Scaling Message", LogLevel.ERROR, error);
+    log("Could not send new Test Scaling Message", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -446,7 +449,7 @@ export async function refreshTestScalingMessage (): Promise<string | undefined> 
     }
     return messageId;
   } catch (error: unknown) {
-    log("Could not refresh Test Scaling Message", LogLevel.ERROR, error);
+    log("Could not refresh Test Scaling Message", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -467,7 +470,7 @@ export async function deleteTestScalingMessage (): Promise<string | undefined> {
     }
     return scalingMessage && scalingMessage.MessageId;
   } catch (error: unknown) {
-    log("Could not delete a Test Scaling Message", LogLevel.ERROR, error);
+    log("Could not delete a Test Scaling Message", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -482,7 +485,7 @@ export async function receiveMessage (params: ReceiveMessageCommandInput): Promi
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("receiveMessage failed", LogLevel.ERROR, error);
+    log("receiveMessage failed", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -497,7 +500,7 @@ export async function sendMessage (params: SendMessageCommandInput): Promise<Sen
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("sendMessage failed", LogLevel.ERROR, error);
+    log("sendMessage failed", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -512,7 +515,7 @@ export async function deleteMessage (params: DeleteMessageCommandInput): Promise
     callAccessCallback(new Date()); // Update the last timestamp
     return;
   } catch (error: unknown) {
-    log("deleteMessage failed", LogLevel.ERROR, error);
+    log("deleteMessage failed", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -527,7 +530,7 @@ export async function changeMessageVisibility (params: ChangeMessageVisibilityCo
     callAccessCallback(new Date()); // Update the last timestamp
     return;
   } catch (error: unknown) {
-    log("changeMessageVisibility failed", LogLevel.ERROR, error);
+    log("changeMessageVisibility failed", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -541,7 +544,7 @@ export async function getQueueAttributes (params: GetQueueAttributesCommandInput
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("getQueueAttributes failed", LogLevel.ERROR, error);
+    log("getQueueAttributes failed", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -572,7 +575,7 @@ export async function cleanUpQueue (sqsQueueType: SqsQueueType, sqsQueueName?: s
       }
     } while (messageReceived !== undefined);
   } catch (error: unknown) {
-    log(QueueUrl + ": Error cleaning up the scaling queue", LogLevel.ERROR, error);
+    log(QueueUrl + ": Error cleaning up the scaling queue", LogLevel.WARN, error);
   }
   return count;
 }

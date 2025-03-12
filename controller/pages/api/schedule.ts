@@ -1,5 +1,5 @@
 import { AuthPermission, AuthPermissions, ErrorResponse, TestManagerResponse } from "../../types";
-import { LogLevel, PpaasTestId, log, logger } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse, PageConfig } from "next";
 import {
   ParsedForm,
@@ -12,8 +12,6 @@ import { EventInput } from "@fullcalendar/core";
 import TestManager from "./util/testmanager";
 import TestScheduler from "./util/testscheduler";
 import { authApi } from "./util/authserver";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view the schedule, but not modify
@@ -29,8 +27,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       const calendarEvents: EventInput[] = await TestScheduler.getCalendarEvents();
       res.status(200).json(calendarEvents);
     } catch (error) {
-      log("Could not load TestScheduler.getCalendarEvents()", LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
 
   } else if (req.method === "DELETE") {
@@ -39,8 +36,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         const result: ErrorResponse = await TestScheduler.removeTest(req.query.testId, authPermissions, true);
         res.status(result.status).json(result.json);
       } catch (error) {
-        log(`Could not TestScheduler.removeTest(${req.query.testId})`, LogLevel.ERROR, error);
-        res.status(500).json(createErrorResponse(req, error));
+        res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
       }
     } else {
       res.status(400).json(createErrorResponse(req, { message: "TestId Not provided" }));
@@ -67,8 +63,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     } finally {
       // Delete any and all of the temporary files and remove the directory
       await cleanupTestFolder(localPath);

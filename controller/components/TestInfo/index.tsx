@@ -105,7 +105,7 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
         : await axios.put(formatPageHref(`${API_STOP}?testId=${testData.testId}${killTest ? "&kill=true" : ""}`));
       if (!isTestManagerMessage(response.data)) {
         const errorString = (deleteSchedule ? API_SCHEDULE : API_STOP) + " did not return a TestManagerMessage object";
-        log(errorString, LogLevel.ERROR, response.data);
+        log(errorString, LogLevel.WARN, response.data);
         throw new Error(errorString);
       }
       const json: TestManagerMessage = response.data;

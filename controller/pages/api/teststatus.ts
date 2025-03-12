@@ -1,11 +1,9 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
-import TestManager from "./util/testmanager";
+import { LogLevel } from "@fs/ppaas-common";
+import { TestManager } from "./util/testmanager";
 import { authApi } from "./util/authserver";
 import { createErrorResponse } from "./util/util";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view
@@ -20,8 +18,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       const testManagerResponse: TestManagerResponse = await TestManager.getTestStatus(req.query.testId);
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
   } else {
     res.status(400).json({ message: `method ${req.method} is not supported for this endpoint` });

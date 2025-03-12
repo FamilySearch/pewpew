@@ -1,8 +1,7 @@
-import { LogLevel, ec2, log, s3, sqs } from "@fs/ppaas-common";
+import { LogLevel, SqsQueueType, ec2, log, s3, sqs, util } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
 import express from "express";
 import { getHostname } from "./util/util";
-import { util } from "@fs/ppaas-common";
 
 const listObjects = s3.listObjects;
 const setS3AccessCallback = s3.setAccessCallback;
@@ -61,12 +60,31 @@ export async function pingS3 (): Promise<boolean> {
   log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
   // Ping S3 and update the lastS3Access if it works
   try {
-    await listObjects("ping"); // Limit 1 so we can get back fast
+    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
     config.lastS3Access = new Date();
     log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
     return true;
   } catch (error) {
-    log("pingS3 failed", LogLevel.ERROR, error);
+    log("pingS3 failed}", LogLevel.WARN, error);
+    // DO NOT REJECT. Just return false
+    return false;
+  }
+}
+
+// Shared function for the SQS healthcheck and normal healthcheck if accessSQSPass fails
+export async function pingSQS (): Promise<boolean> {
+  log("Pinging SQS at " + new Date(), LogLevel.DEBUG);
+  // Ping SQS and update the lastSQSAccess if it works
+  try {
+    const map = await sqs.getQueueAttributesMap(SqsQueueType.Test);
+    if (map === undefined) {
+      throw new Error("getQueueAttributesMap did not return results");
+    }
+    log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
+    log("pingSQS getQueueAttributesMap", LogLevel.DEBUG, map);
+    return true;
+  } catch (error) {
+    log("pingSQS failed", LogLevel.WARN, error);
     // DO NOT REJECT. Just return false
     return false;
   }
@@ -87,7 +105,7 @@ export function init (): Router {
       res.status(500).json(config);
     } else {
       const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await pingS3());
-      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess);
+      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
       log("healthcheck", LogLevel.DEBUG, { ...config, s3Pass, sqsPass });
       res.status(s3Pass && sqsPass ? 200 : 500).json({ ...config, s3: s3Pass || false, sqs: sqsPass || false });
     }
@@ -99,7 +117,7 @@ export function init (): Router {
       res.status(500).json(config);
     } else {
       const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await pingS3());
-      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess);
+      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
       log("heartbeat", LogLevel.DEBUG, { ...config, s3Pass, sqsPass });
       res.status(s3Pass && sqsPass ? 200 : 500).json({ s3: s3Pass || false, sqs: sqsPass || false });
     }
@@ -110,8 +128,8 @@ export function init (): Router {
     res.status(s3Pass ? 200 : 500).json({ ...config, s3: s3Pass || false });
   });
   // define the sqs route
-  router.get("/sqs", (_req: Request, res: Response) => {
-    const sqsPass: boolean = accessSqsPass(config.lastSQSAccess);
+  router.get("/sqs", async (_req: Request, res: Response) => {
+    const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
     res.status(sqsPass ? 200 : 500).json({ ...config, sqs: sqsPass || false });
   });
 

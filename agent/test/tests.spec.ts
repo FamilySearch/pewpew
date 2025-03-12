@@ -4,7 +4,6 @@ import {
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
-  logger,
   s3,
   sqs,
   util
@@ -37,8 +36,6 @@ import {
 } from "../test/mock";
 import { getKey as getKeyS3Message } from "@fs/ppaas-common/dist/src/ppaass3message";
 import { readFile } from "fs/promises";
-
-logger.config.LogFileName = "ppaas-agent";
 
 describe("Tests Build Test", () => {
   let ppaasTestId: PpaasTestId;

@@ -7,7 +7,6 @@ import {
   LogLevel,
   PpaasS3File,
   log,
-  logger,
   sleep
 } from "@fs/ppaas-common";
 import { Entry as ZipEntry, ZipFile, Options as ZipOptions, open as _yauzlOpen } from "yauzl";
@@ -27,9 +26,6 @@ import fs from "fs/promises";
 import { promisify } from "util";
 
 const yauzlOpen: (path: string, options: ZipOptions) => Promise<ZipFile | undefined> = promisify(_yauzlOpen);
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 export const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || tmpdir() || "/tmp";
 const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || "0") || 500;
 const MAX_ZIP_FILE_COUNT = 10;
@@ -101,7 +97,7 @@ export async function uploadFile (file: File, s3Folder: string, tags?: Map<strin
     await s3File.upload();
     return s3File;
   } catch (error) {
-    log("Could not upload file: " + (file && file.originalFilename), LogLevel.ERROR, error);
+    log("Could not upload file: " + (file && file.originalFilename), LogLevel.WARN, error);
     throw error;
   }
 }
@@ -145,12 +141,12 @@ export async function unzipFile (file: File): Promise<File[]> {
           }
           zipfile!.openReadStream(entry, (error, readStream) => {
             if (error) {
-              log(`checkUnzipFile zipfile.openReadStream error ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.ERROR, error, entry);
+              log(`checkUnzipFile zipfile.openReadStream error ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, error, entry);
               reject(error);
               return;
             }
             if (!readStream) {
-              log(`checkUnzipFile zipfile.openReadStream undefined ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.ERROR, entry);
+              log(`checkUnzipFile zipfile.openReadStream undefined ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, entry);
               reject(new Error (`Could not open ${entry.fileName} from ${file.originalFilename || file.filepath}`));
               return;
             }
@@ -166,7 +162,7 @@ export async function unzipFile (file: File): Promise<File[]> {
             log(`checkUnzipFile new file ${newFile.originalFilename || file.filepath}`, LogLevel.DEBUG, newFile.toJSON());
             newFiles.push(newFile);
             readStream.on("error", (err) => {
-              log(`checkUnzipFile zipfile.openReadStream on error ${newFile.originalFilename}`, LogLevel.ERROR, err, { filename: file.originalFilename || file.filepath });
+              log(`checkUnzipFile zipfile.openReadStream on error ${newFile.originalFilename}`, LogLevel.WARN, err, { filename: file.originalFilename || file.filepath });
               reject(err);
             });
             readStream.on("end", () => {
@@ -178,7 +174,7 @@ export async function unzipFile (file: File): Promise<File[]> {
         }
       });
       zipfile!.on("error", (error) => {
-        log(`checkUnzipFile zipfile error ${file.originalFilename || file.filepath}`, LogLevel.ERROR, error, { filename: file.originalFilename || file.filepath });
+        log(`checkUnzipFile zipfile error ${file.originalFilename || file.filepath}`, LogLevel.WARN, error, { filename: file.originalFilename || file.filepath });
         reject(error);
       });
       zipfile!.on("end", (entry) => {
@@ -193,7 +189,7 @@ export async function unzipFile (file: File): Promise<File[]> {
     try {
       if (zipfile) { zipfile.close(); }
     } catch (err) {
-      log("checkUnzipFile: Could not close file: " + (file && (file.originalFilename || file.filepath)), LogLevel.ERROR, err);
+      log("checkUnzipFile: Could not close file: " + (file && (file.originalFilename || file.filepath)), LogLevel.WARN, err);
     }
     throw error;
   }
@@ -235,7 +231,7 @@ export async function cleanupTestFolder (localPath: string | undefined): Promise
       await fs.rmdir(localPath);
     }
   } catch (error) {
-    log(`Could not delete ${localPath}: ${error}`, LogLevel.ERROR, error, files);
+    log(`Could not delete ${localPath}: ${error}`, LogLevel.WARN, error, files);
   }
 }
 

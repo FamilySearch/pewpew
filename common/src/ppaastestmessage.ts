@@ -108,8 +108,9 @@ export class PpaasTestMessage implements TestMessage {
       }
       log("AgentQueueDescriptionMap", LogLevel.DEBUG, PpaasTestMessage.AgentQueueDescriptionMapping);
     } else {
-      log("Cannot create the AgentQueueDescriptionMap, queueNames and AgentDescriptions don't match in length", LogLevel.ERROR, { queueNames, AgentDescriptions });
-      throw new Error("Cannot create the AgentQueueDescriptionMap, queueNames and AgentDescriptions don't match in length");
+      const message = "Cannot create the AgentQueueDescriptionMap, queueNames and AgentDescriptions don't match in length";
+      log(message, LogLevel.WARN, { queueNames, AgentDescriptions });
+      throw new Error(message);
     }
     return PpaasTestMessage.AgentQueueDescriptionMapping;
   }
@@ -133,7 +134,7 @@ export class PpaasTestMessage implements TestMessage {
           temp = JSON.parse(Buffer.from(value.BinaryValue!).toString());
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.DEBUG, temp);
         } catch (error: unknown) {
-          log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.ERROR, error);
+          log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.WARN, error);
           throw new Error(`New Test Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`);
         }
         switch (key) {
@@ -165,12 +166,12 @@ export class PpaasTestMessage implements TestMessage {
             break;
         }
       } else {
-        log(`messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.ERROR);
+        log(`messageAttributes[${key}].DataType = ${value.DataType}`, LogLevel.WARN);
         throw new Error(`New Test Message Attribute was not type String or Binary: messageAttributes[${key}].DataType = ${value.DataType}`);
       }
     }
     if (!parsedTestMessage) {
-      log("PpaasTestMessage was missing the TestMessage", LogLevel.ERROR, { testId });
+      log("PpaasTestMessage was missing the TestMessage", LogLevel.WARN, { testId });
       throw new Error("New Test Message was missing testId, s3Folder, yamlFile, or testRunTime");
     } else if (!parsedTestMessage.testId || typeof parsedTestMessage.testId !== "string"
       || !parsedTestMessage.s3Folder || typeof parsedTestMessage.s3Folder !== "string"
@@ -179,7 +180,7 @@ export class PpaasTestMessage implements TestMessage {
       || !parsedTestMessage.envVariables || typeof parsedTestMessage.envVariables !== "object"
     ) {
       // Don't log the environment variables
-      log("PpaasTestMessage was missing data", LogLevel.ERROR, { ...parsedTestMessage, envVariables: Object.keys(parsedTestMessage.envVariables) });
+      log("PpaasTestMessage was missing data", LogLevel.WARN, { ...parsedTestMessage, envVariables: Object.keys(parsedTestMessage.envVariables) });
       throw new Error("New Test Message was missing testId, s3Folder, yamlFile, or envVariables");
     }
     const newTest: PpaasTestMessage = new this(parsedTestMessage);
@@ -192,18 +193,18 @@ export class PpaasTestMessage implements TestMessage {
       log(`Removing Integration TestMessage from queue ${receiptHandle}`, LogLevel.INFO);
       // Only delete it if it's a test message
       await deleteMessageByHandle({ messageHandle: receiptHandle, sqsQueueType: SqsQueueType.Test })
-      .catch((error) => log(`Could not remove Integration Test message from from queue: ${receiptHandle}`, LogLevel.ERROR, error));
+      .catch((error) => log(`Could not remove Integration Test message from from queue: ${receiptHandle}`, LogLevel.WARN, error));
       return undefined;
     }
     // The sanitizedCopy wipes out the envVariables (which may have passwords) from the logs
-    log(`New TestMessage received at ${Date.now()}: ${testId}`, LogLevel.INFO, newTest.sanitizedCopy());
+    log(`New TestMessage received at ${Date.now()}: ${testId}`, LogLevel.DEBUG, newTest.sanitizedCopy());
     return newTest;
   }
 
   public async send (queueName: string): Promise<void> {
     if (this.testRunTimeMn === undefined && !this.bypassParser) {
       // Don't log the environment variables
-      log("TestMessage must either have a testRunTimeMn or have set bypassParser", LogLevel.ERROR, this.sanitizedCopy());
+      log("TestMessage must either have a testRunTimeMn or have set bypassParser", LogLevel.WARN, this.sanitizedCopy());
       throw new Error("TestMessage must either have a testRunTimeMn or have set bypassParser");
     }
     const testMessage: TestMessage = this.getTestMessage();
@@ -227,7 +228,7 @@ export class PpaasTestMessage implements TestMessage {
     }
     log("PpaasTestMessage.send messageAttributes", LogLevel.DEBUG, Object.assign({}, messageAttributes, { EnvironmentVariables: undefined }));
     this.messageId = await sendNewTestToRun(messageAttributes, queueName);
-    log(`PpaasTestMessage.send messageId: ${this.messageId}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasTestMessage.send messageId: ${this.messageId}`, LogLevel.DEBUG, this.sanitizedCopy());
   }
 
   public async extendMessageLockout (): Promise<void> {

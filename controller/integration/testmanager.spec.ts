@@ -21,7 +21,6 @@ import {
   PpaasTestMessage,
   TestStatus,
   log,
-  logger,
   s3
 } from "@fs/ppaas-common";
 import { TestManager, defaultRecurringFileTags} from "../pages/api/util/testmanager";
@@ -32,8 +31,6 @@ import { TestScheduler } from "../pages/api/util/testscheduler";
 import { expect } from "chai";
 import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
 import path from "path";
-
-logger.config.LogFileName = "ppaas-controller";
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it
 export const UNIT_TEST_FOLDER: string = path.resolve(process.env.UNIT_TEST_FOLDER || "test");

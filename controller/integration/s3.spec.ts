@@ -1,12 +1,10 @@
 import { IncomingMessage, ServerResponse } from "http";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { cleanupAcceptanceFiles, uploadAcceptanceFiles } from "./util";
 import { Socket } from "net";
 import { expect } from "chai";
 import { getS3Response } from "../pages/api/util/s3";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const GZIP_HEADER_NAME = "content-encoding";
 const GZIP_HEADER_VALUE = "gzip";

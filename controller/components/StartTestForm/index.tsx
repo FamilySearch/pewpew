@@ -475,7 +475,7 @@ export const StartTestForm = ({
         onUploadProgress: (progressEvent) => {
           const { loaded, total } = progressEvent || {};
           if (typeof loaded !== "number" || typeof total !== "number") {
-            log("onUploadProgress invalid loaded or total type", LogLevel.ERROR, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
+            log("onUploadProgress invalid loaded or total type", LogLevel.WARN, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
             return;
           }
           const percent = Math.floor((loaded / total) * 100);
@@ -489,7 +489,7 @@ export const StartTestForm = ({
       // log("StartNewTest post response", LogLevel.DEBUG, response);
       if (!isTestData(response.data)) {
         const errorString = (editSchedule ? API_SCHEDULE : API_TEST) + " did not return a TestData object";
-        log(errorString, LogLevel.ERROR, response.data);
+        log(errorString, LogLevel.WARN, response.data);
         throw new Error(errorString);
       }
       const responseData: TestData = response.data;
@@ -552,7 +552,7 @@ export const StartTestForm = ({
         });
       }
     } catch (error) {
-      log("Error Downloading Yaml file", LogLevel.ERROR, error);
+      log("Error Downloading Yaml file", LogLevel.WARN, error);
       setState({
         yamlError: formatError(error)
       });

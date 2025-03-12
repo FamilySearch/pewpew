@@ -69,11 +69,11 @@ export class PpaasS3File implements S3File {
     try {
       initS3();
     } catch (error: unknown) {
-      log("Could not initialize s3", LogLevel.ERROR, error);
+      log("Could not initialize s3", LogLevel.WARN, error);
       throw error;
     }
     if (!filename || !s3Folder || localDirectory === undefined) {
-      log("PpaasS3File was missing data", LogLevel.ERROR, { filename, s3Folder, localDirectory });
+      log("PpaasS3File was missing data", LogLevel.WARN, { filename, s3Folder, localDirectory });
       throw new Error("New Test Message was missing filename, s3Folder, or localDirectory");
     }
     this.filename = filename;
@@ -152,7 +152,7 @@ export class PpaasS3File implements S3File {
       }));
       return ppaasFiles;
     } catch (error: unknown) {
-      log(`getAllFilesInS3(${s3Folder}, ${localDirectory}) failed`, LogLevel.ERROR, error);
+      log(`getAllFilesInS3(${s3Folder}, ${localDirectory}) failed`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -278,7 +278,7 @@ export class PpaasS3File implements S3File {
         // Update last modified local
         this.lastModifiedLocal = stats.mtimeMs;
       } catch (error: unknown) {
-        log(`Error uploading ${this.filename}`, LogLevel.ERROR, error);
+        log(`Error uploading ${this.filename}`, LogLevel.WARN, error);
         caughtError = error;
         // We'll throw it later after all retries
       }

@@ -1,8 +1,5 @@
 import { S3_ALLOWED_LAST_ACCESS_MS, SQS_ALLOWED_LAST_ACCESS_MS, accessS3Pass, accessSqsPass } from "../src/healthcheck";
 import { expect } from "chai";
-import { logger } from "@fs/ppaas-common";
-
-logger.config.LogFileName = "ppaas-agent";
 
 describe("Healthcheck", () => {
   describe("S3 Healthcheck should check last s3 access", () => {

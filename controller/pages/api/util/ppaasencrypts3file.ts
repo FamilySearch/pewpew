@@ -1,8 +1,6 @@
-import { LogLevel, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, log, s3, util } from "@fs/ppaas-common";
 import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { decrypt, encrypt } from "./secrets";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { getFileContents, getTags, init, KEYSPACE_PREFIX, listFiles, uploadFileContents } = s3;
 const { sleep } = util;
@@ -42,12 +40,12 @@ export class PpaasEncryptS3File implements s3.S3File {
     try {
       init();
     } catch (error) {
-      log("Could not initialize s3", LogLevel.ERROR, error);
+      log("Could not initialize s3", LogLevel.WARN, error);
       throw error;
     }
     if (!filename || !s3Folder || fileContents === undefined ) {
       // Don't log the environment variables
-      log("PpaasEncryptS3File was missing data", LogLevel.ERROR, { filename, s3Folder, fileContents });
+      log("PpaasEncryptS3File was missing data", LogLevel.WARN, { filename, s3Folder, fileContents });
       throw new Error("New Test Message was missing filename, s3Folder, or fileContents");
     }
     this.filename = filename;
@@ -88,10 +86,10 @@ export class PpaasEncryptS3File implements s3.S3File {
         }));
         return ppaasEncryptS3File;
       });
-      await Promise.all(downloadPromises).catch((error) => log(`Could not download all files in ${s3Folder}`, LogLevel.ERROR, error));
+      await Promise.all(downloadPromises).catch((error) => log(`Could not download all files in ${s3Folder}`, LogLevel.WARN, error));
       return ppaasFiles;
     } catch (error) {
-      log(`getAllFilesInS3(${s3Folder}) failed`, LogLevel.ERROR, error);
+      log(`getAllFilesInS3(${s3Folder}) failed`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -174,7 +172,7 @@ export class PpaasEncryptS3File implements s3.S3File {
       return;
     }
     // If it's retry it's the last time, log it for real
-    log(`Uploading ${this.filename}`, retry ? LogLevel.INFO : LogLevel.DEBUG);
+    log(`Uploading ${this.filename}`, LogLevel.DEBUG);
     let retryCount: number = 0;
     let caughtError: any;
     let uploaded: boolean = false;
@@ -198,7 +196,7 @@ export class PpaasEncryptS3File implements s3.S3File {
         // Update last modified local
         this.lastModifiedLocal = Date.now();
       } catch (error) {
-        log(`Error uploading ${this.filename}`, LogLevel.ERROR, error);
+        log(`Error uploading ${this.filename}`, LogLevel.WARN, error);
         caughtError = error;
         // We'll throw it later after all retries
       }

@@ -6,11 +6,7 @@ import { authApi } from "../../../util/authserver";
 import { createErrorResponse } from "../../../util/util";
 import { getS3Response } from "../../../util/s3";
 
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 const { getFileContents, listFiles } = s3;
-
 
 export async function getPewPewErrors ({ yamlFile, dateString }: { yamlFile: string, dateString: string }): Promise<string | undefined> {
   const testId = `${yamlFile}${dateString}`;
@@ -25,7 +21,7 @@ export async function getPewPewErrors ({ yamlFile, dateString }: { yamlFile: str
     try {
       return await getFileContents({ filename, s3Folder, maxLength: 5000 });
     } catch (error) {
-      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files);
+      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files);
     }
   }
 }

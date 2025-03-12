@@ -30,8 +30,7 @@ import {
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
-  log,
-  logger
+  log
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
 import { mockGetObjectTagging, mockS3, resetMockS3 } from "./mock";
@@ -42,8 +41,6 @@ import { VERSION_TAG_NAME } from "../pages/api/util/pewpew";
 import { expect } from "chai";
 import { latestPewPewVersion } from "../pages/api/util/clientutil";
 import path from "path";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const localDirectory: string = path.resolve(process.env.UNIT_TEST_FOLDER || "test");
 const BASIC_YAML_FILE: string = "basic.yaml";

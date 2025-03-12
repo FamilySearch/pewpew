@@ -1,4 +1,4 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
   IV_LENGTH as SECRET_LENGTH,
@@ -17,8 +17,6 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import crypto from "crypto";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 describe("Secrets Integration", () => {
   before(async () => {

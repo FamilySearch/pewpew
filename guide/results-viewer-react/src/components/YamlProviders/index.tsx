@@ -1,5 +1,5 @@
+import { Button, Div, InputsDiv} from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Div, InputsDiv} from "../YamlStyles";
 import { ProviderType, ProviderTypes } from "./ProviderTypes";
 import React, { useRef, useState } from "react";
 import { PewPewProvider } from "../../util/yamlwriter";
@@ -117,29 +117,29 @@ export function Providers ({ providers, ...props }: ProviderMainProps) {
   const nodeRef = useRef(null);
   return (
     <InputsDiv>
-      <button onClick={() => addProviderDropDown()}>
-        Add Providers
-      </button>
-      <button onClick={clearProviders}>
+      <Button onClick={() => addProviderDropDown()}>
+        Add Provider
+      </Button>
+      <Button onClick={clearProviders}>
         Clear All Providers
-      </button>&nbsp;&nbsp;
+      </Button>&nbsp;&nbsp;
       <QuestionBubble text="Click here for more information about Providers" href="https://familysearch.github.io/pewpew/config/providers-section.html"></QuestionBubble>
       &nbsp;&nbsp;
       <Div style={{marginTop: "0px"}}>
         {display &&
           <ProviderInputsDiv>
-              <button id={PROVIDER_FILE} onClick={() => props.addProvider(newProviderFile())}>
+              <Button id={PROVIDER_FILE} onClick={() => props.addProvider(newProviderFile())}>
                   File
-              </button>
-              <button id={PROVIDER_RESPONSE} onClick={() => props.addProvider(newProviderResponse())}>
+              </Button>
+              <Button id={PROVIDER_RESPONSE} onClick={() => props.addProvider(newProviderResponse())}>
                   Response
-              </button>
-              <button id={PROVIDER_RANGE} onClick={() => props.addProvider(newProviderRange())}>
+              </Button>
+              <Button id={PROVIDER_RANGE} onClick={() => props.addProvider(newProviderRange())}>
                   Range
-              </button>
-              <button id={PROVIDER_LIST} onClick={() => props.addProvider(newProviderList())}>
+              </Button>
+              <Button id={PROVIDER_LIST} onClick={() => props.addProvider(newProviderList())}>
                   List
-              </button>&nbsp;&nbsp;
+              </Button>&nbsp;&nbsp;
               <QuestionBubble text="Select the type of provider you want to add"></QuestionBubble>
           </ProviderInputsDiv>
         }

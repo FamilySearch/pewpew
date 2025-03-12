@@ -1,9 +1,7 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import { createErrorResponse } from "./util/util";
 import { getLogoutUrl } from "./util/authserver";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 
@@ -13,7 +11,6 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       log(`${req.method} ${req.url} logoutUrl response: ${logoutUrl}`, LogLevel.DEBUG);
       res.redirect(302, logoutUrl);
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
       res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
     }
   } else {

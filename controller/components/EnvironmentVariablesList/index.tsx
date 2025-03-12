@@ -87,12 +87,12 @@ export const EnvironmentVariablesList = ({
             }
             break;
           default:
-            log("Unknown input type", LogLevel.ERROR, input);
+            log("Unknown input type", LogLevel.WARN, input);
             return;
         }
         onAddOrUpdate(newVar);
       } else {
-        log("Could not parse input", LogLevel.ERROR, { input, parts });
+        log("Could not parse input", LogLevel.WARN, { input, parts });
       }
     }
   };

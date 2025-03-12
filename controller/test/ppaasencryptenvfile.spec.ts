@@ -13,7 +13,6 @@ import {
   LogLevel,
   PpaasTestId,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -32,8 +31,6 @@ import {
   resetMockSecrets
 } from "./mock";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { ADDITIONAL_TAGS_ON_ALL, defaultTestFileTags } = s3;
 const UNIT_TEST_FILENAME: string = "unittest.json";

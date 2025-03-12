@@ -22,13 +22,11 @@ const props: LoadPatternProps = {
     // eslint-disable-next-line no-console
     console.log("changing LoadPattern " + pewpewPattern.id, pewpewPattern);
   },
-  defaultYaml: false,
   patterns: [],
   vars: []
 };
 
 const propsDefault: LoadPatternProps = { ...props,
-  defaultYaml: true,
   patterns: [
     { id: RAMP_PATTERN, from: "10", to: "100", over: "15m" },
     { id: LOAD_PATTERN, from: "100", to: "100", over: "15m" }
@@ -36,7 +34,6 @@ const propsDefault: LoadPatternProps = { ...props,
 };
 
 const propsLoaded: LoadPatternProps = { ...props,
-  defaultYaml: false,
   patterns: [
     { id: "0", from: "10", to: "100", over: "15m" },
     { id: "1", from: "100", to: "100", over: "15m" },

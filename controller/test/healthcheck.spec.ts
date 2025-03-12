@@ -8,9 +8,6 @@ import {
 } from "../pages/api/util/healthcheck";
 import { mockListObjects, mockS3, resetMockS3 } from "./mock";
 import { expect } from "chai";
-import { logger } from "@fs/ppaas-common";
-
-logger.config.LogFileName = "ppaas-controller";
 
 describe("Healthcheck", () => {
   before(() => {

@@ -23,7 +23,7 @@ export const getServerSideProps = async (): Promise<VersionInitalProps> => {
     };
   } catch (error) {
     // We need this error on the client and the server
-    log("Error loading pewpew versions", LogLevel.ERROR, error);
+    log("Error loading pewpew versions", LogLevel.WARN, error);
     return {
       pewpewVersion: "",
       pewpewVersions: [],

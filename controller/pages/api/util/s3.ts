@@ -1,14 +1,11 @@
 import { GetObjectCommand, GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { LogLevel, log, logger, s3 } from "@fs/ppaas-common";
+import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { TestManagerError } from "../../../types";
 import getConfig from "next/config";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";
 import { gunzip as zlibGunzip} from "zlib";
-
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
 const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
@@ -77,7 +74,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       try {
         s3Object = await getObject(key);
       } catch (error) {
-        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files.map((file) => file.Key));
+        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files.map((file) => file.Key));
       }
       if (s3Object && s3Object.Body) {
         // If listFiles somehow found more than 1 file, check size again here

@@ -24,6 +24,7 @@ system-test-encrypt-key*
 /out/
 /dist/
 /clr/dist/
+/next-env.d.ts
 
 # production
 /build

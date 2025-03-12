@@ -40,7 +40,7 @@ export class PpaasTestStatus implements TestStatusMessage {
     try {
       initS3();
     } catch (error: unknown) {
-      log("Could not initialize s3", LogLevel.ERROR, error);
+      log("Could not initialize s3", LogLevel.WARN, error);
       throw error;
     }
     this.ppaasTestId = ppaasTestId;
@@ -146,11 +146,11 @@ export class PpaasTestStatus implements TestStatusMessage {
         log(`PpaasTestStatus.getStatus(${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { newMessage: newMessage.sanitizedCopy() });
         return newMessage;
       } catch (error: unknown) {
-        log(`PpaasTestStatus Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.ERROR, error);
+        log(`PpaasTestStatus Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.WARN, error);
         throw error;
       }
     } catch (error: unknown) {
-      log(`PpaasTestStatus.getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.ERROR, error);
+      log(`PpaasTestStatus.getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -223,7 +223,7 @@ export class PpaasTestStatus implements TestStatusMessage {
           log(`PpaasTestStatus.getStatus(${testIdContentsRead.ppaasTestId.s3Folder})`, LogLevel.DEBUG, { newMessage: newMessage.sanitizedCopy() });
           return newMessage;
         }).catch((error) => {
-          log(`Could not retrieve statuses for s3Folder ${testIdContents.ppaasTestId.s3Folder}`, LogLevel.ERROR, error);
+          log(`Could not retrieve statuses for s3Folder ${testIdContents.ppaasTestId.s3Folder}`, LogLevel.WARN, error);
           throw error;
         })
       );
@@ -264,7 +264,7 @@ export class PpaasTestStatus implements TestStatusMessage {
       tags: this.tags
     });
     this.lastModifiedRemote = newDate; // Update the last modified
-    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.DEBUG, this.sanitizedCopy());
     return this.url;
   }
   // Unlike messages, we don't want to delete this

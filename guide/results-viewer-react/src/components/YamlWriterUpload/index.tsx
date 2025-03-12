@@ -5,13 +5,14 @@ import {
   AccordionItemHeading,
   AccordionItemPanel
 } from "react-accessible-accordion";
+import { Button, Span } from "../YamlStyles";
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import React, { useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { Div } from "../Div";
 import DropFile from "../DropFile";
-import { Span } from "../YamlStyles";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
@@ -24,14 +25,7 @@ export const HeaderMain = styled.div`
   font: 14px "Century Gothic", Futura, sans-serif;
   text-align: left;
 `;
-const UploadHarButton = styled.button`
-  justify-content: left;
-  padding: 2px;
-  width: fit-content;
-  height: fit-content;
-  min-width: 115px;
-  margin-top: 1.2%
-`;
+
 const AccHeadingDiv = styled.div`
   display: flex;
   flex-wrap: nowrap;
@@ -407,15 +401,15 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   return (
     <HeaderMain>
       <h2> Create from Har File </h2>
-      <Div style={{ marginTop: "0px", justifyContent: "space-between"}}>
-        <UploadHarButton onClick={() => fileModalRef.current?.openModal()}>
+      <Div style={{ marginTop: "0px", justifyContent: "space-between", height: "30px" }}>
+        <Button onClick={() => fileModalRef.current?.openModal()}>
           Upload Har File
-        </UploadHarButton>
-          <h3 style={{paddingRight: "100px"}}>
-            <a href="https://familysearch.github.io/pewpew/" target="_blank">
-            Help
-            </a>
-          </h3>
+        </Button>
+        <h3 style={{paddingRight: "100px"}}>
+          <a href="https://familysearch.github.io/pewpew/" target="_blank">
+          Help
+          </a>
+        </h3>
       </Div>
       {/* This is the upload file modal */}
       <Modal
@@ -430,13 +424,11 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <div style={{color: "rgb(242, 241, 239)"}}>
           Drag file to drop zone or click to select file to load. Currently will only load one file at a time.
         </div>
-        <div style={{ width: "90%", height: "250px" }}>
-          <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
-        </div>
+        <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
         <div>
           {state.file && (
             <div style={{paddingTop: "13px"}}>
-              <button style={{marginRight: "5px"}} onClick={clearFile}>X</button>
+              <Button style={{marginRight: "5px"}} onClick={clearFile}><DeleteIcon /></Button>
               {state.file.name}
             </div>
           )}
@@ -450,6 +442,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         onSubmit={finalizeEndpoints}
         closeText="Cancel"
         isReady={true}
+        scrollable={true}
       >
         <AccordianStyleDiv style={{paddingRight: "20px"}}>
           <div>
@@ -462,7 +455,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                 return (
                   <AccordionItem key={index}>
                     <AccHeadingDiv>
-                      <button
+                      <Button
                         onClick={() => handleChange("url", key)}
                         className={"accButton" +
                           (url.selected === "yes" ? " accUrlButtonYes" : "") +
@@ -473,7 +466,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                         {"" + (url.selected === "yes" ? "✔" : "") +
                           (url.selected === "partial" ? "/" : "") +
                           (url.selected === "no" ? "X" : "")}
-                      </button>
+                      </Button>
                       <AccordionItemHeading className="accUrlHead">
                         <AccordionItemButton>
                           <AccHeadingText>

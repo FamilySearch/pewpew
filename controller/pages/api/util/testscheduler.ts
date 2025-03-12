@@ -689,7 +689,7 @@ export class TestScheduler implements TestSchedulerItem {
               .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.WARN, error, { s3Folder, s3File }))
             )
           )
-        ).catch((error) => log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error));
+        ).catch((error) => log(`removeTest ${testId} failed to find s3 files`, LogLevel.WARN, error));
       }
       await TestScheduler.saveTestsToS3().catch(() => {/* noop logs itself */});
       try {

@@ -1,8 +1,14 @@
 import * as ec2 from "./util/ec2";
 import * as logger from "./util/log";
+import * as ppaascommessage from "./ppaascommessage";
+import * as ppaass3message from "./ppaass3message";
+import * as ppaastestmessage from "./ppaastestmessage";
+import * as ppaasteststatus from "./ppaasteststatus";
 import * as s3 from "./util/s3";
+import * as s3file from "./s3file";
 import * as sqs from "./util/sqs";
 import * as util from "./util/util";
+import * as yamlparser from "./yamlparser";
 import {
   APPLICATION_NAME,
   PEWPEW_BINARY_EXECUTABLE,
@@ -34,9 +40,15 @@ export type {
 export {
   ec2,
   logger,
+  ppaascommessage,
+  ppaass3message,
+  ppaastestmessage,
+  ppaasteststatus,
   s3,
+  s3file,
   sqs,
   util,
+  yamlparser,
   log,
   LogLevel,
   APPLICATION_NAME,

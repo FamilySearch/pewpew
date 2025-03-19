@@ -110,8 +110,12 @@ export class PpaasTestStatus implements TestStatusMessage {
     return this.ppaasTestId.s3Folder;
   }
 
-  // Get one initially
-  // Returns an object, false if not found, or true if unchanged
+  /**
+   * Internal function to get the latest TestStatusMessage
+   * @param ppaasTestId testId to retrieve
+   * @param lastModified if provided will only get changes
+   * @returns false if not found, true if unchanged, or the object
+   */
   protected static async getStatusInternal (ppaasTestId: PpaasTestId, lastModified?: Date): Promise<PpaasTestStatus | boolean> {
     const key = getKey(ppaasTestId);
     try {
@@ -232,6 +236,11 @@ export class PpaasTestStatus implements TestStatusMessage {
     return undefined;
   }
 
+  /**
+   * Reads the updated TestStatusMessage from S3 and returns the last modified date
+   * @param force Optional parameter to force redownloading
+   * @returns The date of the last modified of the file in S3
+   */
   public async readStatus (force?: boolean): Promise<Date> {
     const updatedStatus: PpaasTestStatus | boolean = await PpaasTestStatus.getStatusInternal(
       this.ppaasTestId,

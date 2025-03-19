@@ -45,6 +45,8 @@ import {
   YamlParser,
   log,
   logger,
+  ppaass3message,
+  ppaasteststatus,
   s3,
   sqs,
   util
@@ -52,14 +54,10 @@ import {
 import type { Fields, File, Files } from "formidable";
 import PpaasEncryptEnvironmentFile, { ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME } from "./ppaasencryptenvfile";
 import { formatError, isYamlFile, latestPewPewVersion } from "./clientutil";
-import { createS3Filename as createS3MessageFilename } from "@fs/ppaas-common/dist/src/ppaass3message";
-import { createS3Filename as createS3StatusFilename } from "@fs/ppaas-common/dist/src/ppaasteststatus";
 import fs from "fs/promises";
 import { getCurrentPewPewLatestVersion } from "./pewpew";
 import semver from "semver";
 
-const sendTestScalingMessage = sqs.sendTestScalingMessage;
-const createStatsFileName = util.createStatsFileName;
 export const MAX_SAVED_TESTS_RECENT: number = parseInt(process.env.MAX_SAVED_TESTS_RECENT || "0", 10) || 10;
 export const MAX_SAVED_TESTS_CACHED: number = parseInt(process.env.MAX_SAVED_TESTS_CACHED || "0", 10) || 1000;
 const MIN_SEARCH_LENGTH: number = parseInt(process.env.MIN_SEARCH_LENGTH || "0", 10) || 0;
@@ -952,9 +950,9 @@ export abstract class TestManager {
           startTime: ppaasTestId.date.getTime()
         };
       // Check s3 for the files
-      const s3MessageFilename: string = createS3MessageFilename(ppaasTestId);
-      const s3StatusFilename: string = createS3StatusFilename(ppaasTestId);
-      const statsFileName: string = path.parse(createStatsFileName(testId)).name;
+      const s3MessageFilename: string = ppaass3message.createS3Filename(ppaasTestId);
+      const s3StatusFilename: string = ppaasteststatus.createS3Filename(ppaasTestId);
+      const statsFileName: string = path.parse(util.createStatsFileName(testId)).name;
       const pewpewOutFilename: string = logger.pewpewStdOutFilename(testId).split("-").slice(0,4).join("-");
       const s3Files: PpaasS3File[] = await PpaasS3File.getAllFilesInS3({ s3Folder, localDirectory });
       let yamlFile: string | undefined;
@@ -1345,7 +1343,7 @@ export abstract class TestManager {
             return file.copy({ destinationS3Folder: s3Folder });
           })));
         } else {
-          const s3StatusFilename: string = createS3StatusFilename(ppaasTestId);
+          const s3StatusFilename: string = ppaasteststatus.createS3Filename(ppaasTestId);
           uploadPromises.push(...(copyFiles.map((file: PpaasS3File) => {
             // If we're changing from non-recurring to recurring or vice-versa we need to edit the existing file tags.
             // yaml and status files need defaultTestFileTags, all others should be defaultTestExtraFileTags
@@ -1418,7 +1416,7 @@ export abstract class TestManager {
 
     // Create a dummy results file so we can get the remoteFileLocation
     const resultsFile: PpaasS3File = new PpaasS3File({
-      filename: createStatsFileName(testId),
+      filename: util.createStatsFileName(testId),
       s3Folder,
       localDirectory
     });
@@ -1456,7 +1454,7 @@ export abstract class TestManager {
     const ppaasTestMessage: PpaasTestMessage = new PpaasTestMessage(testMessage);
     await ppaasTestMessage.send(queueName);
     // Put a message on the scale in queue so we don't scale back in
-    await sendTestScalingMessage(queueName);
+    await sqs.sendTestScalingMessage(queueName);
     // We succeeded! Yay!
     log ("TestManager: New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
 

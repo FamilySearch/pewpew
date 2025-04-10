@@ -42,10 +42,10 @@
     "rimraf": "^6.0.0"
   },
   "devDependencies": {
-    "@aws-sdk/util-stream-node": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.8.0",
     "@fs/config-wasm": "*",
+    "@smithy/util-stream": "^4.0.0",
     "@types/bunyan": "~1.8.8",
     "@types/chai": "^4.3.5",
     "@types/mocha": "^10.0.0",

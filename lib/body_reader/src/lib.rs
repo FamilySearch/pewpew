@@ -77,7 +77,7 @@ impl BodyReader {
             Compression::None => Inner::None,
         };
         let mut buffer = BytesMut::with_capacity(8192);
-        buffer.extend(iter::repeat(0).take(8192));
+        buffer.extend(iter::repeat_n(0, 8192));
         BodyReader { buffer, inner }
     }
 

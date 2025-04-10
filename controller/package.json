@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -71,7 +71,7 @@
     "rc-progress": "^4.0.0",
     "react": "^19.0.0",
     "react-accessible-accordion": "^5.0.0",
-    "react-datepicker": "~8.2.0",
+    "react-datepicker": "^8.2.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",

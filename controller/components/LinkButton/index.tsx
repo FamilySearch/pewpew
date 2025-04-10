@@ -3,7 +3,10 @@ import React from "react";
 import { formatPageHref } from "../../pages/api/util/clientutil";
 import styled from "styled-components";
 
-export const Button = styled.button`
+export const Button = styled.button<{ theme: LinkButtonTheme }>`
+  // Styled Components "patch" version broke typing:
+  // https://github.com/styled-components/styled-components/issues/5572
+  // But we may have to replace it because of https://github.com/styled-components/styled-components/issues/5573
   font-size: ${(props) => props.theme.buttonFontSize};
   width: ${(props) => props.theme.buttonWidth};
   height: ${(props) => props.theme.buttonHeight};

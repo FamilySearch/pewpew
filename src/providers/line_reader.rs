@@ -65,7 +65,7 @@ impl LineReader {
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.byte_buffer.len());
             if let Some(extend_length) = extend_length {
-                self.byte_buffer.extend(iter::repeat(0).take(extend_length));
+                self.byte_buffer.extend(iter::repeat_n(0, extend_length));
             }
             let buf = &mut self.byte_buffer[..hint];
             self.position += hint as u64;

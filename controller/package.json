@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "Controller Service for running pewpew tests",
   "private": true,
   "scripts": {
@@ -71,7 +71,7 @@
     "rc-progress": "^4.0.0",
     "react": "^19.0.0",
     "react-accessible-accordion": "^5.0.0",
-    "react-datepicker": "~8.2.0",
+    "react-datepicker": "^8.2.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",
@@ -86,10 +86,10 @@
     "@aws-sdk/credential-providers": "^3.363.0",
     "@aws-sdk/ec2-metadata-service": "^3.363.0",
     "@aws-sdk/lib-storage": "^3.363.0",
-    "@aws-sdk/util-stream-node": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.8.0",
     "@next/eslint-plugin-next": "^15.1.0",
+    "@smithy/util-stream": "^4.0.0",
     "@storybook/addon-actions": "^8.5.0",
     "@storybook/addon-links": "^8.5.0",
     "@storybook/nextjs": "^8.5.0",

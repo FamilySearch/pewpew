@@ -62,8 +62,7 @@ impl JsonReader {
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.staging_buffer.len());
             if let Some(extend_length) = extend_length {
-                self.staging_buffer
-                    .extend(iter::repeat(0).take(extend_length));
+                self.staging_buffer.extend(iter::repeat_n(0, extend_length));
             }
             let buf = &mut self.staging_buffer[..hint];
             self.position += hint as u64;

@@ -59,6 +59,7 @@ const buildTestMap = new ExpiryMap<string, boolean | unknown>(600_000); // 10 mi
 async function pollTestStatusForFinished (ppaasTestStatus: PpaasTestStatus): Promise<TestStatus> {
   let previousDate: Date = await ppaasTestStatus.readStatus();
   if (ppaasTestStatus.status === TestStatus.Finished || ppaasTestStatus.status === TestStatus.Failed) {
+    log("pollTestStatusForFinished status updated: " + ppaasTestStatus.status, LogLevel.WARN, { previousDate, ...ppaasTestStatus.getTestStatusMessage() });
     return ppaasTestStatus.status;
   }
   await util.poll(async () => {

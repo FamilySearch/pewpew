@@ -482,8 +482,13 @@ export class PewPewTest {
           const pewpewProcess = spawn(pewpewPath, pewpewParamsThisRun, { cwd: this.localPath, env: this.testMessage.envVariables })
           .on("error", (e: unknown) => {
             this.log(`pewpew error: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
-            this.internalStop().catch((error) => this.log("error stopping", LogLevel.WARN, error));
-            reject(e);
+            // If error includes `spawn pewpew ENOENT` then it never started. No need to stop
+            if (`${e}`.includes("spawn pewpew")) {
+              reject(e);
+            } else {
+              this.internalStop().catch((error) => this.log("error stopping", LogLevel.WARN, error));
+              // The exit after stop will reject
+            }
           })
           .on("exit", (code: number, signal: string) => {
             this.pewpewRunning = false;

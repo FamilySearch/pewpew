@@ -1494,7 +1494,7 @@ impl Repeat {
         } else {
             self.min
         };
-        iter::repeat(Cow::Owned(json::Value::Null)).take(n as usize)
+        iter::repeat_n(Cow::Owned(json::Value::Null), n as usize)
     }
 
     pub(super) fn into_stream<Ar: Clone + Send>(

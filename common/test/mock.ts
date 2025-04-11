@@ -41,7 +41,7 @@ import {
 import { LogLevel, log, s3, sqs, util } from "../src/index";
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";
-import { sdkStreamMixin } from "@aws-sdk/util-stream-node";
+import { sdkStreamMixin } from "@smithy/util-stream";
 const { MAX_STRING_LENGTH } = bufferConstants;
 
 const {

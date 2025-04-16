@@ -347,7 +347,7 @@ dependencies = [
  "ether",
  "futures",
  "http",
- "itertools",
+ "itertools 0.13.0",
  "js-sys",
  "jsonpath_lib",
  "log",
@@ -1022,6 +1022,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1174,9 +1183,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.12"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
+checksum = "87de3442987e9dbec73158d5c715e7ad9072fda936bb03d19d7fa10e00520f0e"
 dependencies = [
  "libc",
  "log",
@@ -1393,7 +1402,7 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "hyper-util",
- "itertools",
+ "itertools 0.14.0",
  "json_env_logger",
  "log",
  "maplit",

@@ -11,7 +11,7 @@
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
   "engines": {
-    "node": "^16 || ^18"
+    "node": ">=18"
   },
   "bugs": {
     "url": "https://github.com/FamilySearch/pewpew/issues"
@@ -19,7 +19,7 @@
   "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/hdr-histogram-wasm#readme",
   "dependencies": {},
   "devDependencies": {
-    "chai": "^4.3.7",
-    "mocha": "^10.8.2"
+    "chai": "^5.0.0",
+    "mocha": "^11.0.0"
   }
 }

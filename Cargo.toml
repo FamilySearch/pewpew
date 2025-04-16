@@ -63,7 +63,8 @@ openssl = { version = "0.10", features = ["vendored"] }
 futures-timer = "3"
 maplit = "1"
 tempfile = "3"
-unicode-ident = "1.0.12"
+# Locking these licenses to Unicode 2.0
+unicode-ident = "1.0.12" # 2.5.4 has a Unicode 3.0 license
 
 [profile.release]
 panic = "abort"

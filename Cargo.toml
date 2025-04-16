@@ -63,6 +63,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 futures-timer = "3"
 maplit = "1"
 tempfile = "3"
+unicode-ident = "1.0.12"
 
 [profile.release]
 panic = "abort"

@@ -16,7 +16,7 @@ jobs:
       - name: Add Node.js toolchain
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 22.x
 
       - name: Build Results Viewer and Book
         run: |

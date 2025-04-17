@@ -9,7 +9,7 @@ license.workspace = true
 base64.workspace = true
 boa_engine = "0.16.0"
 derivative = "2.2.0"
-derive_more = "0.99.17"
+derive_more = { version = "2", features = ["deref", "deref_mut", "from", "from_str"] }
 diplomatic-bag = "0.3.1"
 ether.workspace = true
 futures.workspace = true
@@ -34,7 +34,7 @@ serde-tuple-vec-map = "1.0.1"
 serde_yaml.workspace = true
 thiserror.workspace = true
 unicode-segmentation = "1"
-yaml-rust2 = { version = "0.8", optional = true }
+yaml-rust2 = { version = "0.10", optional = true }
 zip_all.workspace = true
 
 [dev-dependencies]

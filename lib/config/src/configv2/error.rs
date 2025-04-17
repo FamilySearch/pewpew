@@ -1,4 +1,5 @@
-use boa_engine::{syntax::parser::ParseError, JsValue};
+use boa_engine::JsValue;
+use boa_parser::Error as ParseError;
 use std::{error::Error as SError, io, sync::Arc};
 use thiserror::Error;
 

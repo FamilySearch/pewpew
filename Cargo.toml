@@ -55,7 +55,7 @@ yansi = "1"
 zip_all.workspace = true
 # https://github.com/softprops/json-env-logger/issues/6
 log = { workspace = true, features = ["kv_unstable_std"] }
-env_logger = "0.11"
+env_logger.workspace = true
 json_env_logger = { version = "0.1", features = ["iso-timestamps"] }
 # https://github.com/sfackler/rust-openssl/issues/1021#issuecomment-605602642
 openssl = { version = "0.10", features = ["vendored"] }
@@ -108,6 +108,7 @@ base64 = "0.22"
 bytes = "1"
 config = { path = "./lib/config" }
 ether = { path = "./lib/either" }
+env_logger = "0.11"
 futures = "0.3"
 futures-timer = "3"
 http = "1"

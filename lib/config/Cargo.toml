@@ -7,9 +7,9 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-boa_engine = "0.19"
-boa_gc = "0.19"
-boa_parser = "0.19"
+boa_engine = "0.20"
+boa_gc = "0.20"
+boa_parser = "0.20"
 derivative = "2.2.0"
 derive_more = { version = "2", features = ["deref", "deref_mut", "from", "from_str"] }
 diplomatic-bag = "0.3.1"

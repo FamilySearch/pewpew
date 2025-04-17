@@ -274,11 +274,11 @@ impl<T: TemplateType<ProvAllowed = True>> Template<String, T, True, True> {
                                 serde_json::Value::String(s) => {
                                     // We don't want to stringify the json::Value::String or it will escape out quotes, etc.
                                     // Get the internal string and use it.
-                                    debug!("Template into_stream_with zip_all json::string s={}, to_string={}", s, s.to_string());
+                                    debug!("Template into_stream_with zip_all json::string s={}", s);
                                     (s.trim_matches('"').to_owned(), ar)
                                 },
                                 other => {
-                                    debug!("Template into_stream_with zip_all json::other j={}, to_string={}", other, other.to_string());
+                                    debug!("Template into_stream_with zip_all json::other j={}", other);
                                     (other.to_string().trim_matches('"').to_owned(), ar)
                                 },
                             }

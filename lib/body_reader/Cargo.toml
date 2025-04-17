@@ -14,4 +14,4 @@ brotli-decompressor = "4"
 libflate = "2"
 
 [dev-dependencies]
-brotli = "6"
+brotli = "7"

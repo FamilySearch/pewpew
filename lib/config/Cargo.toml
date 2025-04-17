@@ -34,7 +34,7 @@ serde-tuple-vec-map = "1.0.1"
 serde_yaml.workspace = true
 thiserror.workspace = true
 unicode-segmentation = "1"
-yaml-rust2 = { version = "0.8", optional = true }
+yaml-rust2 = { version = "0.10", optional = true }
 zip_all.workspace = true
 
 [dev-dependencies]

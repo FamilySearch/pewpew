@@ -9,7 +9,7 @@ license.workspace = true
 base64.workspace = true
 boa_engine = "0.16.0"
 derivative = "2.2.0"
-derive_more = "0.99.17"
+derive_more = { version = "2", features = ["deref", "deref_mut", "from", "from_str"] }
 diplomatic-bag = "0.3.1"
 ether.workspace = true
 futures.workspace = true

@@ -5,7 +5,7 @@ import {
   AccordionItemHeading,
   AccordionItemPanel
 } from "react-accessible-accordion";
-import { Button, Span } from "../YamlStyles";
+import { Button, Input, Span } from "../YamlStyles";
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
@@ -169,6 +169,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultFilename: string = "";
   const [filename, setFilename] = useState(defaultFilename);
   const [state, setState] = useState(defaultState);
+  const [urlFilter, setUrlFilter] = useState("");
   const fileModalRef = useRef<ModalObject| null>(null);
   useEffectModal(fileModalRef);
   const endpointModalRef = useRef<ModalObject| null>(null);
@@ -398,6 +399,71 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     });
   };
 
+  const handleSelectUrls = (selected?: "yes" | "no") => {
+    const outputName = state.output[filename];
+    if (!outputName) { return; }
+
+    const updatedUrls = { ...outputName.urls };
+    const updatedEndpoints = [...outputName.endpoints];
+
+    Object.keys(updatedUrls).forEach((key) => {
+      if (selected) {
+        updatedUrls[key]!.selected = selected;
+        updatedUrls[key]!.index.forEach((url) => {
+          const endpoint = updatedEndpoints.find((ep) => ep.id === url.id);
+          if (endpoint) { endpoint.selected = selected; }
+        });
+      } else if (urlFilter) {
+        const selectedByFilter = key.includes(urlFilter) ? "yes" : "no";
+        updatedUrls[key]!.selected = selectedByFilter;
+        updatedUrls[key]!.index.forEach((url) => {
+          const endpoint = updatedEndpoints.find((ep) => ep.id === url.id);
+          if (endpoint) { endpoint.selected = selectedByFilter; }
+        });
+      }
+    });
+
+    setState(({ output, ...prevState }: YamlWriterUploadState) => ({
+      ...prevState,
+      output: {
+        ...output,
+        [filename]: {
+          ...outputName,
+          urls: updatedUrls,
+          endpoints: updatedEndpoints
+        }
+      }
+    }));
+  };
+
+  const handleSelectAllHeaders = (selected: "yes" | "no") => {
+    const outputName = state.output[filename];
+    if (!outputName) {return;}
+
+    const updatedTypes = { ...outputName.types };
+    const updatedEndpoints = [...outputName.endpoints];
+
+    Object.keys(updatedTypes).forEach((key) => {
+    updatedTypes[key]!.selected = selected;
+    updatedTypes[key]!.index.forEach((type) => {
+      const endpoint = updatedEndpoints.find((ep) => ep.id === type.id);
+      if (endpoint) {endpoint.selected = selected;}
+    });
+    });
+
+    setState(({ output, ...prevState }: YamlWriterUploadState) => ({
+    ...prevState,
+    output: {
+      ...output,
+      [filename]: {
+      ...outputName,
+      types: updatedTypes,
+      endpoints: updatedEndpoints
+      }
+    }
+    }));
+  };
+
   return (
     <HeaderMain>
       <h2> Create from Har File </h2>
@@ -447,7 +513,40 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <AccordianStyleDiv style={{paddingRight: "20px"}}>
           <div>
             <Span>
-              <h2>Urls</h2>&nbsp;&nbsp;&nbsp;
+              <h2>Urls</h2>
+              <div style={{ display: "flex", alignItems: "center", marginLeft: "10px" }}>
+                <Input
+                  type="text"
+                  placeholder="Filter URLs"
+                  value={urlFilter}
+                  onChange={(e) => setUrlFilter(e.target.value)}
+                />
+                <Button
+                  onClick={() => handleSelectUrls()}
+                  style={{ marginLeft: "0"}}
+                  disabled={!urlFilter.length}
+                >
+                  Filter
+                </Button>
+                <Button
+                  onClick={() => handleSelectUrls("yes")}
+                  disabled={
+                  state.output[filename]?.urls &&
+                  Object.values(state.output[filename]!.urls).every((url) => url?.selected === "yes")
+                  }
+                >
+                  Select All
+                </Button>
+                <Button
+                  onClick={() => handleSelectUrls("no")}
+                  disabled={
+                  state.output[filename]?.urls &&
+                  Object.values(state.output[filename]!.urls).every((url) => url?.selected === "no")
+                  }
+                >
+                  Deselect All
+                </Button>
+              </div>
             </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
               {state.output[filename]?.urls && Object.keys(state.output[filename]!.urls).map((key, index) => {
@@ -496,7 +595,29 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             </Accordion>
           </div>
           <div style={{marginTop: "25px"}}>
-            <h2>Return Types</h2>
+            <Span>
+              <h2>Return Types</h2>
+              <div style={{ display: "flex", alignItems: "center", marginLeft: "10px" }}>
+                  <Button
+                  onClick={() => handleSelectAllHeaders("yes")}
+                  disabled={
+                    state.output[filename]?.types &&
+                    Object.values(state.output[filename]!.types).every((type) => type?.selected === "yes")
+                  }
+                  >
+                  Select All
+                  </Button>
+                <Button
+                  onClick={() => handleSelectAllHeaders("no")}
+                  disabled={
+                    state.output[filename]?.types &&
+                    Object.values(state.output[filename]!.types).every((type) => type?.selected === "no")
+                  }
+                >
+                  Deselect All
+                </Button>
+              </div>
+            </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
               {state.output[filename]?.types && Object.keys(state.output[filename]!.types).map((key, index) => {
                 const type = state.output[filename]!.types[key];

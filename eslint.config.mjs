@@ -46,8 +46,8 @@ export default [{
 
     "parserOptions": {
       "project": [
-        "./common/tsconfig.json",
-        "./agent/tsconfig.json",
+        "./common/tsconfig.test.json",
+        "./agent/tsconfig.test.json",
         "./controller/tsconfig.json",
         "./controller/tsconfig.test.json",
         "./controller/.storybook/tsconfig.json",

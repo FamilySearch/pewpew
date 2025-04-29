@@ -1,4 +1,12 @@
-import { CommunicationsMessage, LogLevel, MessageType, PpaasS3Message, PpaasTestId, log  } from "../src/index";
+import {
+  CommunicationsMessage,
+  LogLevel,
+  MessageType,
+  PpaasS3Message,
+  PpaasTestId,
+  log,
+  ppaass3message
+} from "../src/index.js";
 import {
   mockGetObject,
   mockListObject,
@@ -6,8 +14,7 @@ import {
   mockS3,
   mockUploadObject,
   resetMockS3
-} from "./mock";
-import { createS3Filename } from "../src/ppaass3message";
+} from "./mock.js";
 import { expect } from "chai";
 
 describe("PpaasS3Message", () => {
@@ -21,7 +28,7 @@ describe("PpaasS3Message", () => {
   before(() => {
     mockS3();
     ppaasTestId = PpaasTestId.makeTestId("UnitTest");
-    testFilename = createS3Filename(ppaasTestId);
+    testFilename = ppaass3message.createS3Filename(ppaasTestId);
     testFolder = ppaasTestId.s3Folder;
     fullCommunicationsMessage = {
       testId: ppaasTestId.testId,

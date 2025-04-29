@@ -4,18 +4,19 @@ import {
   PEWPEW_VERSION_LATEST,
   PpaasTestMessage,
   TestMessage,
-  log
-} from "../src/index";
-import { UNIT_TEST_FILENAME, UNIT_TEST_KEY_PREFIX } from "../test/s3.spec";
+  log,
+  sqs
+} from "../src/index.js";
+import { UNIT_TEST_FILENAME, UNIT_TEST_KEY_PREFIX } from "../test/s3.spec.js";
 import {
   mockReceiveMessageAttributes,
   mockSendMessage,
   mockSqs,
   resetMockSqs
-} from "../test/mock";
+} from "../test/mock.js";
 import { MessageAttributeValue } from "@aws-sdk/client-sqs";
-import { QUEUE_URL_TEST } from "../src/util/sqs";
 import { expect } from "chai";
+const { QUEUE_URL_TEST } = sqs;
 
 class PPaasUnitTestMessage extends PpaasTestMessage {
   public constructor (testMessage: TestMessage) {

@@ -4,7 +4,7 @@ import {
   IS_RUNNING_IN_AWS,
   SYSTEM_NAME,
   getPrefix
-} from "./util";
+} from "./util.js";
 import {
   ChangeMessageVisibilityCommand,
   ChangeMessageVisibilityCommandInput,
@@ -25,8 +25,8 @@ import {
   SendMessageCommandInput,
   SendMessageCommandOutput
 } from "@aws-sdk/client-sqs";
-import { LogLevel, log } from "./log";
-import { SqsQueueType } from "../../types";
+import { LogLevel, log } from "./log.js";
+import { SqsQueueType } from "../../types/index.js";
 import { fromIni } from "@aws-sdk/credential-providers";
 
 export const QUEUE_URL_TEST: Map<string, string> = new Map<string, string>();

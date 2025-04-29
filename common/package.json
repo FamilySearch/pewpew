@@ -11,10 +11,10 @@
   "scripts": {
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "test": "mocha --project tsconfig.test.json ./test --timeout 30000",
+    "testonly": "mocha --project tsconfig.test.json ./test --timeout 30000",
+    "integration": "mocha --project tsconfig.test.json ./integration --timeout 300000",
+    "coverage": "mocha --project tsconfig.test.json ./test ./integration --timeout 300000",
     "prepare": "tsc --project tsconfig.lib.json",
     "clean": "rimraf dist/"
   },
@@ -58,7 +58,7 @@
     "dotenv-flow": "^4.0.1",
     "eslint": "^9.15.0",
     "mocha": "^11.0.0",
-    "nyc": "^17.0.0",
+    "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
   }
 }

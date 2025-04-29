@@ -2,18 +2,20 @@
   "name": "@fs/ppaas-agent",
   "version": "3.5.1",
   "description": "Agent Service for running pewpew tests",
+  "type": "module",
   "main": "dist/src/app.js",
   "scripts": {
     "fix:start": "rimraf \"node_modules/ppaas-common/node_modules/config-wasm/\"",
-    "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
+    "start": "npm run fix:start && node --experimental-specifier-resolution=node --es-module-specifier-resolution=node ./dist/src/app.js -r dotenv-flow/config",
+    "dev": "npm run fix:start && node --loader ts-node/esm --experimental-specifier-resolution=node ./src/app.ts -r dotenv-flow/config",
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
-    "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 500000 -r dotenv-flow/config",
-    "createtest": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha --timeout 130000 ./dist/integration -r dotenv-flow/config",
+    "test": "npm run buildonly && nyc mocha ./test --timeout 130000",
+    "testonly": "nyc mocha ./test --timeout 130000",
+    "acceptance": "mocha ./acceptance --timeout 130000",
+    "coverage": "npm run build && nyc mocha ./test ./integration --timeout 500000",
+    "createtest": "npm run build && nyc mocha --timeout 500000 ./createtest",
+    "integration": "npm run build && nyc mocha --timeout 130000 ./integration",
     "clean": "rimraf dist/"
   },
   "repository": {
@@ -65,6 +67,7 @@
     "eslint": "^9.15.0",
     "mocha": "^11.0.0",
     "nyc": "^17.0.0",
+    "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
   }
 }

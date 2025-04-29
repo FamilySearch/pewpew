@@ -3,6 +3,7 @@
   "version": "3.5.1",
   "description": "Controller Service for running pewpew tests",
   "private": true,
+  "type": "module",
   "scripts": {
     "start": "npm run fix:start && next start -p 8081",
     "fix:start": "rimraf \"node_modules/@fs/ppaas-common/node_modules/@fs/config-wasm/\"",
@@ -13,12 +14,12 @@
     "build-storybook": "storybook build",
     "fix:install": "rimraf \"node_modules/@types/react-native/\"",
     "build:test": "npm run fix:install && tsc -p tsconfig.test.json",
-    "test": "npm run build:test && nyc mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
-    "acceptance": "mocha --timeout 30000 ./dist/acceptance -r dotenv-flow/config",
-    "integration": "npm run build:test && nyc mocha --timeout 90000 ./dist/integration -r dotenv-flow/config",
-    "coverage": "npm run build:test && nyc mocha --timeout 90000 ./dist/test ./dist/integration --require jsdom-global/register -r dotenv-flow/config",
-    "testcleanup": "mocha --timeout 60000 ./dist/testcleanup -r dotenv-flow/config",
+    "test": "mocha ./test",
+    "testonly": "mocha ./test",
+    "acceptance": "mocha --timeout 30000 ./acceptance",
+    "integration": "mocha --timeout 90000 ./integration",
+    "coverage": "mocha --timeout 90000 ./test ./integration",
+    "testcleanup": "mocha --timeout 60000 ./testcleanup",
     "clean": "rimraf dist/"
   },
   "repository": {
@@ -132,6 +133,7 @@
     "set-value": "^4.1.0",
     "storybook": "^8.5.0",
     "trim": "^1.0.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.0",
     "webpack": "^5.0.0"
   }

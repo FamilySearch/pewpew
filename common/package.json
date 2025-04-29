@@ -2,6 +2,7 @@
   "name": "@fs/ppaas-common",
   "version": "3.5.1",
   "description": "Common Code for the PewPewController and PewPewAgent",
+  "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [
@@ -11,10 +12,10 @@
   "scripts": {
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "test": "npm run buildonly && mocha ./test --timeout 30000",
+    "testonly": "mocha ./test --timeout 30000",
+    "integration": "mocha ./integration --timeout 300000",
+    "coverage": "mocha ./test ./integration --timeout 300000",
     "prepare": "tsc --project tsconfig.lib.json",
     "clean": "rimraf dist/"
   },
@@ -59,6 +60,7 @@
     "eslint": "^9.15.0",
     "mocha": "^11.0.0",
     "nyc": "^17.0.0",
+    "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
   }
 }

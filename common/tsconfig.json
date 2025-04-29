@@ -5,7 +5,7 @@
       "name": "tslint-language-service"
     }],
     "target": "es2022",
-    "module": "commonjs",
+    "module": "ESNext",
     "declaration": true,
     "moduleResolution": "node",
     "isolatedModules": true,

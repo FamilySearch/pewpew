@@ -2,6 +2,7 @@
   "name": "@fs/monorepo",
   "version": "3.5.1",
   "description": "Service for running pewpew tests",
+  "type": "module",
   "private": true,
   "workspaces": [
     "./lib/config-wasm/pkg",

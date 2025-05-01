@@ -2,6 +2,7 @@
   "name": "@fs/ppaas-controller",
   "version": "3.5.1",
   "description": "Controller Service for running pewpew tests",
+  "type": "module",
   "private": true,
   "scripts": {
     "start": "npm run fix:start && next start -p 8081",
@@ -13,11 +14,11 @@
     "build-storybook": "storybook build",
     "fix:install": "rimraf \"node_modules/@types/react-native/\"",
     "build:test": "npm run fix:install && tsc -p tsconfig.test.json",
-    "test": "npm run build:test && nyc mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
+    "test": "npm run build:test && mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
+    "testonly": "mocha ./dist/test --require jsdom-global/register -r dotenv-flow/config",
     "acceptance": "mocha --timeout 30000 ./dist/acceptance -r dotenv-flow/config",
-    "integration": "npm run build:test && nyc mocha --timeout 90000 ./dist/integration -r dotenv-flow/config",
-    "coverage": "npm run build:test && nyc mocha --timeout 90000 ./dist/test ./dist/integration --require jsdom-global/register -r dotenv-flow/config",
+    "integration": "npm run build:test && mocha --timeout 90000 ./dist/integration -r dotenv-flow/config",
+    "coverage": "npm run build:test && mocha --timeout 90000 ./dist/test ./dist/integration --require jsdom-global/register -r dotenv-flow/config",
     "testcleanup": "mocha --timeout 60000 ./dist/testcleanup -r dotenv-flow/config",
     "clean": "rimraf dist/"
   },
@@ -31,10 +32,6 @@
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
     "node": "22"
-  },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
   },
   "overrides": {
     "eslint": "^9.15.0",
@@ -127,7 +124,6 @@
     "jsdom": ">=23.0.0",
     "jsdom-global": "^3.0.2",
     "mocha": "^11.0.0",
-    "nyc": "^17.0.0",
     "postcss": "^8.4.24",
     "set-value": "^4.1.0",
     "storybook": "^8.5.0",

@@ -9,7 +9,7 @@
     "build": "npm run buildonly",
     "buildonly": "tsc",
     "test": "mocha --project tsconfig.test.json ./test --timeout 130000",
-    "testonly": "nyc mocha ./test --timeout 130000",
+    "testonly": "mocha ./test --timeout 130000",
     "acceptance": "mocha ./acceptance --timeout 130000",
     "coverage": "mocha --project tsconfig.test.json ./test ./integration --timeout 500000",
     "createtest": "mocha --project tsconfig.test.json --timeout 500000 ./createtest",

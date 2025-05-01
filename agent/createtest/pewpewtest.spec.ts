@@ -16,18 +16,20 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  ppaass3message,
+  ppaasteststatus,
   s3,
   sqs,
   util
 } from "@fs/ppaas-common";
-import {
-  createS3Filename as createS3FilenameS3Message,
-  getKey as getKeyS3Message
-} from "@fs/ppaas-common/dist/src/ppaass3message";
-import {
-  createS3Filename as createS3FilenameTestStatus,
-  getKey as getKeyTestStatus
-} from "@fs/ppaas-common/dist/src/ppaasteststatus";
+const {
+  createS3Filename: createS3FilenameS3Message,
+  getKey: getKeyS3Message
+} = ppaass3message;
+const {
+  createS3Filename: createS3FilenameTestStatus,
+  getKey: getKeyTestStatus
+} = ppaasteststatus;
 import {
   mockCopyObject,
   mockGetObject,

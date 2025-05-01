@@ -65,10 +65,6 @@
   "engines": {
     "node": ">=20.0.0 <23.0.0"
   },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
-  },
   "overrides": {
     "eslint": "^9.15.0",
     "react": "^19.0.0",
@@ -87,7 +83,6 @@
     "jsdom-global": "^3.0.2",
     "mocha": "^11.0.0",
     "npm-run-all2": "^7.0.0",
-    "nyc": "^17.0.0",
     "rimraf": "^6.0.0",
     "typescript": "^5.3.0"
   }

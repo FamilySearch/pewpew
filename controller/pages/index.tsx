@@ -37,7 +37,7 @@ import styled from "styled-components";
 import { useRouter } from "next/router";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
 const TEST_STATUS_REFRESH_DELAY: number = Number(publicRuntimeConfig.TEST_STATUS_REFRESH_DELAY) || 10000;
 const TEST_ERRORS_MAX_DISPLAYED: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_DISPLAYED) || 20;
 const TEST_ERRORS_MAX_LINE_LENGTH: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_LINE_LENGTH) || 200;

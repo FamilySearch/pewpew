@@ -16,7 +16,7 @@ import { logout as authLogout } from "../../pages/api/util/authclient";
 import getConfig from "next/config";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 const HIDE_ENVIRONMENT: unknown = publicRuntimeConfig.HIDE_ENVIRONMENT;
 
 export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/results-viewer-react/yaml.html";

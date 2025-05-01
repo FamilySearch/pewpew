@@ -9,7 +9,7 @@ export enum LogLevel {
 }
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
 const logDebug: boolean = publicRuntimeConfig.LOGGING_LEVEL === "debug";
 
 // Take a variable list of objects

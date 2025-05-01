@@ -9,12 +9,12 @@
     "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
+    "test": "npm run buildonly && mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
+    "testonly": "mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
     "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 500000 -r dotenv-flow/config",
-    "createtest": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha --timeout 130000 ./dist/integration -r dotenv-flow/config",
+    "coverage": "npm run build && mocha ./dist/test ./dist/integration --timeout 500000 -r dotenv-flow/config",
+    "createtest": "npm run build && mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "integration": "npm run build && mocha --timeout 130000 ./dist/integration -r dotenv-flow/config",
     "clean": "rimraf dist/"
   },
   "repository": {
@@ -27,10 +27,6 @@
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
     "node": "22"
-  },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
   },
   "dependencies": {
     "@fs/config-wasm": "*",
@@ -65,7 +61,6 @@
     "chai": "^4.3.7",
     "eslint": "^9.15.0",
     "mocha": "^11.0.0",
-    "nyc": "^17.0.0",
     "typescript": "^5.3.0"
   }
 }

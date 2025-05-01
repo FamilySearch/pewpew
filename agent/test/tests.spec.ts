@@ -4,6 +4,8 @@ import {
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
+  ppaass3message,
+  ppaasteststatus,
   s3,
   sqs,
   util
@@ -14,11 +16,7 @@ import {
   buildTestContents,
   version as buildTestPewpewVersion,
   yamlFile as buildTestYamlFile
-} from "../src/tests";
-import {
-  createS3Filename as createS3FilenameTestStatus,
-  getKey as getKeyTestStatus
-} from "@fs/ppaas-common/dist/src/ppaasteststatus";
+} from "../src/tests.js";
 import {
   mockCopyObject,
   mockGetObject,
@@ -33,8 +31,7 @@ import {
   mockUploadObject,
   resetMockS3,
   resetMockSqs
-} from "../test/mock";
-import { getKey as getKeyS3Message } from "@fs/ppaas-common/dist/src/ppaass3message";
+} from "./mock.js";
 import { readFile } from "fs/promises";
 
 describe("Tests Build Test", () => {
@@ -79,11 +76,11 @@ describe("Tests Build Test", () => {
       status: TestStatus.Created
     };
     const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(ppaasTestId, basicTestStatusMessage);
-    const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(ppaasTestId);
-    mockListObject({ filename: createS3FilenameTestStatus(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
+    const testStatusKey = s3.KEYSPACE_PREFIX + ppaasteststatus.getKey(ppaasTestId);
+    mockListObject({ filename: ppaasteststatus.createS3Filename(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
     mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
     // .msg
-    const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(ppaasTestId);
+    const s3MessageKey = s3.KEYSPACE_PREFIX + ppaass3message.getKey(ppaasTestId);
     mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
     mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
 

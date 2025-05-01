@@ -1,11 +1,11 @@
 import { LogLevel, log } from "@fs/ppaas-common";
 import { Address } from "cluster";
 import { Application } from "express";
-import { PewPewTest } from "./pewpewtest";
+import { PewPewTest } from "./pewpewtest.js";
 import { Server } from "http";
 import express from "express";
-import { init as initHealthcheck } from "./healthcheck";
-import { init as initTests } from "./tests";
+import { init as initHealthcheck } from "./healthcheck.js";
+import { init as initTests } from "./tests.js";
 
 const PORT: number = parseInt(process.env.PORT || "0", 10) || 8080;
 const TIMEOUT: number = parseInt(process.env.TIMEOUT || "0", 10) || 30000;

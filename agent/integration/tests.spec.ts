@@ -1,6 +1,6 @@
 import {
   buildTest
-} from "../src/tests";
+} from "../src/tests.js";
 
 describe("Integration Build Test", () => {
   it("Should run a build test", (done: Mocha.Done) => {

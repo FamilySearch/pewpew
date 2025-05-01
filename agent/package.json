@@ -2,6 +2,7 @@
   "name": "@fs/ppaas-agent",
   "version": "3.5.1",
   "description": "Agent Service for running pewpew tests",
+  "type": "module",
   "main": "dist/src/app.js",
   "scripts": {
     "fix:start": "rimraf \"node_modules/ppaas-common/node_modules/config-wasm/\"",

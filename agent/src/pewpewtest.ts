@@ -21,7 +21,7 @@ import {
 } from "@fs/ppaas-common";
 import { WriteStream, createWriteStream } from "fs";
 import fs from "fs/promises";
-import { getHostname } from "./util/util";
+import { getHostname } from "./util/util.js";
 import { join as pathJoin } from "path";
 import { platform } from "os";
 import semver from "semver";

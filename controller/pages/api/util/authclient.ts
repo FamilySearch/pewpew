@@ -12,7 +12,7 @@ import getConfig from "next/config";
 import jsCookie from "js-cookie";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 // AUTH_MODE overrides FS_SITE
 export const AUTH_MODE: string | undefined = (publicRuntimeConfig.AUTH_MODE || publicRuntimeConfig.FS_SITE) ? (publicRuntimeConfig.AUTH_MODE || publicRuntimeConfig.FS_SITE!).trim() : undefined;
 const AUTH_MODE_OFF: string = "false";

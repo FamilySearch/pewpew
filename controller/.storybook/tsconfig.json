@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "outDir": "build/lib",
-    "module": "commonjs",
+    "module": "ESNext",
     "target": "es2022",
-    "lib": ["es5", "es6", "es7", "es2017", "es2018","dom"],
+    "lib": ["es5", "es6", "es7", "es2017", "es2018", "es2022","dom"],
     "sourceMap": true,
     "allowJs": true,
     "skipLibCheck": true,

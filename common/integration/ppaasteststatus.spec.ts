@@ -6,10 +6,11 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  ppaasteststatus,
   s3
-} from "../src/index";
+} from "../src/index.js";
 import { expect } from "chai";
-import { getKey } from "../src/ppaasteststatus";
+// import { getKey } from "../src/ppaasteststatus.js";
 
 describe("PpaasTestStatus", () => {
   let ppaasTestId: PpaasTestId;
@@ -42,7 +43,7 @@ describe("PpaasTestStatus", () => {
   });
 
   after(async () => {
-    const key = getKey(ppaasTestId);
+    const key = ppaasteststatus.getKey(ppaasTestId);
     try {
       await s3.deleteObject(key);
     } catch (error) {

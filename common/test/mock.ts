@@ -38,7 +38,7 @@ import {
   Tag as S3Tag,
   UploadPartCommand
 } from "@aws-sdk/client-s3";
-import { LogLevel, log, s3, sqs, util } from "../src/index";
+import { LogLevel, log, s3, sqs, util } from "../src/index.js";
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";
 import { sdkStreamMixin } from "@smithy/util-stream";

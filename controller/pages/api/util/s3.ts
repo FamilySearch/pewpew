@@ -8,7 +8,7 @@ import { promisify } from "util";
 import { gunzip as zlibGunzip} from "zlib";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 
 // If REDIRECT_TO_S3 is turned on, it must also be turned on for the acceptance tests
 const REDIRECT_TO_S3: boolean = publicRuntimeConfig.REDIRECT_TO_S3 === "true";

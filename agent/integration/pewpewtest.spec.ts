@@ -18,11 +18,11 @@ import {
   sqs,
   util
 } from "@fs/ppaas-common";
-import { PewPewTest, getEndTime } from "../src/pewpewtest";
-import { PEWPEW_PATH } from "../src/tests";
+import { PewPewTest, getEndTime } from "../src/pewpewtest.js";
+import { PEWPEW_PATH } from "../src/tests.js";
 import { basename } from "path";
 import { expect } from "chai";
-import { getHostname } from "../src/util/util";
+import { getHostname } from "../src/util/util.js";
 
 const CREATE_TEST_FILENAME: string = process.env.CREATE_TEST_FILENAME || "createtest.yaml";
 const CREATE_TEST_SCRIPTING_FILENAME: string = process.env.CREATE_TEST_SCRIPTING_FILENAME || "createtest.scripting.yaml";

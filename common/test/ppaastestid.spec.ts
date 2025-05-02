@@ -1,4 +1,4 @@
-import { PpaasTestId } from "../src/index";
+import { PpaasTestId } from "../src/index.js";
 import { expect } from "chai";
 
 describe("TestId", () => {

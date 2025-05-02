@@ -8,7 +8,7 @@ import {
   PutObjectTaggingCommandOutput,
   _Object as S3Object
 } from "@aws-sdk/client-s3";
-import { LogLevel, S3File, log } from "../src/index";
+import { LogLevel, S3File, log, s3 } from "../src/index.js";
 import { Stats, createReadStream } from "fs";
 import {
   UNIT_TEST_KEYSPACE_PREFIX,
@@ -20,8 +20,8 @@ import {
   mockS3,
   mockUploadObject,
   resetMockS3
-} from "./mock";
-import {
+} from "./mock.js";
+const {
   copyFile,
   copyObject,
   defaultTestFileTags,
@@ -38,7 +38,7 @@ import {
   uploadFile,
   uploadFileContents,
   uploadObject
-} from "../src/util/s3";
+} = s3;
 import { constants as bufferConstants } from "node:buffer";
 import { expect } from "chai";
 import fs from "fs/promises";

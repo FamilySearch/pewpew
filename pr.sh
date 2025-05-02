@@ -64,14 +64,15 @@ npm run build:common
 npm run build:react
 NODE_ENV=test npm test
 
-read -e -p "Run Coverage Tests y/N: " choice
+read -e -p "Run Integration Tests y/N: " choice
 if [[ "$choice" == [Yy]* ]]; then
   npm run testcleanup
-  # npm run coverage
+  export RUST_LOG=warn
+  # npm run integration
   # read -e -p "Grab screenshot then hit enter to continue." choice
-  npm run coverage:common
+  npm run integration:common
   read -e -p "Grab common screenshot then hit enter to continue." choice
-  npm run coverage:agent
+  npm run integration:agent
   read -e -p "Grab agent screenshot then hit enter to continue." choice
   set +e
   clean_result="1"
@@ -81,10 +82,8 @@ if [[ "$choice" == [Yy]* ]]; then
     echo "clean_result: $clean_result"
   done
   set -e
-  npm run coverage:controller
+  npm run integration:controller
   read -e -p "Grab controller screenshot then hit enter to continue." choice
-  npm run testmerge
-  read -e -p "Grab overall screenshot then hit enter to continue." choice
 fi
 
 read -e -p "Run Acceptance Tests y/N: " choice

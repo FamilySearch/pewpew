@@ -1,0 +1,12 @@
+{
+  "extension": ["ts"],
+  "reporter": "spec",
+  "require": [
+    "ts-node/register",
+    "dotenv-flow/config"
+  ],
+  "node-option": [
+    "experimental-specifier-resolution=node",
+    "loader=ts-node/esm"
+  ]
+}

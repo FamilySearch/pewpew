@@ -19,7 +19,7 @@ import {
   uploadFile,
   uploadFileContents,
   uploadObject
-} from "../src/util/s3";
+} from "../src/util/s3.js";
 import {
   CompleteMultipartUploadCommandOutput,
   CopyObjectCommandOutput,
@@ -30,11 +30,11 @@ import {
   _Object as S3Object,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
-import { LogLevel, S3File, log, util } from "../src/index";
+import { LogLevel, S3File, log, util } from "../src/index.js";
 import { Stats, createReadStream } from "fs";
 import { expect } from "chai";
 import fs from "fs/promises";
-import { poll } from "../src/util/util";
+const { poll } = util;
 import { promisify } from "util";
 import { gunzip as zlibGunzip } from "zlib";
 

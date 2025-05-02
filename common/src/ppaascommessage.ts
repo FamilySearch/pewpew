@@ -1,7 +1,7 @@
-import { CommunicationsMessage, MessageType, SqsQueueType } from "../types";
-import { LogLevel, log } from "./util/log";
+import { CommunicationsMessage, MessageType, SqsQueueType } from "../types/index.js";
+import { LogLevel, log } from "./util/log.js";
 import { MessageAttributeValue, Message as SQSMessage } from "@aws-sdk/client-sqs";
-import { deleteMessageByHandle, getCommunicationMessage, sendNewCommunicationsMessage } from "./util/sqs";
+import { deleteMessageByHandle, getCommunicationMessage, sendNewCommunicationsMessage } from "./util/sqs.js";
 
 /** Messages from the agent to the controller */
 export class PpaasCommunicationsMessage implements CommunicationsMessage {

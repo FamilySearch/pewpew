@@ -1,6 +1,6 @@
 import { LogLevel, log, util } from "@fs/ppaas-common";
 import { expect } from "chai";
-import { getHostname } from "../src/util/util";
+import { getHostname } from "../src/util/util.js";
 
 describe("Util", () => {
   let ipAddress: string | undefined;

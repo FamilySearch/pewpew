@@ -26,11 +26,11 @@ import {
   S3ServiceException,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
-import { IS_RUNNING_IN_AWS, getPrefix } from "./util";
-import { LogLevel, log } from "./log";
+import { IS_RUNNING_IN_AWS, getPrefix } from "./util.js";
+import { LogLevel, log } from "./log.js";
 import { createGzip, gunzip as zlibGunzip} from "zlib";
 import { createReadStream, writeFile as fsWriteFile } from "fs";
-import { S3File } from "../../types";
+import { S3File } from "../../types/index.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { constants as bufferConstants } from "node:buffer";
 import { fromIni } from "@aws-sdk/credential-providers";

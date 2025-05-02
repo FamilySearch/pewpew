@@ -7,10 +7,10 @@ import {
   init as initS3,
   listFiles,
   uploadFileContents
-} from "./util/s3";
-import { LogLevel, log } from "./util/log";
-import { TestStatus, TestStatusMessage } from "../types";
-import PpaasTestId from "./ppaastestid";
+} from "./util/s3.js";
+import { LogLevel, log } from "./util/log.js";
+import { TestStatus, TestStatusMessage } from "../types/index.js";
+import PpaasTestId from "./ppaastestid.js";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 
 export const createS3Filename = (ppaasTestId: PpaasTestId): string => `${ppaasTestId.testId}.info`;

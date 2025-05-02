@@ -1,4 +1,4 @@
-import { YamlParser } from "../src/index";
+import { YamlParser } from "../src/index.js";
 import { expect } from "chai";
 import path from "path";
 

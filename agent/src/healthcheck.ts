@@ -1,7 +1,7 @@
 import { LogLevel, SqsQueueType, ec2, log, s3, sqs, util } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
 import express from "express";
-import { getHostname } from "./util/util";
+import { getHostname } from "./util/util.js";
 
 const listObjects = s3.listObjects;
 const setS3AccessCallback = s3.setAccessCallback;

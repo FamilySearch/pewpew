@@ -10,7 +10,7 @@ import semver from "semver";
 // We can't use process.env because it's set at build time for nextjs
 // https://nextjs.org/docs/api-reference/next.config.js/runtime-configuration
 // Export for testing.
-export const publicRuntimeConfig: NodeJS.Dict<string> = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
+export const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 export const CNAME_DOMAIN: string = publicRuntimeConfig.CNAME_DOMAIN || ".pewpewlocal.org";
 export const ROUTING_DOMAIN: string = publicRuntimeConfig.ROUTING_DOMAIN || ".pewpew.org";
 export const TEST_LOCALHOST: boolean = publicRuntimeConfig.TEST_LOCALHOST === "true";

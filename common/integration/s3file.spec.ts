@@ -6,7 +6,7 @@ import {
   deleteObject,
   getObjectTagging,
   listFiles
-} from "../src/util/s3";
+} from "../src/util/s3.js";
 import { GetObjectTaggingCommandOutput, _Object as S3Object } from "@aws-sdk/client-s3";
 import {
   LogLevel,
@@ -15,7 +15,7 @@ import {
   PpaasTestId,
   log,
   s3
-} from "../src/index";
+} from "../src/index.js";
 import {
   MAX_POLL_WAIT,
   UNIT_TEST_FILENAME,
@@ -27,11 +27,11 @@ import {
   testTags,
   validateTagMap,
   validateTagSet
-} from "./s3.spec";
+} from "./s3.spec.js";
 import { Stats } from "fs";
 import { expect } from "chai";
 import fs from "fs/promises";
-import { poll } from "../src/util/util";
+import { poll } from "../src/util/util.js";
 
 class PpaasS3FileUnitTest extends PpaasS3File {
   public constructor (options: PpaasS3FileOptions) {

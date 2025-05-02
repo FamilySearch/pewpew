@@ -1,5 +1,5 @@
-import { CommunicationsMessage, MessageType } from "../types";
-import { LogLevel, log } from "./util/log";
+import { CommunicationsMessage, MessageType } from "../types/index.js";
+import { LogLevel, log } from "./util/log.js";
 import {
   defaultTestExtraFileTags,
   deleteObject,
@@ -7,8 +7,8 @@ import {
   init as initS3,
   listFiles,
   uploadFileContents
-} from "./util/s3";
-import { PpaasTestId } from "./ppaastestid";
+} from "./util/s3.js";
+import { PpaasTestId } from "./ppaastestid.js";
 
 // Due to issues with visibility 0 and multiple lockouts, The communications queue is only for talking to the controller
 // Going to the agent will write to a file in the s3Folder

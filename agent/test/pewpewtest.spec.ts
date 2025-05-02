@@ -9,6 +9,8 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  ppaass3message,
+  ppaasteststatus,
   s3,
   sqs,
   util
@@ -19,11 +21,7 @@ import {
   findYamlCreatedFiles,
   getEndTime,
   versionGreaterThan
-} from "../src/pewpewtest";
-import {
-  createS3Filename as createS3FilenameTestStatus,
-  getKey as getKeyTestStatus
-} from "@fs/ppaas-common/dist/src/ppaasteststatus";
+} from "../src/pewpewtest.js";
 import {
   mockCopyObject,
   mockGetObject,
@@ -38,14 +36,11 @@ import {
   mockUploadObject,
   resetMockS3,
   resetMockSqs
-} from "./mock";
+} from "./mock.js";
 import { readFile, readdir } from "fs/promises";
-import { PEWPEW_PATH } from "../src/tests";
+import { PEWPEW_PATH } from "../src/tests.js";
 import { expect } from "chai";
-import { getHostname } from "../src/util/util";
-import {
-  getKey as getKeyS3Message
-} from "@fs/ppaas-common/dist/src/ppaass3message";
+import { getHostname } from "../src/util/util.js";
 import { join } from "path";
 
 export const UNIT_TEST_FILENAME: string = process.env.UNIT_TEST_FILENAME || "s3test.txt";
@@ -419,11 +414,11 @@ describe("PewPewTest", () => {
         status: TestStatus.Created
       };
       const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(ppaasTestId, basicTestStatusMessage);
-      const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(ppaasTestId);
-      mockListObject({ filename: createS3FilenameTestStatus(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
+      const testStatusKey = s3.KEYSPACE_PREFIX + ppaasteststatus.getKey(ppaasTestId);
+      mockListObject({ filename: ppaasteststatus.createS3Filename(ppaasTestId), folder: s3Folder, keyMatch: testStatusKey });
       mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
       // .msg
-      const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(ppaasTestId);
+      const s3MessageKey = s3.KEYSPACE_PREFIX + ppaass3message.getKey(ppaasTestId);
       mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
       mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
 

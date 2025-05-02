@@ -1,4 +1,4 @@
-import { LogLevel, log } from "../src/index";
+import { LogLevel, log } from "../src/index.js";
 import { expect } from "chai";
 
 describe("Log", () => {

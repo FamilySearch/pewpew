@@ -1,9 +1,9 @@
 import "dotenv-flow/config";
-import { IS_RUNNING_IN_AWS, PewPewTest } from "./pewpewtest";
+import { IS_RUNNING_IN_AWS, PewPewTest } from "./pewpewtest.js";
 import { LogLevel, log, util } from "@fs/ppaas-common";
-import { config as serverConfig, start, stop } from "./server";
-import { buildTest } from "./tests";
-import { config as healthcheckConfig } from "./healthcheck";
+import { config as serverConfig, start, stop } from "./server.js";
+import { buildTest } from "./tests.js";
+import { config as healthcheckConfig } from "./healthcheck.js";
 
 const sleep = util.sleep;
 

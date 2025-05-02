@@ -1,4 +1,4 @@
-import { LogLevel, YamlParser, log } from "../src/index";
+import { LogLevel, YamlParser, log } from "../src/index.js";
 import { expect } from "chai";
 import path from "path";
 

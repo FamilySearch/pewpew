@@ -1,4 +1,5 @@
 /* eslint-disable camelcase */
+import * as openIdClient from "openid-client";
 import {
   API_LOGIN,
   AuthPermission,
@@ -23,14 +24,13 @@ import {
   getDomain,
   isAuthEnabled
 } from "./authclient";
-import {
-  CallbackParamsType,
-  Client,
+import type {
   ClientMetadata,
-  Issuer,
-  IssuerMetadata,
-  TokenSet,
-  UserinfoResponse
+  Configuration,
+  ServerMetadata,
+  TokenEndpointResponse,
+  TokenEndpointResponseHelpers,
+  UserInfoResponse
 } from "openid-client";
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from "next";
 import { LogLevel, log } from "@fs/ppaas-common";
@@ -61,15 +61,14 @@ if (TEST_AUTH_PERMISSION !== undefined) {
   const [permissionName, permissionValue] = Object.entries(AuthPermission).find(([_key, value]) => TEST_AUTH_PERMISSION === value)!;
   log("TEST_AUTH_PERMISSION overridden, using: " + permissionName, LogLevel.ERROR, { TEST_AUTH_PERMISSION, permissionName, permissionValue });
 }
-let openIdAuthClient: Client | undefined;
+let openIdConfiguration: Configuration | undefined;
 
 const getOpenIdClientId = (): string => OPENID_CLIENT_ID;
 
-async function getOpenIdClient (): Promise<Client> {
-  if (openIdAuthClient === undefined) {
+async function getOpenIdConfiguration (): Promise<Configuration> {
+  if (openIdConfiguration === undefined) {
     log("getOpenIdClient", LogLevel.DEBUG, { OPENID_CLIENT_ID, OPENID_OIDC_BASE_URL, OPENID_HOST: publicRuntimeConfig.OPENID_HOST, env: process.env });
-    let issuer: Issuer<Client>;
-    const metadata: IssuerMetadata = {
+    const serverMetadata: ServerMetadata = {
       issuer: OPENID_OIDC_BASE_URL,
       authorization_endpoint: OPENID_OIDC_BASE_URL + "/oauth2/v1/authorize",
       token_endpoint: OPENID_OIDC_BASE_URL + "/oauth2/v1/token",
@@ -81,27 +80,26 @@ async function getOpenIdClient (): Promise<Client> {
     const client_secret: string = getClientSecretOpenId();
     const scopes: string[] = ["offline_access", "openid", "profile", "groups", "email"];
     try {
-      issuer = await Issuer.discover(metadata.issuer);
+      openIdConfiguration = await openIdClient.discovery(new URL(serverMetadata.issuer), client_id, client_secret);
     } catch (error) {
-      log("Error Discovering Issuer", LogLevel.ERROR, { metadata }, error);
-      issuer = new Issuer(metadata);
+      log("Error Discovering Issuer", LogLevel.ERROR, { serverMetadata }, error);
+      const clientMetadata: ClientMetadata = {
+        client_id,
+        client_secret,
+        // Use authorization_code flow
+        response_types: ["code"],
+        scopes
+      };
+      openIdConfiguration = new openIdClient.Configuration(
+        serverMetadata,
+        client_id,
+        clientMetadata,
+        openIdClient.ClientSecretPost(client_secret)
+      );
     }
-    log("issuer", LogLevel.DEBUG, { issuer, metadata });
-    const options: ClientMetadata = {
-      client_id,
-      client_secret,
-      // Use authorization_code flow
-      response_types: ["code"],
-      scopes
-    };
-    openIdAuthClient = new issuer.Client(options);
-    log("openIdAuthClient", LogLevel.DEBUG, {
-      openIdAuthClient: { ...openIdAuthClient, client_secret: undefined },
-      metadata: { ...openIdAuthClient.metadata, client_secret: undefined },
-      issuer: openIdAuthClient.issuer.metadata
-    });
+    log("openIdAuthConfiguration", LogLevel.DEBUG, { openIdAuthConfiguration: openIdConfiguration });
   }
-  return openIdAuthClient;
+  return openIdConfiguration;
 }
 
 interface OpenIdPermissionNames {
@@ -119,7 +117,7 @@ const OpenIdPermissions: OpenIdPermissionNames = {
 // If AUTH_MODE is set and not "off", we want it on.
 log("AUTH_MODE=" + AUTH_MODE, LogLevel.INFO);
 
-function getPermissions (userInfoResponse: UserinfoResponse): AuthPermission {
+function getPermissions (userInfoResponse: UserInfoResponse): AuthPermission {
   log("userInfoResponse", LogLevel.DEBUG, userInfoResponse);
   if (TEST_AUTH_PERMISSION !== undefined) {
     log("TEST_AUTH_PERMISSION overridden, using: " + TEST_AUTH_PERMISSION, LogLevel.ERROR, { TEST_AUTH_PERMISSION });
@@ -150,15 +148,24 @@ function getPermissions (userInfoResponse: UserinfoResponse): AuthPermission {
  * @param token session token
  * @returns SessionResponse if valid, undefined otherwise
  */
-async function getSessionFromToken (token: string): Promise<UserinfoResponse | undefined> {
+async function getSessionFromToken (token: string): Promise<UserInfoResponse | undefined> {
+  log("getSessionFromToken", LogLevel.DEBUG, { token });
   try {
-    const openIdClient: Client = await getOpenIdClient();
-    const userInfo: UserinfoResponse = await openIdClient.userinfo(token);
+    const configuration: Configuration = await getOpenIdConfiguration();
+    // Check if the token is valid and get the sub for the fetchUserInfo call. The `sub` is the unique identifier for the user
+    const tokenIntrospection = await openIdClient.tokenIntrospection(configuration, token);
+    log("tokenIntrospection", LogLevel.DEBUG, tokenIntrospection);
+    if (tokenIntrospection.active === false) {
+      log("Token is not active", LogLevel.DEBUG, tokenIntrospection);
+      return undefined;
+    }
+    // If the token is valid, fetch the user info and get the groups
+    const userInfo: UserInfoResponse = await openIdClient.fetchUserInfo(configuration, token, tokenIntrospection.uid as string);
     log("userInfo", LogLevel.DEBUG, userInfo);
     return userInfo;
   } catch (error: unknown) {
     const message = `${error instanceof Error ? error.message : error}`;
-    log(`Token is not valid: ${message}`, message.includes("expired") ? LogLevel.DEBUG : LogLevel.WARN, error);
+    log(`Token is not valid: ${message}`, message.includes("expired") || message.includes("challenge") ? LogLevel.DEBUG : LogLevel.WARN, error);
     return undefined;
   }
 }
@@ -168,8 +175,9 @@ async function getSessionFromToken (token: string): Promise<UserinfoResponse | u
 // 2. Token has User permissions
 // 3. Token has Admin permissions
 export async function validateToken (token: string): Promise<AuthPermissions> {
+  log("validateToken", LogLevel.DEBUG, { token });
   // Check if the token is valid
-  const sessionResponse: UserinfoResponse | undefined = await getSessionFromToken(token);
+  const sessionResponse: UserInfoResponse | undefined = await getSessionFromToken(token);
   log(`getSessionFromToken(token): ${JSON.stringify(sessionResponse)}`, LogLevel.DEBUG, sessionResponse);
   // If it's expired redirect to login
   if (!sessionResponse) {
@@ -235,16 +243,16 @@ export async function getAuthUrl (req: NextApiRequest): Promise<string> {
   // Auth redirects do not support wildcards and query params
   const loginUrl = getFullCallbackUrl(req);
 
-  const openIdClient: Client = await getOpenIdClient();
-  const authUrl = openIdClient.authorizationUrl({
+  const configuration: Configuration = await getOpenIdConfiguration();
+  const authUrl = openIdClient.buildAuthorizationUrl(configuration, {
     scope: "offline_access openid profile groups email",
     response_type: "code",
     redirect_uri: loginUrl,
-    client_secret: undefined, // undefined for OpenId so it's not exposed to the client
+    // client_secret: undefined, // undefined for OpenId so it's not exposed to the client
     state
   });
   log("getAuthUrl: " + authUrl, LogLevel.DEBUG);
-  return authUrl;
+  return authUrl.toString();
 }
 
 function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AUTH_HEADER_NAME): string | undefined {
@@ -277,23 +285,25 @@ function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AU
  * @param code code queryparam returned by Web Auth call
  */
 export async function getTokenFromCode (req: NextApiRequest): Promise<TokenResponse> {
+  log("getTokenFromCode: " + req.url, LogLevel.DEBUG, req.query);
   let loginUrl: string | undefined;
   try {
     // https://github.com/panva/node-openid-client
-    const openIdClient: Client = await getOpenIdClient();
-    const params: CallbackParamsType = openIdClient.callbackParams(req);
-    loginUrl = getFullCallbackUrl(req);
+    const configuration: Configuration = await getOpenIdConfiguration();
+    // const params: CallbackParamsType = openIdClient.callbackParams(req);
+    loginUrl = getFullCallbackUrl(req) + `?code=${req.query.code}`;
     // When it was a NextApiRequest, this parsed fine, with the new GetServerSideContext we parse an extra "state"
     // which causes an error if it's there.
-    if (params.state) {
-      delete params.state;
-    }
-    log("openIdClient.callback", LogLevel.DEBUG, { params, loginUrl });
-    const tokenSet: TokenSet = await openIdClient.callback(loginUrl, params, undefined);
-    log("openIdClient.callback result", LogLevel.DEBUG, { tokenSet });
+    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl, url: req.url, query: req.query });
+    const tokenSet: TokenEndpointResponse & TokenEndpointResponseHelpers = await openIdClient.authorizationCodeGrant(
+      configuration,
+      new URL(loginUrl),
+      undefined
+    );
+    log("openIdClient.callback result", LogLevel.DEBUG, { tokenSet, sub: tokenSet.claims()?.sub, claims: tokenSet.claims() });
     if (tokenSet && tokenSet.access_token) {
       const { access_token: token, refresh_token: refreshToken, id_token: hintToken } = tokenSet;
-      log("auth token: " + JSON.stringify(token), LogLevel.DEBUG, { token, refreshToken, hintToken });
+      log("getTokenFromCode auth token: " + JSON.stringify(token), LogLevel.DEBUG, { token, refreshToken, hintToken });
       return { token, refreshToken, hintToken };
     } else {
       throw new Error("Could not get the auth token from: " + JSON.stringify(tokenSet));
@@ -311,8 +321,8 @@ export async function getTokenFromCode (req: NextApiRequest): Promise<TokenRespo
  */
 export async function getTokenFromRefreshToken (refreshToken: string): Promise<TokenResponse> {
   try {
-    const openIdClient: Client = await getOpenIdClient();
-    const tokenSet: TokenSet = await openIdClient.refresh(refreshToken);
+    const configuration: Configuration = await getOpenIdConfiguration();
+    const tokenSet: TokenEndpointResponse = await openIdClient.refreshTokenGrant(configuration, refreshToken);
     log("getTokenFromRefreshToken tokenResponse: " + JSON.stringify(tokenSet), LogLevel.DEBUG, tokenSet);
     if (tokenSet && tokenSet.access_token) {
       // There will be a NEW refresh_token we have to use in the future. The old one is dead now.
@@ -339,10 +349,10 @@ export async function getLogoutUrl (req: NextApiRequest): Promise<string> {
   // The openId logout will error if we don't pass a token
   if (id_token_hint) {
     // const logoutUrl: string = `${OPENID_OIDC_BASE_URL}/oauth2/v1/logout?id_token_hint=${token}&post_logout_redirect_uri=${homeUrl}}`;
-    const openIdClient: Client = await getOpenIdClient();
-    const logoutUrl = openIdClient.endSessionUrl({ id_token_hint, post_logout_redirect_uri });
+    const configuration: Configuration = await getOpenIdConfiguration();
+    const logoutUrl = openIdClient.buildEndSessionUrl(configuration, { id_token_hint, post_logout_redirect_uri });
     log("getLogoutUrl: " + logoutUrl, LogLevel.DEBUG, { id_token_hint, post_logout_redirect_uri });
-    return logoutUrl;
+    return logoutUrl.toString();
   }
   return post_logout_redirect_uri;
 }

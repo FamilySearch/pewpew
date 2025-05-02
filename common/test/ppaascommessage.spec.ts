@@ -3,17 +3,18 @@ import {
   LogLevel,
   MessageType,
   PpaasCommunicationsMessage,
-  log
-} from "../src/index";
+  log,
+  sqs
+} from "../src/index.js";
 import {
   mockReceiveMessageAttributes,
   mockReceiveMessages,
   mockSendMessage,
   mockSqs,
   resetMockSqs
-} from "./mock";
+} from "./mock.js";
 import { MessageAttributeValue } from "@aws-sdk/client-sqs";
-import { QUEUE_URL_COMMUNICATION} from "../src/util/sqs";
+// import { QUEUE_URL_COMMUNICATION} from "../src/util/sqs.js";
 import { expect } from "chai";
 
 class PPaasUnitCommunicationsMessage extends PpaasCommunicationsMessage {
@@ -37,7 +38,7 @@ describe("PpaasCommunicationsMessage", () => {
 
   before(() => {
     mockSqs();
-    log("QUEUE_URL_COMMUNICATION=" + QUEUE_URL_COMMUNICATION, LogLevel.DEBUG);
+    log("QUEUE_URL_COMMUNICATION=" + sqs.QUEUE_URL_COMMUNICATION, LogLevel.DEBUG);
     ppaasUnitCommunicationsMessage = new PPaasUnitCommunicationsMessage({ testId, messageType, messageData: undefined });
     fullCommunicationsMessage = {
       testId,

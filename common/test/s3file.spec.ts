@@ -2,11 +2,12 @@ import {
   LogLevel,
   PEWPEW_BINARY_EXECUTABLE_NAMES,
   PpaasS3File,
+  PpaasS3FileOptions,
   PpaasTestId,
   S3File,
   log,
   s3
-} from "../src/index";
+} from "../src/index.js";
 import {
   UNIT_TEST_BUCKET_NAME,
   UNIT_TEST_FILENAME,
@@ -22,8 +23,7 @@ import {
   mockS3,
   mockUploadObject,
   resetMockS3
-} from "./mock";
-import { PpaasS3FileOptions } from "../src/s3file";
+} from "./mock.js";
 import { Stats } from "fs";
 import { expect } from "chai";
 import fs from "fs/promises";

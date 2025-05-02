@@ -2,7 +2,7 @@ import {
   BYPASS_PARSER_RUNTIME_DEFAULT,
   PewPewTest,
   getEndTime
-} from "../src/pewpewtest";
+} from "../src/pewpewtest.js";
 import {
   LogLevel,
   MessageType,
@@ -16,18 +16,20 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  ppaass3message,
+  ppaasteststatus,
   s3,
   sqs,
   util
 } from "@fs/ppaas-common";
-import {
-  createS3Filename as createS3FilenameS3Message,
-  getKey as getKeyS3Message
-} from "@fs/ppaas-common/dist/src/ppaass3message";
-import {
-  createS3Filename as createS3FilenameTestStatus,
-  getKey as getKeyTestStatus
-} from "@fs/ppaas-common/dist/src/ppaasteststatus";
+const {
+  createS3Filename: createS3FilenameS3Message,
+  getKey: getKeyS3Message
+} = ppaass3message;
+const {
+  createS3Filename: createS3FilenameTestStatus,
+  getKey: getKeyTestStatus
+} = ppaasteststatus;
 import {
   mockCopyObject,
   mockGetObject,
@@ -42,10 +44,10 @@ import {
   mockUploadObject,
   resetMockS3,
   resetMockSqs
-} from "../test/mock";
-import { PEWPEW_PATH } from "../src/tests";
+} from "../test/mock.js";
+import { PEWPEW_PATH } from "../src/tests.js";
 import { expect } from "chai";
-import { getHostname } from "../src/util/util";
+import { getHostname } from "../src/util/util.js";
 import { join } from "path";
 import { readFile } from "fs/promises";
 

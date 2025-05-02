@@ -197,8 +197,8 @@ describe("TestManager Integration", () => {
           // Should be 3. Yaml, status, vars
           expect(s3Files.length, "s3Files.length").to.equal(3);
           // Check that the test=true tag is added
-          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next()?.value as [string, string];
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -556,8 +556,8 @@ describe("TestManager Integration", () => {
           // Should be 3. Yaml, status, vars
           expect(s3Files.length, "s3Files.length").to.equal(5);
           // Check that the test=true tag is added
-          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next()?.value as [string, string];
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -660,8 +660,8 @@ describe("TestManager Integration", () => {
           // Should be 3. Yaml, status, vars
           expect(s3Files.length, "s3Files.length").to.equal(3);
           // Check that the recurring=true tag is added
-          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next()?.value as [string, string];
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -763,8 +763,8 @@ describe("TestManager Integration", () => {
           // Should be 3. Yaml, status, vars
           expect(s3Files.length, "s3Files.length").to.equal(5);
           // Check that the recurring=true tag is added
-          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const [tagKey, tagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next()?.value as [string, string];
           expect(typeof tagKey, "typeof tagKey").to.equal("string");
           for (const s3File of s3Files) {
             expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -880,7 +880,7 @@ describe("TestManager Integration", () => {
             // Should be 3. Yaml, status, vars
             expect(s3Files.length, "s3Files.length").to.equal(3);
             // Check that the recurring=true tag is added
-            const [tagKey, tagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            const [tagKey, tagValue]: [string, string] = defaultRecurringFileTags().entries().next()?.value as [string, string];
             expect(typeof tagKey, "typeof tagKey").to.equal("string");
             for (const s3File of s3Files) {
               expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -1740,8 +1740,8 @@ describe("TestManager Integration", () => {
             expect(s3Files.length, "s3Files.length").to.equal(3);
             // Check that the test=true tag is removed and recurring=true is added
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next()?.value as [string, string];
             expect(typeof testTagKey, "typeof tagKey").to.equal("string");
             for (const s3File of s3Files) {
               expect(s3File.tags, "s3File.tags").to.not.equal(undefined);
@@ -1810,10 +1810,10 @@ describe("TestManager Integration", () => {
             // Should be 3. Yaml, status, vars
             expect(s3Files.length, "s3Files.length").to.equal(3);
             // Check that the test=true tag is added and recurring=true is removed
-            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next().value;
-            const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+            const [testTagKey, testTagValue]: [string, string] = s3.defaultTestFileTags().entries().next()?.value as [string, string];
+            const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next()?.value as [string, string];
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next().value;
+            const [recurringTagKey, recurringTagValue]: [string, string] = defaultRecurringFileTags().entries().next()?.value as [string, string];
             expect(typeof testTagKey, "typeof tagKey").to.equal("string");
             for (const s3File of s3Files) {
               expect(s3File.tags, "s3File.tags").to.not.equal(undefined);

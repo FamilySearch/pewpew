@@ -2,6 +2,7 @@
   "name": "@fs/ppaas-common",
   "version": "3.5.1",
   "description": "Common Code for the PewPewController and PewPewAgent",
+  "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [
@@ -11,10 +12,10 @@
   "scripts": {
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "test": "npm run buildonly && mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "testonly": "mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "integration": "npm run build && mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "coverage": "npm run build && mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
     "prepare": "tsc --project tsconfig.lib.json",
     "clean": "rimraf dist/"
   },
@@ -24,10 +25,6 @@
   },
   "engines": {
     "node": ">=20.0.0 <23.0.0"
-  },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
   },
   "peerDependencies": {
     "@fs/config-wasm": "*"
@@ -47,18 +44,17 @@
     "@fs/config-wasm": "*",
     "@smithy/util-stream": "^4.0.0",
     "@types/bunyan": "~1.8.8",
-    "@types/chai": "^4.3.5",
+    "@types/chai": "^5.0.0",
     "@types/mocha": "^10.0.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "aws-sdk-client-mock": "^4.0.0",
-    "chai": "^4.3.7",
+    "chai": "^5.0.0",
     "dotenv": "^16.0.0",
     "dotenv-flow": "^4.0.1",
     "eslint": "^9.15.0",
     "mocha": "^11.0.0",
-    "nyc": "^17.0.0",
     "typescript": "^5.3.0"
   }
 }

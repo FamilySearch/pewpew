@@ -1,5 +1,5 @@
-import { LogLevel, log } from "./log";
-import { IS_RUNNING_IN_AWS } from "./util";
+import { LogLevel, log } from "./log.js";
+import { IS_RUNNING_IN_AWS } from "./util.js";
 import { MetadataService } from "@aws-sdk/ec2-metadata-service";
 import { exec as _exec } from "child_process";
 import { promisify } from "util";

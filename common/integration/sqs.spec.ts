@@ -10,9 +10,9 @@ import {
   SendMessageCommandInput,
   SendMessageCommandOutput
 } from "@aws-sdk/client-sqs";
-import { LogLevel, SqsQueueType, log, util } from "../src/index";
-import {
-  QUEUE_URL_COMMUNICATION,
+import { LogLevel, SqsQueueType, log, sqs, util } from "../src/index.js";
+const {
+  // QUEUE_URL_COMMUNICATION,
   QUEUE_URL_SCALE_IN,
   QUEUE_URL_TEST,
   changeMessageVisibility,
@@ -27,7 +27,7 @@ import {
   getQueueAttributes,
   getQueueAttributesMap,
   getTestScalingMessage,
-  init as initSqs,
+  init: initSqs,
   receiveMessage,
   refreshTestScalingMessage,
   sendMessage,
@@ -35,8 +35,8 @@ import {
   sendNewTestToRun,
   sendTestScalingMessage,
   setAccessCallback,
-  config as sqsConfig
-} from "../src/util/sqs";
+  config: sqsConfig
+} = sqs;
 
 import { expect } from "chai";
 
@@ -93,11 +93,17 @@ describe("SqsUtil Integration", () => {
     WaitTimeSeconds: 0
   };
   let healthCheckDate: Date | undefined;
+  // let QUEUE_URL_TEST: Map<string, string>;
+  // let QUEUE_URL_SCALE_IN: Map<string, string>;
+  let QUEUE_URL_COMMUNICATION: string;
 
   before(async () => {
     // reset everything in case the mocks ran.
     sqsConfig.sqsClient = undefined;
     initSqs();
+    // QUEUE_URL_TEST = sqs.QUEUE_URL_TEST;
+    // QUEUE_URL_SCALE_IN = sqs.QUEUE_URL_SCALE_IN;
+    QUEUE_URL_COMMUNICATION = sqs.QUEUE_URL_COMMUNICATION;
     log("QUEUE_URL_TEST=" + [...QUEUE_URL_TEST], LogLevel.DEBUG);
     log("QUEUE_URL_SCALE=" + [...QUEUE_URL_SCALE_IN], LogLevel.DEBUG);
     log("QUEUE_URL_COMMUNICATION=" + QUEUE_URL_COMMUNICATION, LogLevel.DEBUG);

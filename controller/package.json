@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "3.5.1",
+  "version": "4.0.0",
   "description": "Controller Service for running pewpew tests",
   "type": "module",
   "private": true,

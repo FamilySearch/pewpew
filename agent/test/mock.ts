@@ -135,7 +135,7 @@ export function mockListObjects ({
     if (once) {
       mockedS3Instance.on(ListObjectsV2Command, { Prefix: keyMatch }).resolves({ Contents: undefined });
     }
-    return { Contents: contents, IsTruncated: truncated };
+    return { Contents: contents, KeyCount: contents?.length || 0, IsTruncated: truncated };
   });
 }
 

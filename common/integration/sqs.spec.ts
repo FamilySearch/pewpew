@@ -27,6 +27,7 @@ const {
   getQueueAttributes,
   getQueueAttributesMap,
   getTestScalingMessage,
+  healthCheck,
   init: initSqs,
   receiveMessage,
   refreshTestScalingMessage,
@@ -137,6 +138,13 @@ describe("SqsUtil Integration", () => {
     const duration = Date.now() - startTime;
     // Get the names of the enum and create an object with name to count mapping
     log(`cleanUpQueues ${total}: ${duration}ms`, LogLevel.WARN, { total, duration });
+  });
+
+  describe("SQS Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      const isHealthy = await healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
   });
 
   describe("SQS Read/Write", () => {

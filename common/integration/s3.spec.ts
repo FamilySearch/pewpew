@@ -9,6 +9,7 @@ import {
   getObject,
   getObjectTagging,
   getTags,
+  healthCheck,
   init as initS3,
   listFiles,
   listObjects,
@@ -154,6 +155,13 @@ describe("S3Util Integration", () => {
     // If this is still undefined the access callback failed and was not updated with the last access date
     log("afterEach healthCheckDate=" + healthCheckDate, healthCheckDate ? LogLevel.DEBUG : LogLevel.ERROR);
     expect(healthCheckDate).to.not.equal(undefined);
+  });
+
+  describe("S3 Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      const isHealthy = await healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
   });
 
   describe("List Objects Empty in S3", () => {

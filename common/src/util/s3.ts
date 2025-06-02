@@ -724,3 +724,21 @@ export async function putObjectTagging ({ key, tags }: PutObjectTaggingOptions):
     throw error;
   }
 }
+
+/**
+ * Healthcheck function to verify S3 connectivity
+ * @returns Promise resolving to true if connected, false otherwise
+ */
+export async function healthCheck (): Promise<boolean> {
+  log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
+  // Ping S3 and update the lastS3Access if it works
+  try {
+    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
+    log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
+    return true;
+  } catch (error) {
+    log("pingS3 failed}", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
+  }
+}

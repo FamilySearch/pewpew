@@ -88,6 +88,14 @@ describe("S3Util", () => {
     expect(healthCheckDate, "healthCheckDate").to.not.equal(undefined);
   });
 
+  describe("S3 Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      mockListObjects(undefined);
+      const isHealthy = await s3.healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
+  });
+
   describe("TEST_FILE_TAGS", () => {
     it("should have key test", (done: Mocha.Done) => {
       try {

@@ -1,4 +1,4 @@
-import { LogLevel, log } from "@fs/ppaas-common";
+import { LogLevel, log, s3, sqs } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   accessEncryptionKeyPass,
@@ -6,8 +6,6 @@ import {
   accessS3Pass,
   accessSqsPass,
   getGlobalHealthcheckConfig,
-  pingS3,
-  pingSQS,
   waitForSecrets
 } from "../util/healthcheck";
 import { start as startCommuncations } from "../util/communications";
@@ -23,8 +21,8 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     log("failHealthCheck", LogLevel.FATAL, getGlobalHealthcheckConfig());
     res.status(500).json(getGlobalHealthcheckConfig());
   } else {
-    const s3Pass: boolean = accessS3Pass() || await pingS3();
-    const sqsPass: boolean = accessSqsPass() || await pingSQS();
+    const s3Pass: boolean = accessS3Pass() || await s3.healthCheck();
+    const sqsPass: boolean = accessSqsPass() || await sqs.healthCheck();
     const encryptPass = accessEncryptionKeyPass() || await waitForSecrets();
     const openIdPass = accessOpenIdSecretPass() || await waitForSecrets();
     const healthcheckPass = s3Pass && sqsPass && encryptPass && openIdPass;

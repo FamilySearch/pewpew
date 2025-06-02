@@ -23,7 +23,7 @@ export async function getInstanceId (): Promise<string> {
     try {
       // curl http://169.254.169.254/latest/meta-data/instance-id -> "i-0cfd3309705a3ce79"
       const instanceId: string = await metadata.request("/latest/meta-data/instance-id", {});
-      log("getInstanceId MetadataService /latest/meta-data/instance-id: " + instanceId, LogLevel.WARN, instanceId);
+      log("getInstanceId MetadataService /latest/meta-data/instance-id: " + instanceId, LogLevel.DEBUG, instanceId);
       if (!INSTANCE_ID_REGEX.test(instanceId)) {
         log(`InstanceId did not match regex [${instanceId}]`, LogLevel.WARN, { match: instanceId?.match(INSTANCE_ID_REGEX), INSTANCE_ID_REGEX });
         throw new Error("InstanceId did not match regex");

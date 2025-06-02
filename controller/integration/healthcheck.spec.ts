@@ -1,13 +1,27 @@
-import { getGlobalHealthcheckConfig, pingS3 } from "../pages/api/util/healthcheck";
+import { s3, sqs } from "@fs/ppaas-common";
 import { expect } from "chai";
+import { getGlobalHealthcheckConfig } from "../pages/api/util/healthcheck";
 
 describe("Healthcheck Integration", () => {
   it("Pinging s3 should succeed and update config on success", (done: Mocha.Done) => {
     const dateBefore: Date = new Date(0);
     getGlobalHealthcheckConfig().lastS3Access = dateBefore;
-    pingS3().then((result) => {
+    s3.healthCheck().then((result) => {
       expect(result).to.equal(true);
       expect(getGlobalHealthcheckConfig().lastS3Access.getTime()).to.greaterThan(dateBefore.getTime());
+      done();
+    })
+    .catch((error) => {
+      done(error);
+    });
+  });
+
+  it("Pinging sqs should succeed and update config on success", (done: Mocha.Done) => {
+    const dateBefore: Date = new Date(0);
+    getGlobalHealthcheckConfig().lastSQSAccess = dateBefore;
+    sqs.healthCheck().then((result) => {
+      expect(result).to.equal(true);
+      expect(getGlobalHealthcheckConfig().lastSQSAccess.getTime()).to.greaterThan(dateBefore.getTime());
       done();
     })
     .catch((error) => {

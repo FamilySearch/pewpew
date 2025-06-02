@@ -3,11 +3,11 @@ import {
   SQS_ALLOWED_LAST_ACCESS_MS,
   accessS3Pass,
   accessSqsPass,
-  getGlobalHealthcheckConfig,
-  pingS3
+  getGlobalHealthcheckConfig
 } from "../pages/api/util/healthcheck";
 import { mockListObjects, mockS3, resetMockS3 } from "./mock";
 import { expect } from "chai";
+import { s3 } from "@fs/ppaas-common";
 
 describe("Healthcheck", () => {
   before(() => {
@@ -42,7 +42,7 @@ describe("Healthcheck", () => {
   it("Pinging s3 should succeed and update config on success", (done: Mocha.Done) => {
     const dateBefore: Date = new Date(0);
     getGlobalHealthcheckConfig().lastS3Access = dateBefore;
-    pingS3().then((result) => {
+    s3.healthCheck().then((result) => {
       expect(result).to.equal(true);
       expect(getGlobalHealthcheckConfig().lastS3Access.getTime()).to.greaterThan(dateBefore.getTime());
       done();

@@ -1,9 +1,5 @@
-import { LogLevel, SqsQueueType, ec2, log, s3, sqs } from "@fs/ppaas-common";
+import { LogLevel, ec2, log, s3, sqs } from "@fs/ppaas-common";
 import { waitForSecrets as _waitForSecrets, getClientSecretOpenId, getEncryptionKey } from "./secrets";
-
-const listObjects = s3.listObjects;
-const setS3AccessCallback = s3.setAccessCallback;
-const setSqsAccessCallback = sqs.setAccessCallback;
 
 // Export these for testing
 export const S3_ALLOWED_LAST_ACCESS_MS: number = parseInt(process.env.S3_ALLOWED_LAST_ACCESS_MS || "0", 10) || 90000;
@@ -42,8 +38,8 @@ const lastSQSAccessCallBack = (date: Date) => {
   getGlobalHealthcheckConfig().lastSQSAccess = date;
   log("lastSQSAccessCallBack", LogLevel.DEBUG, { date, ts: date.getTime(), ...getGlobalHealthcheckConfig() });
 };
-setS3AccessCallback(lastS3AccessCallBack);
-setSqsAccessCallback(lastSQSAccessCallBack);
+s3.setAccessCallback(lastS3AccessCallBack);
+sqs.setAccessCallback(lastSQSAccessCallBack);
 
 // These are in separate export functions for test purposes
 export function accessS3Pass (lastS3Access: Date = getGlobalHealthcheckConfig().lastS3Access): boolean {
@@ -87,40 +83,6 @@ ec2.getInstanceId().then((instanceId: string) => {
   getGlobalHealthcheckConfig().instanceId = instanceId;
   log("getGlobalHealthcheckConfig instanceId", LogLevel.DEBUG, { instanceId, globalInstanceId: getGlobalHealthcheckConfig().instanceId });
 }).catch((error) => log("Could not get instanceId", LogLevel.WARN, error));
-
-// Shared function for the S3 healthcheck and normal healthcheck if accessS3Pass fails
-export async function pingS3 (): Promise<boolean> {
-  log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
-  // Ping S3 and update the lastS3Access if it works
-  try {
-    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
-    log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
-    return true;
-  } catch (error) {
-    log("pingS3 failed", LogLevel.WARN, error);
-    // DO NOT REJECT. Just return false
-    return false;
-  }
-}
-
-// Shared function for the SQS healthcheck and normal healthcheck if accessSQSPass fails
-export async function pingSQS (): Promise<boolean> {
-  log("Pinging SQS at " + new Date(), LogLevel.DEBUG);
-  // Ping SQS and update the lastSQSAccess if it works
-  try {
-    const map = await sqs.getQueueAttributesMap(SqsQueueType.Communications);
-    if (map === undefined) {
-      throw new Error("getQueueAttributesMap did not return results");
-    }
-    log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
-    log("pingSQS getQueueAttributesMap", LogLevel.DEBUG, map);
-    return true;
-  } catch (error) {
-    log("pingSQS failed", LogLevel.WARN, error);
-    // DO NOT REJECT. Just return false
-    return false;
-  }
-}
 
 // Shared function for the normal healthcheck if accessEncryptionKeyPass fails
 export async function waitForSecrets (): Promise<boolean> {

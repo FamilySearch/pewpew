@@ -120,6 +120,14 @@ describe("SqsUtil", () => {
     resetMockSqs();
   });
 
+  describe("SQS Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      mockGetQueueAttributes();
+      const isHealthy = await sqs.healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
+  });
+
   describe("getQueueUrl", () => {
     it("Should return communications", (done: Mocha.Done) => {
       try {

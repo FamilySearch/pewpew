@@ -122,12 +122,55 @@ describe("S3Util", () => {
 
   describe("List Objects Empty in S3", () => {
     it("List Objects should always succeed even if empty", (done: Mocha.Done) => {
-      mockListObjects([]);
+      mockListObjects(undefined);
       listObjects({ prefix: "bogus", maxKeys: 1}).then((result: ListObjectsV2CommandOutput) => {
         log(`listObjects("bogus", 1) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
-        expect(result.Contents).to.not.equal(undefined);
-        expect(result.Contents!.length).to.equal(0);
+        expect(result.Contents, "Contents").to.equal(undefined);
+        expect(result.KeyCount, "KeyCount").to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should find key", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listObjects({ prefix: UNIT_TEST_KEY, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should not find after", (done: Mocha.Done) => {
+      mockListObjects(undefined);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: UNIT_TEST_KEY, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.equal(undefined);
+        expect(result.KeyCount, "KeyCount").to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should find after", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: UNIT_TEST_KEY_PREFIX, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
         done();
       }).catch((error) => {
         done(error);

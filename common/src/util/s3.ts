@@ -457,30 +457,36 @@ export async function putTags ({ filename, s3Folder, tags }: PutTagsOptions): Pr
 
 export interface ListObjectsOptions {
   prefix?: string;
+  startAfter?: string;
   maxKeys?: number;
   continuationToken?: string;
 }
 
 // export for testing
 export async function listObjects (prefix?: string): Promise<ListObjectsV2CommandOutput>;
-export async function listObjects (options?: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
+export async function listObjects ({ prefix, startAfter, maxKeys, continuationToken }: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
 export async function listObjects (options?: string | ListObjectsOptions): Promise<ListObjectsV2CommandOutput> {
   let prefix: string | undefined;
+  let startAfter: string | undefined;
   let maxKeys: number | undefined;
   let continuationToken: string | undefined;
   if (typeof options === "string") {
     prefix = options;
   } else {
-    ({ prefix, maxKeys, continuationToken } = options || {});
+    ({ prefix, startAfter, maxKeys, continuationToken } = options || {});
   }
-  log(`listObjects(${prefix}, ${maxKeys}, ${continuationToken})`, LogLevel.DEBUG);
+  log(`listObjects({ prefix: "${prefix}", startAfter: "${startAfter}", maxKeys: ${maxKeys}, continuationToken: "${continuationToken}" })`, LogLevel.DEBUG);
   const s3Client = init();
   if (!prefix || !prefix.startsWith(KEYSPACE_PREFIX)) {
     prefix = KEYSPACE_PREFIX + (prefix || "");
   }
+  if (startAfter && !startAfter.startsWith(KEYSPACE_PREFIX)) {
+    startAfter = KEYSPACE_PREFIX + startAfter;
+  }
   const params: ListObjectsV2CommandInput = {
     Bucket: BUCKET_NAME,
     Prefix: prefix,
+    StartAfter: startAfter, // StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key.
     ContinuationToken: continuationToken,
     MaxKeys: maxKeys || 50
   };

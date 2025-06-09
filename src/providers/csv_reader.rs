@@ -1,5 +1,5 @@
 use crate::util::str_to_json;
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use serde_json as json;
 
 use std::{fs::File, io, iter::Iterator};
@@ -87,8 +87,9 @@ impl CsvReader {
                 }
             }
             let pos_index = if config.random && !cr.positions.is_empty() {
-                let random = Uniform::new(0, cr.positions.len());
-                let pos_index = random.sample(&mut rand::thread_rng());
+                let random = Uniform::new(0, cr.positions.len())
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                let pos_index = random.sample(&mut rand::rng());
                 cr.random = Some(random);
                 pos_index
             } else {
@@ -113,7 +114,7 @@ impl Iterator for CsvReader {
             if self.positions.is_empty() {
                 return None;
             }
-            let i = random.sample(&mut rand::thread_rng()) % self.positions.len();
+            let i = random.sample(&mut rand::rng()) % self.positions.len();
             let pos = if self.repeat {
                 self.positions
                     .get(i)

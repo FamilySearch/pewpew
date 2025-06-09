@@ -6,6 +6,7 @@ pub fn str_to_json(s: &str) -> json::Value {
     json::from_str(s).unwrap_or_else(|_| json::Value::String(s.into()))
 }
 
+#[allow(clippy::owned_cow)]
 pub fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
     match v {
         Cow::Owned(json::Value::String(s)) => Cow::Owned(s),

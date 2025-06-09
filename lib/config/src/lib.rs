@@ -2996,6 +2996,7 @@ impl LoadTest {
     }
 }
 
+#[allow(clippy::owned_cow)]
 pub(crate) fn json_value_to_string(v: Cow<'_, json::Value>) -> Cow<'_, String> {
     match v {
         Cow::Owned(json::Value::String(s)) => Cow::Owned(s),

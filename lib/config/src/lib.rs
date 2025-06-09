@@ -11,7 +11,7 @@ pub use from_yaml::FromYaml;
 use from_yaml::{Nullable, ParseResult, TupleVec, YamlDecoder, YamlEvent};
 use http::Method;
 use rand::{
-    distributions::{Distribution, Uniform},
+    distr::{Distribution, Uniform},
     Rng,
 };
 use regex::Regex;
@@ -425,15 +425,17 @@ impl IntoIterator for ListProvider {
             ListProvider::WithOptions(mut e) => match (e.repeat, e.random) {
                 (true, true) => {
                     let a = ListRepeatRandomIterator {
-                        random: Uniform::new(0, e.values.len()),
+                        random: Uniform::new(0, e.values.len())
+                            .expect("should be able to create a uniform distribution"),
                         values: e.values,
                     };
                     Either3::A(a)
                 }
                 (false, false) => Either3::B(e.values.into_iter()),
                 (false, true) => {
-                    let mut rng = rand::thread_rng();
-                    e.values.sort_unstable_by_key(|_| rng.gen::<usize>());
+                    let mut rng = rand::rng();
+                    e.values
+                        .sort_unstable_by_key(|_| rng.random::<u32>() as usize);
                     Either3::B(e.values.into_iter())
                 }
                 (true, false) => Either3::C(e.values.into_iter().cycle()),
@@ -452,7 +454,7 @@ impl Iterator for ListRepeatRandomIterator {
     type Item = json::Value;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos_index = self.random.sample(&mut rand::thread_rng());
+        let pos_index = self.random.sample(&mut rand::rng());
         self.values.get(pos_index).cloned()
     }
 }

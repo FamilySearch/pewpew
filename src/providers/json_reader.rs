@@ -1,4 +1,4 @@
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use serde_json as json;
 
 use std::{
@@ -40,8 +40,9 @@ impl JsonReader {
                 }
             }
             if !jr.positions.is_empty() {
-                let random = Uniform::new(0, jr.positions.len());
-                let rand_pos = jr.positions.get(random.sample(&mut rand::thread_rng()));
+                let random = Uniform::new(0, jr.positions.len())
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                let rand_pos = jr.positions.get(random.sample(&mut rand::rng()));
                 if let Some((pos, _)) = rand_pos {
                     let pos = *pos;
                     jr.seek(pos)?;
@@ -117,7 +118,7 @@ impl Iterator for JsonReader {
             if self.positions.is_empty() {
                 return None;
             }
-            let i = random.sample(&mut rand::thread_rng()) % self.positions.len();
+            let i = random.sample(&mut rand::rng()) % self.positions.len();
             let (pos, size) = if self.repeat {
                 self.positions[i]
             } else {

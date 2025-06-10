@@ -1,4 +1,4 @@
-use rand::seq::SliceRandom;
+use rand::seq::{IndexedRandom, SliceRandom};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, serde::Serialize)]
@@ -31,11 +31,11 @@ impl IntoIterator for ListProvider {
             (false, false) => Box::new(values.into_iter()),
             (true, false) => Box::new(values.into_iter().cycle()),
             (false, true) => {
-                values.shuffle(&mut rand::thread_rng());
+                values.shuffle(&mut rand::rng());
                 Box::new(values.into_iter())
             }
             (true, true) => Box::new(std::iter::from_fn(move || {
-                values.choose(&mut rand::thread_rng()).cloned()
+                values.choose(&mut rand::rng()).cloned()
             })),
         }
     }

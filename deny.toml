@@ -31,6 +31,7 @@ allow = [
     "MIT",
     "MPL-2.0", # MPL is only copyleft in regards to modifications to the original, adding as a dependency is fine
     "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Zlib",
 ]
 confidence-threshold = 1.0

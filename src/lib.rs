@@ -58,7 +58,7 @@ use std::{
     fmt,
     fs::File,
     future::Future,
-    io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, Write},
+    io::{Error as IOError, Read, Seek, Write},
     mem,
     path::{Path, PathBuf},
     pin::Pin,
@@ -456,7 +456,7 @@ async fn _create_run(
         let config_file = Arc::clone(&config_file);
         move |e| {
             warn!("config file error: {}", e);
-            let e = IOError::new(IOErrorKind::Other, e);
+            let e = IOError::other(e);
             TestError::CannotOpenFile(config_file, e.into())
         }
     })??;

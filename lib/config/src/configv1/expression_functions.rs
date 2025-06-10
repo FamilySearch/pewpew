@@ -9,7 +9,7 @@ use ether::{Either, Either3, EitherExt};
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use jsonpath_lib as json_path;
 use log::warn;
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use regex::Regex;
 use serde_json as json;
 use unicode_segmentation::UnicodeSegmentation;
@@ -84,7 +84,10 @@ impl Collect {
                         let max = as_u64(&fa).ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("collect", marker)
                         });
-                        Ok::<_, CreatingExpressionError>(Uniform::new(second, max?))
+                        Ok::<_, CreatingExpressionError>(
+                            Uniform::new(second, max?)
+                                .expect("should have created a uniform distribution"),
+                        )
                     })
                     .transpose()?;
                 Ok(Collect {
@@ -135,7 +138,7 @@ impl Collect {
         stream::poll_fn(move |cx| {
             if value.is_none() {
                 let n = if let Some(r) = random {
-                    r.sample(&mut rand::thread_rng())
+                    r.sample(&mut rand::rng())
                 } else {
                     min
                 };
@@ -1213,13 +1216,15 @@ impl Random {
                     let r = Uniform::new(
                         first.as_u64().expect("should have been u64"),
                         second.as_u64().expect("should have been u64"),
-                    );
+                    )
+                    .expect("should have created a uniform distribution");
                     Ok(Random::Integer(r))
                 } else {
                     let r = Uniform::new(
                         first.as_f64().expect("should have been f64"),
                         second.as_f64().expect("should have been f64"),
-                    );
+                    )
+                    .expect("should have created a uniform distribution");
                     Ok(Random::Float(r))
                 }
             }
@@ -1229,8 +1234,8 @@ impl Random {
 
     pub(super) fn evaluate<'a>(&self) -> Cow<'a, json::Value> {
         match self {
-            Random::Integer(r) => Cow::Owned(r.sample(&mut rand::thread_rng()).into()),
-            Random::Float(r) => Cow::Owned(r.sample(&mut rand::thread_rng()).into()),
+            Random::Integer(r) => Cow::Owned(r.sample(&mut rand::rng()).into()),
+            Random::Float(r) => Cow::Owned(r.sample(&mut rand::rng()).into()),
         }
     }
 
@@ -1471,7 +1476,10 @@ impl Repeat {
                         let max = as_u64(&fa).ok_or({
                             ExecutingExpressionError::InvalidFunctionArguments("repeat", marker)
                         });
-                        Ok::<_, CreatingExpressionError>(Uniform::new(min, max?))
+                        Ok::<_, CreatingExpressionError>(
+                            Uniform::new(min, max?)
+                                .expect("should have created a uniform distribution"),
+                        )
                     })
                     .transpose()?;
                 Ok(Repeat { min, random })
@@ -1490,7 +1498,7 @@ impl Repeat {
         &self,
     ) -> impl Iterator<Item = Cow<'a, json::Value>> + Clone {
         let n = if let Some(r) = self.random {
-            r.sample(&mut rand::thread_rng())
+            r.sample(&mut rand::rng())
         } else {
             self.min
         };

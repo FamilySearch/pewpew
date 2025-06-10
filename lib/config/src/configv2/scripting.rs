@@ -649,7 +649,7 @@ mod builtins {
 
     use crate::shared::{encode::Encoding, Epoch};
     use helper::{AnyAsString, AnyNull, NumType, OrNull};
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     use regex::Regex;
     use scripting_macros::boa_fn;
     use serde_json::Value as SJV;
@@ -828,10 +828,10 @@ mod builtins {
     #[boa_fn]
     fn random(min: NumType, max: NumType, _: Option<AnyNull>) -> NumType {
         match (min, max) {
-            (NumType::Int(i), NumType::Int(j)) => NumType::Int(thread_rng().gen_range(i..j)),
+            (NumType::Int(i), NumType::Int(j)) => NumType::Int(rng().random_range(i..j)),
             (i, j) => {
                 let (i, j) = (i.as_float(), j.as_float());
-                NumType::Real(thread_rng().gen_range(i..j))
+                NumType::Real(rng().random_range(i..j))
             }
         }
     }
@@ -849,7 +849,7 @@ mod builtins {
     fn repeat(min: i64, max: Option<i64>) -> Vec<()> {
         let min = min as usize;
         let len = match max {
-            Some(max) => thread_rng().gen_range(min..=(max as usize)),
+            Some(max) => rng().random_range(min..=(max as usize)),
             None => min,
         };
         vec![(); len]

@@ -62,10 +62,10 @@ enum Take {
 
 impl Take {
     fn next_size(&self) -> usize {
-        use rand::prelude::*;
+        use rand::{rng, Rng};
         match self {
             Self::Fixed(x) => *x,
-            Self::Rand(min, max) => thread_rng().gen_range(*min..*max),
+            Self::Rand(min, max) => rng().random_range(*min..*max),
         }
     }
 

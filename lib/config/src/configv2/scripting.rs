@@ -4,9 +4,14 @@ use super::{
 };
 use crate::make_send::MakeSend;
 use boa_engine::{
-    object::{JsArray, JsFunction, ObjectInitializer},
+    js_string,
+    object::{
+        builtins::{JsArray, JsFunction},
+        ObjectInitializer,
+    },
     prelude::*,
     property::{Attribute, PropertyKey},
+    JsResult,
 };
 use derivative::Derivative;
 use futures::{Stream, TryStreamExt};
@@ -92,15 +97,19 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
         match js {
             JsValue::Null => Ok(serde_json::Value::Null),
             &JsValue::Boolean(b) => Ok(b.into()),
-            JsValue::String(string) => Ok(string.as_str().into()),
+            JsValue::String(string) => Ok(string.to_std_string_escaped().into()),
             &JsValue::Rational(rat) => Ok(rat.into()),
             &JsValue::Integer(int) => Ok(int.into()),
-            JsValue::BigInt(_bigint) => context.throw_type_error("cannot convert bigint to JSON"),
-            JsValue::Symbol(_sym) => context.throw_type_error("cannot convert Symbol to JSON"),
+            JsValue::BigInt(_bigint) => Err(JsError::from_native(
+                JsNativeError::typ().with_message("cannot convert bigint to JSON"),
+            )),
+            JsValue::Symbol(_sym) => Err(JsError::from_native(
+                JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
+            )),
             JsValue::Object(o) => {
                 if o.is_array() {
-                    let jsarr =
-                        JsArray::from_object(o.clone(), context).expect("just checked if array");
+                    let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
+                    log::trace!("purge_undefined array: {jsarr:?}");
                     let len = jsarr.length(context)?;
                     (0..len)
                         .map(|i| {
@@ -116,24 +125,41 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
                         .map(Into::into)
                 } else {
                     let mut map = serde_json::Map::new();
-                    for (key, property) in o.borrow().properties().iter() {
+                    // https://github.com/boa-dev/boa/issues/3923
+                    // Starting in 0.17, to_json uses properties().shape().keys() which doesn't include integer keys
+                    // own_property_keys() does include them
+                    let keys = o
+                        .own_property_keys(context)
+                        .expect("Objects should have keys");
+                    log::trace!("purge_undefined object keys: {keys:?}");
+
+                    for key in keys {
+                        let property = o.get(key.clone(), context);
+                        log::trace!("purge_undefined object property: {key:?} = {property:?}");
+
                         let key = match &key {
-                            PropertyKey::String(string) => string.as_str().to_owned(),
-                            PropertyKey::Index(i) => i.to_string(),
+                            PropertyKey::String(string) => {
+                                string.to_std_string_escaped().to_owned()
+                            }
+                            PropertyKey::Index(i) => i.get().to_string(),
                             PropertyKey::Symbol(_sym) => {
-                                return context.throw_type_error("cannot convert Symbol to JSON")
+                                return Err(JsError::from_native(
+                                    JsNativeError::typ()
+                                        .with_message("cannot convert Symbol to JSON"),
+                                ))
                             }
                         };
 
-                        let value = match property.value() {
-                            Some(val) => purge_inner(val, context, {
+                        let value = match property {
+                            Ok(val) => purge_inner(&val, context, {
                                 let mut trace = trace.clone();
                                 trace.push(key.clone());
                                 trace
                             })?,
-                            None => serde_json::Value::Null,
+                            Err(_) => serde_json::Value::Null,
                         };
 
+                        log::trace!("purge_undefined Object result: {value:?}");
                         map.insert(key, value);
                     }
 
@@ -150,9 +176,10 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
 }
 
 pub fn eval_direct(code: &str) -> Result<String, EvalExprError> {
-    get_default_context()
-        .eval(code)
-        .map_err(EvalExprErrorInner::ExecutionError)
+    let context = &mut get_default_context();
+    context
+        .eval(Source::from_bytes(code))
+        .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(context)))
         .map_err(Into::into)
         .map(|js| js.display().to_string())
 }
@@ -190,10 +217,10 @@ impl EvalExpr {
         Ok(Self {
             ctx: MakeSend::try_new::<CreateExprError, _>(|| {
                 let mut ctx = builtins::get_default_context();
-                ctx.eval(script.as_bytes())
-                    .map_err(CreateExprError::fn_err)?;
+                ctx.eval(Source::from_bytes(script.as_bytes()))
+                    .map_err(|err| CreateExprError::fn_err(err.to_opaque(&mut ctx)))?;
                 let efn = ctx
-                    .eval("____eval")
+                    .eval(Source::from_bytes("____eval".as_bytes()))
                     .ok()
                     .and_then(|v| v.as_object().cloned())
                     .and_then(JsFunction::from_object)
@@ -266,23 +293,27 @@ impl EvalExpr {
             .into_iter()
             .map(|(n, (v, ar))| {
                 JsValue::from_json(&v, ctx)
-                    .map_err(EvalExprErrorInner::InvalidJsonFromProvider)
+                    .map_err(|err| EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(ctx)))
                     .map(|v| (n, (v, ar)))
             })
             .collect::<Result<_, _>>()?;
         let mut object = ObjectInitializer::new(ctx);
         for (name, (value, _)) in values.iter() {
-            object.property(name.to_string(), value, Attribute::READONLY);
+            object.property(
+                js_string!(name.to_string()),
+                value.clone(),
+                Attribute::READONLY,
+            );
         }
         let object = object.build();
         Ok((
             purge_undefined(
                 &efn.call(&JsValue::Null, &[object.into()], ctx)
                     .map(|js| if js.is_undefined() { JsValue::Null } else { js })
-                    .map_err(EvalExprErrorInner::ExecutionError)?,
+                    .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(ctx)))?,
                 ctx,
             )
-            .map_err(EvalExprErrorInner::InvalidResultJson)?,
+            .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))?,
             values.into_iter().flat_map(|v| v.1 .1).collect_vec(),
         ))
     }
@@ -329,7 +360,7 @@ impl EvalExpr {
 #[cfg(test)]
 mod tests {
     use super::LibSrc;
-    use boa_engine::{object::JsArray, Context, JsValue};
+    use boa_engine::{object::builtins::JsArray, Context, JsValue, Source};
     use std::{path::PathBuf, sync::Arc};
 
     // I don't bother calling purge_undefined() in here, because for unit testing we control the
@@ -339,19 +370,31 @@ mod tests {
     #[test]
     fn parse_funcs() {
         let mut ctx: Context = super::builtins::get_default_context();
-        assert_eq!(ctx.eval(r#"parseInt("5")"#), Ok(JsValue::Integer(5)));
-        assert_eq!(ctx.eval(r#"parseInt("5.1")"#), Ok(JsValue::Integer(5)));
-        assert_eq!(ctx.eval(r#"parseFloat("5.1")"#), Ok(JsValue::Rational(5.1)));
-        assert_eq!(ctx.eval(r#"parseFloat("e")"#), Ok(JsValue::Null));
+        assert_eq!(
+            ctx.eval(Source::from_bytes(r#"parseInt("5")"#)),
+            Ok(JsValue::Integer(5))
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(r#"parseInt("5.1")"#)),
+            Ok(JsValue::Integer(5))
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(r#"parseFloat("5.1")"#)),
+            Ok(JsValue::Rational(5.1))
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(r#"parseFloat("e")"#)),
+            Ok(JsValue::Null)
+        );
     }
 
     #[test]
     fn reapeat_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
-        let rep_arr = ctx.eval(r#"repeat(3)"#).unwrap();
+        let rep_arr = ctx.eval(Source::from_bytes(r#"repeat(3)"#)).unwrap();
         let rep_arr = rep_arr.as_object().unwrap();
         assert!(rep_arr.is_array());
-        let rep_arr = JsArray::from_object(rep_arr.clone(), &mut ctx).unwrap();
+        let rep_arr = JsArray::from_object(rep_arr.clone()).unwrap();
         for _ in 0..3 {
             assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::Null);
         }
@@ -362,36 +405,38 @@ mod tests {
     fn pad_fns() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval(r#"end_pad("foo", 6, "bar")"#),
+            ctx.eval(Source::from_bytes(r#"end_pad("foo", 6, "bar")"#)),
             Ok(JsValue::String("foobar".into()))
         );
         assert_eq!(
-            ctx.eval(r#"end_pad("foo", 7, "bar")"#),
+            ctx.eval(Source::from_bytes(r#"end_pad("foo", 7, "bar")"#)),
             Ok(JsValue::String("foobarb".into()))
         );
         assert_eq!(
-            ctx.eval(r#"end_pad("foo", 1, "fsdajlkvshduva")"#),
+            ctx.eval(Source::from_bytes(r#"end_pad("foo", 1, "fsdajlkvshduva")"#)),
             Ok(JsValue::String("foo".into()))
         );
         assert_eq!(
-            ctx.eval(r#"end_pad("foo", 4, "")"#),
+            ctx.eval(Source::from_bytes(r#"end_pad("foo", 4, "")"#)),
             Ok(JsValue::String("foo".into()))
         );
 
         assert_eq!(
-            ctx.eval(r#"start_pad("foo", 6, "bar")"#),
+            ctx.eval(Source::from_bytes(r#"start_pad("foo", 6, "bar")"#)),
             Ok(JsValue::String("barfoo".into()))
         );
         assert_eq!(
-            ctx.eval(r#"start_pad("foo", 7, "bar")"#),
+            ctx.eval(Source::from_bytes(r#"start_pad("foo", 7, "bar")"#)),
             Ok(JsValue::String("barbfoo".into()))
         );
         assert_eq!(
-            ctx.eval(r#"start_pad("foo", 1, "fsdajlkvshduva")"#),
+            ctx.eval(Source::from_bytes(
+                r#"start_pad("foo", 1, "fsdajlkvshduva")"#
+            )),
             Ok(JsValue::String("foo".into()))
         );
         assert_eq!(
-            ctx.eval(r#"start_pad("foo", 4, "")"#),
+            ctx.eval(Source::from_bytes(r#"start_pad("foo", 4, "")"#)),
             Ok(JsValue::String("foo".into()))
         );
     }
@@ -400,7 +445,9 @@ mod tests {
     fn encode_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval(r#"encode("foo=bar", "percent-userinfo")"#),
+            ctx.eval(Source::from_bytes(
+                r#"encode("foo=bar", "percent-userinfo")"#
+            )),
             Ok(JsValue::String("foo%3Dbar".into()))
         );
     }
@@ -410,11 +457,11 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
 
         let mut eval_str = |s: &str| {
-            ctx.eval(s)
+            ctx.eval(Source::from_bytes(s))
                 .unwrap()
                 .as_string()
                 .unwrap()
-                .as_str()
+                .to_std_string_escaped()
                 .to_owned()
         };
 
@@ -444,27 +491,30 @@ mod tests {
     fn entries_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval(r#"entries({"foo": "bar", "baz": 123})"#)
+            ctx.eval(Source::from_bytes(r#"entries({"foo": "bar", "baz": 123})"#))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
             serde_json::json!([["foo", "bar"], ["baz", 123]])
         );
         assert_eq!(
-            ctx.eval(r#"entries(["abc", "def"])"#)
+            ctx.eval(Source::from_bytes(r#"entries(["abc", "def"])"#))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
             serde_json::json!([[0, "abc"], [1, "def"]])
         );
         assert_eq!(
-            ctx.eval(r#"entries("xyz")"#)
+            ctx.eval(Source::from_bytes(r#"entries("xyz")"#))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
             serde_json::json!([[0, "x"], [1, "y"], [2, "z"]])
         );
-        assert_eq!(ctx.eval("entries(null)"), Ok(JsValue::Null));
+        assert_eq!(
+            ctx.eval(Source::from_bytes("entries(null)")),
+            Ok(JsValue::Null)
+        );
     }
 
     #[test]
@@ -472,19 +522,19 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         // not testing value ranges, just int * int -> int
         assert!(matches!(
-            ctx.eval(r#"random(1, 4)"#),
+            ctx.eval(Source::from_bytes(r#"random(1, 4)"#)),
             Ok(JsValue::Integer(_))
         ));
         assert!(matches!(
-            ctx.eval(r#"random(1.1, 4)"#),
+            ctx.eval(Source::from_bytes(r#"random(1.1, 4)"#)),
             Ok(JsValue::Rational(_))
         ));
         assert!(matches!(
-            ctx.eval(r#"random(1, 4.1)"#),
+            ctx.eval(Source::from_bytes(r#"random(1, 4.1)"#)),
             Ok(JsValue::Rational(_))
         ));
         assert!(matches!(
-            ctx.eval(r#"random(1.001, 4.09)"#),
+            ctx.eval(Source::from_bytes(r#"random(1.001, 4.09)"#)),
             Ok(JsValue::Rational(_))
         ));
     }
@@ -493,11 +543,17 @@ mod tests {
     fn range_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval("range(1, 10)").unwrap().to_json(&mut ctx).unwrap(),
+            ctx.eval(Source::from_bytes("range(1, 10)"))
+                .unwrap()
+                .to_json(&mut ctx)
+                .unwrap(),
             serde_json::json!([1, 2, 3, 4, 5, 6, 7, 8, 9])
         );
         assert_eq!(
-            ctx.eval("range(10, 1)").unwrap().to_json(&mut ctx).unwrap(),
+            ctx.eval(Source::from_bytes("range(10, 1)"))
+                .unwrap()
+                .to_json(&mut ctx)
+                .unwrap(),
             serde_json::json!([10, 9, 8, 7, 6, 5, 4, 3, 2])
         );
     }
@@ -506,10 +562,30 @@ mod tests {
     fn replace_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval(r#"replace("foo", {"foo": "baz", "zed": ["abc", 123, "fooo"]}, "bar")"#)
-                .unwrap()
-                .to_json(&mut ctx)
-                .unwrap(),
+            ctx.eval(Source::from_bytes(
+                r#"replace("foo", "foobarisfooobar", "bar")"#
+            ))
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap(),
+            serde_json::json!("barbarisbarobar")
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(
+                r#"replace("foo", ["abc", 123, "fooo"], "bar")"#
+            ))
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap(),
+            serde_json::json!(["abc", 123, "baro"])
+        );
+        assert_eq!(
+            ctx.eval(Source::from_bytes(
+                r#"replace("foo", {"foo": "baz", "zed": ["abc", 123, "fooo"]}, "bar")"#
+            ))
+            .unwrap()
+            .to_json(&mut ctx)
+            .unwrap(),
             serde_json::json!({"bar": "baz", "zed": ["abc", 123, "baro"]})
         )
     }
@@ -518,11 +594,11 @@ mod tests {
     fn join_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
-            ctx.eval(r#"join(["foo", "bar", "baz"], "-")"#),
+            ctx.eval(Source::from_bytes(r#"join(["foo", "bar", "baz"], "-")"#)),
             Ok(JsValue::String("foo-bar-baz".into()))
         );
         assert_eq!(
-            ctx.eval(r#"join({"a": 1, "b": 2}, "\n", ": ")"#),
+            ctx.eval(Source::from_bytes(r#"join({"a": 1, "b": 2}, "\n", ": ")"#)),
             Ok(JsValue::String("a: 1\nb: 2".into()))
         );
     }
@@ -530,10 +606,13 @@ mod tests {
     #[test]
     fn match_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
-        let caps = ctx.eval(
+        let caps = ctx.eval(Source::from_bytes(
             r#"match("<html>\n<body>\nHello, Jean! Today's date is 2038-01-19. So glad you made it!\n</body>\n</html>", "Hello, (?P<name>\\w+).*(?P<y>\\d{4})-(?P<m>\\d{2})-(?P<d>\\d{2})")"#
-        ).map_err(|js| js.display().to_string()).unwrap();
-        let caps = caps.to_json(&mut ctx).unwrap();
+        )).map_err(|js| js.to_opaque(&mut ctx).display().to_string()).unwrap();
+        // https://github.com/boa-dev/boa/issues/3923
+        // Starting in 0.17, to_json removes any integer/integer strings from the object. purge_undefined doesn't
+        // let caps = caps.to_json(&mut ctx).unwrap();
+        let caps = crate::scripting::purge_undefined(&caps, &mut ctx).unwrap();
         assert_eq!(
             caps,
             serde_json::json!({
@@ -550,16 +629,20 @@ mod tests {
     fn json_path_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         let val = ctx
-            .eval(r#"json_path({"a": [{"c": 1}, {"c": 2}], "b": null}, "$.a.*.c")"#)
-            .map_err(|js| js.display().to_string())
+            .eval(Source::from_bytes(
+                r#"json_path({"a": [{"c": 1}, {"c": 2}], "b": null}, "$.a.*.c")"#,
+            ))
+            .map_err(|js| js.to_opaque(&mut ctx).display().to_string())
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
         assert_eq!(val, serde_json::json!([1, 2]));
         // ensure that same cached path works as expected on different data
         let val = ctx
-            .eval(r#"json_path({"a": [{"c": 56}, {"c": 88}], "b": null}, "$.a.*.c")"#)
-            .map_err(|js| js.display().to_string())
+            .eval(Source::from_bytes(
+                r#"json_path({"a": [{"c": 56}, {"c": 88}], "b": null}, "$.a.*.c")"#,
+            ))
+            .map_err(|js| js.to_opaque(&mut ctx).display().to_string())
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
@@ -569,14 +652,25 @@ mod tests {
     #[test]
     fn val_eq_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
-        let val = ctx.eval("[1] == [1]").unwrap().as_boolean().unwrap();
+        let val = ctx
+            .eval(Source::from_bytes("[1] == [1]"))
+            .unwrap()
+            .as_boolean()
+            .unwrap();
         assert!(!val);
-        let val = ctx.eval("val_eq([1], [1])").unwrap().as_boolean().unwrap();
+        let val = ctx
+            .eval(Source::from_bytes("val_eq([1], [1])"))
+            .unwrap()
+            .as_boolean()
+            .unwrap();
         assert!(val);
     }
 
     #[test]
     fn custom_js() {
+        // sleep is to prevent collision issues with the test in the scripting module
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
         super::set_source(Some(LibSrc::Extern(Arc::from(PathBuf::from(
             "./tests/test_custom.js",
         )))))
@@ -585,20 +679,20 @@ mod tests {
         let mut ctx = super::get_default_context();
 
         assert_eq!(
-            ctx.eval(r#"foo_custom({x: 55})"#)
-                .map_err(|e| e.display().to_string())
+            ctx.eval(Source::from_bytes(r#"foo_custom({x: 55})"#))
+                .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
                 .unwrap(),
             JsValue::Integer(55)
         );
         assert_eq!(
-            ctx.eval(r#"foo_custom({y: 55})"#)
-                .map_err(|e| e.display().to_string())
+            ctx.eval(Source::from_bytes(r#"foo_custom({y: 55})"#))
+                .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
                 .unwrap(),
             JsValue::Integer(2)
         );
 
         assert_eq!(
-            ctx.eval("calls_entries([1, 2, 3])")
+            ctx.eval(Source::from_bytes("calls_entries([1, 2, 3])"))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
@@ -614,13 +708,16 @@ pub fn get_default_context() -> Context {
     // the function called here is written by the `boa_mod` macro
     let mut ctx = builtins::get_default_context();
     match lib_src::get_source().as_deref() {
-        Some(s) => match ctx.eval(s) {
+        Some(s) => match ctx.eval(Source::from_bytes(s)) {
             Ok(_) => ctx,
             Err(e) => {
                 // Function does not return a Result because that would need to be handled every
                 // time this function is called, and the return value of this function should never
                 // change after the first time.
-                log::error!("error inserting custom js: {}", e.display());
+                log::error!(
+                    "error inserting custom js: {}",
+                    e.to_opaque(&mut ctx).display()
+                );
                 builtins::get_default_context()
             }
         },
@@ -649,7 +746,7 @@ mod builtins {
 
     use crate::shared::{encode::Encoding, Epoch};
     use helper::{AnyAsString, AnyNull, NumType, OrNull};
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     use regex::Regex;
     use scripting_macros::boa_fn;
     use serde_json::Value as SJV;
@@ -666,7 +763,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn end_pad(s: AnyAsString, min_length: i64, pad_string: &str) -> String {
+    fn end_pad(s: AnyAsString, min_length: i64, pad_string: String) -> String {
         use unicode_segmentation::UnicodeSegmentation;
         let mut s = s.get();
         let needed_chars = (min_length as usize).saturating_sub(s.len());
@@ -703,7 +800,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn join(value: SJV, separator: &str, separator2: Option<&str>) -> String {
+    fn join(value: SJV, separator: String, separator2: Option<String>) -> String {
         // The std ToString impl for SJV put extra "" around the String
         fn get_as_str(v: &SJV) -> Cow<str> {
             match v {
@@ -714,37 +811,41 @@ mod builtins {
         let s = separator;
         let s2 = separator2;
         match (value, s2) {
-            (SJV::Array(a), _) => a.iter().map(get_as_str).collect::<Vec<_>>().join(s),
+            (SJV::Array(a), _) => a
+                .iter()
+                .map(get_as_str)
+                .collect::<Vec<_>>()
+                .join(s.as_str()),
             (SJV::Object(m), Some(s2)) => m
                 .into_iter()
                 .map(|(k, v)| format!("{k}{s2}{0}", get_as_str(&v)))
                 .collect::<Vec<_>>()
-                .join(s),
+                .join(s.as_str()),
             (SJV::String(s), _) => s,
             (other, _) => other.to_string(),
         }
     }
 
     #[boa_fn]
-    fn json_path(v: SJV, s: &str) -> Vec<SJV> {
+    fn json_path(v: SJV, s: String) -> Vec<SJV> {
         use jsonpath_lib::Compiled;
         // same pattern as in `match` helper function
-        fn get_node(s: &str) -> Arc<Result<Compiled, String>> {
+        fn get_node(s: String) -> Arc<Result<Compiled, String>> {
             static PATH_CACHE: Mutex<BTreeMap<String, Arc<Result<Compiled, String>>>> =
                 Mutex::new(BTreeMap::new());
 
             match PATH_CACHE.lock() {
                 Ok(mut c) => c
                     .entry(s.to_owned())
-                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(s)))
+                    .or_insert_with(|| Arc::new(jsonpath_lib::Compiled::compile(s.as_str())))
                     .clone(),
                 Err(_) => {
                     log::warn!("jsonpath cache Mutex has been poisoned");
-                    Arc::new(jsonpath_lib::Compiled::compile(s))
+                    Arc::new(jsonpath_lib::Compiled::compile(s.as_str()))
                 }
             }
         }
-        let path = get_node(s);
+        let path = get_node(s.clone());
         let path = match &*path {
             Ok(p) => p,
             Err(e) => {
@@ -758,7 +859,7 @@ mod builtins {
     }
 
     #[boa_fn(jsname = "match")]
-    fn r#match(s: AnyAsString, regex: &str) -> SJV {
+    fn r#match(s: AnyAsString, regex: String) -> SJV {
         // Prevent same Regex from being compiled again.
         fn get_reg(reg: &str) -> Arc<Result<Regex, regex::Error>> {
             // does not need to be a tokio::Mutex, as LockGuard is not held beyond any await point,
@@ -778,7 +879,7 @@ mod builtins {
             }
         }
         let s = s.get();
-        let reg = get_reg(regex);
+        let reg = get_reg(regex.as_str());
         let reg = match &*reg {
             Ok(reg) => reg,
             Err(e) => {
@@ -828,10 +929,10 @@ mod builtins {
     #[boa_fn]
     fn random(min: NumType, max: NumType, _: Option<AnyNull>) -> NumType {
         match (min, max) {
-            (NumType::Int(i), NumType::Int(j)) => NumType::Int(thread_rng().gen_range(i..j)),
+            (NumType::Int(i), NumType::Int(j)) => NumType::Int(rng().random_range(i..j)),
             (i, j) => {
                 let (i, j) = (i.as_float(), j.as_float());
-                NumType::Real(thread_rng().gen_range(i..j))
+                NumType::Real(rng().random_range(i..j))
             }
         }
     }
@@ -849,26 +950,26 @@ mod builtins {
     fn repeat(min: i64, max: Option<i64>) -> Vec<()> {
         let min = min as usize;
         let len = match max {
-            Some(max) => thread_rng().gen_range(min..=(max as usize)),
+            Some(max) => rng().random_range(min..=(max as usize)),
             None => min,
         };
         vec![(); len]
     }
 
     #[boa_fn]
-    fn replace(needle: &str, haystack: SJV, replacer: &str) -> SJV {
+    fn replace(needle: String, haystack: SJV, replacer: String) -> SJV {
         let n = needle;
         let r = replacer;
         match haystack {
-            SJV::String(s) => SJV::String(s.replace(n, r)),
+            SJV::String(s) => SJV::String(s.replace(&n, &r)),
             SJV::Array(a) => a
                 .into_iter()
-                .map(|v| replace(n, v, r))
+                .map(|v| replace(n.clone(), v, r.clone()))
                 .collect::<Vec<_>>()
                 .into(),
             SJV::Object(m) => SJV::Object(
                 m.into_iter()
-                    .map(|(k, v)| (k.replace(n, r), replace(n, v, r)))
+                    .map(|(k, v)| (k.replace(&n, &r), replace(n.clone(), v, r.clone())))
                     .collect(),
             ),
             other => other,
@@ -876,7 +977,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn start_pad(s: AnyAsString, min_length: i64, pad_string: &str) -> String {
+    fn start_pad(s: AnyAsString, min_length: i64, pad_string: String) -> String {
         use unicode_segmentation::UnicodeSegmentation;
         let s = s.get();
         let needed_chars = (min_length as usize).saturating_sub(s.len());
@@ -892,7 +993,7 @@ mod builtins {
     }
 
     #[boa_fn]
-    fn stwrap(s: &str) -> String {
+    fn stwrap(s: String) -> String {
         format!("\"{s}\"")
     }
 
@@ -906,7 +1007,9 @@ mod builtins {
         #![allow(clippy::wrong_self_convention)]
 
         use crate::shared::{encode::Encoding, Epoch};
-        use boa_engine::{object::JsArray, Context, JsResult, JsValue};
+        use boa_engine::{
+            object::builtins::JsArray, Context, JsError, JsNativeError, JsResult, JsValue,
+        };
         use std::fmt::Display;
 
         /// This trait must be implemented for any type used as an input parameter on one of the
@@ -932,24 +1035,40 @@ mod builtins {
             }
         }
 
-        impl<'a> JsInput<'a> for &'a str {
-            fn from_js(js: &'a JsValue, ctx: &mut Context) -> JsResult<Self> {
+        // Conversion to &str was removed in 0.17. 0.19 added back in a JsStr, but lifetime issues...
+        // impl<'a> JsInput<'a> for &'a str {
+        //     fn from_js(js: &'a JsValue, ctx: &mut Context) -> JsResult<Self> {
+        //         Ok(js
+        //             .as_string()
+        //             .ok_or_else(|| {
+        //                 JsError::from_native(JsNativeError::typ().with_message("not a string"))
+        //             })?
+        //             .as_str())
+        //     }
+        // }
+
+        impl<'a> JsInput<'a> for String {
+            fn from_js(js: &'a JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 Ok(js
                     .as_string()
-                    .ok_or_else(|| ctx.construct_type_error("not a string"))?
-                    .as_str())
+                    .ok_or_else(|| {
+                        JsError::from_native(JsNativeError::typ().with_message("not a string"))
+                    })?
+                    .to_std_string_escaped())
             }
         }
 
         impl JsInput<'_> for i64 {
-            fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
+            fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 match js {
                     JsValue::Integer(i) => Ok(*i as i64),
                     JsValue::Rational(r) => {
                         log::trace!("casting float to int");
                         Ok(*r as i64)
                     }
-                    _ => Err(ctx.construct_type_error("not an int")),
+                    _ => Err(JsError::from_native(
+                        JsNativeError::typ().with_message("not an int"),
+                    )),
                 }
             }
         }
@@ -967,17 +1086,23 @@ mod builtins {
 
         impl JsInput<'_> for Encoding {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                let s: &str = JsInput::from_js(js, ctx)?;
-                s.parse()
-                    .map_err(|_| ctx.construct_type_error("invalid string for Encoding"))
+                let s: String = JsInput::from_js(js, ctx)?;
+                s.parse().map_err(|_| {
+                    JsError::from_native(
+                        JsNativeError::typ().with_message("invalid string for Encoding"),
+                    )
+                })
             }
         }
 
         impl JsInput<'_> for Epoch {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                let s: &str = JsInput::from_js(js, ctx)?;
-                s.parse()
-                    .map_err(|_| ctx.construct_type_error("invalid string for Epoch"))
+                let s: String = JsInput::from_js(js, ctx)?;
+                s.parse().map_err(|_| {
+                    JsError::from_native(
+                        JsNativeError::typ().with_message("invalid string for Epoch"),
+                    )
+                })
             }
         }
 
@@ -986,7 +1111,7 @@ mod builtins {
 
         impl JsInput<'_> for AnyAsString {
             fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
-                Ok(Self(js.to_string(ctx)?.as_str().to_owned()))
+                Ok(Self(js.to_string(ctx)?.to_std_string_escaped().to_owned()))
             }
         }
 
@@ -1012,11 +1137,13 @@ mod builtins {
         }
 
         impl JsInput<'_> for NumType {
-            fn from_js(js: &JsValue, ctx: &mut Context) -> JsResult<Self> {
+            fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
                 match js {
                     JsValue::Integer(i) => Ok(Self::Int(*i as i64)),
                     JsValue::Rational(f) => Ok(Self::Real(*f)),
-                    _ => Err(ctx.construct_type_error("needed numerical")),
+                    _ => Err(JsError::from_native(
+                        JsNativeError::typ().with_message("needed numerical"),
+                    )),
                 }
             }
         }
@@ -1085,13 +1212,13 @@ mod builtins {
             fn as_js_result(self, ctx: &mut Context) -> JsResult<JsValue> {
                 self.map(|x| x.as_js_result(ctx))
                     .transpose()?
-                    .ok_or_else(|| JsValue::String("missing value".into()))
+                    .ok_or_else(|| JsError::from_opaque(JsValue::String("missing value".into())))
             }
         }
 
         impl<T: AsJsResult, E: Display> AsJsResult for Result<T, E> {
             fn as_js_result(self, ctx: &mut Context) -> JsResult<JsValue> {
-                self.map_err(|e| JsValue::String(e.to_string().into()))
+                self.map_err(|e| JsError::from_opaque(JsValue::String(e.to_string().into())))
                     .and_then(|x| x.as_js_result(ctx))
             }
         }

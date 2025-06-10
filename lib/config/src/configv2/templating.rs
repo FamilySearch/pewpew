@@ -103,6 +103,7 @@ where
 }
 
 /// Segment of an Expression.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprSegment {
     /// Just a string.

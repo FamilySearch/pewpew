@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-boa_engine = "0.16.0"
+boa_engine = "0.20"
+boa_gc = "0.20"
+boa_parser = "0.20"
 derivative = "2.2.0"
 derive_more = { version = "2", features = ["deref", "deref_mut", "from", "from_str"] }
 diplomatic-bag = "0.3.1"
@@ -18,7 +20,7 @@ futures.workspace = true
 # https://docs.rs/getrandom/0.2.2/getrandom/#unsupported-targets
 # The fix is to add it as a supported target and specify the target. As of 0.2.2 both browser and nodejs use "js"
 getrandom = { version = "0.2", features = ["js"] }
-gc = "0.4.1"
+# gc = "0.4.1"
 http.workspace = true
 itertools.workspace = true
 js-sys.workspace = true

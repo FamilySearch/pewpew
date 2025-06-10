@@ -15,10 +15,8 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 yanked = "warn"
 ignore = [
-    "RUSTSEC-2024-0421",
-    "RUSTSEC-2024-0379", # Need to update boa_engine for this
-    "RUSTSEC-2025-0003", # Need to update boa_engine for this
     "RUSTSEC-2024-0388", # Need to find replacement for derivative
+    "RUSTSEC-2024-0436", # Need to find replacement for paste
 ]
 
 [licenses]
@@ -29,8 +27,6 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "MIT",
-    "MPL-2.0", # MPL is only copyleft in regards to modifications to the original, adding as a dependency is fine
-    "Unicode-DFS-2016",
     "Unicode-3.0",
     "Zlib",
 ]

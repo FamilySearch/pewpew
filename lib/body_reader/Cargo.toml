@@ -10,8 +10,8 @@ doctest = false
 
 [dependencies]
 bytes = "1"
-brotli-decompressor = "4"
+brotli-decompressor = "5"
 libflate = "2"
 
 [dev-dependencies]
-brotli = "7"
+brotli = "8"

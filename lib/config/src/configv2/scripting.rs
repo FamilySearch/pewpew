@@ -668,6 +668,9 @@ mod tests {
 
     #[test]
     fn custom_js() {
+        // sleep is to prevent collision issues with the test in the scripting module
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
         super::set_source(Some(LibSrc::Extern(Arc::from(PathBuf::from(
             "./tests/test_custom.js",
         )))))

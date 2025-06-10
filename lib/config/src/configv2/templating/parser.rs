@@ -323,7 +323,7 @@ mod ast {
 
     impl<'a> Raw<'a> {
         fn escaped<E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Self, E> {
-            value(Self::EscapedDollarSign, tag("$$"))(input)
+            value(Self::EscapedDollarSign, tag("$$")).parse(input)
         }
 
         /// `inner` check is to allow for "}" in the top level source
@@ -332,11 +332,13 @@ mod ast {
         /// `r#"{"a": 1, "b": ${p:e}}"#`
         ///
         /// without the inner check, the last '}' can't be parsed.
-        fn literal<E: ParseError<&'a str>>(inner: bool) -> impl Parser<&'a str, Raw<'a>, E> {
+        fn literal<E: ParseError<&'a str>>(
+            inner: bool,
+        ) -> impl Parser<&'a str, Output = Raw<'a>, Error = E> {
             recognize(many1(none_of(if inner { "$}" } else { "$" }))).map(Self::Literal)
         }
 
-        fn parse(inner: bool) -> impl Parser<&'a str, Raw<'a>, NomError<&'a str>> {
+        fn parse(inner: bool) -> impl Parser<&'a str, Output = Raw<'a>, Error = NomError<&'a str>> {
             alt((Self::escaped, Self::literal(inner)))
         }
     }
@@ -348,7 +350,9 @@ mod ast {
     }
 
     impl<'a> Segment<'a> {
-        fn parse(inner: bool) -> impl Parser<&'a str, Segment<'a>, NomError<&'a str>> {
+        fn parse(
+            inner: bool,
+        ) -> impl Parser<&'a str, Output = Segment<'a>, Error = NomError<&'a str>> {
             alt((
                 many1(Raw::parse(inner)).map(Self::Literal),
                 TemplateSegment::parse.map(Self::Template),
@@ -356,7 +360,8 @@ mod ast {
         }
 
         pub fn parse_all(input: &'a str) -> Result<Vec<Segment<'a>>, NomError<&'a str>> {
-            all_consuming(many0(Self::parse(false)))(input.trim())
+            all_consuming(many0(Self::parse(false)))
+                .parse(input.trim())
                 .finish()
                 .map(|(_, v)| v)
         }
@@ -369,13 +374,14 @@ mod ast {
     }
 
     impl<'a> TemplateSegment<'a> {
-        fn parse(input: &'a str) -> IResult<&'a str, Self> {
+        fn parse(input: &'a str) -> IResult<&'a str, Self, NomError<&'a str>> {
             delimited(
                 tag("${"),
                 separated_pair(anychar, tag(":"), many1(Segment::parse(true)))
                     .map(|(tag, inner)| Self { tag, inner }),
                 tag("}"),
-            )(input)
+            )
+            .parse(input)
         }
     }
 

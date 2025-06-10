@@ -38,7 +38,7 @@ import {
   Tag as S3Tag,
   UploadPartCommand
 } from "@aws-sdk/client-s3";
-import { LogLevel, log, s3, sqs, util } from "../src/index";
+import { LogLevel, log, s3, sqs, util } from "../src/index.js";
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";
 import { sdkStreamMixin } from "@smithy/util-stream";
@@ -111,7 +111,7 @@ export function mockListObject (filename: string, folder: string, lastModified: 
 
 export function mockListObjects (contents?: S3Object[] | undefined, truncated?: boolean) {
   const mockedS3Instance: AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3ClientResolvedConfig> = mockS3();
-  mockedS3Instance.on(ListObjectsV2Command).resolves({ Contents: contents, IsTruncated: truncated });
+  mockedS3Instance.on(ListObjectsV2Command).resolves({ Contents: contents, KeyCount: contents?.length || 0, IsTruncated: truncated });
 }
 
 export function mockUploadObject ({ filename = UNIT_TEST_FILENAME, folder = UNIT_TEST_KEY_PREFIX, duration }: {

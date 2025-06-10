@@ -9,6 +9,7 @@ import {
   getObject,
   getObjectTagging,
   getTags,
+  healthCheck,
   init as initS3,
   listFiles,
   listObjects,
@@ -19,7 +20,7 @@ import {
   uploadFile,
   uploadFileContents,
   uploadObject
-} from "../src/util/s3";
+} from "../src/util/s3.js";
 import {
   CompleteMultipartUploadCommandOutput,
   CopyObjectCommandOutput,
@@ -30,11 +31,11 @@ import {
   _Object as S3Object,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
-import { LogLevel, S3File, log, util } from "../src/index";
+import { LogLevel, S3File, log, util } from "../src/index.js";
 import { Stats, createReadStream } from "fs";
 import { expect } from "chai";
 import fs from "fs/promises";
-import { poll } from "../src/util/util";
+const { poll } = util;
 import { promisify } from "util";
 import { gunzip as zlibGunzip } from "zlib";
 
@@ -156,6 +157,13 @@ describe("S3Util Integration", () => {
     expect(healthCheckDate).to.not.equal(undefined);
   });
 
+  describe("S3 Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      const isHealthy = await healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
+  });
+
   describe("List Objects Empty in S3", () => {
     it("List Objects should always succeed even if empty", (done: Mocha.Done) => {
       listObjects({ prefix: "bogus", maxKeys: 1}).then((result: ListObjectsV2CommandOutput) => {
@@ -226,6 +234,66 @@ describe("S3Util Integration", () => {
         s3FileKey = `${UNIT_TEST_KEY_PREFIX}/${UNIT_TEST_FILENAME}`;
         expect(url).to.not.equal(undefined);
         expect(url).to.include(s3FileKey);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+  });
+
+  describe("List Objects in S3", () => {
+    beforeEach (async () => {
+      try {
+        const url: string = await uploadFile({ filepath: UNIT_TEST_FILEPATH, s3Folder: UNIT_TEST_KEY_PREFIX });
+        log(`uploadResults url = ${JSON.stringify(url)}`, LogLevel.DEBUG);
+        s3FileKey = `${UNIT_TEST_KEY_PREFIX}/${UNIT_TEST_FILENAME}`;
+        await poll(async (): Promise<boolean | undefined> => {
+          const objects = await listObjects(s3FileKey!);
+          return (objects && objects.Contents && objects.Contents.length > 0);
+        }, MAX_POLL_WAIT, (errMsg: string) => `${errMsg} Could not find the ${s3FileKey} in s3`);
+      } catch (error) {
+        log(`beforeEach error uploadFile(${UNIT_TEST_FILEPATH}, ${UNIT_TEST_KEY_PREFIX})`, LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("List Objects should find key", (done: Mocha.Done) => {
+      expect(s3FileKey, "s3FileKey").to.not.equal(undefined);
+      listObjects({ prefix: s3FileKey, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${s3FileKey}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should not find after", (done: Mocha.Done) => {
+      expect(s3FileKey, "s3FileKey").to.not.equal(undefined);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: s3FileKey, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${s3FileKey}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.equal(undefined);
+        expect(result.KeyCount, "KeyCount").to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should find after", (done: Mocha.Done) => {
+      expect(s3FileKey, "s3FileKey").to.not.equal(undefined);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: UNIT_TEST_KEY_PREFIX, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${s3FileKey}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
         done();
       }).catch((error) => {
         done(error);

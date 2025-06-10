@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import * as Logger from "bunyan";
-import { LogLevel } from "../../types";
+import { LogLevel } from "../../types/index.js";
 import { join as pathJoin } from "path";
 
 export { LogLevel } ;

@@ -12,12 +12,12 @@ import {
   listFiles,
   putTags,
   uploadFile
-} from "./util/s3";
-import { LogLevel, log } from "./util/log";
-import { PEWPEW_BINARY_EXECUTABLE_NAMES, sleep } from "./util/util";
+} from "./util/s3.js";
+import { LogLevel, log } from "./util/log.js";
+import { PEWPEW_BINARY_EXECUTABLE_NAMES, sleep } from "./util/util.js";
 import { PutObjectCommandInput, _Object as S3Object } from "@aws-sdk/client-s3";
 import { access, stat } from "fs/promises";
-import { S3File } from "../types";
+import { S3File } from "../types/index.js";
 import { Stats } from "fs";
 import { URL } from "url";
 

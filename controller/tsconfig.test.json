@@ -4,8 +4,8 @@
     "plugins": [{
       "name": "tslint-language-service"
     }],
-    "target": "es2021",
-    "module": "commonjs",
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleResolution": "node",
     "isolatedModules": true,
     "jsx": "react",
@@ -26,11 +26,10 @@
     "sourceMap": true,
     "outDir": "dist",
     "baseUrl": "test",
-    "lib": ["es2021", "esnext.asynciterable", "dom", "dom.iterable"]
+    "lib": ["ES2022", "esnext.asynciterable", "dom", "dom.iterable"]
   },
   "exclude": ["node_modules", "pages/**/*", "components/**/*", "src/**/*"],
   "include": ["test/**/*", "types/**/*", "pages/api/util/*", "acceptance/**/*", "integration/**/*", "testcleanup/**/*"],
   "compileOnSave": true,
   "buildOnSave": false
 }
-  

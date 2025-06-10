@@ -1,11 +1,7 @@
-import { LogLevel, SqsQueueType, ec2, log, s3, sqs, util } from "@fs/ppaas-common";
+import { LogLevel, ec2, log, s3, sqs, util } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
 import express from "express";
-import { getHostname } from "./util/util";
-
-const listObjects = s3.listObjects;
-const setS3AccessCallback = s3.setAccessCallback;
-const setSqsAccessCallback = sqs.setAccessCallback;
+import { getHostname } from "./util/util.js";
 
 // Export these for testing
 export const S3_ALLOWED_LAST_ACCESS_MS: number = parseInt(process.env.S3_ALLOWED_LAST_ACCESS_MS || "0", 10) || 90000;
@@ -39,8 +35,8 @@ try {
 
 const lastS3AccessCallBack = (date: Date) => config.lastS3Access = date;
 const lastSQSAccessCallBack = (date: Date) => config.lastSQSAccess = date;
-setS3AccessCallback(lastS3AccessCallBack);
-setSqsAccessCallback(lastSQSAccessCallBack);
+s3.setAccessCallback(lastS3AccessCallBack);
+sqs.setAccessCallback(lastSQSAccessCallBack);
 
 // These are in separate export functions for test purposes
 export function accessS3Pass (lastS3Access: Date): boolean {
@@ -53,41 +49,6 @@ export function accessSqsPass (lastSQSAccess: Date): boolean {
   const sqsPass: boolean = ((Date.now() - lastSQSAccess.getTime()) < SQS_ALLOWED_LAST_ACCESS_MS);
   log("accessSqsPass", LogLevel.DEBUG, { now: Date.now(), lastSQSAccess: lastSQSAccess.getTime(), sqsPass });
   return sqsPass;
-}
-
-// Shared function for the S3 healthcheck and normal healthcheck if accessS3Pass fails
-export async function pingS3 (): Promise<boolean> {
-  log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
-  // Ping S3 and update the lastS3Access if it works
-  try {
-    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
-    config.lastS3Access = new Date();
-    log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
-    return true;
-  } catch (error) {
-    log("pingS3 failed}", LogLevel.WARN, error);
-    // DO NOT REJECT. Just return false
-    return false;
-  }
-}
-
-// Shared function for the SQS healthcheck and normal healthcheck if accessSQSPass fails
-export async function pingSQS (): Promise<boolean> {
-  log("Pinging SQS at " + new Date(), LogLevel.DEBUG);
-  // Ping SQS and update the lastSQSAccess if it works
-  try {
-    const map = await sqs.getQueueAttributesMap(SqsQueueType.Test);
-    if (map === undefined) {
-      throw new Error("getQueueAttributesMap did not return results");
-    }
-    log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
-    log("pingSQS getQueueAttributesMap", LogLevel.DEBUG, map);
-    return true;
-  } catch (error) {
-    log("pingSQS failed", LogLevel.WARN, error);
-    // DO NOT REJECT. Just return false
-    return false;
-  }
 }
 
 export function init (): Router {
@@ -104,8 +65,8 @@ export function init (): Router {
       log("healthcheck", LogLevel.WARN, config);
       res.status(500).json(config);
     } else {
-      const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await pingS3());
-      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
+      const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await s3.healthCheck());
+      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await sqs.healthCheck());
       log("healthcheck", LogLevel.DEBUG, { ...config, s3Pass, sqsPass });
       res.status(s3Pass && sqsPass ? 200 : 500).json({ ...config, s3: s3Pass || false, sqs: sqsPass || false });
     }
@@ -116,20 +77,20 @@ export function init (): Router {
       log("heartbeat", LogLevel.WARN, config);
       res.status(500).json(config);
     } else {
-      const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await pingS3());
-      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
+      const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await s3.healthCheck());
+      const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await sqs.healthCheck());
       log("heartbeat", LogLevel.DEBUG, { ...config, s3Pass, sqsPass });
       res.status(s3Pass && sqsPass ? 200 : 500).json({ s3: s3Pass || false, sqs: sqsPass || false });
     }
   });
   // define the s3 route
   router.get("/s3", async (_req: Request, res: Response) => {
-    const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await pingS3());
+    const s3Pass: boolean = accessS3Pass(config.lastS3Access) || (await s3.healthCheck());
     res.status(s3Pass ? 200 : 500).json({ ...config, s3: s3Pass || false });
   });
   // define the sqs route
   router.get("/sqs", async (_req: Request, res: Response) => {
-    const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await pingSQS());
+    const sqsPass: boolean = accessSqsPass(config.lastSQSAccess) || (await sqs.healthCheck());
     res.status(sqsPass ? 200 : 500).json({ ...config, sqs: sqsPass || false });
   });
 

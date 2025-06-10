@@ -1,5 +1,5 @@
-import { AgentQueueDescription, EnvironmentVariables, SqsQueueType, TestMessage } from "../types";
-import { LogLevel, log } from "./util/log";
+import { AgentQueueDescription, EnvironmentVariables, SqsQueueType, TestMessage } from "../types/index.js";
+import { LogLevel, log } from "./util/log.js";
 import { MessageAttributeValue, Message as SQSMessage } from "@aws-sdk/client-sqs";
 import {
   QUEUE_URL_TEST,
@@ -8,7 +8,7 @@ import {
   sendNewTestToRun,
   getNewTestToRun as sqsGetNewTestToRun,
   init as sqsInit
-} from "./util/sqs";
+} from "./util/sqs.js";
 
 const DEFAULT_BUCKET_SIZE: number = parseInt(process.env.DEFAULT_BUCKET_SIZE || "0", 10) || 60000;
 // If we're in a AWS, the default should be empty, we need the real list. If we're running locally, default it to a single size

@@ -1,4 +1,4 @@
-import { LogLevel, ec2, log } from "../src/index";
+import { LogLevel, ec2, log } from "../src/index.js";
 import { expect } from "chai";
 
 describe("EC2 Integration", () => {

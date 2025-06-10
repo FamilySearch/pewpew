@@ -1,4 +1,4 @@
-import { S3_ALLOWED_LAST_ACCESS_MS, SQS_ALLOWED_LAST_ACCESS_MS, accessS3Pass, accessSqsPass } from "../src/healthcheck";
+import { S3_ALLOWED_LAST_ACCESS_MS, SQS_ALLOWED_LAST_ACCESS_MS, accessS3Pass, accessSqsPass } from "../src/healthcheck.js";
 import { expect } from "chai";
 
 describe("Healthcheck", () => {

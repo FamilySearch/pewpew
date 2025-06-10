@@ -4,7 +4,7 @@ import {
   IS_RUNNING_IN_AWS,
   SYSTEM_NAME,
   getPrefix
-} from "./util";
+} from "./util.js";
 import {
   ChangeMessageVisibilityCommand,
   ChangeMessageVisibilityCommandInput,
@@ -25,8 +25,8 @@ import {
   SendMessageCommandInput,
   SendMessageCommandOutput
 } from "@aws-sdk/client-sqs";
-import { LogLevel, log } from "./log";
-import { SqsQueueType } from "../../types";
+import { LogLevel, log } from "./log.js";
+import { SqsQueueType } from "../../types/index.js";
 import { fromIni } from "@aws-sdk/credential-providers";
 
 export const QUEUE_URL_TEST: Map<string, string> = new Map<string, string>();
@@ -588,4 +588,31 @@ export async function cleanUpQueues (): Promise<number> {
   const total = results.reduce((prev: number, current: number) => prev + current, 0);
   log("cleanUpQueues deleted: " + results, LogLevel.DEBUG, { results, total });
   return total;
+}
+
+/**
+ * Healthcheck function to verify SQS connectivity
+ * @returns Promise resolving to true if connected, false otherwise
+ */
+export async function healthCheck (): Promise<boolean> {
+  log("Pinging SQS at " + new Date(), LogLevel.DEBUG);
+  // Ping SQS and update the lastSQSAccess if it works
+  try {
+    init(); // We have to call init to populate QUEUE_URL_TEST
+    // Controller needs to ping all queues
+    const maps = await Promise.all(
+      Array.from(QUEUE_URL_TEST.keys()).map((sqsScalingQueueType) => getQueueAttributesMap(SqsQueueType.Test, sqsScalingQueueType))
+    );
+    if (maps.some((map) => map === undefined)) {
+      log("pingSQS getQueueAttributesMap", LogLevel.WARN, { maps });
+      throw new Error("getQueueAttributesMap did not return results");
+    }
+    log("Pinging SQS succeeded at " + new Date(), LogLevel.DEBUG);
+    maps.forEach((map) => log("pingSQS getQueueAttributesMap", LogLevel.DEBUG, map));
+    return true;
+  } catch (error) {
+    log("pingSQS failed", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
+  }
 }

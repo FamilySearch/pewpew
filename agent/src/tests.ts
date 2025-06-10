@@ -15,8 +15,8 @@ import {
 } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
 import ExpiryMap from "expiry-map";
-import { PewPewTest } from "./pewpewtest";
-import { config as healthcheckConfig } from "./healthcheck";
+import { PewPewTest } from "./pewpewtest.js";
+import { config as healthcheckConfig } from "./healthcheck.js";
 import { join as pathJoin } from "path";
 import { tmpdir } from "os";
 

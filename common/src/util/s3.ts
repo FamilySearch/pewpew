@@ -26,11 +26,11 @@ import {
   S3ServiceException,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
-import { IS_RUNNING_IN_AWS, getPrefix } from "./util";
-import { LogLevel, log } from "./log";
+import { IS_RUNNING_IN_AWS, getPrefix } from "./util.js";
+import { LogLevel, log } from "./log.js";
 import { createGzip, gunzip as zlibGunzip} from "zlib";
 import { createReadStream, writeFile as fsWriteFile } from "fs";
-import { S3File } from "../../types";
+import { S3File } from "../../types/index.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { constants as bufferConstants } from "node:buffer";
 import { fromIni } from "@aws-sdk/credential-providers";
@@ -457,30 +457,36 @@ export async function putTags ({ filename, s3Folder, tags }: PutTagsOptions): Pr
 
 export interface ListObjectsOptions {
   prefix?: string;
+  startAfter?: string;
   maxKeys?: number;
   continuationToken?: string;
 }
 
 // export for testing
 export async function listObjects (prefix?: string): Promise<ListObjectsV2CommandOutput>;
-export async function listObjects (options?: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
+export async function listObjects ({ prefix, startAfter, maxKeys, continuationToken }: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
 export async function listObjects (options?: string | ListObjectsOptions): Promise<ListObjectsV2CommandOutput> {
   let prefix: string | undefined;
+  let startAfter: string | undefined;
   let maxKeys: number | undefined;
   let continuationToken: string | undefined;
   if (typeof options === "string") {
     prefix = options;
   } else {
-    ({ prefix, maxKeys, continuationToken } = options || {});
+    ({ prefix, startAfter, maxKeys, continuationToken } = options || {});
   }
-  log(`listObjects(${prefix}, ${maxKeys}, ${continuationToken})`, LogLevel.DEBUG);
+  log(`listObjects({ prefix: "${prefix}", startAfter: "${startAfter}", maxKeys: ${maxKeys}, continuationToken: "${continuationToken}" })`, LogLevel.DEBUG);
   const s3Client = init();
   if (!prefix || !prefix.startsWith(KEYSPACE_PREFIX)) {
     prefix = KEYSPACE_PREFIX + (prefix || "");
   }
+  if (startAfter && !startAfter.startsWith(KEYSPACE_PREFIX)) {
+    startAfter = KEYSPACE_PREFIX + startAfter;
+  }
   const params: ListObjectsV2CommandInput = {
     Bucket: BUCKET_NAME,
     Prefix: prefix,
+    StartAfter: startAfter, // StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key.
     ContinuationToken: continuationToken,
     MaxKeys: maxKeys || 50
   };
@@ -716,5 +722,23 @@ export async function putObjectTagging ({ key, tags }: PutObjectTaggingOptions):
   } catch (error: unknown) {
     log("putObjectTagging failed", LogLevel.WARN, error);
     throw error;
+  }
+}
+
+/**
+ * Healthcheck function to verify S3 connectivity
+ * @returns Promise resolving to true if connected, false otherwise
+ */
+export async function healthCheck (): Promise<boolean> {
+  log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
+  // Ping S3 and update the lastS3Access if it works
+  try {
+    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
+    log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
+    return true;
+  } catch (error) {
+    log("pingS3 failed}", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
   }
 }

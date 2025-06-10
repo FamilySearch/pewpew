@@ -4,7 +4,7 @@ import {
   util
 } from "@fs/ppaas-common";
 import axios, { AxiosError, AxiosResponse as Response } from "axios";
-import { buildTest } from "../src/tests";
+import { buildTest } from "../src/tests.js";
 import { expect } from "chai";
 
 const ACCEPTANCE_SEND_TO_QUEUE: boolean = process.env.ACCEPTANCE_SEND_TO_QUEUE !== undefined;

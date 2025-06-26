@@ -30,20 +30,59 @@ Changes:
   - Expressions in vars will not wrap environment variables in the expected `${e:VAR}`
   - vars in `logs` and `provides` will not have the prepended `_v.` before the var name.
 
-Bug fixes:
+### v0.5.14
+- [Bump openssl from 0.10.57 to 0.10.60](https://github.com/FamilySearch/pewpew/pull/181)
+- [Bump h2 from 0.3.21 to 0.3.24](https://github.com/FamilySearch/pewpew/pull/193)
+- [Replace actions-rs with rustup](https://github.com/FamilySearch/pewpew/pull/198)
+- [Bump mio from 0.8.10 to 0.8.11](https://github.com/FamilySearch/pewpew/pull/200)
+- [Bump h2 from 0.3.24 to 0.3.26](https://github.com/FamilySearch/pewpew/pull/216)
+- [Update Rust Dependencies 2024-05-29](https://github.com/FamilySearch/pewpew/pull/226)
+  - Moved deprecated .cargo/config to config.toml
+  - Updated base64, itertools, yansi, env_logger, brotli, serde-wasm-bindgen
+  - Moved from abandoned yaml_rust to yaml_rust2
+  - Updated body_reader and channel dependencies
+  - Fix dependency loop with ahash on itself
+- [Update rust dependencies 2024-07-18](https://github.com/FamilySearch/pewpew/pull/236)
+  - Updated dashmap to 6
+  - Fixed clippy warnings
+- [Updated Rust hyper and http](https://github.com/FamilySearch/pewpew/pull/237)
+  - Updated http to 1.0
+  - Updated hyper to 1.0
+  - Updated hyper-tls to 0.6
+  - Added hyper-util 0.1
+  - Added http-body-util 0.1
+- [Fix response status and headers](https://github.com/FamilySearch/pewpew/pull/245)
+  - Added additional logging to the response handler
+  - Fixed a bug from the hyper upgrade
+- [Bump openssl from 0.10.64 to 0.10.66](https://github.com/FamilySearch/pewpew/pull/238)
+- [Fix Rust Lint Warnings](https://github.com/FamilySearch/pewpew/pull/281)
+- [Bump openssl from 0.10.66 to 0.10.70](https://github.com/FamilySearch/pewpew/pull/289)
+- [Bump openssl from 0.10.70 to 0.10.72](https://github.com/FamilySearch/pewpew/pull/299)
+- [Bump tokio from 1.39.2 to 1.43.1](https://github.com/FamilySearch/pewpew/pull/300)
+- [Bump crossbeam-channel from 0.5.13 to 0.5.15](https://github.com/FamilySearch/pewpew/pull/301)
+- [Update rust dependencies 2025-04-16](https://github.com/FamilySearch/pewpew/pull/305)
+  - Updated itertools to 0.14
+  - Updated brotli to 7.0
+  - Updated yaml-rust2 to 0.10
+- [Update rust dependencies 2025-06-09](https://github.com/FamilySearch/pewpew/pull/315)
+  - Updated cargo deny file now that Unicode 3.0 is allowed
+  - Updated rand to 0.9 and get_random to 0.3
+  - Updated brotli to 8.0
+  - Fixed Clippy warnings
+- [Release v5.14](https://github.com/FamilySearch/pewpew/pull/318)
 
 ### v0.5.13
 Changes:
-- use IsTerminal trait (Rust 1.70.0), removing (direct) dependency on atty crate. (#130)
+- use IsTerminal trait (Rust 1.70.0), removing (direct) dependency on atty crate. (https://github.com/FamilySearch/pewpew/pull/130)
 - Added example yaml files under /examples
-- Adds skipBody CLI argument - Skips Request and Response Body in Try Output (#140) (#169)
+- Adds skipBody CLI argument - Skips Request and Response Body in Try Output (https://github.com/FamilySearch/pewpew/pull/140) (https://github.com/FamilySearch/pewpew/pull/169)
 
 Bug fixes:
-- Updated dependencies and fixed deprecations (#143)
-- Fixed the HDR Histogram build for webpack (#119)
-- Use clap derive, fixing behavior of --include flag. (#121)
-- Fix yaml loggers (#129)
-- Fix try script hang broken in 0.5.8 (#177)
+- Updated dependencies and fixed deprecations (https://github.com/FamilySearch/pewpew/pull/143)
+- Fixed the HDR Histogram build for webpack (https://github.com/FamilySearch/pewpew/pull/119)
+- Use clap derive, fixing behavior of --include flag. (https://github.com/FamilySearch/pewpew/pull/121)
+- Fix yaml loggers (https://github.com/FamilySearch/pewpew/pull/129)
+- Fix try script hang broken in 0.5.8 (https://github.com/FamilySearch/pewpew/pull/177)
 
 ### v0.5.12
 Changes:

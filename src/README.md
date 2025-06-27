@@ -41,6 +41,7 @@ Changes:
   - Updated base64, itertools, yansi, env_logger, brotli, serde-wasm-bindgen
   - Moved from abandoned yaml_rust to yaml_rust2
   - Updated body_reader and channel dependencies
+  - Updated config-wasm and hdr-histogram dependencies
   - Fix dependency loop with ahash on itself
 - [Update rust dependencies 2024-07-18](https://github.com/FamilySearch/pewpew/pull/236)
   - Updated dashmap to 6

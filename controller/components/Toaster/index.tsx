@@ -31,7 +31,7 @@ const Container = styled(Info)`
     &.fade-out { animation: ${fadeOut} 0.3s ease-in-out forwards; }
 `;
 
-const Toaster: React.FC<ToasterProps>  = ({ id,  message, duration = 7000 }) => {
+export const Toaster: React.FC<ToasterProps>  = ({ id,  message, duration = 7000 }) => {
   useEffect(() => {
     setTimeout(() => {
       const toasterElement = document.getElementById(id);

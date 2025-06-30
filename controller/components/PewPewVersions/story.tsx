@@ -14,7 +14,7 @@ const props: VersionProps = {
     // eslint-disable-next-line no-console
     console.log("newVal: ", newVal);
   },
-  pewpewVersions: ["0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", latestPewPewVersion, "0.1.6"],
+  pewpewVersions: ["0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5-preview1", "0.1.5", "0.1.5-preview2", "0.1.5-preview3", latestPewPewVersion, "0.1.6-preview2", "0.1.6", "0.1.6-preview1", "0.1.6-preview3"],
   latestPewPewVersion: "0.1.6",
   loading: false,
   error: false

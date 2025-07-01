@@ -12,7 +12,7 @@ export interface FileListProps {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
-const FileList = ({
+export const FilesList = ({
   files,
   onClick
 }: FileListProps) => {
@@ -25,4 +25,4 @@ const FileList = ({
   );
 };
 
-export default FileList;
+export default FilesList;

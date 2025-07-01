@@ -38,7 +38,7 @@ export interface DropFileProps {
   multiple?: boolean;
 }
 
-const DropFile = ({ onDropFile, multiple = true }: DropFileProps) => {
+export const DropFile = ({ onDropFile, multiple = true }: DropFileProps) => {
   return (
     <FileDiv className="file-div">
       <Dropzone onDrop={onDropFile} multiple={multiple} >

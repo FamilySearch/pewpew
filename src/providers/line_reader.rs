@@ -1,5 +1,5 @@
 use crate::util::str_to_json;
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use serde_json as json;
 
 static KB8: usize = 8 * (1 << 10);
@@ -44,8 +44,9 @@ impl LineReader {
                 }
             }
             if !jr.positions.is_empty() {
-                let random = Uniform::new(0, jr.positions.len());
-                let rand_pos = jr.positions.get(random.sample(&mut rand::thread_rng()));
+                let random = Uniform::new(0, jr.positions.len())
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                let rand_pos = jr.positions.get(random.sample(&mut rand::rng()));
                 if let Some((pos, _)) = rand_pos {
                     let pos = *pos;
                     jr.seek(pos)?;
@@ -65,7 +66,7 @@ impl LineReader {
         if let Some(hint) = size_hint {
             let extend_length = hint.checked_sub(self.byte_buffer.len());
             if let Some(extend_length) = extend_length {
-                self.byte_buffer.extend(iter::repeat(0).take(extend_length));
+                self.byte_buffer.extend(iter::repeat_n(0, extend_length));
             }
             let buf = &mut self.byte_buffer[..hint];
             self.position += hint as u64;
@@ -89,7 +90,7 @@ impl LineReader {
                 self.position += (i + 1) as u64;
                 let mut raw_value = &self.byte_buffer[..i];
                 let mut i2 = i;
-                while raw_value.ends_with(&[b'\n']) || raw_value.ends_with(&[b'\r']) {
+                while raw_value.ends_with(b"\n") || raw_value.ends_with(b"\r") {
                     i2 -= 1;
                     raw_value = &self.byte_buffer[..i2];
                 }
@@ -134,7 +135,7 @@ impl Iterator for LineReader {
             if self.positions.is_empty() {
                 return None;
             }
-            let i = random.sample(&mut rand::thread_rng()) % self.positions.len();
+            let i = random.sample(&mut rand::rng()) % self.positions.len();
             let (pos, size) = if self.repeat {
                 self.positions[i]
             } else {

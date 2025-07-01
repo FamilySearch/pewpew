@@ -28,7 +28,7 @@ use hyper_util::client::legacy::{
     connect::{dns::GaiResolver, HttpConnector},
     Client,
 };
-use rand::distributions::{Alphanumeric, Distribution};
+use rand::distr::{Alphanumeric, Distribution};
 use select_any::select_any;
 use serde_json as json;
 use tokio::{
@@ -403,7 +403,7 @@ fn multipart_body_as_hyper_body(
     body_value: &mut Option<String>,
 ) -> Result<impl Future<Output = Result<(u64, HyperBody), TestError>>, TestError> {
     let boundary: String = Alphanumeric
-        .sample_iter(&mut rand::thread_rng())
+        .sample_iter(&mut rand::rng())
         .map(char::from)
         .take(20)
         .collect();
@@ -619,7 +619,7 @@ fn body_template_as_hyper_body(
             *body_value = Some(body.clone());
         }
         Either3::B(future::ok((
-            body.as_bytes().len() as u64,
+            body.len() as u64,
             body.map_err(|never| match never {}).boxed(),
         )))
     }

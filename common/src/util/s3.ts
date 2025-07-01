@@ -26,13 +26,14 @@ import {
   S3ServiceException,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
-import { LogLevel, log } from "./log";
+import { IS_RUNNING_IN_AWS, getPrefix } from "./util.js";
+import { LogLevel, log } from "./log.js";
 import { createGzip, gunzip as zlibGunzip} from "zlib";
 import { createReadStream, writeFile as fsWriteFile } from "fs";
-import { S3File } from "../../types";
+import { S3File } from "../../types/index.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { constants as bufferConstants } from "node:buffer";
-import { getPrefix } from "./util";
+import { fromIni } from "@aws-sdk/credential-providers";
 import { promisify } from "util";
 import stream from "stream";
 const { MAX_STRING_LENGTH } = bufferConstants;
@@ -47,8 +48,8 @@ export let BUCKET_URL: string;
 export let KEYSPACE_PREFIX: string;
 // let REGION_ENDPOINT: string | undefined;
 // Export for testing so we can reset s3
-export const config: { s3Client: S3Client } = {
-  s3Client: undefined as unknown as S3Client
+export const config: { s3Client: (() => S3Client) | undefined } = {
+  s3Client: undefined
 };
 /**
  * ADDITIONAL_TAGS_ON_ALL if set via environment variable is expected to be a comma delimited list of key=value pairs
@@ -69,10 +70,10 @@ export const defaultTestExtraFileTags = (): Map<string, string> => new Map(TEST_
 /**
  * Initializes the S3 object using environment variables. Runs later so it doesn't throw on start-up
  */
-export function init (): void {
+export function init (): S3Client {
   if (BUCKET_NAME && config.s3Client) {
     // If we've already set the BUCKET_NAME then we've done this already.
-    return;
+    return config.s3Client();
   }
   // Where <prefix> is your application name, system name, and service name concatenated with underscores, capitalized, and all dashes replaced with underscores.
   // The s3 service name is s3 in the application which is then capitalized to _S3_ below
@@ -101,12 +102,6 @@ export function init (): void {
   // Since we don't have a private s3 bucket. This will be populated. If we ever move to a private we don't want to tack on the trailing /
   KEYSPACE_PREFIX = keyspacePrefix.length > 0 && !keyspacePrefix.endsWith("/") ? (keyspacePrefix + "/") : keyspacePrefix;
 
-  // Create an S3 service object
-  config.s3Client = new S3Client({
-    // params: { Bucket: BUCKET_NAME },
-    region: "us-east-1"
-  });
-
   if (process.env.ADDITIONAL_TAGS_ON_ALL && ADDITIONAL_TAGS_ON_ALL.size === 0) {
     try {
       for (const keyPair of process.env.ADDITIONAL_TAGS_ON_ALL.split(",")) {
@@ -124,6 +119,26 @@ export function init (): void {
       throw error;
     }
   }
+
+  // Create an S3 service object
+  if (IS_RUNNING_IN_AWS) {
+    // Create a fixed client that will be returned every time.
+    const s3Client = new S3Client({
+      // params: { Bucket: BUCKET_NAME },
+      region: "us-east-1"
+    });
+    config.s3Client = () => s3Client;
+  } else {
+    // https://github.com/aws/aws-sdk-js-v3/issues/3396
+    // When not running in AWS, use the fromIni rather than automatic configuration, don't cache the credentials,
+    // and create a new instance every time
+    config.s3Client = () => new S3Client({
+      // params: { Bucket: BUCKET_NAME },
+      credentials: fromIni({ ignoreCache: true }),
+      region: "us-east-1"
+    });
+  }
+  return config.s3Client();
 }
 
 let accessCallback: (date: Date) => void | undefined;
@@ -413,7 +428,7 @@ export async function getTags ({ filename, s3Folder }: GetTagsOptions): Promise<
     }
     return tags;
   } catch (error: unknown) {
-    log(`getTags(${filename}, ${s3Folder}) ERROR`, LogLevel.ERROR, error);
+    log(`getTags(${filename}, ${s3Folder}) ERROR`, LogLevel.WARN, error);
     throw error;
   }
 }
@@ -442,48 +457,54 @@ export async function putTags ({ filename, s3Folder, tags }: PutTagsOptions): Pr
 
 export interface ListObjectsOptions {
   prefix?: string;
+  startAfter?: string;
   maxKeys?: number;
   continuationToken?: string;
 }
 
 // export for testing
 export async function listObjects (prefix?: string): Promise<ListObjectsV2CommandOutput>;
-export async function listObjects (options?: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
+export async function listObjects ({ prefix, startAfter, maxKeys, continuationToken }: ListObjectsOptions): Promise<ListObjectsV2CommandOutput>;
 export async function listObjects (options?: string | ListObjectsOptions): Promise<ListObjectsV2CommandOutput> {
   let prefix: string | undefined;
+  let startAfter: string | undefined;
   let maxKeys: number | undefined;
   let continuationToken: string | undefined;
   if (typeof options === "string") {
     prefix = options;
   } else {
-    ({ prefix, maxKeys, continuationToken } = options || {});
+    ({ prefix, startAfter, maxKeys, continuationToken } = options || {});
   }
-  log(`listObjects(${prefix}, ${maxKeys}, ${continuationToken})`, LogLevel.DEBUG);
-  init();
+  log(`listObjects({ prefix: "${prefix}", startAfter: "${startAfter}", maxKeys: ${maxKeys}, continuationToken: "${continuationToken}" })`, LogLevel.DEBUG);
+  const s3Client = init();
   if (!prefix || !prefix.startsWith(KEYSPACE_PREFIX)) {
     prefix = KEYSPACE_PREFIX + (prefix || "");
+  }
+  if (startAfter && !startAfter.startsWith(KEYSPACE_PREFIX)) {
+    startAfter = KEYSPACE_PREFIX + startAfter;
   }
   const params: ListObjectsV2CommandInput = {
     Bucket: BUCKET_NAME,
     Prefix: prefix,
+    StartAfter: startAfter, // StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key.
     ContinuationToken: continuationToken,
     MaxKeys: maxKeys || 50
   };
   try {
     log("listObjects request", LogLevel.DEBUG, params);
-    const result: ListObjectsV2CommandOutput = await config.s3Client.send(new ListObjectsV2Command(params));
+    const result: ListObjectsV2CommandOutput = await s3Client.send(new ListObjectsV2Command(params));
     log("listObjects succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("listObjects failed on prefix: " + prefix, LogLevel.ERROR, error);
+    log("listObjects failed on prefix: " + prefix, LogLevel.WARN, error);
     throw error;
   }
 }
 
 // export for testing
 export async function getObject (key: string, lastModified?: Date): Promise<GetObjectCommandOutput> {
-  init();
+  const s3Client = init();
   if (!key || !key.startsWith(KEYSPACE_PREFIX)) {
     key = KEYSPACE_PREFIX + (key || "");
   }
@@ -494,7 +515,7 @@ export async function getObject (key: string, lastModified?: Date): Promise<GetO
   };
   try {
     log("getObject request", LogLevel.DEBUG, params);
-    const result: GetObjectCommandOutput = await config.s3Client.send(new GetObjectCommand(params));
+    const result: GetObjectCommandOutput = await s3Client.send(new GetObjectCommand(params));
     log("getObject succeeded", LogLevel.DEBUG, Object.assign({}, result, { Body: undefined })); // Log it without the body
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
@@ -512,7 +533,7 @@ export async function getObject (key: string, lastModified?: Date): Promise<GetO
 
 // export for testing
 export async function uploadObject (file: S3File): Promise<CompleteMultipartUploadCommandOutput> {
-  init();
+  const s3Client = init();
   if (!file.key || !file.key.startsWith(KEYSPACE_PREFIX)) {
     file.key = KEYSPACE_PREFIX + (file.key || "");
   }
@@ -548,7 +569,7 @@ export async function uploadObject (file: S3File): Promise<CompleteMultipartUplo
   try {
     log("uploadObject request", LogLevel.DEBUG, Object.assign({}, params, { Body: undefined })); // Log it without the body
     const upload = new Upload({
-      client: config.s3Client,
+      client: s3Client,
       // tags: file.tags && [...file.tags].map(([Key, Value]) => ({ Key, Value })),
       params
     });
@@ -582,7 +603,7 @@ export interface CopyObjectOptions {
  * @returns {CopyObjectCommandOutput}
  */
 export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObjectOptions): Promise<CopyObjectCommandOutput> {
-  init();
+  const s3Client = init();
   if (!sourceFile.key || !sourceFile.key.startsWith(KEYSPACE_PREFIX)) {
     sourceFile.key = KEYSPACE_PREFIX + (sourceFile.key || "");
   }
@@ -614,7 +635,7 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
   };
   try {
     log("copyObject request", LogLevel.DEBUG, Object.assign({}, params, { Body: undefined })); // Log it without the body
-    const result: CopyObjectCommandOutput = await config.s3Client.send(new CopyObjectCommand(params));
+    const result: CopyObjectCommandOutput = await s3Client.send(new CopyObjectCommand(params));
     log("copyObject succeeded", LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
@@ -626,7 +647,7 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
 
 // export for testing
 export async function deleteObject (s3FileKey: string): Promise<DeleteObjectCommandOutput> {
-  init();
+  const s3Client = init();
   if (!s3FileKey || !s3FileKey.startsWith(KEYSPACE_PREFIX)) {
     s3FileKey = KEYSPACE_PREFIX + (s3FileKey || "");
   }
@@ -636,7 +657,7 @@ export async function deleteObject (s3FileKey: string): Promise<DeleteObjectComm
   };
   try {
     log("deleteObject request", LogLevel.DEBUG, params);
-    const result: DeleteObjectCommandOutput = await config.s3Client.send(new DeleteObjectCommand(params));
+    const result: DeleteObjectCommandOutput = await s3Client.send(new DeleteObjectCommand(params));
     log(`deleteObject ${s3FileKey} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
@@ -647,7 +668,7 @@ export async function deleteObject (s3FileKey: string): Promise<DeleteObjectComm
 }
 
 export async function getObjectTagging (s3FileKey: string): Promise<GetObjectTaggingCommandOutput> {
-  init();
+  const s3Client = init();
   if (!s3FileKey || !s3FileKey.startsWith(KEYSPACE_PREFIX)) {
     s3FileKey = KEYSPACE_PREFIX + (s3FileKey || "");
   }
@@ -657,7 +678,7 @@ export async function getObjectTagging (s3FileKey: string): Promise<GetObjectTag
   };
   try {
     log("getObjectTagging request", LogLevel.DEBUG, params);
-    const result: GetObjectTaggingCommandOutput = await config.s3Client.send(new GetObjectTaggingCommand(params));
+    const result: GetObjectTaggingCommandOutput = await s3Client.send(new GetObjectTaggingCommand(params));
     log(`getObjectTagging ${s3FileKey} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
@@ -673,7 +694,7 @@ export interface PutObjectTaggingOptions {
 }
 
 export async function putObjectTagging ({ key, tags }: PutObjectTaggingOptions): Promise<PutObjectTaggingCommandOutput> {
-  init();
+  const s3Client = init();
   if (!key || !key.startsWith(KEYSPACE_PREFIX)) {
     key = KEYSPACE_PREFIX + (key || "");
   }
@@ -694,12 +715,30 @@ export async function putObjectTagging ({ key, tags }: PutObjectTaggingOptions):
   };
   try {
     log("putObjectTagging request", LogLevel.DEBUG, params);
-    const result: PutObjectTaggingCommandOutput = await config.s3Client.send(new PutObjectTaggingCommand(params));
+    const result: PutObjectTaggingCommandOutput = await s3Client.send(new PutObjectTaggingCommand(params));
     log(`putObjectTagging ${key} succeeded`, LogLevel.DEBUG, result);
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
     log("putObjectTagging failed", LogLevel.WARN, error);
     throw error;
+  }
+}
+
+/**
+ * Healthcheck function to verify S3 connectivity
+ * @returns Promise resolving to true if connected, false otherwise
+ */
+export async function healthCheck (): Promise<boolean> {
+  log("Pinging S3 at " + new Date(), LogLevel.DEBUG);
+  // Ping S3 and update the lastS3Access if it works
+  try {
+    await listObjects({ prefix: "ping", maxKeys: 1 }); // Limit 1 so we can get back fast
+    log("Pinging S3 succeeded at " + new Date(), LogLevel.DEBUG);
+    return true;
+  } catch (error) {
+    log("pingS3 failed}", LogLevel.ERROR, error);
+    // DO NOT REJECT. Just return false
+    return false;
   }
 }

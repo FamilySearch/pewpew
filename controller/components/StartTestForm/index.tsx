@@ -19,9 +19,9 @@ import {
 } from "../EnvironmentVariablesList";
 import { H1, H3 } from "../Headers";
 import { LogLevel, log } from "../../pages/api/util/log";
-import PewPewVersions, { VersionInitalProps } from "../PewPewVersions";
-import React, { useState } from "react";
-import TestQueues, { QueueInitialProps } from "../TestQueues";
+import { PewPewVersions, VersionInitalProps } from "../PewPewVersions";
+import { QueueInitialProps, TestQueues } from "../TestQueues";
+import React, { JSX, useState } from "react";
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import {
   formatError,
@@ -33,11 +33,11 @@ import {
 } from "../../pages/api/util/clientutil";
 import { CheckboxButton } from "../CheckboxButton";
 import DatePicker from "react-datepicker";
-import DropFile from "../DropFile";
-import FilesList from "../FilesList";
+import { DropFile } from "../DropFile";
+import { FilesList } from "../FilesList";
 import { Line } from "rc-progress";
-import LinkButton from "../LinkButton";
-import TestInfo from "../TestInfo";
+import { LinkButton } from "../LinkButton";
+import { TestInfo } from "../TestInfo";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { YamlViewer } from "../YamlViewer";
 import styled from "styled-components";
@@ -160,8 +160,11 @@ export const StartTestForm = ({
   // Check if we have a previous daysOfWeek and map to turn the ones on that need to be. Otherwise everything on.
   const defaultDaysOfWeek: DayValue[] = DAYS_ARRAY.map((name: string, index: number): DayValue =>
     ({ name, value: previousTestData?.daysOfWeek ? previousTestData.daysOfWeek.includes(index) : true }));
-  const maxPewPewVersion: string = getMaxVersion(versionInitalProps.pewpewVersions);
+  const latestVersionTag: string = // First try to switch to the version that is "latest", then fall back to the max version
+    versionInitalProps.pewpewVersions.find((value) => value === versionInitalProps.latestPewPewVersion)
+    || getMaxVersion(versionInitalProps.pewpewVersions);
   const recurringTest: boolean = (previousTestData?.daysOfWeek && previousTestData?.endDate) ? true : false;
+  log("StartTestForm latestVersionTag", LogLevel.DEBUG, { latestVersionTag, recurringTest, pewpewVersion: previousTestData?.version || versionInitalProps.pewpewVersion });
   const defaultState: StartTestState = {
     yamlFile: previousTestData?.yamlFile || undefined,
     additionalFiles: previousTestData?.additionalFiles || [],
@@ -172,7 +175,7 @@ export const StartTestForm = ({
     daysOfWeek: defaultDaysOfWeek,
     allDays: defaultDaysOfWeek.every((dayOfWeek: DayValue) => dayOfWeek.value),
     queueName: previousTestData?.queueName || queueInitialProps.queueName,
-    pewpewVersion: previousTestData?.version || (recurringTest ? maxPewPewVersion : versionInitalProps.pewpewVersion),
+    pewpewVersion: previousTestData?.version || versionInitalProps.pewpewVersion || latestPewPewVersion,
     environmentVariables: previousTestData?.environmentVariables
       ? Object.entries(previousTestData.environmentVariables).map(([variableName, variableValue]: [string, string | null], index: number) => ({
         // Map these to the placeholder values
@@ -475,7 +478,7 @@ export const StartTestForm = ({
         onUploadProgress: (progressEvent) => {
           const { loaded, total } = progressEvent || {};
           if (typeof loaded !== "number" || typeof total !== "number") {
-            log("onUploadProgress invalid loaded or total type", LogLevel.ERROR, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
+            log("onUploadProgress invalid loaded or total type", LogLevel.WARN, { loaded, total, typeofloaded: typeof loaded, typeoftotal: typeof total });
             return;
           }
           const percent = Math.floor((loaded / total) * 100);
@@ -489,7 +492,7 @@ export const StartTestForm = ({
       // log("StartNewTest post response", LogLevel.DEBUG, response);
       if (!isTestData(response.data)) {
         const errorString = (editSchedule ? API_SCHEDULE : API_TEST) + " did not return a TestData object";
-        log(errorString, LogLevel.ERROR, response.data);
+        log(errorString, LogLevel.WARN, response.data);
         throw new Error(errorString);
       }
       const responseData: TestData = response.data;
@@ -517,10 +520,12 @@ export const StartTestForm = ({
   const setRecurring = () => {
     setFormData(({ pewpewVersion, ...oldState }: StartTestState) => {
       // We always set recurringTest to true, but if the pewpewVersion is latest we need to change it
+      log("setRecurring pewpewVersion", LogLevel.DEBUG, { pewpewVersion, latestVersionTag });
       return ({
         ...oldState,
         recurringTest: true,
-        pewpewVersion: pewpewVersion === latestPewPewVersion ? maxPewPewVersion : pewpewVersion
+        // If the current selected version is "latest" change it to a fixed version
+        pewpewVersion: pewpewVersion === latestPewPewVersion ? latestVersionTag : pewpewVersion
       });
     });
   };
@@ -552,7 +557,7 @@ export const StartTestForm = ({
         });
       }
     } catch (error) {
-      log("Error Downloading Yaml file", LogLevel.ERROR, error);
+      log("Error Downloading Yaml file", LogLevel.WARN, error);
       setState({
         yamlError: formatError(error)
       });

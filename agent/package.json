@@ -1,18 +1,20 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "3.3.4",
+  "version": "4.0.0",
   "description": "Agent Service for running pewpew tests",
+  "type": "module",
   "main": "dist/src/app.js",
   "scripts": {
     "fix:start": "rimraf \"node_modules/ppaas-common/node_modules/config-wasm/\"",
     "start": "npm run fix:start && node ./dist/src/app.js -r dotenv-flow/config",
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && nyc mocha ./dist/test -r dotenv-flow/config",
-    "testonly": "nyc mocha ./dist/test -r dotenv-flow/config",
+    "test": "npm run buildonly && mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
+    "testonly": "mocha ./dist/test --timeout 130000 -r dotenv-flow/config",
     "acceptance": "mocha ./dist/acceptance --timeout 130000 -r dotenv-flow/config",
-    "coverage": "npm run build && nyc mocha ./dist/test ./dist/createtest --timeout 500000 -r dotenv-flow/config",
-    "integration": "npm run build && nyc mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "coverage": "npm run build && mocha ./dist/test ./dist/integration --timeout 500000 -r dotenv-flow/config",
+    "createtest": "npm run build && mocha --timeout 500000 ./dist/createtest -r dotenv-flow/config",
+    "integration": "npm run build && mocha --timeout 130000 ./dist/integration -r dotenv-flow/config",
     "clean": "rimraf dist/"
   },
   "repository": {
@@ -24,11 +26,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": "18"
-  },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
+    "node": "22"
   },
   "dependencies": {
     "@fs/config-wasm": "*",
@@ -38,28 +36,31 @@
     "dotenv-flow": "^4.0.1",
     "expiry-map": "^2.0.0",
     "express": "^5.0.1",
-    "rimraf": "^5.0.0",
+    "rimraf": "^6.0.0",
     "semver": "^7.5.2"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-sqs": "^3.363.0",
-    "@aws-sdk/util-stream-node": "^3.363.0",
+    "@aws-sdk/credential-providers": "^3.363.0",
+    "@aws-sdk/ec2-metadata-service": "^3.363.0",
+    "@aws-sdk/lib-storage": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.8.0",
+    "@smithy/util-stream": "^4.0.0",
     "@types/bunyan": "~1.8.8",
-    "@types/chai": "^4.3.5",
+    "@types/chai": "^5.0.0",
     "@types/express": "^5.0.0",
     "@types/mocha": "^10.0.0",
     "@types/node": "^22.0.0",
     "@types/semver": "^7.5.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "axios": "~1.7.0",
-    "chai": "^4.3.7",
+    "aws-sdk-client-mock": "^4.0.0",
+    "axios": "^1.7.0",
+    "chai": "^5.0.0",
     "eslint": "^9.15.0",
-    "mocha": "^10.2.0",
-    "nyc": "^17.0.0",
+    "mocha": "^11.0.0",
     "typescript": "^5.3.0"
   }
 }

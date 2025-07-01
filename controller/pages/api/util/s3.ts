@@ -1,5 +1,5 @@
 import { GetObjectCommand, GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { LogLevel, log, logger, s3 } from "@fs/ppaas-common";
+import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { TestManagerError } from "../../../types";
 import getConfig from "next/config";
@@ -7,15 +7,14 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";
 import { gunzip as zlibGunzip} from "zlib";
 
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
 
 // If REDIRECT_TO_S3 is turned on, it must also be turned on for the acceptance tests
 const REDIRECT_TO_S3: boolean = publicRuntimeConfig.REDIRECT_TO_S3 === "true";
 const UNZIP_S3_FILES: boolean = publicRuntimeConfig.UNZIP_S3_FILES === "true";
+// Next.js Max API size is 4MB
+const MAX_API_SIZE = 4 * 1024 * 1024;
 
 // We can't pull in BUCKET_URL and KEYSPACE_PREFIX here because they're not set until init
 const { getObject, listFiles } = s3;
@@ -50,12 +49,12 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       // https://stackoverflow.com/questions/74699607/how-to-pipe-to-next-js-13-api-response
       if (redirectToS3) {
         try {
-          s3.init();
+          const s3Client = s3.init();
           const command = new GetObjectCommand({
             Bucket: s3.BUCKET_NAME,
             Key: key.startsWith(s3.KEYSPACE_PREFIX) ? key : (s3.KEYSPACE_PREFIX + key)
           });
-          const presignedUrl = await getSignedUrl(s3.config.s3Client, command, { expiresIn: 60 });
+          const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
           log(`${key} presignedUrl: ${presignedUrl}`, LogLevel.DEBUG, presignedUrl);
           response.writeHead(302, { Location: presignedUrl });
           response.end();
@@ -65,13 +64,25 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
           throw error;
         }
       }
+      // Check for too large of file AFTER the redirect. Only limit on our own API. Redirect can bypass with auth
+      if (files.length === 1 && files[0].Size && files[0].Size >= MAX_API_SIZE) {
+        // Too Large
+        response.status(413).json({ message: `Reponse is too large - Size: ${files[0].Size}, Max: ${MAX_API_SIZE}` });
+        return true;
+      }
       let s3Object: GetObjectCommandOutput | undefined;
       try {
         s3Object = await getObject(key);
       } catch (error) {
-        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files.map((file) => file.Key));
+        log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files.map((file) => file.Key));
       }
       if (s3Object && s3Object.Body) {
+        // If listFiles somehow found more than 1 file, check size again here
+        if (s3Object.ContentLength && s3Object.ContentLength >= MAX_API_SIZE) {
+          // Too Large
+          response.status(413).json({ message: `Reponse is too large - Size: ${s3Object.ContentLength}, Max: ${MAX_API_SIZE}` });
+          return true;
+        }
         let content: GetObjectCommandOutput["Body"] | Buffer = s3Object.Body;
         log("s3Object: " + s3Object, LogLevel.DEBUG, { ...s3Object, Body: !!s3Object.Body });
         // res.writeHead and res.send don't mix so we have to set each header separately

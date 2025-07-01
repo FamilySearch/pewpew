@@ -3,14 +3,49 @@ on:
 
 name: Pull Request Javascript
 jobs:
+  changedfiles: # https://dev.to/scienta/get-changed-files-in-github-actions-1p36
+    runs-on: ubuntu-latest
+    # Map a step output to a job output
+    outputs:
+      all_files: ${{ steps.changes.outputs.all_files}}
+      lock_file: ${{ steps.changes.outputs.lock_file }}
+      create_test: ${{ steps.changes.outputs.create_test }}
+    steps:
+        # Make sure we have some code to diff.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get changed files
+        id: changes
+        run: |
+          export all_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | xargs)
+          # Send to outside variable
+          echo "all_files=$all_files" >> $GITHUB_OUTPUT
+          echo "all_files=$all_files"
+          export agent_files=$(git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^createtest/" | grep ".spec.ts$" | xargs)
+          echo "agent_files=$agent_files"
+          if [[ ! -z "${agent_files[@]}" ]] || ([[ "${all_files[@]}" =~ "package.json" ]] || [[ "${all_files[@]}" =~ "package-lock.json" ]] || [[ "${all_files[@]}" =~ "src/pewpewtest.ts" ]]); then
+            echo "Createtest test files changed, changed package.json, or changed pewpewtest.ts"
+            echo "create_test=true" >> $GITHUB_OUTPUT
+            echo "create_test=true"
+          fi
+          if [[ "${all_files[@]}" =~ "package-lock.json" ]]; then
+            echo "Lock file changed"
+            echo "lock_file=true" >> $GITHUB_OUTPUT
+            echo "lock_file=true"
+          fi
+
   test-release:
     name: Build project
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [20.x, 22.x]
+    needs: changedfiles
     runs-on: ubuntu-latest
-    # env:
-    #   USE_XVFB: true
+    env:
+      DOWNLOAD_PEWPEW: true
 
     steps:
       - uses: actions/checkout@v4
@@ -20,17 +55,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Setup Artifactory
-        env:
-          CI_USER_TOKEN: ${{ secrets.CI_USER_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          echo -e "machine github.com\n  login $CI_USER_TOKEN" > ~/.netrc
-          echo "//familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-          echo "@fs:registry=https://familysearch.jfrog.io/artifactory/api/npm/fs-npm-prod-virtual/" >> ~/.npmrc
-          echo git config --global --add url."https://$CI_USER_TOKEN@github.com/".insteadOf "https://github.com/"
-
       - name: Install NPM Dependencies
         run: npm ci
       - name: Run Tests
         run: NODE_ENV=test npm test
+      - name: Run Agent CreateTest
+        if: ${{ needs.changedfiles.outputs.create_test }}
+        run: NODE_ENV=test npm run createtest

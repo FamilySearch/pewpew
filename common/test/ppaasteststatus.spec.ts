@@ -5,8 +5,9 @@ import {
   PpaasTestStatus,
   TestStatus,
   TestStatusMessage,
-  log
-} from "../src/index";
+  log,
+  ppaasteststatus
+} from "../src/index.js";
 import {
   mockGetObject,
   mockGetObjectError,
@@ -16,8 +17,8 @@ import {
   mockS3,
   mockUploadObject,
   resetMockS3
-} from "./mock";
-import { createS3Filename } from "../src/ppaasteststatus";
+} from "./mock.js";
+// import { createS3Filename } from "../src/ppaasteststatus.js";
 import { expect } from "chai";
 
 class PpaasUnitTestStatus extends PpaasTestStatus {
@@ -51,7 +52,7 @@ describe("PpaasTestStatus", () => {
       queueName: "unittest",
       userId: "unittestuser"
     };
-    testFilename = createS3Filename(ppaasTestId);
+    testFilename = ppaasteststatus.createS3Filename(ppaasTestId);
     testFolder = ppaasTestId.s3Folder;
   });
 

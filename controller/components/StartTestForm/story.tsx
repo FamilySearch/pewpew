@@ -50,7 +50,7 @@ const queueInitialProps: QueueInitialProps = {
 const versionInitalProps: VersionInitalProps = {
   pewpewVersion: "",
   loading: false,
-  pewpewVersions: [latestPewPewVersion, "0.5.10", "0.5.11", "0.5.12"],
+  pewpewVersions: [latestPewPewVersion, "0.5.10", "0.5.11", "0.5.12", "0.5.13-preview1", "0.6.0"],
   latestPewPewVersion: "0.5.12",
   error: false
 };

@@ -55,7 +55,7 @@ use std::{
     fmt,
     fs::File,
     future::Future,
-    io::{Error as IOError, ErrorKind as IOErrorKind, Read, Seek, Write},
+    io::{Error as IOError, Read, Seek, Write},
     mem,
     path::{Path, PathBuf},
     pin::Pin,
@@ -450,7 +450,7 @@ async fn _create_run(
     .await
     .map_err(move |e| {
         warn!("config file error: {}", e);
-        let e = IOError::new(IOErrorKind::Other, e);
+        let e = IOError::other(e);
         TestError::CannotOpenFile(config_file2, e.into())
     })??;
 
@@ -953,7 +953,7 @@ fn create_try_run_future(
         filters.is_empty()
             || filters.iter().any(|(is_eq, key, regex)| {
                 // "should it match" compared to "does it match"
-                *is_eq == tags.get(key).map_or(false, |left| regex.is_match(left))
+                *is_eq == tags.get(key).is_some_and(|left| regex.is_match(left))
             })
     };
 

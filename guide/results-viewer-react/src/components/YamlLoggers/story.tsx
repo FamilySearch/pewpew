@@ -22,7 +22,6 @@ const props: LoggerProps = {
     // eslint-disable-next-line no-console
     console.log("changing logger " + pewPewLogger.id, pewPewLogger);
   },
-  defaultYaml: true,
   loggers: []
 };
 

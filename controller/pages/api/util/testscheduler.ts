@@ -29,7 +29,6 @@ import {
   TestMessage,
   TestStatus,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -40,8 +39,6 @@ import { IS_RUNNING_IN_AWS } from "./authclient";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
 
 const { sleep } = util;
-logger.config.LogFileName = "ppaas-controller";
-
 const TEST_SCHEDULER_POLL_INTERVAL_MS: number = parseInt(process.env.TEST_SCHEDULER_POLL_INTERVAL_MS || "0", 10) || 60000;
 const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH?.toLowerCase() === "true";
 const HISTORICAL_SEARCH_MAX_FILES: number = parseInt(process.env.HISTORICAL_SEARCH_MAX_FILES || "0", 10) || 100000;
@@ -269,7 +266,7 @@ export class TestScheduler implements TestSchedulerItem {
     };
     const { queueName, testMessage, environmentVariables: environmentVariablesFile } = testToRun.scheduledTestData;
     const { testId, envVariables, restartOnFailure, version, bypassParser, yamlFile, additionalFiles } = testMessage;
-    log("Test Scheduler Loop: startNewTest", LogLevel.INFO, { testId, authPermissions, queueName, version, yamlFile });
+    log("Test Scheduler Loop: startNewTest", LogLevel.DEBUG, { testId, authPermissions, queueName, version, yamlFile });
     let localPath: string | undefined;
     try {
       // If it's recurring and we have a nextStart, clone the directory and create a new testId to use
@@ -329,7 +326,7 @@ export class TestScheduler implements TestSchedulerItem {
     };
     const { queueName, testMessage } = testToRun.scheduledTestData;
     const { testId, testRunTimeMn } = testMessage;
-    log("Test Scheduler Loop: startExistingTest", LogLevel.INFO, { testId, authPermissions, queueName });
+    log("Test Scheduler Loop: startExistingTest", LogLevel.DEBUG, { testId, authPermissions, queueName });
     try {
       // Not recurring, or the last run for this set, use the same dir and message
       const testData: StoredTestData = await TestManager.sendTestToQueue(testMessage, queueName, PpaasTestId.getFromTestId(testId), testRunTimeMn, authPermissions);
@@ -384,7 +381,7 @@ export class TestScheduler implements TestSchedulerItem {
       return global.testSchedulerLoopRunning;
     }
     global.testSchedulerLoopRunning = true;
-    log("Starting Test Scheduler Loop", LogLevel.INFO);
+    log("Starting Test Scheduler Loop", LogLevel.DEBUG);
     if (RUN_HISTORICAL_SEARCH) {
       TestScheduler.runHistoricalSearch().catch(() => { /* already logs error, swallow */ });
     }
@@ -429,7 +426,7 @@ export class TestScheduler implements TestSchedulerItem {
           if (TestScheduler.nextStart && Date.now() >= TestScheduler.nextStart) {
             // We have tests to run
             const testsToRun: TestSchedulerItem[] = getTestsToRun(TestScheduler.scheduledTests);
-            log("Test Scheduler Loop: testsToRun " + testsToRun.length, LogLevel.INFO, testsToRun
+            log("Test Scheduler Loop: testsToRun " + testsToRun.length, testsToRun.length > 0 ? LogLevel.INFO : LogLevel.DEBUG, testsToRun
             .map((item) => ({
               userId: item.userId,
               testId: item.scheduledTestData.testMessage.testId,
@@ -499,7 +496,7 @@ export class TestScheduler implements TestSchedulerItem {
       }
       TestScheduler.updateNextStart();
     } catch (error) {
-      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} from s3`, LogLevel.ERROR, error);
+      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} from s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -524,7 +521,7 @@ export class TestScheduler implements TestSchedulerItem {
         await this.scheduledEncryptFile.upload(force, true);
       }
     } catch (error) {
-      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} to s3`, LogLevel.ERROR, error);
+      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${ENCRYPTED_TEST_SCHEDULER_FILENAME} to s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -691,7 +688,7 @@ export class TestScheduler implements TestSchedulerItem {
               s3Files.filter((s3File) => s3File.Key)
               .map((s3File) => s3.deleteObject(s3File.Key!)
                 .then(() => log(`removeTest ${testId} deleted ${s3File.Key}`, LogLevel.INFO, { s3Folder }))
-                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.ERROR, error, { s3Folder, s3File }))
+                .catch((error) => log(`removeTest ${testId} failed to delete s3 file ${s3File.Key}`, LogLevel.WARN, error, { s3Folder, s3File }))
               )
             );
             const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
@@ -700,7 +697,7 @@ export class TestScheduler implements TestSchedulerItem {
             }
           }
           ).catch((error) => {
-            log(`removeTest ${testId} failed to find s3 files`, LogLevel.ERROR, error);
+            log(`removeTest ${testId} failed to find s3 files`, LogLevel.WARN, error);
             throw error;
           });
         }
@@ -754,7 +751,7 @@ export class TestScheduler implements TestSchedulerItem {
       TestScheduler.historicalTests!.set(testId, event);
       await TestScheduler.saveHistoricalToS3().catch(() => {/* noop logs itself */});
     } catch (error) {
-      log(`TestScheduler: Could not addHistoricalTest ${testId} to the schedule`, LogLevel.ERROR, error);
+      log(`TestScheduler: Could not addHistoricalTest ${testId} to the schedule`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -809,7 +806,7 @@ export class TestScheduler implements TestSchedulerItem {
     try {
       // Load existing ones
       await TestScheduler.loadHistoricalFromS3();
-      log("Starting Test Historical Search", LogLevel.INFO, { sizeBefore: TestScheduler.historicalTests!.size });
+      log("Starting Test Historical Search", LogLevel.DEBUG, { sizeBefore: TestScheduler.historicalTests!.size });
       // Create an ignore list
       const ignoreList: string[] = Array.from((TestScheduler.historicalTests || new Map<string, EventInput>()).keys());
       // Get X files, and parse them
@@ -829,7 +826,7 @@ export class TestScheduler implements TestSchedulerItem {
             if (ppaasTestStatus.status === TestStatus.Failed || ppaasTestStatus.status === TestStatus.Finished) {
               const yamlFile = PpaasTestId.getFromTestId(testId).yamlFile;
               const eventInput: EventInput = createHistoricalEvent(testId, yamlFile, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status);
-              log("Found Historical Test " + testId, LogLevel.INFO, eventInput);
+              log("Found Historical Test " + testId, LogLevel.DEBUG, eventInput);
               TestScheduler.historicalTests!.set(testId, eventInput);
             } else {
               log("Found Non Historical Test " + testId, LogLevel.DEBUG, ppaasTestStatus.sanitizedCopy());
@@ -840,7 +837,7 @@ export class TestScheduler implements TestSchedulerItem {
               parsedCount = 0; // Save to s3 every 50
               await TestScheduler.saveHistoricalToS3().catch(() => { /* noop, this already logs */ });
             }
-          }).catch((error) => log("runHistoricalSearch: Error retrieving ppaas test status", LogLevel.ERROR, error)));
+          }).catch((error) => log("runHistoricalSearch: Error retrieving ppaas test status", LogLevel.WARN, error)));
         }
         await Promise.all(parsedPromises);
         // After each batch of X, save them
@@ -851,7 +848,7 @@ export class TestScheduler implements TestSchedulerItem {
       log("foundStatus iterations " + iteration, LogLevel.DEBUG, { foundStatusPromises: JSON.stringify(foundStatusPromises) });
       log("Finished Test Historical Search", LogLevel.INFO, { sizeAfter: TestScheduler.historicalTests!.size });
     } catch (error) {
-      log("Error running historical search", LogLevel.ERROR, error);
+      log("Error running historical search", LogLevel.WARN, error);
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }
@@ -863,7 +860,7 @@ export class TestScheduler implements TestSchedulerItem {
       await TestScheduler.loadHistoricalFromS3();
       const oldDatetime: number = Date.now() - (deleteOldFilesDays * ONE_DAY);
       const sizeBefore = TestScheduler.historicalTests!.size;
-      log("Starting Test Historical Delete", LogLevel.INFO, { sizeBefore, oldDatetime: new Date(oldDatetime), oldDatetimeTs: oldDatetime, deleteOldFilesDays });
+      log("Starting Test Historical Delete", LogLevel.DEBUG, { sizeBefore, oldDatetime: new Date(oldDatetime), oldDatetimeTs: oldDatetime, deleteOldFilesDays });
 
       // Delete old ones off the historical Calendar. These will be cleaned up in S3 by Bucket Expiration Policy
       for (const [testId, eventInput] of TestScheduler.historicalTests!) {
@@ -879,7 +876,7 @@ export class TestScheduler implements TestSchedulerItem {
       log("Finished Test Historical Delete", LogLevel.INFO, { deletedCount, sizeBefore, sizeAfter: TestScheduler.historicalTests!.size });
       return deletedCount;
     } catch (error) {
-      log("Error running Historical Delete", LogLevel.ERROR, error, { deletedCount });
+      log("Error running Historical Delete", LogLevel.WARN, error, { deletedCount });
       throw error; // Throw for testing, but the loop will catch and noop
     }
   }
@@ -912,7 +909,7 @@ export class TestScheduler implements TestSchedulerItem {
         TestScheduler.historicalTests = new Map<string, TestSchedulerItem>();
       }
     } catch (error) {
-      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} from s3`, LogLevel.ERROR, error);
+      log(`Could not load /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} from s3`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -937,7 +934,7 @@ export class TestScheduler implements TestSchedulerItem {
         await this.historicalEncryptFile.upload(force, true);
       }
     } catch (error) {
-      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} to s3`, LogLevel.ERROR, error);
+      log(`Could not save /${ENCRYPTED_TEST_SCHEDULER_FOLDERNAME}/${TEST_HISTORY_FILENAME} to s3`, LogLevel.WARN, error);
       throw error;
     }
   }

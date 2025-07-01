@@ -21,12 +21,11 @@ import {
 } from "@fs/ppaas-common";
 import { WriteStream, createWriteStream } from "fs";
 import fs from "fs/promises";
-import { getHostname } from "./util/util";
+import { getHostname } from "./util/util.js";
 import { join as pathJoin } from "path";
 import { platform } from "os";
 import semver from "semver";
 
-logger.config.LogFileName = "ppaas-agent";
 const logConfig = logger.config;
 const { deleteTestScalingMessage, refreshTestScalingMessage } = sqs;
 const { poll, sleep } = util;
@@ -59,6 +58,7 @@ const COMMUCATION_NO_MESSAGE_DELAY: number = parseInt(process.env.COMMUCATION_NO
 const VERSION_SPECIFIC_RESULTS_FILE: string = "0.5.4";
 const VERSION_RESTART_TEST_AT_TIME: string = "0.5.5";
 const TEN_MINUTES: number = 10 * 60000;
+export const BYPASS_PARSER_RUNTIME_DEFAULT: number = 60;
 
 // Export for testing
 export async function findYamlCreatedFiles (localPath: string, yamlFile: string, additionalFiles: string[] | undefined): Promise<string[] | undefined> {
@@ -78,7 +78,7 @@ export async function findYamlCreatedFiles (localPath: string, yamlFile: string,
     }
     return undefined;
   } catch (error) {
-    log("Could not Find Yaml Created Files", LogLevel.ERROR, error);
+    log("Could not Find Yaml Created Files", LogLevel.WARN, error);
     throw error;
   }
 }
@@ -126,7 +126,7 @@ async function getInstanceId (): Promise<string> {
   return globalInstanceId;
 }
 if (IS_RUNNING_IN_AWS) {
-  getInstanceId().catch((error: unknown) => log("Could not retrieve instanceId", LogLevel.ERROR, error));
+  getInstanceId().catch((error: unknown) => log("Could not retrieve instanceId", LogLevel.WARN, error));
 }
 
 export class PewPewTest {
@@ -154,7 +154,7 @@ export class PewPewTest {
 
   public constructor (testMessage: PpaasTestMessage) {
     if (!testMessage.testId || !testMessage.s3Folder || !testMessage.yamlFile || (!testMessage.testRunTimeMn && !testMessage.bypassParser)) {
-      log("testData was missing data", LogLevel.ERROR, testMessage.sanitizedCopy());
+      log("testData was missing data", LogLevel.WARN, testMessage.sanitizedCopy());
       throw new Error("New Test Message was missing testId, s3Folder, yamlFile, or testRunTime");
     }
     this.resultsFileMaxWait = testMessage.bucketSizeMs + RESULTS_FILE_MAX_WAIT;
@@ -168,12 +168,13 @@ export class PewPewTest {
       ipAddress = util.getLocalIpAddress();
       hostname = getHostname();
     } catch (error) {
-      log("Could not retrieve ipAddress", LogLevel.ERROR, error);
+      log("Could not retrieve ipAddress", LogLevel.WARN, error);
     }
     // Save this data to put back in after we read the current info from s3 on delay
+    const startTime = Date.now();
     const newTestStatus: TestStatusMessage = {
-      startTime: Date.now(),
-      endTime: getEndTime(Date.now(), this.testMessage.testRunTimeMn || 60),
+      startTime,
+      endTime: getEndTime(startTime, this.testMessage.testRunTimeMn || BYPASS_PARSER_RUNTIME_DEFAULT),
       resultsFilename: [],
       status: TestStatus.Created,
       queueName: PpaasTestMessage.getAvailableQueueNames()[0], // Length will be 1 on the agents
@@ -205,7 +206,7 @@ export class PewPewTest {
         throw new Error(`PpaasTestStatus.getStatus(${this.testMessage.testId}) returned undefined`);
       }
     })
-    .catch((error: any) => log("Could not retrieve PpaasTestStatus from s3 to save previous data", LogLevel.ERROR, error));
+    .catch((error: any) => log("Could not retrieve PpaasTestStatus from s3 to save previous data", LogLevel.WARN, error));
     getInstanceId()
     .then((instanceId: string) => {
       log("instanceId: " + instanceId, LogLevel.DEBUG);
@@ -305,7 +306,7 @@ export class PewPewTest {
     try {
       await this.ppaasTestStatus.writeStatus();
     } catch (error) {
-      this.log("Could not write ppaasTestStatus", LogLevel.ERROR, error, { ppaasTestStatus: this.ppaasTestStatus });
+      this.log("Could not write ppaasTestStatus", LogLevel.WARN, error, { ppaasTestStatus: this.ppaasTestStatus });
     }
   }
 
@@ -316,7 +317,7 @@ export class PewPewTest {
       const messageId = await new PpaasCommunicationsMessage({ testId, messageType, messageData }).send();
       this.log(`Sent testStatus ${messageType}: " ${messageId}`, LogLevel.DEBUG, { messageData, messageId });
     } catch (error) {
-      this.log("Could not send TestStatus", LogLevel.ERROR, error, { messageData });
+      this.log("Could not send TestStatus", LogLevel.WARN, error, { messageData });
     }
   }
 
@@ -325,7 +326,7 @@ export class PewPewTest {
       const messageId = await refreshTestScalingMessage();
       this.log(`Sent refreshTestScalingMessage: " ${messageId}`, LogLevel.DEBUG, {  messageId });
     } catch (error) {
-      this.log("Error calling refreshTestScalingMessage", LogLevel.ERROR, error);
+      this.log("Error calling refreshTestScalingMessage", LogLevel.WARN, error);
     }
   }
 
@@ -334,7 +335,7 @@ export class PewPewTest {
       const messageId = await deleteTestScalingMessage();
       this.log(`deleteTestScalingMessage: " ${messageId}`, LogLevel.DEBUG, {  messageId });
     } catch (error) {
-      this.log("Error calling deleteTestScalingMessage", LogLevel.ERROR, error);
+      this.log("Error calling deleteTestScalingMessage", LogLevel.WARN, error);
     }
   }
 
@@ -349,6 +350,7 @@ export class PewPewTest {
 
   /** * Launches the pewpew process and waits for it to complete, throws on error ** */
   public async launch (): Promise<void> {
+    this.log(`PewpewTest.launch() at ${Date.now()}`, LogLevel.DEBUG);
     try {
       // Keep alive
       await this.refreshTestScalingMessage();
@@ -369,6 +371,7 @@ export class PewPewTest {
       this.log(`fs.access(${yamlLocalPath}) stats = ${JSON.stringify(await fs.access(yamlLocalPath))}`, LogLevel.DEBUG);
 
       let pewpewPath = PEWPEW_PATH;
+      this.log(`pewpewPath: ${pewpewPath}`, LogLevel.DEBUG, { PEWPEW_PATH, DOWNLOAD_PEWPEW });
       // Download the pewpew executable if needed
       if (DOWNLOAD_PEWPEW) {
         // version check in the test message
@@ -477,10 +480,15 @@ export class PewPewTest {
           const pewpewErrorStream: WriteStream = createWriteStream(this.pewpewStdErrS3File!.localFilePath, { flags: "a" });
           this.log(`Running ${this.iteration}: ${pewpewPath} ${pewpewParamsThisRun.join(" ")}`, LogLevel.DEBUG, pewpewParams);
           const pewpewProcess = spawn(pewpewPath, pewpewParamsThisRun, { cwd: this.localPath, env: this.testMessage.envVariables })
-          .on("error", (e: any) => {
+          .on("error", (e: unknown) => {
             this.log(`pewpew error: ${e instanceof Error ? e.message : e}`, LogLevel.ERROR, e);
-            this.internalStop().catch((error) => this.log("error stopping", LogLevel.ERROR, error));
-            reject(e);
+            // If error includes `spawn pewpew ENOENT` then it never started. No need to stop
+            if (`${e}`.includes("spawn pewpew")) {
+              reject(e);
+            } else {
+              this.internalStop().catch((error) => this.log("error stopping", LogLevel.WARN, error));
+              // The exit after stop will reject
+            }
           })
           .on("exit", (code: number, signal: string) => {
             this.pewpewRunning = false;
@@ -490,7 +498,7 @@ export class PewPewTest {
               this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
             }
             if (code === 0 || signal === "SIGINT") {
-              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.INFO);
+              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.DEBUG);
               // We still want to resolve on SIGINT (stop called) so we don't get errors down the line. Just log one warning here
               resolve();
             } else {
@@ -512,7 +520,9 @@ export class PewPewTest {
           // We want pewpew to die if we die. It's better to restart the test than to have an orphaned process that isn't being uploaded to s3
           // pewpewProcess.unref(); // Allows the parent (this) to exit without waiting for pewpew to exit
           this.log(`Removing Start Test Message from queue ${this.testMessage.receiptHandle}`, LogLevel.DEBUG);
-          this.testMessage.deleteMessageFromQueue().catch((error) => this.log(`Could not remove Start Test message from from queue: ${this.testMessage.receiptHandle}`, LogLevel.ERROR, error));
+          this.testMessage.deleteMessageFromQueue().catch((error) =>
+            this.log(`Could not remove Start Test message from from queue: ${this.testMessage.receiptHandle}`, LogLevel.ERROR, error)
+          );
         });
         const promises = [pewpewPromise, this.pollAndUploadResults(), this.pollCommunications()];
         try {
@@ -521,13 +531,13 @@ export class PewPewTest {
             // If we're less than a minute before what should be the end and we exited gracefully, log it
             const message = "Pewpew exited gracefully early without stop being called. Check the loggers and providers.";
             this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
-            this.log(message, LogLevel.WARN);
+            this.log(message, LogLevel.DEBUG);
           }
-        } catch (error) {
+        } catch (error: unknown) {
           if (!this.stopCalled && this.testMessage.restartOnFailure && Date.now() > minTimeForRetry && (this.testMessage.bypassParser || Date.now() < this.testEnd)) {
             // log it, but continue
-            const errorMessage = `launch test error: ${error && error.message ? error.message : error}, restartOnFailure: ${this.testMessage.restartOnFailure}`;
-            this.log(errorMessage, LogLevel.ERROR, error);
+            const errorMessage = `launch test error: ${error instanceof Error ? error.message : error}, restartOnFailure: ${this.testMessage.restartOnFailure}`;
+            this.log(errorMessage, LogLevel.WARN, error);
             // Send error communications message
             this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), errorMessage];
             await Promise.all([
@@ -579,14 +589,14 @@ export class PewPewTest {
         this.sendTestStatus(MessageType.TestFinished),
         this.writeTestStatus() // Final write
       ]);
-    } catch (error) {
-      const errorMessage = `launch test error: ${error && error.message ? error.message : error}`;
+    } catch (error: unknown) {
+      const errorMessage = `launch test error: ${error instanceof Error ? error.message : error}`;
       this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), errorMessage];
-      this.log(errorMessage, LogLevel.ERROR, error);
+      this.log(errorMessage, LogLevel.WARN, error);
       try {
         await this.internalStop();
       } catch (err) {
-        this.log("Could not stop the pewpew process", LogLevel.ERROR, err);
+        this.log("Could not stop the pewpew process", LogLevel.WARN, err);
       }
       // Send failed communications message and update teststatus
       this.ppaasTestStatus.status = TestStatus.Failed;
@@ -608,20 +618,20 @@ export class PewPewTest {
       try {
         this.log(`Stopping pewpew process with SIGINT ${this.pewpewProcess.pid}`, LogLevel.INFO);
         const intResult = this.pewpewProcess.kill("SIGINT"); // We be nice to them if they be nice to us.
-        this.log(`pewpew process SIGINT result: ${intResult}`, intResult ? LogLevel.INFO : LogLevel.WARN);
+        this.log(`pewpew process SIGINT result: ${intResult}`, intResult ? LogLevel.DEBUG : LogLevel.WARN);
         // Poll for the process to stop.
         // eslint-disable-next-line require-await
         await poll(async (): Promise<boolean | undefined> => {
           return !this.pewpewProcess || !this.pewpewRunning;
         }, KILL_MAX_WAIT, (errMsg: string) => `${errMsg} SIGINT did not stop pewpew. We gave it a chance, now it's personal.`)
-        .catch((error) => this.log("SIGINT did not stop pewpew", LogLevel.ERROR, error));
+        .catch((error) => this.log("SIGINT did not stop pewpew", LogLevel.WARN, error));
         if (this.pewpewProcess && this.pewpewRunning) {
           await this.internalKill();
         } else {
           this.log("pewpew process stopped with SIGINT", LogLevel.INFO);
         }
       } catch (error) {
-        this.log(`Caught error stopping pewpew ${error}`, LogLevel.ERROR, error);
+        this.log(`Caught error stopping pewpew ${error}`, LogLevel.WARN, error);
       }
     } else {
       this.log("Stop called with no pewpew process", LogLevel.DEBUG);
@@ -639,8 +649,8 @@ export class PewPewTest {
         // eslint-disable-next-line require-await
         await poll(async (): Promise<boolean | undefined> => {
           return !this.pewpewProcess || !this.pewpewRunning;
-        }, KILL_MAX_WAIT, (errMsg: string) => `${errMsg} SIGINT did not stop pewpew. We gave it a chance, now it's personal.`)
-        .catch((error) => this.log("SIGINT did not stop pewpew", LogLevel.ERROR, error));
+        }, KILL_MAX_WAIT)
+        .catch((error) => this.log("SIGKILL did not stop pewpew", LogLevel.ERROR, error));
       } catch (error) {
         this.log(`Caught error killing pewpew ${error}`, LogLevel.ERROR, error);
       }
@@ -803,7 +813,7 @@ export class PewPewTest {
   /** * Polls the communications queue for messages from the controller ** */
   protected async pollCommunications (): Promise<void> {
     this.communicationsRunning = true;
-    log("Starting Communications Loop", LogLevel.INFO);
+    log("Starting Communications Loop", LogLevel.DEBUG);
     try {
       let iteration = 0;
       // Keep running until the pewpew process ends, or we're more than the allowed overrage. Then upload everything regardless and exit
@@ -816,11 +826,11 @@ export class PewPewTest {
         try {
           messageToHandle = await PpaasS3Message.getMessage(this.ppaasTestId);
         } catch (error) {
-          this.log("Error trying to get communications message", LogLevel.ERROR, error);
+          this.log("Error trying to get communications message", LogLevel.WARN, error);
           await sleep(5000);
         }
         if (messageToHandle) {
-          this.log(`New message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle.sanitizedCopy());
+          this.log(`PewpewTest - New Communications message received at ${new Date()}: ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle.sanitizedCopy());
           // Process message and start a test
           try {
             switch (messageToHandle.messageType) {
@@ -849,7 +859,7 @@ export class PewPewTest {
                     if (newRuntime !== this.testMessage.testRunTimeMn && this.startTime) {
                       this.testMessage.testRunTimeMn = newRuntime;
                       this.testEnd = getEndTime(this.startTime.getTime(), this.testMessage.testRunTimeMn);
-                      this.log(`${this.getYamlFile()} new testRunTimeMn ${newRuntime}. Updating.`, LogLevel.INFO,
+                      this.log(`${messageToHandle.messageType}: ${this.getYamlFile()} new testRunTimeMn ${newRuntime}. Updating.`, LogLevel.INFO,
                         { testRunTimeMn: this.testMessage.testRunTimeMn, startTime: this.startTime.getTime(), testEnd: this.testEnd });
                       this.ppaasTestStatus.endTime = this.testEnd;
                       await this.writeTestStatus();
@@ -863,7 +873,7 @@ export class PewPewTest {
                       messageType: MessageType.TestError,
                       messageData: { message, error }
                     });
-                    errorMessage.send().catch((sendError) => this.log("Could not send error communications message to controller", LogLevel.ERROR, sendError));
+                    errorMessage.send().catch((sendError) => this.log("Could not send error communications message to controller", LogLevel.WARN, sendError));
                   }
                 }
                 this.log(`handleMessage Complete ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle);

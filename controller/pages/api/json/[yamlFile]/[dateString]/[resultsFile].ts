@@ -1,61 +1,60 @@
 import { AuthPermission, AuthPermissions, TestManagerError } from "../../../../../types";
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { authApi } from "../../../util/authserver";
 import { createErrorResponse } from "../../../util/util";
 import { getS3Response } from "../../../util/s3";
 
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
-async function getOrRedirect (
+async function getOrRedirect ({ request, response, resultsFile: filename, s3Folder, redirectToS3 }: {
   request: NextApiRequest,
   response: NextApiResponse<GetObjectCommandOutput["Body"] | Buffer | TestManagerError>,
-  filename: string,
-  s3Folder: string
-): Promise<void> {
+  resultsFile: string,
+  s3Folder: string,
+  redirectToS3?: boolean
+}): Promise<void> {
   try {
     if (!filename || !s3Folder) {
       response.status(400).json({ message: `method ${request.method} must have a file path` });
       return;
     }
 
-    const found = await getS3Response({ request, response, filename, s3Folder});
+    const found = await getS3Response({ request, response, filename, s3Folder, redirectToS3 });
     if (found) { return; }
 
     // 404 - Not Found
     response.status(404).json({ message: `No results file found for ${request.method} ${request.url}` });
   } catch (error) {
-    log(`${request.method} ${request.url} failed: ${error}`, LogLevel.ERROR, error);
-    response.status(500).json(createErrorResponse(request, error));
+    response.status(500).json(createErrorResponse(request, error, LogLevel.ERROR));
   }
 }
 
-export default async (req: NextApiRequest, res: NextApiResponse<GetObjectCommandOutput["Body"] | Buffer | TestManagerError>) => {
+export default async (request: NextApiRequest, response: NextApiResponse<GetObjectCommandOutput["Body"] | Buffer | TestManagerError>) => {
 
-  if (req.method === "GET") {
+  if (request.method === "GET") {
     // Allow Read-Only to view
-    const authPermissions: AuthPermissions | undefined = await authApi(req, res, AuthPermission.ReadOnly);
+    const authPermissions: AuthPermissions | undefined = await authApi(request, response, AuthPermission.ReadOnly);
     if (!authPermissions) {
       // If it's undefined we failed auth and already have set a response
       return;
     }
     try {
       const {
-        query: { yamlFile, dateString, resultsFile }
-      } = req;
-      log(`resultsFile: ${resultsFile}`, LogLevel.DEBUG, { query: req.query });
+        query: { yamlFile, dateString, resultsFile, redirect }
+      } = request;
+      log(`resultsFile: ${resultsFile}`, LogLevel.DEBUG, { query: request.query });
       if (resultsFile && !Array.isArray(resultsFile) && resultsFile.startsWith("stats-") && resultsFile.endsWith(".json")) {
-        await getOrRedirect(req, res, resultsFile, `${yamlFile}/${dateString}`);
+        // If it's a string treat it as truthy. I.e. ?redirect will redirect. Only ?redirect=false
+        // Any non string fall back to the default
+        const redirectToS3: boolean | undefined = typeof redirect === "string" ? redirect.toLowerCase() !== "false" : undefined;
+        await getOrRedirect({ request, response, resultsFile, s3Folder: `${yamlFile}/${dateString}`, redirectToS3 });
       } else {
-        res.status(400).json({ message: `method ${req.method} must have a json file` });
+        response.status(400).json({ message: `method ${request.method} must have a json file` });
       }
     } catch (error) {
-      log(`${req.method} ${req.url} failed: ${error}`, LogLevel.ERROR, error);
-      res.status(500).json(createErrorResponse(req, error));
+      response.status(500).json(createErrorResponse(request, error, LogLevel.ERROR));
     }
   } else {
-    res.status(400).json({ message: `method ${req.method} is not supported for this endpoint` });
+    response.status(400).json({ message: `method ${request.method} is not supported for this endpoint` });
   }
 };

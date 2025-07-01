@@ -1,7 +1,8 @@
 {
   "name": "@fs/monorepo",
-  "version": "3.3.4",
+  "version": "4.0.0",
   "description": "Service for running pewpew tests",
+  "type": "module",
   "private": true,
   "workspaces": [
     "./lib/config-wasm/pkg",
@@ -29,8 +30,7 @@
     "testonly:agent": "cd agent && npm run testonly",
     "testonly:controller": "cd controller && npm run testonly",
     "testonly": "npm-run-all --parallel testonly:common testonly:agent testonly:controller",
-    "testmerge": "mkdir -p .nyc_output && rimraf .nyc_output/*.json && cp common/.nyc_output/*.json .nyc_output/ && cp agent/.nyc_output/*.json .nyc_output/ && cp controller/.nyc_output/*.json .nyc_output/ && nyc merge .nyc_output testmerge.json && nyc report --reporter=lcov --reporter=text",
-    "test": "npm-run-all --serial linterror build:test testonly && npm run testmerge",
+    "test": "npm-run-all --serial linterror build:test testonly",
     "testslow": "npm run linterror && npm run test:common && npm run test:agent && npm run test:controller",
     "test:common": "cd common && npm run test",
     "test:agent": "cd agent && npm run test",
@@ -40,17 +40,17 @@
     "acceptance": "npm-run-all --serial acceptance:agent acceptance:controller",
     "acceptance:agent": "cd agent && npm run acceptance",
     "acceptance:controller": "cd controller && npm run acceptance",
-    "integration": "npm-run-all --serial lint integration:common integration:agent integration:controller testmerge",
+    "integration": "npm-run-all --serial lint integration:common integration:agent integration:controller",
     "integration:common": "cd common && npm run integration",
     "integration:agent": "cd agent && npm run integration",
     "integration:controller": "cd controller && npm run integration",
-    "coverage": "npm-run-all --serial lint coverage:common coverage:agent coverage:controller testmerge",
+    "coverage": "npm-run-all --serial lint coverage:common coverage:agent coverage:controller",
     "coverage:common": "cd common && npm run coverage",
     "coverage:agent": "cd agent && npm run coverage",
     "coverage:controller": "cd controller && npm run coverage",
     "testcleanup": "cd controller && npm run testcleanup",
     "clean:all": "npm-run-all --parallel clean clean:logs clean:npm",
-    "clean:logs": "rimraf coverage/ mutants.out/ common/app-ppaas-*.json agent/app-ppaas-*.json controller/app-ppaas-*.json examples/stats-*.json examples/*_*.yaml.out examples/log-results-* examples/search-results-*",
+    "clean:logs": "rimraf coverage/ mutants.out/ common/app-ppaas-*.json* agent/app-ppaas-*.json* controller/app-ppaas-*.json* examples/stats-*.json examples/*_*.yaml.out examples/log-results-* examples/search-results-*",
     "clean:npm": "rimraf node_modules/ package-lock.json controller/node_modules/ agent/node_modules/ common/node_modules/",
     "clean": "rimraf common/dist/ agent/dist/ controller/dist/"
   },
@@ -63,14 +63,12 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": ">=18.0.0 <23.0.0"
-  },
-  "nyc": {
-    "reporter": ["lcov", "text"],
-    "exclude": "**/*.spec.ts"
+    "node": ">=20.0.0 <23.0.0"
   },
   "overrides": {
-    "eslint": "^9.15.0"
+    "eslint": "^9.15.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "dependencies": {
   },
@@ -83,10 +81,9 @@
     "dotenv-flow": "^4.0.1",
     "eslint": "^9.15.0",
     "jsdom-global": "^3.0.2",
-    "mocha": "^10.2.0",
-    "npm-run-all2": "^7.0.0",
-    "nyc": "^17.0.0",
-    "rimraf": "^5.0.0",
+    "mocha": "^11.0.0",
+    "npm-run-all2": "^8.0.0",
+    "rimraf": "^6.0.0",
     "typescript": "^5.3.0"
   }
 }

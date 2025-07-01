@@ -1,6 +1,6 @@
-import { LogLevel, log, config as logConfig } from "./util/log";
+import { LogLevel, log, config as logConfig } from "./util/log.js";
 import { Config } from "@fs/config-wasm";
-import { EnvironmentVariables } from "../types";
+import { EnvironmentVariables } from "../types/index.js";
 import { readFile } from "fs/promises";
 
 export function parseEnvVarFromError (error: any): string | undefined {

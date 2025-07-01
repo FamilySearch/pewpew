@@ -1,8 +1,14 @@
-import * as ec2 from "./util/ec2";
-import * as logger from "./util/log";
-import * as s3 from "./util/s3";
-import * as sqs from "./util/sqs";
-import * as util from "./util/util";
+import * as ec2 from "./util/ec2.js";
+import * as logger from "./util/log.js";
+import * as ppaascommessage from "./ppaascommessage.js";
+import * as ppaass3message from "./ppaass3message.js";
+import * as ppaastestmessage from "./ppaastestmessage.js";
+import * as ppaasteststatus from "./ppaasteststatus.js";
+import * as s3 from "./util/s3.js";
+import * as s3file from "./s3file.js";
+import * as sqs from "./util/sqs.js";
+import * as util from "./util/util.js";
+import * as yamlparser from "./yamlparser.js";
 import {
   APPLICATION_NAME,
   PEWPEW_BINARY_EXECUTABLE,
@@ -12,17 +18,17 @@ import {
   SYSTEM_NAME,
   poll,
   sleep
- } from "./util/util";
-import { LogLevel, log } from "./util/log";
-import { MakeTestIdOptions, PpaasTestId } from "./ppaastestid";
-import { PpaasS3File, PpaasS3FileCopyOptions, PpaasS3FileOptions } from "./s3file";
-import { PpaasS3Message, PpaasS3MessageOptions } from "./ppaass3message";
-import { PpaasCommunicationsMessage } from "./ppaascommessage";
-import { PpaasTestMessage } from "./ppaastestmessage";
-import { PpaasTestStatus } from "./ppaasteststatus";
-import { YamlParser } from "./yamlparser";
+ } from "./util/util.js";
+import { LogLevel, log } from "./util/log.js";
+import { MakeTestIdOptions, PpaasTestId } from "./ppaastestid.js";
+import { PpaasS3File, PpaasS3FileCopyOptions, PpaasS3FileOptions } from "./s3file.js";
+import { PpaasS3Message, PpaasS3MessageOptions } from "./ppaass3message.js";
+import { PpaasCommunicationsMessage } from "./ppaascommessage.js";
+import { PpaasTestMessage } from "./ppaastestmessage.js";
+import { PpaasTestStatus } from "./ppaasteststatus.js";
+import { YamlParser } from "./yamlparser.js";
 
-export * from "../types";
+export * from "../types/index.js";
 
 export type {
   PpaasS3MessageOptions,
@@ -34,9 +40,15 @@ export type {
 export {
   ec2,
   logger,
+  ppaascommessage,
+  ppaass3message,
+  ppaastestmessage,
+  ppaasteststatus,
   s3,
+  s3file,
   sqs,
   util,
+  yamlparser,
   log,
   LogLevel,
   APPLICATION_NAME,

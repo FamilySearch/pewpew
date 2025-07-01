@@ -1,5 +1,5 @@
-import { CommunicationsMessage, MessageType } from "../types";
-import { LogLevel, log } from "./util/log";
+import { CommunicationsMessage, MessageType } from "../types/index.js";
+import { LogLevel, log } from "./util/log.js";
 import {
   defaultTestExtraFileTags,
   deleteObject,
@@ -7,8 +7,8 @@ import {
   init as initS3,
   listFiles,
   uploadFileContents
-} from "./util/s3";
-import { PpaasTestId } from "./ppaastestid";
+} from "./util/s3.js";
+import { PpaasTestId } from "./ppaastestid.js";
 
 // Due to issues with visibility 0 and multiple lockouts, The communications queue is only for talking to the controller
 // Going to the agent will write to a file in the s3Folder
@@ -37,7 +37,7 @@ export class PpaasS3Message implements CommunicationsMessage {
     try {
       initS3();
     } catch (error: unknown) {
-      log("Could not initialize s3", LogLevel.ERROR, error);
+      log("Could not initialize s3", LogLevel.WARN, error);
       throw error;
     }
     if (typeof testId === "string") {
@@ -45,7 +45,7 @@ export class PpaasS3Message implements CommunicationsMessage {
         this.ppaasTestId = PpaasTestId.getFromTestId(testId);
         this.testId = this.ppaasTestId.testId;
       } catch (error: unknown) {
-        log("Could not initialize s3", LogLevel.ERROR, error);
+        log("Could not parse testId", LogLevel.WARN, error);
         throw error;
       }
     } else {
@@ -93,7 +93,7 @@ export class PpaasS3Message implements CommunicationsMessage {
       log(`getFileContents(${s3Filename}, ${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { contents });
       if (!contents) {
         // File exists but is empty, delete it
-        deleteObject(key).catch((error) => log(`Could not delete ${key}`, LogLevel.ERROR, error));
+        deleteObject(key).catch((error) => log(`Could not delete ${key}`, LogLevel.WARN, error));
         return undefined;
       }
       log("We found a message for s3Folder " + ppaasTestId.s3Folder, LogLevel.DEBUG, { contents });
@@ -111,22 +111,18 @@ export class PpaasS3Message implements CommunicationsMessage {
         newMessage.inS3 = true; // Set this so we can delete it later
         return newMessage;
       } catch (error: unknown) {
-        log(`Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.ERROR, error);
+        log(`Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.WARN, error);
         throw error;
       }
     } catch (error: unknown) {
-      log(`getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.ERROR, error);
+      log(`getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.WARN, error);
       throw error;
     }
   }
 
   public async send (): Promise<string | undefined> {
     // Send the S3 Message
-    const communicationsMessage: CommunicationsMessage = {
-      testId: this.testId,
-      messageType: this.messageType,
-      messageData: this.messageData
-    };
+    const communicationsMessage: CommunicationsMessage = this.getCommunicationsMessage();
     if (this.messageData instanceof Map || this.messageData instanceof Set) {
       communicationsMessage.messageData = [...this.messageData]; // Need to cast it to an array
     }
@@ -141,7 +137,7 @@ export class PpaasS3Message implements CommunicationsMessage {
       tags: defaultTestExtraFileTags()
     });
     this.inS3 = true;
-    log(`PpaasS3Message.send url: ${url}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasS3Message.send url: ${url}`, LogLevel.DEBUG, this.sanitizedCopy());
     return url;
   }
 

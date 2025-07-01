@@ -8,7 +8,7 @@ import {
   PutObjectTaggingCommandOutput,
   _Object as S3Object
 } from "@aws-sdk/client-s3";
-import { LogLevel, S3File, log } from "../src/index";
+import { LogLevel, S3File, log, s3 } from "../src/index.js";
 import { Stats, createReadStream } from "fs";
 import {
   UNIT_TEST_KEYSPACE_PREFIX,
@@ -20,8 +20,8 @@ import {
   mockS3,
   mockUploadObject,
   resetMockS3
-} from "./mock";
-import {
+} from "./mock.js";
+const {
   copyFile,
   copyObject,
   defaultTestFileTags,
@@ -38,7 +38,7 @@ import {
   uploadFile,
   uploadFileContents,
   uploadObject
-} from "../src/util/s3";
+} = s3;
 import { constants as bufferConstants } from "node:buffer";
 import { expect } from "chai";
 import fs from "fs/promises";
@@ -88,6 +88,14 @@ describe("S3Util", () => {
     expect(healthCheckDate, "healthCheckDate").to.not.equal(undefined);
   });
 
+  describe("S3 Health Check", () => {
+    it("Should pass health check with valid connection", async () => {
+      mockListObjects(undefined);
+      const isHealthy = await s3.healthCheck();
+      expect(isHealthy, "isHealthy").to.equal(true);
+    });
+  });
+
   describe("TEST_FILE_TAGS", () => {
     it("should have key test", (done: Mocha.Done) => {
       try {
@@ -122,12 +130,55 @@ describe("S3Util", () => {
 
   describe("List Objects Empty in S3", () => {
     it("List Objects should always succeed even if empty", (done: Mocha.Done) => {
-      mockListObjects([]);
+      mockListObjects(undefined);
       listObjects({ prefix: "bogus", maxKeys: 1}).then((result: ListObjectsV2CommandOutput) => {
         log(`listObjects("bogus", 1) result = ${JSON.stringify(result)}`, LogLevel.DEBUG);
         expect(result).to.not.equal(undefined);
-        expect(result.Contents).to.not.equal(undefined);
-        expect(result.Contents!.length).to.equal(0);
+        expect(result.Contents, "Contents").to.equal(undefined);
+        expect(result.KeyCount, "KeyCount").to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should find key", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listObjects({ prefix: UNIT_TEST_KEY, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should not find after", (done: Mocha.Done) => {
+      mockListObjects(undefined);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: UNIT_TEST_KEY, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.equal(undefined);
+        expect(result.KeyCount, "KeyCount").to.equal(0);
+        done();
+      }).catch((error) => {
+        done(error);
+      });
+    });
+
+    it("List Objects should find after", (done: Mocha.Done) => {
+      mockListObjects([s3TestObject]);
+      listObjects({ prefix: UNIT_TEST_KEY_PREFIX + "/", startAfter: UNIT_TEST_KEY_PREFIX, maxKeys: 1 }).then((result: ListObjectsV2CommandOutput) => {
+        log(`listObjects({ prefix: "${UNIT_TEST_KEY_PREFIX + "/"}", startAfter: "${UNIT_TEST_KEY}", maxKeys: 1 }) result`, LogLevel.DEBUG, result);
+        expect(result).to.not.equal(undefined);
+        expect(result.Contents, "Contents").to.not.equal(undefined);
+        expect(Array.isArray(result.Contents), "Array.isArray(Contents)").to.equal(true);
+        expect(result.Contents?.length, "Contents.length").to.equal(1);
+        expect(result.KeyCount, "KeyCount").to.equal(1);
         done();
       }).catch((error) => {
         done(error);

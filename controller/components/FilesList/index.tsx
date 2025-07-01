@@ -1,5 +1,5 @@
+import React, { JSX } from "react";
 import Div from "../Div";
-import React from "react";
 import styled from "styled-components";
 
 const FilesDiv = styled(Div)`
@@ -12,7 +12,7 @@ export interface FileListProps {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
-const FileList = ({
+export const FilesList = ({
   files,
   onClick
 }: FileListProps) => {
@@ -25,4 +25,4 @@ const FileList = ({
   );
 };
 
-export default FileList;
+export default FilesList;

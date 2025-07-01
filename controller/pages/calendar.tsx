@@ -169,7 +169,7 @@ export const getServerSideProps: GetServerSideProps =
         const numberDate = Number(ctx.query.defaultDate);
         defaultDate = new Date(isNaN(numberDate) ? ctx.query.defaultDate : numberDate);
       } catch (error) {
-        logServer("Error parsing date", LogLevelServer.ERROR, error);
+        logServer("Error parsing date", LogLevelServer.WARN, error);
         defaultDate = undefined;
       }
     }

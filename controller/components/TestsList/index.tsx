@@ -1,7 +1,7 @@
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
 import { API_TEST_STATUS, PAGE_TEST_HISTORY, TestData, TestManagerMessage } from "../../types";
 import { LogLevel, log } from "../../pages/api/util/log";
-import React, { useEffect, useState } from "react";
+import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatPageHref, isTestManagerMessage } from "../../pages/api/util/clientutil";
 import Div from "../Div";
@@ -67,7 +67,7 @@ export const TestsList = ({
         if (response.status === 200) {
           if (!isTestManagerMessage(response.data)) {
             const errorString = API_TEST_STATUS + " did not return a TestManagerMessage object";
-            log(errorString, LogLevel.ERROR, response.data);
+            log(errorString, LogLevel.WARN, response.data);
             throw new Error(errorString);
           }
           const testManagerMessage: TestManagerMessage = response.data;

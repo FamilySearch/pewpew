@@ -1,13 +1,13 @@
 import {
   LogLevel,
   log,
-  logger,
   util
 } from "@fs/ppaas-common";
 import axios, { AxiosError, AxiosResponse as Response } from "axios";
+import { buildTest } from "../src/tests.js";
 import { expect } from "chai";
 
-logger.config.LogFileName = "ppaas-agent";
+const ACCEPTANCE_SEND_TO_QUEUE: boolean = process.env.ACCEPTANCE_SEND_TO_QUEUE !== undefined;
 
 const integrationUrl = "http://" + (process.env.BUILD_APP_URL || `localhost:${process.env.PORT || "8080"}`);
 log("integrationUrl = " + integrationUrl);
@@ -64,7 +64,12 @@ describe("Tests Integration", () => {
 
   describe("/tests/build", () => {
     it("GET tests/build should respond 200 OK", (done: Mocha.Done) => {
-      waitForSuccess().then(() => done()).catch((error) => done(error));
+      if (ACCEPTANCE_SEND_TO_QUEUE) {
+        // Put the message on the SQS queue and wait for S3/communications queue
+        buildTest({ sendToQueue: true, unitTest: true }).then(() => done()).catch((error) => done(error));
+      } else {
+        waitForSuccess().then(() => done()).catch((error) => done(error));
+      }
     });
   });
 });

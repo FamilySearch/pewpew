@@ -13,6 +13,7 @@ import type {
 } from "next";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
+import React, { JSX } from "react";
 import { formatError, formatPageHref, getHostUrl } from "./api/util/clientutil";
 import {
   getLoginApiUrl,
@@ -24,7 +25,6 @@ import {
 } from "./api/util/authserver";
 import Div from "../components/Div";
 import { H1 } from "../components/Headers";
-import React from "react";
 import Router from "next/router";
 import { TokenResponse } from "../types";
 import styled from "styled-components";
@@ -117,13 +117,14 @@ export const getServerSideProps: GetServerSideProps =
       const tokenResponse: TokenResponse = await getTokenFromCode({ ...(ctx.req), query: ctx.query, headers: ctx.req.headers } as NextApiRequest);
       const { token, refreshToken: newRefreshToken, hintToken } = tokenResponse;
       if (token) {
-        logServer("auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken: newRefreshToken, hintToken });
+        logServer("code auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken: newRefreshToken, hintToken });
       } else {
         throw new Error("Could not get the auth token from: " + JSON.stringify(tokenResponse));
       }
       const redirectUrl: string = getAndValidateUrlFromState(ctx.query.state, getHostUrl(ctx.req));
       // Instead of loading the page and setting the cookie, we do a 302 to redirectUrl and add a Set-Cookie header
       setCookies({ ctx, token, refreshToken: newRefreshToken, hintToken });
+      logServer("setCookies done redirecting to: " + redirectUrl, LogLevelServer.DEBUG, { redirectUrl });
       return {
         redirect: { destination: redirectUrl, permanent: false },
         props: { token, redirectUrl, errorLoading: undefined }
@@ -145,7 +146,7 @@ export const getServerSideProps: GetServerSideProps =
       // The old refresh token is dead. This is a new one
       const { token, refreshToken: newRefreshToken, hintToken } = tokenResponse;
       if (token) {
-        logServer("auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken, hintToken });
+        logServer("refresh auth token: " + JSON.stringify(token), LogLevelServer.DEBUG, { token, refreshToken, hintToken });
       } else {
         throw new Error("Could not get the auth token from: " + JSON.stringify(tokenResponse));
       }

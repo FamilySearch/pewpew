@@ -1,4 +1,4 @@
-import { LogLevel, log, logger } from "@fs/ppaas-common";
+import { LogLevel, log, s3, sqs } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   accessEncryptionKeyPass,
@@ -6,11 +6,9 @@ import {
   accessS3Pass,
   accessSqsPass,
   getGlobalHealthcheckConfig,
-  pingS3
+  waitForSecrets
 } from "../util/healthcheck";
 import { start as startCommuncations } from "../util/communications";
-
-logger.config.LogFileName = "ppaas-controller";
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
   // We have to start the communications loop somewhere, and the healthcheck should be the first thing called
@@ -23,13 +21,10 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     log("failHealthCheck", LogLevel.FATAL, getGlobalHealthcheckConfig());
     res.status(500).json(getGlobalHealthcheckConfig());
   } else {
-    let s3Pass: boolean = accessS3Pass();
-    const sqsPass: boolean = accessSqsPass();
-    if (!s3Pass) {
-      s3Pass = await pingS3();
-    }
-    const encryptPass = accessEncryptionKeyPass();
-    const openIdPass = accessOpenIdSecretPass();
+    const s3Pass: boolean = accessS3Pass() || await s3.healthCheck();
+    const sqsPass: boolean = accessSqsPass() || await sqs.healthCheck();
+    const encryptPass = accessEncryptionKeyPass() || await waitForSecrets();
+    const openIdPass = accessOpenIdSecretPass() || await waitForSecrets();
     const healthcheckPass = s3Pass && sqsPass && encryptPass && openIdPass;
     log("healthCheck", healthcheckPass ? LogLevel.DEBUG : LogLevel.ERROR, { s3Pass, sqsPass, encryptPass, openIdPass, ...getGlobalHealthcheckConfig() });
     res.status(healthcheckPass ? 200 : 500).json({ ...(getGlobalHealthcheckConfig()), s3: s3Pass || false, sqs: sqsPass || false, encrypt: encryptPass || false, auth: openIdPass || false });

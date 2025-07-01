@@ -6,7 +6,7 @@ import {
   getDefaultHeaders,
   isValidUrl
 } from "../YamlUrls";
-import { Checkbox, Div, InputsDiv, Label } from "../YamlStyles";
+import { Button, Checkbox, Div, Input, InputsDiv, Label } from "../YamlStyles";
 import {
   HarEndpoint,
   HarHeader,
@@ -23,9 +23,12 @@ import {
   NUMBER_REGEX,
   OVER_REGEX,
   PATTERNS,
-  RAMP_PATTERN
+  RAMP_PATTERN,
+  newLoadLoadPattern,
+  newRampLoadPattern
 } from "../YamlLoadPatterns";
-import { LOGGERS, Loggers, getDefaultLoggers } from "../YamlLoggers";
+import { LOAD_TIME, PEAK_LOAD, RAMP_TIME, SESSION_ID, VARS, Vars, getDefaultVars } from "../YamlVars";
+import { LOGGERS, LoggerType, Loggers, getDefaultLoggers } from "../YamlLoggers";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import {
@@ -37,10 +40,11 @@ import {
   Providers
 } from "../YamlProviders";
 import React, { useEffect, useRef, useState } from "react";
-import { VARS, Vars, getDefaultVars } from "../YamlVars";
 import { createYamlString, writeFile } from "./writeyaml";
 import { Endpoints } from "../YamlEndpoints";
 import { QuestionBubble } from "../YamlQuestionBubble";
+import { Row } from "../Div";
+import ToggleDefaults from "../ToggleDefaults/ToggleDefaults";
 import { YamlViewer } from "../YamlViewer";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -55,16 +59,8 @@ export const DisplayDivMain = styled.div`
   align-items: initial;
 `;
 export const DisplayDivBody = styled.div`
-display: flex;
-flex-direction: column;
-#createYaml {
-  cursor: pointer;
-  color: rgb(200, 200, 200);
-  }
-#createYaml:disabled {
-  cursor: default;
-  color: black;
-}
+  display: flex;
+  flex-direction: column;
 `;
 export const UrlsDiv = styled.div`
   border-right: 2px solid black;
@@ -80,36 +76,35 @@ export interface YamlWriterFormProps {
 }
 
 export interface YamlWriterFormState {
-    urls: PewPewAPI[],
-    patterns: PewPewLoadPattern[],
-    vars: PewPewVars[],
-    providers: PewPewProvider[],
-    loggers: PewPewLogger[],
-    fileName: string,
-    previewYaml: string,
-    /** State of Default Yaml checkbox */
-    default: boolean,
-    /** State of Authenticated checkbox */
-    authenticated: boolean
+  urls: PewPewAPI[],
+  patterns: PewPewLoadPattern[],
+  vars: PewPewVars[],
+  providers: PewPewProvider[],
+  loggers: PewPewLogger[],
+  fileName: string,
+  previewYaml: string,
+  /** State of Default Yaml checkbox */
+  default: boolean,
+  /** State of Authenticated checkbox */
+  authenticated: boolean
 }
 
 const NAME_REGEX = new RegExp("^[A-Za-z_-].*$");
 const VALUE_REGEX = new RegExp("^[A-Za-z0-9_-{}$].*$");
 
-const DEFAULT = "default";
 type YamlWriterBooleanState = "default" | "filterHeaders" | "authenticated";
 
 export const YamlWriterForm = (props: YamlWriterFormProps) => {
   const defaultState: YamlWriterFormState = {
-      urls: [],
-      patterns: [],
-      vars: getDefaultVars(),
-      providers: [],
-      loggers: getDefaultLoggers(),
-      fileName: "",
-      previewYaml: "",
-      default: true,
-      authenticated: true
+    urls: [],
+    patterns: [newRampLoadPattern(), newLoadLoadPattern()],
+    vars: getDefaultVars(),
+    providers: [],
+    loggers: getDefaultLoggers(),
+    fileName: "",
+    previewYaml: "",
+    default: true,
+    authenticated: true
   };
 
   const [state, setState] = useState(defaultState);
@@ -118,6 +113,39 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
   useEffectModal(modalRef);
   const previewModalRef = useRef<ModalObject| null>(null);
   useEffectModal(previewModalRef);
+
+  const setAuthenticated = (authenticated: boolean) => {
+    setState((prevState) => ({...prevState, authenticated }));
+  };
+
+  const addDefaults = () => {
+    setState((prevState) => ({
+      ...prevState,
+      vars: [...getDefaultVars(), ...prevState.vars],
+      patterns: [newRampLoadPattern(), newLoadLoadPattern(), ...prevState.patterns],
+      loggers: [...getDefaultLoggers(), ...prevState.loggers]
+    }));
+  };
+
+  const removeAllDefaults = () => {
+    setState((prevState) => ({
+      ...prevState,
+      vars: prevState.vars.filter((v) => ![SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].includes(v.id)),
+      patterns: prevState.patterns.filter((pattern) => pattern.id !== RAMP_PATTERN && pattern.id !== LOAD_PATTERN),
+      loggers: prevState.loggers.filter((l) => l.id !== LoggerType.ERROR_LOGGER && l.id !== LoggerType.KILL_LOGGER)
+    }));
+  };
+
+  const hasDefaultVars: boolean = state.vars.find((v) => v.id === SESSION_ID) !== undefined &&
+    state.vars.find((v) => v.id === RAMP_TIME) !== undefined &&
+    state.vars.find((v) => v.id === LOAD_TIME) !== undefined &&
+    state.vars.find((v) => v.id === PEAK_LOAD) !== undefined;
+
+  const hasDefaultPatterns: boolean = state.patterns.find((p) => p.id === RAMP_PATTERN) !== undefined &&
+    state.patterns.find((p) => p.id === LOAD_PATTERN) !== undefined;
+
+  const hasDefaultLoggers: boolean = state.loggers.find((l) => l.id === LoggerType.ERROR_LOGGER) !== undefined &&
+    state.loggers.find((l) => l.id === LoggerType.KILL_LOGGER) !== undefined;
 
   // Used in parent App.js
   // When endpoints are finalized in header.js modal, endpoints get sent to here
@@ -410,15 +438,24 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
     <DisplayDivMain>
       <DisplayDivBody>
         <InputsDiv>
-          <button id="createYaml" onClick={() => modalRef.current?.openModal()}>
-            Create Yaml
-          </button>
-          <button id="createYaml" onClick={openPreviewModal}>
-            Preview Yaml
-          </button>
-          <label htmlFor={DEFAULT}> Default Yaml </label>
-          <QuestionBubble text="Includes default, easy to use values for Variables, Load Patterns, and Loggers. Also includes authenticated headers"></QuestionBubble>
-          <Checkbox type="checkbox" id={DEFAULT} onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleClick(DEFAULT, event.target.checked)} checked={state.default} />
+          <Row style={{ justifyContent: "start" }}>
+            <Button onClick={() => modalRef.current?.openModal()}>
+              Create Yaml
+            </Button>
+            <Button onClick={openPreviewModal}>
+              Preview Yaml
+            </Button>
+          </Row>
+          <Row style={{ justifyContent: "start" }}>
+            <ToggleDefaults
+              title="Yaml"
+              handleAddMissing={addDefaults}
+              handleDeleteAll={removeAllDefaults}
+              addDisabled={hasDefaultVars && hasDefaultPatterns && hasDefaultLoggers}
+              deleteDisabled={!hasDefaultVars && !hasDefaultPatterns && !hasDefaultLoggers}
+            />
+            <QuestionBubble text="Includes default, easy to use values for Variables, Load Patterns, and Loggers. Also includes authenticated headers"></QuestionBubble>
+          </Row>
 
           <label htmlFor={AUTHENTICATED}> Authenticated </label>
           <QuestionBubble text="Creates sessionId variable and adds authentication header to every endpoint"></QuestionBubble>
@@ -436,14 +473,15 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           defaultYaml={state.default}
           authenticated={state.authenticated}
           urls={state.urls}
+          peakLoad={state.vars.find((variable) => variable.name === "peakLoad")?.name}
         />
         <Vars
           addVar={addVar}
           clearAllVars={() => clearInput(VARS)}
           deleteVar={(varId: string) => removeInput(varId, VARS)}
           changeVar={changeVars}
-          defaultYaml={state.default}
           authenticated={state.authenticated}
+          setAuthenticated={setAuthenticated}
           vars={state.vars}
         />
         <LoadPatterns
@@ -451,8 +489,8 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           clearAllPatterns={() => clearInput(PATTERNS)}
           deletePattern={(patternId: string) => removeInput(patternId, PATTERNS)}
           changePattern={changePattern}
-          defaultYaml={state.default}
           patterns={state.patterns}
+          vars={state.vars}
         />
         <Providers
           addProvider={addProvider}
@@ -466,7 +504,6 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           clearAllLoggers={() => clearInput(LOGGERS)}
           deleteLogger={(loggerId: string) => removeInput(loggerId, LOGGERS)}
           changeLogger={changeLogger}
-          defaultYaml={state.default}
           loggers={state.loggers}
         />
         <Modal
@@ -485,7 +522,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           </>}
           <Label>
             File Name:&nbsp;
-            <input style={{width: "150px"}} onChange={changeFile} value={state.fileName} />.yaml
+            <Input style={{width: "150px"}} onChange={changeFile} value={state.fileName} />.yaml
           </Label>
         </Modal>
         <Modal

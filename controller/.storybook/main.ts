@@ -3,7 +3,7 @@ import type { StorybookConfig } from "@storybook/nextjs";
 
 const config: StorybookConfig = {
   stories: ["../components/**/story.tsx"],
-  addons: ["@storybook/addon-actions", "@storybook/addon-links"],
+  addons: ["storybook/actions", "@storybook/addon-links"],
   features: {
     // legacyMdx1: true,
     // storyStoreV7: false, // Opt out of on-demand story loading

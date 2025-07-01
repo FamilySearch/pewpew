@@ -1,11 +1,8 @@
 import {
   buildTest
-} from "../src/tests";
-import { logger } from "@fs/ppaas-common";
+} from "../src/tests.js";
 
-logger.config.LogFileName = "ppaas-agent";
-
-describe("Tests Build Test", () => {
+describe("Integration Build Test", () => {
   it("Should run a build test", (done: Mocha.Done) => {
     buildTest({ unitTest: true }).then(() => done()).catch((error) => done(error));
   });

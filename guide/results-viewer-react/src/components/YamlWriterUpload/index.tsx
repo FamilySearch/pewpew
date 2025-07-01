@@ -5,14 +5,15 @@ import {
   AccordionItemHeading,
   AccordionItemPanel
 } from "react-accessible-accordion";
+import { Button, Input, Span } from "../YamlStyles";
 import { Har, HarEndpoint } from "../../util/yamlwriter";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
 import type { OpenAPIV2, OpenAPIV3} from "openapi-types";
 import React, { useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import { Div } from "../Div";
 import DropFile from "../DropFile";
-import { Span } from "../YamlStyles";
 import { convertObj } from "swagger2openapi";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -29,14 +30,6 @@ export const HeaderMain = styled.div`
   padding-bottom: 10px;
   font: 14px "Century Gothic", Futura, sans-serif;
   text-align: left;
-`;
-const StyledButton = styled.button`
-  justify-content: left;
-  padding: 2px;
-  width: fit-content;
-  height: fit-content;
-  min-width: 115px;
-  margin-top: 1.2%
 `;
 
 const AccHeadingDiv = styled.div`
@@ -188,6 +181,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultFilename: string = "";
   const [filename, setFilename] = useState(defaultFilename);
   const [state, setState] = useState(defaultState);
+  const [urlFilter, setUrlFilter] = useState("");
   const fileModalRef = useRef<ModalObject| null>(null);
   useEffectModal(fileModalRef);
   const endpointModalRef = useRef<ModalObject| null>(null);
@@ -857,24 +851,86 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     });
   };
 
-  /*
+  const handleSelectUrls = (selected?: "yes" | "no") => {
+    const outputName = state.output[filename];
+    if (!outputName) { return; }
 
-   */
+    const updatedUrls = { ...outputName.urls };
+    const updatedEndpoints = [...outputName.endpoints];
+
+    Object.keys(updatedUrls).forEach((key) => {
+      if (selected) {
+        updatedUrls[key]!.selected = selected;
+        updatedUrls[key]!.index.forEach((url) => {
+          const endpoint = updatedEndpoints.find((ep) => ep.id === url.id);
+          if (endpoint) { endpoint.selected = selected; }
+        });
+      } else if (urlFilter) {
+        const selectedByFilter = key.includes(urlFilter) ? "yes" : "no";
+        updatedUrls[key]!.selected = selectedByFilter;
+        updatedUrls[key]!.index.forEach((url) => {
+          const endpoint = updatedEndpoints.find((ep) => ep.id === url.id);
+          if (endpoint) { endpoint.selected = selectedByFilter; }
+        });
+      }
+    });
+
+    setState(({ output, ...prevState }: YamlWriterUploadState) => ({
+      ...prevState,
+      output: {
+        ...output,
+        [filename]: {
+          ...outputName,
+          urls: updatedUrls,
+          endpoints: updatedEndpoints
+        }
+      }
+    }));
+  };
+
+  const handleSelectAllHeaders = (selected: "yes" | "no") => {
+    const outputName = state.output[filename];
+    if (!outputName) {return;}
+
+    const updatedTypes = { ...outputName.types };
+    const updatedEndpoints = [...outputName.endpoints];
+
+    Object.keys(updatedTypes).forEach((key) => {
+    updatedTypes[key]!.selected = selected;
+    updatedTypes[key]!.index.forEach((type) => {
+      const endpoint = updatedEndpoints.find((ep) => ep.id === type.id);
+      if (endpoint) {endpoint.selected = selected;}
+    });
+    });
+
+    setState(({ output, ...prevState }: YamlWriterUploadState) => ({
+    ...prevState,
+    output: {
+      ...output,
+      [filename]: {
+      ...outputName,
+      types: updatedTypes,
+      endpoints: updatedEndpoints
+      }
+    }
+    }));
+  };
+
   return (
     <HeaderMain>
       <h2> Create from Upload </h2>
-      <Div style={{ marginTop: "0px", justifyContent: "space-between"}}>
-        <StyledButton onClick={() => fileModalRef.current?.openModal()}>
+      <Div style={{ marginTop: "0px", justifyContent: "space-between", height: "30px" }}>
+        <Button onClick={() => fileModalRef.current?.openModal()}>
           Upload File
-        </StyledButton>
-        <StyledButton onClick={() => swaggerUrlModalRef.current?.openModal()}>
-          Upload Swagger URL File
-        </StyledButton>
-          <h3 style={{paddingRight: "100px"}}>
-            <a href="https://familysearch.github.io/pewpew/" target="_blank">
-            Help
-            </a>
-          </h3>
+        </Button>
+        <Button onClick={() => swaggerUrlModalRef.current?.openModal()}>
+          Upload From Swagger URL
+        </Button>
+        <h3 style={{paddingRight: "100px"}}>
+          <a href="https://familysearch.github.io/pewpew/" target="_blank">
+          Help
+          </a>
+        </h3>
       </Div>
       {/* This is the upload file modal */}
       <Modal
@@ -895,16 +951,12 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         <div style={{color: "rgb(242, 241, 239)"}}>
           IMPORTANT! Swaggger HTML files must have all collapsible endpoints opened
         </div>
-        <div style={{ width: "90%", height: "250px" }}>
-          <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
-        </div>
+        <DropFile onDropFile={handleFileInput} multiple={false}></DropFile>
         <div>
           {/* for HAR */}
           {state.file && (
             <div style={{paddingTop: "13px"}}>
-              <button style={{marginRight: "5px"}} onClick={() => {
-                clearStateValue("file");
-                }}>X</button>
+              <Button style={{marginRight: "5px"}} onClick={() => clearStateValue("file")}><DeleteIcon /></Button>
               {state.file.name}
             </div>
           )}
@@ -1001,11 +1053,45 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         onSubmit={finalizeEndpoints}
         closeText="Cancel"
         isReady={true}
+        scrollable={true}
       >
         <AccordianStyleDiv style={{paddingRight: "20px"}}>
           <div>
             <Span>
-              <h2>Urls</h2>&nbsp;&nbsp;&nbsp;
+              <h2>Urls</h2>
+              <div style={{ display: "flex", alignItems: "center", marginLeft: "10px" }}>
+                <Input
+                  type="text"
+                  placeholder="Filter URLs"
+                  value={urlFilter}
+                  onChange={(e) => setUrlFilter(e.target.value)}
+                />
+                <Button
+                  onClick={() => handleSelectUrls()}
+                  style={{ marginLeft: "0"}}
+                  disabled={!urlFilter.length}
+                >
+                  Filter
+                </Button>
+                <Button
+                  onClick={() => handleSelectUrls("yes")}
+                  disabled={
+                  state.output[filename]?.urls &&
+                  Object.values(state.output[filename]!.urls).every((url) => url?.selected === "yes")
+                  }
+                >
+                  Select All
+                </Button>
+                <Button
+                  onClick={() => handleSelectUrls("no")}
+                  disabled={
+                  state.output[filename]?.urls &&
+                  Object.values(state.output[filename]!.urls).every((url) => url?.selected === "no")
+                  }
+                >
+                  Deselect All
+                </Button>
+              </div>
             </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
               {state.output[filename]?.urls && Object.keys(state.output[filename]!.urls).map((key, index) => {
@@ -1013,7 +1099,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                 return (
                   <AccordionItem key={index}>
                     <AccHeadingDiv>
-                      <button
+                      <Button
                         onClick={() => handleChange("url", key)}
                         className={"accButton" +
                           (url.selected === "yes" ? " accUrlButtonYes" : "") +
@@ -1024,7 +1110,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                         {"" + (url.selected === "yes" ? "✔" : "") +
                           (url.selected === "partial" ? "/" : "") +
                           (url.selected === "no" ? "X" : "")}
-                      </button>
+                      </Button>
                       <AccordionItemHeading className="accUrlHead">
                         <AccordionItemButton>
                           <AccHeadingText>
@@ -1054,7 +1140,29 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             </Accordion>
           </div>
           <div style={{marginTop: "25px"}}>
-            <h2>Return Types</h2>
+            <Span>
+              <h2>Return Types</h2>
+              <div style={{ display: "flex", alignItems: "center", marginLeft: "10px" }}>
+                  <Button
+                  onClick={() => handleSelectAllHeaders("yes")}
+                  disabled={
+                    state.output[filename]?.types &&
+                    Object.values(state.output[filename]!.types).every((type) => type?.selected === "yes")
+                  }
+                  >
+                  Select All
+                  </Button>
+                <Button
+                  onClick={() => handleSelectAllHeaders("no")}
+                  disabled={
+                    state.output[filename]?.types &&
+                    Object.values(state.output[filename]!.types).every((type) => type?.selected === "no")
+                  }
+                >
+                  Deselect All
+                </Button>
+              </div>
+            </Span>
             <Accordion allowMultipleExpanded={true} allowZeroExpanded={true}>
               {state.output[filename]?.types && Object.keys(state.output[filename]!.types).map((key, index) => {
                 const type = state.output[filename]!.types[key];

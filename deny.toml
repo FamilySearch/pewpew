@@ -15,7 +15,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 yanked = "warn"
 ignore = [
-    # "RUSTSEC-2020-0071",
+    # "RUSTSEC-2024-0421",
 ]
 
 [licenses]
@@ -26,7 +26,8 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "MIT",
-    "Unicode-DFS-2016",
+    # "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Zlib",
 ]
 confidence-threshold = 1.0

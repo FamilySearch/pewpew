@@ -1,4 +1,4 @@
-import { LogLevel, PpaasTestId, log, logger, s3, util } from "@fs/ppaas-common";
+import { LogLevel, PpaasTestId, log, s3, util } from "@fs/ppaas-common";
 import { PpaasEncryptS3File, PpaasEncryptS3FileParams } from "../pages/api/util/ppaasencrypts3file";
 import { encrypt, getEncryptionKey } from "../pages/api/util/secrets";
 import {
@@ -16,8 +16,6 @@ import {
   resetMockSecrets
 } from "./mock";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { ADDITIONAL_TAGS_ON_ALL } = s3;
 const filename: string = "unittest.json";
@@ -257,8 +255,8 @@ describe("PpaasEncryptS3File", () => {
 
     it("Upload a test file force should upload unchanged files", (done: Mocha.Done) => {
       mockUploadObject();
-      const lastModified: number = Date.now();
-      testPpaasEncryptS3FileUpload.setLastModifiedLocal(lastModified - 1);
+      const lastModified: number = Date.now() - 1;
+      testPpaasEncryptS3FileUpload.setLastModifiedLocal(lastModified);
       testPpaasEncryptS3FileUpload.upload(true).then(() => {
         s3FileKey = testPpaasEncryptS3FileUpload.key;
         log("testPpaasEncryptS3FileDownload.upload(true) succeeded", LogLevel.DEBUG);

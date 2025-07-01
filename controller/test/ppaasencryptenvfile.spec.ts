@@ -13,7 +13,6 @@ import {
   LogLevel,
   PpaasTestId,
   log,
-  logger,
   s3,
   util
 } from "@fs/ppaas-common";
@@ -32,8 +31,6 @@ import {
   resetMockSecrets
 } from "./mock";
 import { expect } from "chai";
-
-logger.config.LogFileName = "ppaas-controller";
 
 const { ADDITIONAL_TAGS_ON_ALL, defaultTestFileTags } = s3;
 const UNIT_TEST_FILENAME: string = "unittest.json";
@@ -516,8 +513,8 @@ describe("PpaasEncryptEnvironmentFile", () => {
     });
 
     it("Upload a test file force should upload unchanged files", (done: Mocha.Done) => {
-      const lastModified: number = Date.now();
-      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified - 1);
+      const lastModified: number = Date.now() - 1;
+      testPpaasEncryptEnvironmentFileUpload.setLastModifiedLocal(lastModified);
       testPpaasEncryptEnvironmentFileUpload.upload(true).then(() => {
         log("testPpaasEncryptEnvironmentFileDownload.upload(true) succeeded", LogLevel.DEBUG);
         // If it's newer, but forced we should upload it and set the time to last modified

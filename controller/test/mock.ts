@@ -62,7 +62,7 @@ import {
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";
 import crypto from "crypto";
-import { sdkStreamMixin } from "@aws-sdk/util-stream-node";
+import { sdkStreamMixin } from "@smithy/util-stream";
 const { MAX_STRING_LENGTH } = bufferConstants;
 
 const {
@@ -98,9 +98,12 @@ export function mockS3 (): AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3
     return _mockedS3Instance;
   }
   // _mockedS3Instance = mockClient(S3Client);
-  s3Config.s3Client = undefined as any;
-  initS3();
-  _mockedS3Instance = mockClient(s3Config.s3Client);
+  // Forced reset Create a new client instance
+  s3Config.s3Client = undefined;
+  const s3Client = initS3();
+  _mockedS3Instance = mockClient(s3Client);
+  // Instead of creating a new client each time, return this one that is mocked
+  s3Config.s3Client = () => s3Client;
   _mockedS3Instance.on(DeleteObjectCommand).resolves({});
   // There's no parameters, so just mock it
   _mockedS3Instance.on(PutObjectTaggingCommand).resolves({});
@@ -111,7 +114,7 @@ export function mockS3 (): AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3
 export function resetMockS3 (): void {
   if (_mockedS3Instance !== undefined) {
     _mockedS3Instance.reset();
-    s3Config.s3Client = undefined as any;
+    s3Config.s3Client = undefined;
     _mockedS3Instance = undefined;
   }
 }
@@ -130,7 +133,7 @@ export function mockListObject ({ filename = UNIT_TEST_FILENAME, folder = UNIT_T
 
 export function mockListObjects (contents?: S3Object[] | undefined, truncated?: boolean) {
   const mockedS3Instance: AwsStub<S3ServiceInputTypes, S3ServiceOutputTypes, S3ClientResolvedConfig> = mockS3();
-  mockedS3Instance.on(ListObjectsV2Command).resolves({ Contents: contents, IsTruncated: truncated });
+  mockedS3Instance.on(ListObjectsV2Command).resolves({ Contents: contents, KeyCount: contents?.length || 0, IsTruncated: truncated });
 }
 
 export function mockUploadObject ({ filename = UNIT_TEST_FILENAME, folder = UNIT_TEST_KEY_PREFIX, duration }: {
@@ -255,9 +258,12 @@ export function mockSqs (): AwsStub<SQSServiceInputTypes, SQSServiceOutputTypes,
     return _mockedSqsInstance;
   }
   // _mockedSqsInstance = mockClient(SQSClient);
-  sqsConfig.sqsClient = undefined as any;
-  initSqs();
-  _mockedSqsInstance = mockClient(sqsConfig.sqsClient);
+  // Forced reset Create a new client instance
+  sqsConfig.sqsClient = undefined;
+  const sqsClient = initSqs();
+  _mockedSqsInstance = mockClient(sqsClient);
+  // Instead of creating a new client each time, return this one that is mocked
+  sqsConfig.sqsClient = () => sqsClient;
   log("mockSqs created", LogLevel.DEBUG, { mockedSqsInstance: _mockedSqsInstance, sqs: sqsConfig.sqsClient });
   // Always mock deleteMessage so we don't accidentally call it behind the scenes. Don't expose the call like the others
   _mockedSqsInstance.on(DeleteMessageCommand).resolves({});
@@ -270,7 +276,7 @@ export function mockSqs (): AwsStub<SQSServiceInputTypes, SQSServiceOutputTypes,
 export function resetMockSqs (): void {
   if (_mockedSqsInstance !== undefined) {
     _mockedSqsInstance.reset();
-    sqsConfig.sqsClient = undefined as any;
+    sqsConfig.sqsClient = undefined;
     _mockedSqsInstance = undefined;
   }
 }

@@ -7,10 +7,10 @@ import {
   init as initS3,
   listFiles,
   uploadFileContents
-} from "./util/s3";
-import { LogLevel, log } from "./util/log";
-import { TestStatus, TestStatusMessage } from "../types";
-import PpaasTestId from "./ppaastestid";
+} from "./util/s3.js";
+import { LogLevel, log } from "./util/log.js";
+import { TestStatus, TestStatusMessage } from "../types/index.js";
+import PpaasTestId from "./ppaastestid.js";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 
 export const createS3Filename = (ppaasTestId: PpaasTestId): string => `${ppaasTestId.testId}.info`;
@@ -40,7 +40,7 @@ export class PpaasTestStatus implements TestStatusMessage {
     try {
       initS3();
     } catch (error: unknown) {
-      log("Could not initialize s3", LogLevel.ERROR, error);
+      log("Could not initialize s3", LogLevel.WARN, error);
       throw error;
     }
     this.ppaasTestId = ppaasTestId;
@@ -110,8 +110,12 @@ export class PpaasTestStatus implements TestStatusMessage {
     return this.ppaasTestId.s3Folder;
   }
 
-  // Get one initially
-  // Returns an object, false if not found, or true if unchanged
+  /**
+   * Internal function to get the latest TestStatusMessage
+   * @param ppaasTestId testId to retrieve
+   * @param lastModified if provided will only get changes
+   * @returns false if not found, true if unchanged, or the object
+   */
   protected static async getStatusInternal (ppaasTestId: PpaasTestId, lastModified?: Date): Promise<PpaasTestStatus | boolean> {
     const key = getKey(ppaasTestId);
     try {
@@ -146,11 +150,11 @@ export class PpaasTestStatus implements TestStatusMessage {
         log(`PpaasTestStatus.getStatus(${ppaasTestId.s3Folder})`, LogLevel.DEBUG, { newMessage: newMessage.sanitizedCopy() });
         return newMessage;
       } catch (error: unknown) {
-        log(`PpaasTestStatus Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.ERROR, error);
+        log(`PpaasTestStatus Could not parse ${getKey(ppaasTestId)} contents: ` + contents, LogLevel.WARN, error);
         throw error;
       }
     } catch (error: unknown) {
-      log(`PpaasTestStatus.getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.ERROR, error);
+      log(`PpaasTestStatus.getMessage(${ppaasTestId.s3Folder}) ERROR`, LogLevel.WARN, error);
       throw error;
     }
   }
@@ -223,7 +227,7 @@ export class PpaasTestStatus implements TestStatusMessage {
           log(`PpaasTestStatus.getStatus(${testIdContentsRead.ppaasTestId.s3Folder})`, LogLevel.DEBUG, { newMessage: newMessage.sanitizedCopy() });
           return newMessage;
         }).catch((error) => {
-          log(`Could not retrieve statuses for s3Folder ${testIdContents.ppaasTestId.s3Folder}`, LogLevel.ERROR, error);
+          log(`Could not retrieve statuses for s3Folder ${testIdContents.ppaasTestId.s3Folder}`, LogLevel.WARN, error);
           throw error;
         })
       );
@@ -232,6 +236,11 @@ export class PpaasTestStatus implements TestStatusMessage {
     return undefined;
   }
 
+  /**
+   * Reads the updated TestStatusMessage from S3 and returns the last modified date
+   * @param force Optional parameter to force redownloading
+   * @returns The date of the last modified of the file in S3
+   */
   public async readStatus (force?: boolean): Promise<Date> {
     const updatedStatus: PpaasTestStatus | boolean = await PpaasTestStatus.getStatusInternal(
       this.ppaasTestId,
@@ -264,7 +273,7 @@ export class PpaasTestStatus implements TestStatusMessage {
       tags: this.tags
     });
     this.lastModifiedRemote = newDate; // Update the last modified
-    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.INFO, this.sanitizedCopy());
+    log(`PpaasTestStatus PpaasTestStatus.send url: ${this.url}`, LogLevel.DEBUG, this.sanitizedCopy());
     return this.url;
   }
   // Unlike messages, we don't want to delete this

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { util } from "../src/index";
+import { util } from "../src/index.js";
 
 const {
   CONTROLLER_ENV,

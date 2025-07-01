@@ -339,7 +339,7 @@ const afterBuildTicks = (chart: any) => {
     const datasets = chart.data.datasets!;
     let allHidden = true;
     if (legendItem.datasetIndex === undefined) {
-      log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
+      log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.WARN, legendItem);
       return;
     }
     for (let i = 0; i < datasets.length; i++) {

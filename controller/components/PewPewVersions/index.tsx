@@ -1,7 +1,7 @@
+import React, { JSX } from "react";
 import { Danger } from "../Alert";
-import Div from "../Div";
-import React from "react";
-import Toaster  from "../Toaster";
+import { Div } from "../Div";
+import { Toaster }  from "../Toaster";
 import styled from "styled-components";
 
 const VersionDiv = styled(Div)`

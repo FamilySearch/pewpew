@@ -21,13 +21,11 @@ import {
 import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "./api/util/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
-import React, { useEffect, useState } from "react";
-import axios, { AxiosResponse } from "axios";
+import React, { JSX, useEffect, useState } from "react";
+import axios, { AxiosError, AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestData } from "./api/util/clientutil";
 import Div from "../components/Div";
 import { Layout } from "../components/Layout";
-// Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
-import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import { TestInfo } from "../components/TestInfo";
 import { TestManager } from "./api/util/testmanager";
 import { TestResults } from "../components/TestResults";
@@ -35,12 +33,11 @@ import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { TestsList } from "../components/TestsList";
 import { authPage } from "./api/util/authserver";
 import getConfig from "next/config";
-import { getPewPewErrors } from "./api/error/[yamlFile]/[dateString]";
 import styled from "styled-components";
 import { useRouter } from "next/router";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: any = getConfig() && getConfig().publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
+const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
 const TEST_STATUS_REFRESH_DELAY: number = Number(publicRuntimeConfig.TEST_STATUS_REFRESH_DELAY) || 10000;
 const TEST_ERRORS_MAX_DISPLAYED: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_DISPLAYED) || 20;
 const TEST_ERRORS_MAX_LINE_LENGTH: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_LINE_LENGTH) || 200;
@@ -60,8 +57,6 @@ const TestStatusSection = styled(Div)`
 // What this returns or calls from the parents
 export interface TestStatusProps {
   testData: TestData | undefined;
-  pewpewStdErrors?: string[];
-  pewpewStdErrorsTruncated?: boolean;
   allTests: AllTests | undefined;
   testIdSearch?: string;
   searchTestResult?: TestData[];
@@ -73,6 +68,9 @@ export interface TestStatusProps {
 export interface TestStatusState {
   testIdSearch: string;
   searchTestResult: TestData[] | undefined;
+  pewpewStdErrors?: string[];
+  pewpewStdErrorsTruncated?: boolean;
+  pewpewStdErrorsRedirect?: boolean;
   error: string | undefined;
 }
 
@@ -81,8 +79,6 @@ const noTestsFoundEror = (searchString: string, searchExtension?: string | strin
 
 const TestStatusPage = ({
   testData,
-  pewpewStdErrors,
-  pewpewStdErrorsTruncated,
   allTests,
   errorLoading,
   authPermission,
@@ -93,6 +89,9 @@ const TestStatusPage = ({
   const defaultState: TestStatusState = {
     testIdSearch: propsTestIdSearch || "",
     searchTestResult: propsSearchTestResult,
+    pewpewStdErrors: undefined,
+    pewpewStdErrorsTruncated: undefined,
+    pewpewStdErrorsRedirect: undefined,
     error: errorLoading
   };
   const [state, setFormData] = useState(defaultState);
@@ -135,6 +134,67 @@ const TestStatusPage = ({
     }
   }, [testData?.status]);
 
+  // Lazy load the console errors on the client-side
+  useEffect(() => {
+    log("console errors useEffect", LogLevel.DEBUG, testData?.s3Folder);
+    // If it's not running yet there's no file
+    if (testData?.status && (testData.status === TestStatus.Running || testData.status === TestStatus.Finished || testData.status === TestStatus.Failed)) {
+      const url = formatPageHref(API_ERROR_FORMAT(testData.s3Folder));
+      log("console errors url", LogLevel.DEBUG, url);
+      // If we're client-side the cookie gets passed automatically
+      axios.get(url).then((response: AxiosResponse) => {
+        log("console error data response: " + response.status, LogLevel.DEBUG, response.statusText);
+        let pewpewStdErrors: string[] | undefined;
+        let pewpewStdErrorsTruncated: boolean | undefined;
+        // Get the text contents
+        const pewpewErrorText: string | undefined = response.data;
+        log("pewpewErrorText", LogLevel.DEBUG, { type: typeof pewpewErrorText, length: pewpewErrorText?.length });
+        if (pewpewErrorText && pewpewErrorText.length > 0) {
+          // Split and remove empty lines
+          pewpewStdErrors = pewpewErrorText.split("\n").filter((line: string) => line);
+          // https://fhjira.churchofjesuschrist.org/browse/SYSTEST-1115
+          if (pewpewStdErrors.length > TEST_ERRORS_MAX_DISPLAYED) {
+            // Cap this at TEST_ERRORS_MAX_DISPLAYED length
+            pewpewStdErrors = pewpewStdErrors.slice(0, TEST_ERRORS_MAX_DISPLAYED);
+            // Set as truncated
+            pewpewStdErrorsTruncated = true;
+          }
+          // Truncate line length
+          pewpewStdErrors = pewpewStdErrors.map((line: string) => {
+            if (line.length > TEST_ERRORS_MAX_LINE_LENGTH) {
+              pewpewStdErrorsTruncated = true;
+              return line.substring(0, TEST_ERRORS_MAX_LINE_LENGTH) + " ...";
+            }
+            return line;
+          });
+          log("pewpewStdErrors", LogLevel.DEBUG, pewpewStdErrors.length);
+          setState({
+            pewpewStdErrors,
+            pewpewStdErrorsTruncated,
+            pewpewStdErrorsRedirect: undefined
+          });
+        } else {
+          setState({
+            pewpewStdErrors: undefined,
+            pewpewStdErrorsTruncated: undefined,
+            pewpewStdErrorsRedirect: undefined
+          });
+        }
+      }).catch((error: unknown) => {
+        log("Could not retrieve the console errors", LogLevel.WARN, error);
+        setState({
+          pewpewStdErrors: ["Could not retrieve the console errors:", formatError(error)],
+          pewpewStdErrorsTruncated: true,
+          pewpewStdErrorsRedirect: (error as AxiosError)?.isAxiosError
+            ? (error as AxiosError).response?.status === 413
+            : undefined
+        });
+      });
+    } else {
+      setState({ pewpewStdErrors: undefined, pewpewStdErrorsTruncated: undefined });
+    }
+  }, [testData?.testId]);
+
   let body: JSX.Element = <Div>Unknown Error</Div>;
   if (testData) {
     body = <TestStatusSection>
@@ -142,7 +202,7 @@ const TestStatusPage = ({
         <TestStatusSection>
           <TestInfo testData={testData} />
         </TestStatusSection>
-        {(testData.errors || pewpewStdErrors) && <TestStatusSection>
+        {(testData.errors || state.pewpewStdErrors) && <TestStatusSection>
           {testData.errors && <Warning>
             <TestStatusSection>
             Errors during Test
@@ -151,14 +211,16 @@ const TestStatusPage = ({
             </ul>
             </TestStatusSection>
           </Warning>}
-          {pewpewStdErrors && <Warning>
+          {state.pewpewStdErrors && <Warning>
             <TestStatusSection>
             Pewpew Console Standard Errors
-            {pewpewStdErrorsTruncated && /** If pewpewStdErrors are truncated, link to full results */
-              <a href={formatPageHref(API_ERROR_FORMAT(testData.s3Folder))} target="_blank">Errors Truncated - Click for full log</a>
+            {state.pewpewStdErrorsTruncated && /** If pewpewStdErrors are truncated, link to full results */
+              <a href={formatPageHref(API_ERROR_FORMAT(testData.s3Folder)) + (state.pewpewStdErrorsRedirect ? "?redirect" : "")} target="_blank">
+                Errors Truncated - Click for full log
+              </a>
             }
             <ul>
-              {pewpewStdErrors.map((error: string, index: number) => <li key={"error" + index}>{error}</li>)}
+              {state.pewpewStdErrors.map((error: string, index: number) => <li key={"error" + index}>{error}</li>)}
             </ul>
             </TestStatusSection>
           </Warning>}
@@ -296,13 +358,6 @@ export const getServerSideProps: GetServerSideProps =
     // If we get more than one testId, just return all, don't try to pick one
     if (ctx.query?.testId && !Array.isArray(ctx.query.testId)) {
       const testId: string = ctx.query.testId;
-      let ppaasTestId: PpaasTestId;
-      try {
-        ppaasTestId = PpaasTestId.getFromTestId(testId);
-      } catch (error) {
-        logServer(`Could not parse ${testId} into a PpaasTestId`, LogLevelServer.ERROR, error);
-        throw error;
-      }
       // If we're client-side the cookie gets passed. Server side it doesn't
       const testDataResponse: TestManagerResponse = await TestManager.getTest(testId);
       if (testDataResponse.status >= 300) {
@@ -311,40 +366,9 @@ export const getServerSideProps: GetServerSideProps =
       // Convert it to json
       const testData: TestData = (testDataResponse as TestDataResponse).json;
 
-      // If we're client-side the cookie gets passed. Server side it doesn't
-      let pewpewStdErrors: string[] | undefined;
-      let pewpewStdErrorsTruncated: boolean | undefined;
-      // Get the text contents
-      const { yamlFile, dateString } = ppaasTestId;
-      const pewpewErrorText: string | undefined = await getPewPewErrors({ yamlFile, dateString });
-      logServer("pewpewErrorText", LogLevelServer.DEBUG, pewpewErrorText);
-      if (pewpewErrorText && pewpewErrorText.length > 0) {
-        // Split and remove empty lines
-        pewpewStdErrors = pewpewErrorText.split("\n").filter((line: string) => line);
-        // https://fhjira.churchofjesuschrist.org/browse/SYSTEST-1115
-        if (pewpewStdErrors.length > TEST_ERRORS_MAX_DISPLAYED) {
-          // Cap this at TEST_ERRORS_MAX_DISPLAYED length
-          pewpewStdErrors = pewpewStdErrors.slice(0, TEST_ERRORS_MAX_DISPLAYED);
-          // Set as truncated
-          pewpewStdErrorsTruncated = true;
-        }
-        // Truncate line length
-        pewpewStdErrors = pewpewStdErrors.map((line: string) => {
-          if (line.length > TEST_ERRORS_MAX_LINE_LENGTH) {
-            pewpewStdErrorsTruncated = true;
-            return line.substring(0, TEST_ERRORS_MAX_LINE_LENGTH) + " ...";
-          }
-          return line;
-        });
-        logServer("pewpewStdErrors", LogLevelServer.DEBUG, pewpewStdErrors);
-      }
-
-      // if (testData.status === TestStatus.Scheduled)
       return {
         props: {
           testData,
-          pewpewStdErrors,
-          pewpewStdErrorsTruncated,
           allTests: undefined,
           errorLoading: undefined,
           authPermission: authPermissions.authPermission

@@ -6,11 +6,7 @@ import { authApi } from "../../../util/authserver";
 import { createErrorResponse } from "../../../util/util";
 import { getS3Response } from "../../../util/s3";
 
-// We have to set this before we make any log calls
-logger.config.LogFileName = "ppaas-controller";
-
 const { getFileContents, listFiles } = s3;
-
 
 export async function getPewPewErrors ({ yamlFile, dateString }: { yamlFile: string, dateString: string }): Promise<string | undefined> {
   const testId = `${yamlFile}${dateString}`;
@@ -25,7 +21,7 @@ export async function getPewPewErrors ({ yamlFile, dateString }: { yamlFile: str
     try {
       return await getFileContents({ filename, s3Folder, maxLength: 5000 });
     } catch (error) {
-      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.ERROR, error, files);
+      log(`${key} not found in s3 after listFiles returned: ${files}`, LogLevel.WARN, error, files);
     }
   }
 }
@@ -41,14 +37,17 @@ export default async (request: NextApiRequest, response: NextApiResponse<GetObje
     }
     try {
       const {
-        query: { yamlFile, dateString }
+        query: { yamlFile, dateString, redirect }
       } = request;
       const testId = `${yamlFile}${dateString}`;
       log(`yamlFile: ${yamlFile}, dateString: ${dateString}, testId: ${testId}`, LogLevel.DEBUG, { query: request.query });
       if (yamlFile && !Array.isArray(yamlFile) && dateString && !Array.isArray(dateString)) {
         const filename: string = logger.pewpewStdErrFilename(testId);
         const s3Folder: string = `${yamlFile}/${dateString}`;
-        const found = await getS3Response({ request, response, filename, s3Folder});
+        // If it's a string treat it as truthy. I.e. ?redirect will redirect. Only ?redirect=false
+        // Any non string fall back to the default
+        const redirectToS3: boolean | undefined = typeof redirect === "string" ? redirect.toLowerCase() !== "false" : undefined;
+        const found = await getS3Response({ request, response, filename, s3Folder, redirectToS3 });
         if (found) { return; }
 
         response.status(404).json({ message: `No error file found for ${request.method} ${request.url}` });

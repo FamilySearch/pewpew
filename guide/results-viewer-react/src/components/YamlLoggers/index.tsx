@@ -1,11 +1,14 @@
+import { Button, Div, Input, InputsDiv, NonFlexSpan, Span, TipButton } from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { Checkbox, Div, InputsDiv, Label, NonFlexSpan, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { LoggerModal, debugLoggerSelect, errorLoggerSelect, killLoggerSelect } from "./LoggerModal";
 import { LoggerSelectEntry, PewPewLogger } from "../../util/yamlwriter";
 import { ModalObject, useEffectModal } from "../Modal";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
+import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
+import { Row } from "../Div";
+import ToggleDefaults from "../ToggleDefaults/ToggleDefaults";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
 
@@ -15,15 +18,14 @@ const BorderDiv = styled.div`
   border-top: 2px dotted rgb(206, 199, 199);
   margin-top: 5px;
 `;
-const EditListButton = styled.button`
-  width: 100px;
-`;
 
 export const LOGGERS = "loggers";
-const DEBUG_LOGGER = "debugLogger";
-const ERROR_LOGGER = "errorLogger";
-const KILL_LOGGER = "killLogger";
-const DEFAULT_LOGGERS = "defaultLoggers";
+
+export enum LoggerType {
+  DEBUG_LOGGER = "debugLogger",
+  ERROR_LOGGER = "errorLogger",
+  KILL_LOGGER = "killLogger"
+}
 
 export type DefaultLoggerTypeAll = DefaultVariablesType | "defaultLoggers";
 export type PewPewLoggerBooleanType = "kill" | "pretty";
@@ -55,7 +57,7 @@ export const newLogger = (loggerId: string = uniqueId()): PewPewLogger => ({
 });
 
 export const debugLoggerVar = (): PewPewLogger => ({
-  id: DEBUG_LOGGER,
+  id: LoggerType.DEBUG_LOGGER,
   name: "httpAll",
   where: "",
   to: "stdout",
@@ -65,7 +67,7 @@ export const debugLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const errorLoggerVar = (): PewPewLogger => ({
-  id: ERROR_LOGGER,
+  id: LoggerType.ERROR_LOGGER,
   name: "httpErrors",
   where: "response.status >= 400",
   to: "stderr",
@@ -75,7 +77,7 @@ export const errorLoggerVar = (): PewPewLogger => ({
   kill: false
 });
 export const killLoggerVar = (): PewPewLogger => ({
-  id: KILL_LOGGER,
+  id: LoggerType.KILL_LOGGER,
   name: "testEnd",
   where: "response.status >= 500",
   to: "stderr",
@@ -87,11 +89,11 @@ export const killLoggerVar = (): PewPewLogger => ({
 
 function getDefaultLogger (loggerName: DefaultVariablesType): PewPewLogger {
   switch (loggerName) {
-    case DEBUG_LOGGER:
+    case LoggerType.DEBUG_LOGGER:
       return debugLoggerVar();
-    case ERROR_LOGGER:
+    case LoggerType.ERROR_LOGGER:
       return errorLoggerVar();
-    case KILL_LOGGER:
+    case LoggerType.KILL_LOGGER:
       return killLoggerVar();
     default:
       throw new Error("getDefaultLogger Invalid loggerName: " + loggerName);
@@ -115,20 +117,16 @@ export interface LoggerProps {
   clearAllLoggers: () => void;
   deleteLogger: (loggerId: string) => void;
   changeLogger: (pewpewLogger: PewPewLogger) => void;
-  defaultYaml: boolean;
   loggers: PewPewLogger[];
 }
 
 interface LoggerState extends DefaultVariables {
-  /** State of the "Default Loggers" checkbox */
-  defaultLoggers: boolean;
   /** This should be a PewPewLogger.id */
   currentLogger: PewPewLogger;
 }
 
-export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
+export function Loggers ({ ...props }: LoggerProps) {
   const defaultState: LoggerState = {
-    defaultLoggers: defaultYaml,
     currentLogger: newLogger(),
     ...defaultUI
   };
@@ -140,28 +138,10 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
   const modalRef = useRef<ModalObject| null>(null);
   useEffectModal(modalRef);
 
-  // Prepopulate the loggers based on the defaultYaml
-  useEffect(() => {
-    switchAllDefaults(defaultYaml);
-  }, [defaultYaml]);
-
-  const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const target = event.target as HTMLInputElement;
-    const id = target.id as DefaultLoggerTypeAll;
-    const checked = target.checked;
-    log("handleClickDefault", LogLevel.DEBUG, { id, checked });
-    if (id === DEFAULT_LOGGERS) {
-      switchAllDefaults(checked);
-    } else {
-      switchDefault(id, checked);
-    }
-  };
-
   const switchAllDefaults = (newChecked: boolean) => {
     log("switchAllDefaults", LogLevel.DEBUG, { newChecked });
     switchDefault("errorLogger", newChecked);
     switchDefault("killLogger", newChecked);
-    updateState({ defaultLoggers: newChecked });
   };
 
   const switchDefault = (loggerType: DefaultVariablesType, newChecked: boolean) => {
@@ -220,35 +200,41 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
     modalRef.current?.openModal();
   };
 
+  const getDefaultLoggerExplanation = (type: LoggerType) => {
+    switch (type) {
+      case LoggerType.DEBUG_LOGGER:
+        return "http_all logs everything for debugging";
+      case LoggerType.ERROR_LOGGER:
+        return "http_errors logs everything that includes an error status";
+      case LoggerType.KILL_LOGGER:
+        return "test_end logs status errors 500 and above and kills tests with too many errors";
+    }
+  };
+
   // https://github.com/reactjs/react-transition-group/issues/904
   // http://reactcommunity.org/react-transition-group/transition#Transition-prop-nodeRef
   const nodeRef = useRef(null);
   return (
     <InputsDiv>
-    <button onClick={() => props.addLogger(newLogger())}>
-      Add Loggers
-    </button>
-    <button onClick={props.clearAllLoggers}>
-      Clear All Loggers
-    </button>&nbsp;&nbsp;
-    <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
-    &nbsp;&nbsp;
-    <label htmlFor={DEFAULT_LOGGERS}> Default Loggers </label>
-    <QuestionBubble text="Default loggers include an error logger and a kill logger"></QuestionBubble>
-    <Checkbox type="checkbox" id={DEFAULT_LOGGERS} onChange={handleClickDefault} checked={state.defaultLoggers} />
-    <Div>
-      <Label htmlFor={DEBUG_LOGGER}> Debug Logger </Label>
-      <QuestionBubble text="http_all logs everything for debugging"></QuestionBubble>
-      <Checkbox type="checkbox" id={DEBUG_LOGGER} onChange={handleClickDefault} checked={state.debugLogger} />
-
-      <Label htmlFor={ERROR_LOGGER}> Error Logger </Label>
-      <QuestionBubble text="http_errors logs everything that includes an error status"></QuestionBubble>
-      <Checkbox type="checkbox" id={ERROR_LOGGER} onChange={handleClickDefault} checked={state.errorLogger} />
-
-      <Label htmlFor={KILL_LOGGER}> Kill Logger </Label>
-      <QuestionBubble text="test_end logs status errors 500 and above and kills test with too many errors"></QuestionBubble>
-      <Checkbox type="checkbox" id={KILL_LOGGER} onChange={handleClickDefault} checked={state.killLogger} />
-    </Div>
+    <Row style={{ justifyContent: "start" }}>
+      <Button onClick={() => props.addLogger(newLogger())}>
+        Add Logger
+      </Button>
+      <Button onClick={props.clearAllLoggers}>
+        Clear All Loggers
+      </Button>&nbsp;&nbsp;
+      <QuestionBubble text="Click here form more information about Loggers" href="https://familysearch.github.io/pewpew/config/loggers-section.html"></QuestionBubble>
+    </Row>
+    <Row style={{ justifyContent: "start" }}>
+      <ToggleDefaults
+        title="Loggers"
+        handleAddMissing={() => switchAllDefaults(true)}
+        handleDeleteAll={() => switchAllDefaults(false)}
+        addDisabled={state.errorLogger && state.killLogger}
+        deleteDisabled={!state.errorLogger || !state.killLogger}
+      />
+      <QuestionBubble text="Default loggers include an error logger and a kill logger"></QuestionBubble>
+    </Row>
     <TransitionGroup className="loadPatter-section_list" nodeRef={nodeRef}>
       {Array.from(loggerMap.values()).map((logger: PewPewLogger) => (
         <CSSTransition key={logger.id} timeout={300} classNames="load" nodeRef={nodeRef}>
@@ -256,39 +242,39 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
               <Span style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "7px"}}> Name: </label>
                 <QuestionBubble text="Name of Logger"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="name" name={logger.id} onChange={(event) => changeLogger(logger, "name", event.target.value)} value={logger.name} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="name" name={logger.id} onChange={(event) => changeLogger(logger, "name", event.target.value)} value={logger.name} />
 
                 <label style={{marginRight: "5px"}}> Select: </label>
                 <QuestionBubble text="Select data to be logged"></QuestionBubble>
-                <EditListButton onClick={() => openModal(logger)}>
+                <Button onClick={() => openModal(logger)}>
                   Edit List
-                </EditListButton>
+                </Button>
               </Span>
               <NonFlexSpan style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "5px"}}> Where: </label>
                 <QuestionBubble text="Only log data that meets where clause"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="where" name={logger.id} onChange={(event) => changeLogger(logger, "where", event.target.value)} value={logger.where} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="where" name={logger.id} onChange={(event) => changeLogger(logger, "where", event.target.value)} value={logger.where} />
 
                 <label style={{marginRight: "17px"}}> Limit: </label>
                 <QuestionBubble text="Integer indicates logger will only log up to n values"></QuestionBubble>
-                <input type="text" style={{width: "100px"}} id="limit" name={logger.id} min="0" onChange={(event) => changeLogger(logger, "limit", event.target.value)} value={logger.limit} />
+                <Input type="text" style={{width: "100px"}} id="limit" name={logger.id} min="0" onChange={(event) => changeLogger(logger, "limit", event.target.value)} value={logger.limit} />
 
-                <button style={{marginLeft: "200px"}} id={logger.id} onClick={() => deleteLogger(logger.id)}>X</button>
+                <Button style={{marginLeft: "200px"}} id={logger.id} onClick={() => deleteLogger(logger.id)}><DeleteIcon /></Button>
               </NonFlexSpan>
               <Span style={{paddingBottom: "15px"}}>
                 <label style={{marginRight: "34.5px"}}> To: </label>
                 <QuestionBubble text="Where you want data logged to (File, splunk, etc.)"></QuestionBubble>
-                <input type="text" style={{width: "150px", marginRight: "120px"}} id="to" name={logger.id} onChange={(event) => changeLogger(logger, "to", event.target.value)} value={logger.to} />
+                <Input type="text" style={{width: "150px", marginRight: "120px"}} id="to" name={logger.id} onChange={(event) => changeLogger(logger, "to", event.target.value)} value={logger.to} />
                 <div>
                   <span >
                     <label htmlFor={logger.id + "kill"} style={{marginRight: "5px"}}> Kill: </label>
                     <QuestionBubble text="Optional | end test after limit is reached"></QuestionBubble>
-                    <input style={{marginRight: "15px"}} type="checkbox" id="kill" name={logger.id} onChange={(event) => handleClickLogger(logger, "kill", event.target.checked)} checked={logger.kill} />
+                    <Input style={{marginRight: "15px"}} type="checkbox" id="kill" name={logger.id} onChange={(event) => handleClickLogger(logger, "kill", event.target.checked)} checked={logger.kill} />
                   </span>
                   <span>
                     <label htmlFor={logger.id + "pretty"} style={{marginRight: "5px"}}> Pretty: </label>
                     <QuestionBubble text="Optional | display results on separate lines (Do not use if logging to splunk)"></QuestionBubble>
-                    <input style={{marginRight: "15px"}} type="checkbox" id="pretty" name={logger.id} onChange={(event) => handleClickLogger(logger, "pretty", event.target.checked)} checked={logger.pretty} />
+                    <Input style={{marginRight: "15px"}} type="checkbox" id="pretty" name={logger.id} onChange={(event) => handleClickLogger(logger, "pretty", event.target.checked)} checked={logger.pretty} />
                   </span>
                 </div>
               </Span>
@@ -302,6 +288,17 @@ export function Loggers ({ defaultYaml, ...props }: LoggerProps) {
         onClose={changeLoggerSelectOnClose}
       />
     </TransitionGroup>
+
+    {[LoggerType.DEBUG_LOGGER, LoggerType.ERROR_LOGGER, LoggerType.KILL_LOGGER].filter((value) => !loggerMap.has(value)).map((loggerName) => {
+      return (
+        <Div key={loggerName}>
+          <TipButton id={loggerName} onClick={() => switchDefault(loggerName as keyof DefaultVariables, true)}>
+            Add {loggerName.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase())}
+            <span>{getDefaultLoggerExplanation(loggerName)}</span>
+          </TipButton>
+        </Div>
+      );
+    })}
   </InputsDiv>
   );
 }

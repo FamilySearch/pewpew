@@ -431,7 +431,7 @@ export const TestResults = ({ testData }: TestResultProps) => {
 
   useEffect(() => {
     import("chartjs-adapter-date-fns")
-    .catch((error) => log("Could not load chartjs-adapter-date-fns import", LogLevel.ERROR, error));
+    .catch((error) => log("Could not load chartjs-adapter-date-fns import", LogLevel.WARN, error));
   }, []);
 
   useEffect(() => {
@@ -442,9 +442,9 @@ export const TestResults = ({ testData }: TestResultProps) => {
       testData.status === TestStatus.Running
     ) {
       const intervalId = setInterval(() => {
-      fetchData(state.resultsPath!).catch(function (error) {
-          log("Error Fetching Data: " + state.resultsPath, LogLevel.ERROR, error);
-      });
+      fetchData(state.resultsPath!).catch((error) =>
+        log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
+      );
       }, 15000);
       return () => clearInterval(intervalId);
     } else if (
@@ -453,9 +453,9 @@ export const TestResults = ({ testData }: TestResultProps) => {
       !state.error &&
       (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)
     ) {
-      fetchData(state.resultsPath).catch(function (error) {
-        log("Error Fetching Data: " + state.resultsPath, LogLevel.ERROR, error);
-      });
+      fetchData(state.resultsPath).catch((error) =>
+        log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
+      );
     }
     return undefined;
   }, [testData.status]);

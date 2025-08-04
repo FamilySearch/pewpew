@@ -14,7 +14,6 @@ import {
   util
 } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
-import ExpiryMap from "expiry-map";
 import { PewPewTest } from "./pewpewtest.js";
 import { config as healthcheckConfig } from "./healthcheck.js";
 import { join as pathJoin } from "path";
@@ -54,7 +53,7 @@ endpoints:
 `;
 
 /** key is an id/timestamp, result is either boolean (finished/not finished) or error */
-const buildTestMap = new ExpiryMap<string, boolean | unknown>(600_000); // 10 minutes
+const buildTestMap = new Map<string, boolean | unknown>();
 
 async function pollTestStatusForFinished (ppaasTestStatus: PpaasTestStatus): Promise<TestStatus> {
   let previousDate: Date = await ppaasTestStatus.readStatus();

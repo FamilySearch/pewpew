@@ -507,11 +507,8 @@ export async function validateYamlfile (
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {
   // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
-  // eslint-disable-next-line no-var
   var runningTests: Map<string, StoredTestData> | undefined;
-  // eslint-disable-next-line no-var
   var recentTests: Map<string, StoredTestData> | undefined;
-  // eslint-disable-next-line no-var
   var requestedTests: Map<string, StoredTestData> | undefined;
 }
 

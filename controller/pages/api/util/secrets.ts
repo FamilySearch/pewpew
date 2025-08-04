@@ -30,7 +30,6 @@ declare global {
   // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
   // https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#type-checking-for-globalthis
   // Note that global variables declared with let and const don’t show up on globalThis.
-  // eslint-disable-next-line no-var
   var secretsConfig: SecretsConfig | undefined;
 }
 

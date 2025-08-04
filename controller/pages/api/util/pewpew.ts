@@ -77,7 +77,6 @@ export async function getPewpew (): Promise<ErrorResponse | PewPewVersionsRespon
 declare global {
   // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
   /** The pewpew version that 'latest' is currently set to */
-  // eslint-disable-next-line no-var
   var currentLatestVersion: string | undefined;
 }
 

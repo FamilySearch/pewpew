@@ -117,13 +117,9 @@ export function getNextStart (startTime: number, endTime: number, daysOfWeek: nu
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {
   // https://stackoverflow.com/questions/68481686/type-typeof-globalthis-has-no-index-signature
-  // eslint-disable-next-line no-var
   var scheduledTests: Map<string, TestSchedulerItem> | undefined;
-  // eslint-disable-next-line no-var
   var historicalTests: Map<string, EventInput> | undefined;
-  // eslint-disable-next-line no-var
   var nextStart: number | undefined;
-  // eslint-disable-next-line no-var
   var testSchedulerLoopRunning: boolean | undefined;
 }
 

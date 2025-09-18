@@ -1,6 +1,6 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
 import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
-import { NextApiRequest, NextApiResponse, PageConfig } from "next";
+import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
   cleanupTestFolder,
@@ -87,7 +87,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
   }
 };
 
-export const config: PageConfig = {
+export const config = {
   api: {
     bodyParser: false
   }

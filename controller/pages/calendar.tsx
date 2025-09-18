@@ -14,16 +14,16 @@ import {
   GetServerSidePropsResult
 } from "next";
 import { H1, H3 } from "../components/Headers";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref, isTestManagerError } from "./api/util/clientutil";
+import { formatError, formatPageHref, isTestManagerError } from "../src/clientutil";
 import Div from "../components/Div";
 import { GridView } from "../components/Calendar";
 import Layout from "../components/Layout";
-import { TestScheduler } from "./api/util/testscheduler";
-import { authPage } from "./api/util/authserver";
+import { TestScheduler } from "../src/testscheduler";
+import { authPage } from "../src/authserver";
 import dynamic from "next/dynamic";
 import styled from "styled-components";
 import { useRouter } from "next/router";

@@ -23,8 +23,8 @@ import {
   TestSchedulerItem,
   getNextStart,
   getTestsToRun
-} from "../pages/api/util/testscheduler";
-import { getHourMinuteFromTimestamp, latestPewPewVersion } from "../pages/api/util/clientutil";
+} from "../src/testscheduler";
+import { getHourMinuteFromTimestamp, latestPewPewVersion } from "../src/clientutil";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
 

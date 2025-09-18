@@ -7,9 +7,9 @@ import {
   createErrorResponse,
   createTestFolder,
   parseForm
-} from "./util/util";
-import { deletePewPew, getPewpew, postPewPew } from "./util/pewpew";
-import { authApi } from "./util/authserver";
+} from "../../src/util";
+import { deletePewPew, getPewpew, postPewPew } from "../../src/pewpew";
+import { authApi } from "../../src/authserver";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 

@@ -1,7 +1,7 @@
 import { GetObjectCommand, GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
-import type { TestManagerError } from "../../../types";
+import type { TestManagerError } from "../types";
 import getConfig from "next/config";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";

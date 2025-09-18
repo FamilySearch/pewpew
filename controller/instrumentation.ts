@@ -38,7 +38,7 @@ export async function register () {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     try {
       // Load encryption key/openId secret before we start the loops
-      const { waitForSecrets } = await import("./pages/api/util/secrets");
+      const { waitForSecrets } = await import("./src/secrets");
       log("Instrumentation register Secrets imported", logger?.LogLevel.DEBUG);
       await waitForSecrets();
       log("Instrumentation register Secrets finished", logger?.LogLevel.INFO);
@@ -47,7 +47,7 @@ export async function register () {
       throw error;
     }
     try {
-      const { start: startCommuncations } = await import("./pages/api/util/communications");
+      const { start: startCommuncations } = await import("./src/communications");
       log("Instrumentation register startCommuncations imported", logger?.LogLevel.DEBUG);
       const result = startCommuncations();
       if (!result) {

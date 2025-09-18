@@ -19,8 +19,8 @@ import {
   ParsedForm,
   createFormidableFile,
   unzipFile
-} from "../pages/api/util/util";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
+} from "../src/util";
+import { TestScheduler, TestSchedulerItem } from "../src/testscheduler";
 import {
   VERSION_TAG_NAME,
   deletePewPew,
@@ -28,7 +28,7 @@ import {
   getPewPewVersionsInS3,
   getPewpew,
   postPewPew
-} from "../pages/api/util/pewpew";
+} from "../src/pewpew";
 import {
   mockGetObjectTagging,
   mockListObject,
@@ -39,7 +39,7 @@ import {
 } from "./mock";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../src/clientutil";
 import path from "path";
 import { platform } from "os";
 import semver from "semver";

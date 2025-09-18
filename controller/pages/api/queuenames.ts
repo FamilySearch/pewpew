@@ -1,6 +1,6 @@
 import { LogLevel, PpaasTestMessage } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
-import { createErrorResponse } from "./util/util";
+import { createErrorResponse } from "../../src/util";
 
 export default (req: NextApiRequest, res: NextApiResponse): void => {
   try {

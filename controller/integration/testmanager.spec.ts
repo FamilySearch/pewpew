@@ -13,7 +13,7 @@ import {
   TestManagerError
 } from "../types";
 import type { Fields, File, Files } from "formidable";
-import { LOCAL_FILE_LOCATION, ParsedForm, createFormidableFile } from "../pages/api/util/util";
+import { LOCAL_FILE_LOCATION, ParsedForm, createFormidableFile } from "../src/util";
 import {
   LogLevel,
   PpaasS3File,
@@ -23,13 +23,13 @@ import {
   log,
   s3
 } from "@fs/ppaas-common";
-import { TestManager, defaultRecurringFileTags} from "../pages/api/util/testmanager";
-import { isYamlFile, latestPewPewVersion } from "../pages/api/util/clientutil";
+import { TestManager, defaultRecurringFileTags} from "../src/testmanager";
+import { isYamlFile, latestPewPewVersion } from "../src/clientutil";
 import { EventInput } from "@fullcalendar/core";
-import { PpaasEncryptEnvironmentFile } from "../pages/api/util/ppaasencryptenvfile";
-import { TestScheduler } from "../pages/api/util/testscheduler";
+import { PpaasEncryptEnvironmentFile } from "../src/ppaasencryptenvfile";
+import { TestScheduler } from "../src/testscheduler";
 import { expect } from "chai";
-import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
+import { getPewPewVersionsInS3 } from "../src/pewpew";
 import path from "path";
 
 // Re-create these here so we don't have to run yamlparser.spec by importing it

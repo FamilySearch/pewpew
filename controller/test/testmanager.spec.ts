@@ -19,7 +19,7 @@ import {
   getRunningTests,
   removeOldest,
   validateYamlfile
-} from "../pages/api/util/testmanager";
+} from "../src/testmanager";
 import {
   EnvironmentVariables,
   LogLevel,
@@ -32,7 +32,7 @@ import {
   log
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
-import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
+import { PpaasEncryptS3File } from "../src/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { expect } from "chai";
 import path from "path";

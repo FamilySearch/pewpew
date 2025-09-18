@@ -18,7 +18,7 @@ import {
   EnvironmentVariablesUpdate
 } from "../EnvironmentVariablesList";
 import { H1, H3 } from "../Headers";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import { PewPewVersions, VersionInitalProps } from "../PewPewVersions";
 import { QueueInitialProps, TestQueues } from "../TestQueues";
 import React, { JSX, useState } from "react";
@@ -30,7 +30,7 @@ import {
   isTestData,
   isYamlFile,
   latestPewPewVersion
-} from "../../pages/api/util/clientutil";
+} from "../../src/clientutil";
 import { CheckboxButton } from "../CheckboxButton";
 import DatePicker from "react-datepicker";
 import { DropFile } from "../DropFile";

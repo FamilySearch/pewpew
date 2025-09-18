@@ -7,11 +7,11 @@ import {
   createErrorResponse,
   createTestFolder,
   parseForm
-} from "./util/util";
+} from "../../src/util";
 import { EventInput } from "@fullcalendar/core";
-import TestManager from "./util/testmanager";
-import TestScheduler from "./util/testscheduler";
-import { authApi } from "./util/authserver";
+import TestManager from "../../src/testmanager";
+import TestScheduler from "../../src/testscheduler";
+import { authApi } from "../../src/authserver";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view the schedule, but not modify

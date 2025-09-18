@@ -1,5 +1,5 @@
 import { ACCEPTANCE_AWS_PERMISSIONS, integrationUrl, uploadAcceptanceFiles } from "./util";
-import { API_ERROR, API_SEARCH, API_TEST, TestData } from "../types";
+import { API_ERROR, API_SEARCH, API_TEST_FORMAT, TestData } from "../types";
 import { LogLevel, PpaasTestId, TestStatus, log } from "@fs/ppaas-common";
 import _axios, { AxiosRequestConfig, AxiosResponse as Response } from "axios";
 import { getPpaasTestId, getTestData } from "./test.spec";
@@ -67,7 +67,7 @@ describe("ErrorFile API Integration", function () {
         // The search TestData only has the testId, s3Folder, startTime, and status unknown. We need the full data
         try {
           const testResponses: Response[] = await Promise.all(searchArray.map((searchData: TestData) => {
-            const testUrl = integrationUrl + API_TEST + "?testId=" + searchData.testId;
+            const testUrl = integrationUrl + API_TEST_FORMAT(searchData.testId);
             log(`GET testUrl = ${testUrl}`, LogLevel.DEBUG);
             return fetch(testUrl);
           }));

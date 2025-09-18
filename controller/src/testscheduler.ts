@@ -2,8 +2,8 @@ import {
   AuthPermission,
   AuthPermissions,
   ErrorResponse,
-  PAGE_START_TEST,
-  PAGE_TEST_HISTORY,
+  PAGE_START_TEST_FORMAT,
+  PAGE_TEST_HISTORY_FORMAT,
   ScheduledTestData,
   ScheduledTestRecurrence,
   StoredTestData,
@@ -71,8 +71,8 @@ export function getTestsToRun (scheduledTests: Map<string, TestSchedulerItem> | 
   return Array.from(scheduledTests.values()).filter((testItem: TestSchedulerItem) => testItem.nextStart <= Date.now());
 }
 
-const createHistoricalUrl = (testId: string) => `${PAGE_TEST_HISTORY}?testId=${testId}`;
-const createEventUrl = (testId: string) => `${PAGE_START_TEST}?testId=${testId}&edit`;
+const createHistoricalUrl = (testId: string) => PAGE_TEST_HISTORY_FORMAT(testId);
+const createEventUrl = (testId: string) => PAGE_START_TEST_FORMAT(testId, true);
 const createHistoricalEvent = (testId: string, yamlFile: string, startTime: number, endTime: number, testStatus: TestStatus): EventInput => ({
   /** String or Integer. Will uniquely identify your event. Useful for getEventById. */
   id: testId,

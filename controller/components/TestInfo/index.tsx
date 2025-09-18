@@ -1,9 +1,11 @@
 import {
   API_SCHEDULE,
+  API_SCHEDULE_FORMAT,
   API_STOP,
+  API_STOP_FORMAT,
   PAGE_CALENDAR,
-  PAGE_START_TEST,
-  PAGE_TEST_UPDATE,
+  PAGE_START_TEST_FORMAT,
+  PAGE_TEST_UPDATE_FORMAT,
   TestData,
   TestManagerMessage
 } from "../../types";
@@ -101,8 +103,8 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
       const confirm: boolean = window.confirm(confirmPrompt);
       if (!confirm) { return; }
       const response: AxiosResponse = deleteSchedule
-        ? await axios.delete(formatPageHref(API_SCHEDULE + "?testId=" + testData.testId))
-        : await axios.put(formatPageHref(`${API_STOP}?testId=${testData.testId}${killTest ? "&kill=true" : ""}`));
+        ? await axios.delete(formatPageHref(API_SCHEDULE_FORMAT(testData.testId)))
+        : await axios.put(formatPageHref(API_STOP_FORMAT(testData.testId, killTest)));
       if (!isTestManagerMessage(response.data)) {
         const errorString = (deleteSchedule ? API_SCHEDULE : API_STOP) + " did not return a TestManagerMessage object";
         log(errorString, LogLevel.WARN, response.data);
@@ -160,9 +162,9 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
         </ul>
       </Div>
       <Div>
-      <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px", buttonMargin: "10px" }} href={PAGE_START_TEST + "?testId=" + testData.testId}>Rerun Test</LinkButton>
+      <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px", buttonMargin: "10px" }} href={PAGE_START_TEST_FORMAT(testData.testId)}>Rerun Test</LinkButton>
       {(testIsRunning || testIsScheduled) && <>
-        <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px", buttonMargin: "10px" }} href={PAGE_TEST_UPDATE + "?testId=" + testData.testId}>Update Yaml File</LinkButton>
+        <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px", buttonMargin: "10px" }} href={PAGE_TEST_UPDATE_FORMAT(testData.testId)}>Update Yaml File</LinkButton>
         {testIsRunning && <StopTestButton onClick={onClick} value={testData.testId}>{state.killTest ? "Kill" : "Stop"} Test</StopTestButton>}
         {testIsScheduled && <StopTestButton onClick={(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => onClick(e, true)} value={testData.testId}>Delete Schedule</StopTestButton>}
       </>}

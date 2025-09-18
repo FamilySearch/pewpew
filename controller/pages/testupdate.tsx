@@ -1,4 +1,4 @@
-import { API_TEST, AuthPermission, AuthPermissions, PAGE_TEST_HISTORY, TestManagerMessage } from "../types";
+import { API_TEST, AuthPermission, AuthPermissions, PAGE_TEST_HISTORY_FORMAT, TestManagerMessage } from "../types";
 import { Danger, Info, Success } from "../components/Alert";
 import Div, { Column } from "../components/Div";
 import {
@@ -203,7 +203,7 @@ const TestUpdate = ({ testId, authPermission }: TestUpdateProps) => {
                   : <>
                       <UpdateYamlButton type="submit">Update Yaml File</UpdateYamlButton>
                       <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
-                        href={PAGE_TEST_HISTORY + "?testId=" + testId}>Back to Test Status</LinkButton>
+                        href={PAGE_TEST_HISTORY_FORMAT(testId)}>Back to Test Status</LinkButton>
                     </>
                 }
               </ButtonDiv>

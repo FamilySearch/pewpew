@@ -1,9 +1,11 @@
 import {
   API_SCHEDULE,
+  API_SCHEDULE_FORMAT,
   AuthPermission,
   AuthPermissions,
   PAGE_START_TEST,
-  PAGE_TEST_HISTORY,
+  PAGE_START_TEST_FORMAT,
+  PAGE_TEST_HISTORY_FORMAT,
   TestManagerError
 } from "../types";
 import { Alert, Danger } from "../components/Alert";
@@ -83,7 +85,7 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
 
   const deleteEvent = async (testId: string) => {
     try {
-      const response: AxiosResponse = await axios.delete(formatPageHref(API_SCHEDULE + "?testId=" + testId));
+      const response: AxiosResponse = await axios.delete(formatPageHref(API_SCHEDULE_FORMAT(testId)));
       log("Calendar delete response", LogLevel.DEBUG, response);
       if (!isTestManagerError(response.data)) {
         const errorString = API_SCHEDULE + " did not return a TestManagerError object";
@@ -118,10 +120,9 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
       }
       return undefined;
     }
-    const url: string = (arg.event.start && arg.event.start.getTime() < Date.now()
-        ? (PAGE_TEST_HISTORY + "?testId=")
-        : (PAGE_START_TEST + "?edit&testId=")
-      ) + testId;
+    const url: string = (arg.event.start && arg.event.start.getTime() < Date.now())
+        ? PAGE_TEST_HISTORY_FORMAT(testId)
+        : PAGE_START_TEST_FORMAT(testId, true);
     // We must use route.push "as" similar to our next/link
     router.push(url, formatPageHref(url))
     .catch((error) => log("Could not Router.push to the schedule", LogLevel.ERROR, error));

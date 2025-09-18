@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import type { Route } from "next";
 import { formatPageHref } from "../../src/clientutil";
 import styled from "styled-components";
 
@@ -26,7 +27,7 @@ export const defaultButtonTheme: LinkButtonTheme = { buttonFontSize: ".8rem", bu
 // What this returns or calls from the parents
 export interface LinkButtonProps {
   name?: string;
-  href: string;
+  href: Route;
   target?: string;
   title?: string;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;

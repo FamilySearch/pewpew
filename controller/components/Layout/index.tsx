@@ -155,7 +155,9 @@ export const Layout = ({
             <LinkButton href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">Yaml Writer</LinkButton>
+            <a href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">
+              <Button theme={{...defaultButtonTheme}}>Yaml Writer</Button>
+            </a>
           </LinkDiv>
           {authPermission === AuthPermission.Admin &&
             <LinkDiv>

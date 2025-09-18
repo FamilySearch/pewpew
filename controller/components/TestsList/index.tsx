@@ -1,5 +1,5 @@
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
-import { API_TEST_STATUS, PAGE_TEST_HISTORY, TestData, TestManagerMessage } from "../../types";
+import { API_TEST_STATUS, API_TEST_STATUS_FORMAT, PAGE_TEST_HISTORY_FORMAT, TestData, TestManagerMessage } from "../../types";
 import { LogLevel, log } from "../../src/log";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
@@ -61,7 +61,7 @@ export const TestsList = ({
     if (testData.status === TestStatus.Unknown && !state.notFoundList.includes(testData.testId)) {
       log("Checking " + testData.testId, LogLevel.DEBUG, { testData, notFoundList: state.notFoundList });
       updateStatus(testData.testId, TestStatus.Checking);
-      axios.get(formatPageHref(API_TEST_STATUS + "?testId=" + testData.testId))
+      axios.get(formatPageHref(API_TEST_STATUS_FORMAT(testData.testId)))
       .then((response: AxiosResponse) => {
         log("Checked " + testData.testId, LogLevel.DEBUG, { status: response.status, data: response.data });
         if (response.status === 200) {
@@ -90,7 +90,7 @@ export const TestsList = ({
     .map((testData: TestData) => ({ testData, ppaasTestId: PpaasTestId.getFromTestId(testData.testId)}))
     .map((testIdData: TestIdData) => (
       <li key={testIdData.ppaasTestId.testId}>{testIdData.ppaasTestId.yamlFile} - {testIdData.ppaasTestId.date.toLocaleString()}&nbsp;
-        <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_HISTORY + "?testId=" + testIdData.ppaasTestId.testId}>
+        <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_HISTORY_FORMAT(testIdData.ppaasTestId.testId)}>
           {testIdData.ppaasTestId.testId}
         </LinkButton> - {testIdData.testData.status}
       </li>

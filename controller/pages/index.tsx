@@ -1,7 +1,8 @@
 import {
   API_ERROR_FORMAT,
-  API_SEARCH,
+  API_SEARCH_FORMAT,
   API_TEST,
+  API_TEST_FORMAT,
   AllTests,
   AllTestsResponse,
   AuthPermission,
@@ -99,7 +100,7 @@ const TestStatusPage = ({
   const router = useRouter();
   const fetchData = async (testId: string) => {
     try {
-      const url = formatPageHref(`${API_TEST}?testId=${testId}`);
+      const url = formatPageHref(API_TEST_FORMAT(testId));
       // If we're client-side the cookie gets passed automatically
       const response: AxiosResponse = await axios.get(url);
       // Convert it to json
@@ -275,7 +276,7 @@ const TestStatusPage = ({
         return;
       }
       // PUT /api/search - Don't include the extension here. Only on page loads
-      const url = formatPageHref(`${API_SEARCH}?s3Folder=${searchString}`);
+      const url = formatPageHref(API_SEARCH_FORMAT(searchString));
       const response: AxiosResponse = await axios.get(url);
       // Update the URL to include the search param `?search=${searchString}`
       const searchUrl = `${router.pathname}?search=${searchString}`;

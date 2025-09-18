@@ -1,9 +1,9 @@
 import "react-datepicker/dist/react-datepicker.css";
 import "./styles.css";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { AppProps } from "next/app";
 import { Router } from "next/router";
-import { getBasePath } from "./api/util/clientutil";
+import { getBasePath } from "../src/clientutil";
 import { useEffect } from "react";
 
 // https://stackoverflow.com/questions/70791571/nextjs-use-getserversideprops-with-a-specific-url-path

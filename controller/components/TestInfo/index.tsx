@@ -8,10 +8,10 @@ import {
   TestManagerMessage
 } from "../../types";
 import { Danger, Success } from "../Alert";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref, isTestManagerMessage } from "../../pages/api/util/clientutil";
+import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import Div from "../Div";
 import { H3 } from "../Headers";
 import LinkButton from "../LinkButton";

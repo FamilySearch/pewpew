@@ -4,7 +4,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { cleanupAcceptanceFiles, uploadAcceptanceFiles } from "./util";
 import { Socket } from "net";
 import { expect } from "chai";
-import { getS3Response } from "../pages/api/util/s3";
+import { getS3Response } from "../src/s3";
 
 const GZIP_HEADER_NAME = "content-encoding";
 const GZIP_HEADER_VALUE = "gzip";

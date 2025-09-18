@@ -1,9 +1,9 @@
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
 import { API_TEST_STATUS, PAGE_TEST_HISTORY, TestData, TestManagerMessage } from "../../types";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
-import { formatPageHref, isTestManagerMessage } from "../../pages/api/util/clientutil";
+import { formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import Div from "../Div";
 import LinkButton from "../LinkButton";
 import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";

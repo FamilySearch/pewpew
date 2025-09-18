@@ -5,7 +5,7 @@ import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import React from "react";
 import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
-import { latestPewPewVersion } from "../../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../../src/clientutil";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.

@@ -1,5 +1,5 @@
 import { EnvironmentVariables, LogLevel, log, s3 } from "@fs/ppaas-common";
-import { EnvironmentVariablesFile, PreviousEnvironmentVariables } from "../../../types";
+import { EnvironmentVariablesFile, PreviousEnvironmentVariables } from "../types";
 import { PpaasEncryptS3File } from "./ppaasencrypts3file";
 
 export const ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME = "environmentvariables.json";

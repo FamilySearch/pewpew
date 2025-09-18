@@ -19,19 +19,19 @@ import {
   GetServerSidePropsResult
 } from "next";
 import { H1, H3 } from "../components/Headers";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosError, AxiosResponse } from "axios";
-import { formatError, formatPageHref, isTestData } from "./api/util/clientutil";
+import { formatError, formatPageHref, isTestData } from "../src/clientutil";
 import Div from "../components/Div";
 import { Layout } from "../components/Layout";
 import { TestInfo } from "../components/TestInfo";
-import { TestManager } from "./api/util/testmanager";
+import { TestManager } from "../src/testmanager";
 import { TestResults } from "../components/TestResults";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { TestsList } from "../components/TestsList";
-import { authPage } from "./api/util/authserver";
+import { authPage } from "../src/authserver";
 import getConfig from "next/config";
 import styled from "styled-components";
 import { useRouter } from "next/router";

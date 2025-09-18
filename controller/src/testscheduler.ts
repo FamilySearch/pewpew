@@ -10,7 +10,7 @@ import {
   TestData,
   TestDataResponse,
   TestManagerError
-} from "../../../types";
+} from "../types";
 import {
   ENCRYPTED_TEST_SCHEDULER_FILENAME,
   ENCRYPTED_TEST_SCHEDULER_FOLDERNAME,

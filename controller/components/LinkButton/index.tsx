@@ -1,6 +1,6 @@
 import Link from "next/link";
 import React from "react";
-import { formatPageHref } from "../../pages/api/util/clientutil";
+import { formatPageHref } from "../../src/clientutil";
 import styled from "styled-components";
 
 export const Button = styled.button<{ theme: LinkButtonTheme }>`

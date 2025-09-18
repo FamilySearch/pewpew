@@ -58,7 +58,7 @@ import {
   getGlobalSecretsConfig,
   init as initSecrets,
   internalConfig as secretsConfig
-} from "../pages/api/util/secrets";
+} from "../src/secrets";
 import { Readable } from "stream";
 import { constants as bufferConstants } from "node:buffer";
 import crypto from "crypto";

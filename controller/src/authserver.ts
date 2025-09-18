@@ -6,7 +6,7 @@ import {
   AuthPermissions,
   PAGE_LOGIN,
   TokenResponse
-} from "../../../types";
+} from "../types";
 import {
   AUTH_COOKIE_NAME,
   AUTH_HEADER_HOST,

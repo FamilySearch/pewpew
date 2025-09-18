@@ -1,4 +1,4 @@
-import { LogLevel, log } from "../pages/api/util/log";
+import { LogLevel, log } from "../src/log";
 import { expect } from "chai";
 
 describe("Log", () => {

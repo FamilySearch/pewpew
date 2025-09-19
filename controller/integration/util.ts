@@ -1,3 +1,4 @@
+import { ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME, PpaasEncryptEnvironmentFile } from "../src/ppaasencryptenvfile";
 import {
   LogLevel,
   PpaasS3File,
@@ -24,7 +25,7 @@ export interface AcceptanceFiles {
   resultsFile: string;
   stdoutFile: string;
   stderrFile: string;
-  variablesFile?: string;
+  variablesFile: string;
 }
 
 const ACCEPTANCE_FOLDER = "integration/files";
@@ -34,7 +35,8 @@ const ACCEPTANCE_FILES: AcceptanceFiles = {
   statusFile: "rmsdeletestage20240617T193912876.info",
   resultsFile: "stats-rmsdeletestage20240617T193912876.json",
   stdoutFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-out.json",
-  stderrFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-error.json"
+  stderrFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-error.json",
+  variablesFile: ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME
 };
 
 // We want to re-use the PPaaSS3Files between acceptance tests so we don't re-upload them
@@ -44,13 +46,23 @@ const ACCEPTANCE_PPAASS3FILES: {
   resultsFile?: PpaasS3File;
   stdoutFile?: PpaasS3File;
   stderrFile?: PpaasS3File;
-  variablesFile?: PpaasS3File;
+  variablesFile?: PpaasS3File | PpaasEncryptEnvironmentFile;
 } = {};
 
 export async function uploadAcceptanceFiles (): Promise<AcceptanceFiles> {
   try {
     for (const [key, filename] of Object.entries(ACCEPTANCE_FILES)) {
       if (key === "ppaasTestId") { continue; } // No file for the ppaasTestId
+      if (key === "variablesFile") {
+        if (!filename) { continue; } // variablesFile is optional
+         ACCEPTANCE_PPAASS3FILES.variablesFile = new PpaasEncryptEnvironmentFile({
+          s3Folder,
+          environmentVariablesFile: {
+            EXAMPLE_VAR: "example value",
+            ANOTHER_VAR: "another value"
+          }
+        });
+      }
       // We want to re-use the PPaaSS3Files between acceptance tests so we don't re-upload them
       log("uploadAcceptanceFiles create PpaasS3File", LogLevel.DEBUG, { key, filename, s3File: ACCEPTANCE_PPAASS3FILES[key as keyof typeof ACCEPTANCE_PPAASS3FILES] !== undefined });
       if (!ACCEPTANCE_PPAASS3FILES[key as keyof typeof ACCEPTANCE_PPAASS3FILES]) {
@@ -66,8 +78,8 @@ export async function uploadAcceptanceFiles (): Promise<AcceptanceFiles> {
       log("uploadAcceptanceFiles upload", LogLevel.DEBUG, { filetype, filename: s3File?.filename, s3File: s3File !== undefined });
       try {
         await s3File.upload(false, true);
-        log(`uploadAcceptanceFiles uploaded ${filetype} - ${s3File.filename}`, LogLevel.INFO, { filetype, filename: s3File.filename, remoteUrl: s3File.remoteUrl });
-        return s3File.remoteUrl;
+        log(`uploadAcceptanceFiles uploaded ${filetype} - ${s3File.filename}`, LogLevel.INFO, { filetype, filename: s3File.filename, key: s3File.key });
+        return s3File.key;
       } catch (error: unknown) {
         log(`uploadAcceptanceFiles failed to upload ${filetype} - ${s3File.filename}`, LogLevel.WARN, error);
         throw error;
@@ -86,7 +98,7 @@ export async function cleanupAcceptanceFiles (): Promise<void> {
       log("cleanupAcceptanceFiles cleanup", LogLevel.DEBUG, { filetype, filename: s3File?.filename, s3File: s3File !== undefined });
       try {
         await s3.deleteObject(s3File.key);
-        log(`cleanupAcceptanceFiles deleted ${filetype} - ${s3File.filename}`, LogLevel.INFO, { filetype, filename: s3File.filename, remoteUrl: s3File.remoteUrl });
+        log(`cleanupAcceptanceFiles deleted ${filetype} - ${s3File.filename}`, LogLevel.INFO, { filetype, filename: s3File.filename, key: s3File.key });
         delete ACCEPTANCE_PPAASS3FILES[filetype as keyof typeof ACCEPTANCE_PPAASS3FILES];
       } catch (error: unknown) {
         log(`cleanupAcceptanceFiles failed to delete ${filetype} - ${s3File.filename}`, LogLevel.WARN, error);

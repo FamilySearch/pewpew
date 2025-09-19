@@ -7,6 +7,20 @@ import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { latestPewPewVersion } from "../../src/clientutil";
 
+// This interface needs to match the one in index.tsx
+interface TestInfoStorybookProps extends TestInfoProps {
+  /** Export for storybook. DO NOT USE */
+  message?: string;
+  /** Export for storybook. DO NOT USE */
+  messageId?: string;
+  /** Export for storybook. DO NOT USE */
+  killTest?: boolean;
+  /** Export for storybook. DO NOT USE */
+  downloadFiles?: string[];
+  /** Export for storybook. DO NOT USE */
+  error?: any;
+}
+
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.
  * This file shows an example of that for the Layout component.
@@ -45,11 +59,11 @@ const fullTest: Required<TestData> = {
   queueName: "unittest",
   userId: "bruno.madrigal@pewpew.org"
 };
-const props: TestInfoProps = {
+const props: TestInfoStorybookProps = {
   testData: { ...basicTest, status: TestStatus.Created, lastUpdated: fullTest.lastUpdated }
 };
 
-const propsWithRunTime: TestInfoProps = {
+const propsWithRunTime: TestInfoStorybookProps = {
   testData: {
     ...basicTest,
     endTime,
@@ -59,15 +73,15 @@ const propsWithRunTime: TestInfoProps = {
   }
 };
 
-const propsWithAgentInfo: TestInfoProps = {
+const propsWithAgentInfo: TestInfoStorybookProps = {
   testData: { ...fullTest, resultsFileLocation: undefined }
 };
 
-const propsWithResults: TestInfoProps = {
+const propsWithResults: TestInfoStorybookProps = {
   testData: { ...fullTest, status: TestStatus.Finished }
 };
 
-const propsWithMoreResults: TestInfoProps = {
+const propsWithMoreResults: TestInfoStorybookProps = {
   testData: {
     ...basicTest,
     resultsFileLocation: [
@@ -79,24 +93,41 @@ const propsWithMoreResults: TestInfoProps = {
   }
 };
 
-const propsWithStopSuccess: TestInfoProps = {
+const propsWithDownloadFiles: TestInfoStorybookProps = {
+  testData: {
+    ...basicTest,
+    status: TestStatus.Running,
+    resultsFileLocation: [
+      ...fullTest.resultsFileLocation
+    ]
+  },
+  downloadFiles: [
+    "Story.yaml",
+    "Story.csv",
+    "app-ppaas-pewpew-basicwithenv20250918T170447046-out.json",
+    "app-ppaas-pewpew-basicwithenv20250918T170447046-error.json",
+    "stats-basicwithenv20250918T170447046.json"
+  ]
+};
+
+const propsWithStopSuccess: TestInfoStorybookProps = {
   testData: { ...basicTest, status: TestStatus.Running },
   killTest: true,
   message: "Stop TestId basic20191216T165541825 Message Sent.",
   messageId: "efaea50f-45d3-42a1-ab96-4e446f016b59"
 };
 
-const propsWithStopSuccessNoId: TestInfoProps = {
-  testData: basicTest,
+const propsWithStopSuccessNoId: TestInfoStorybookProps = {
+  testData: { ...basicTest, status: TestStatus.Running },
   message: "Stop Sent."
 };
 
-const propsWithStopError: TestInfoProps = {
-  testData: basicTest,
+const propsWithStopError: TestInfoStorybookProps = {
+  testData: { ...basicTest, status: TestStatus.Running },
   error: "Could not Send Message to Queue"
 };
 
-const scheduledProps: TestInfoProps = {
+const scheduledProps: TestInfoStorybookProps = {
   testData: {
     ...basicTest,
     status: TestStatus.Scheduled,
@@ -105,7 +136,7 @@ const scheduledProps: TestInfoProps = {
   }
 };
 
-const scheduledPastProps: TestInfoProps = {
+const scheduledPastProps: TestInfoStorybookProps = {
   testData: {
     ...basicTest,
     status: TestStatus.Scheduled,
@@ -167,6 +198,17 @@ export const WithMoreResults = {
   ),
 
   name: "WithMoreResults"
+};
+
+export const WithDownloadFiles = {
+  render: () => (
+    <React.Fragment>
+      <GlobalStyle />
+      <TestInfo {...propsWithDownloadFiles} />
+    </React.Fragment>
+  ),
+
+  name: "WithDownloadFiles"
 };
 
 export const WithSuccess = {

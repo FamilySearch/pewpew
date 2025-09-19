@@ -8,7 +8,7 @@ async function log (message: string, level?: LogLevel | undefined, ...datas: any
       try {
         ({ log: logFunction, logger } = await import("@fs/ppaas-common"));
         // logger.config.LogFileName = "ppaas-controller";
-        logFunction("Instrumentation register log imported", logger?.LogLevel.DEBUG);
+        logFunction("Instrumentation register log imported", logger?.LogLevel.DEBUG, typeof logFunction);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Could not import log from @fs/ppaas-common", error);
@@ -39,7 +39,7 @@ export async function register () {
     try {
       // Load encryption key/openId secret before we start the loops
       const { waitForSecrets } = await import("./src/secrets");
-      log("Instrumentation register Secrets imported", logger?.LogLevel.DEBUG);
+      log("Instrumentation register Secrets imported", logger?.LogLevel.DEBUG, typeof waitForSecrets);
       await waitForSecrets();
       log("Instrumentation register Secrets finished", logger?.LogLevel.INFO);
     } catch (error) {
@@ -48,7 +48,7 @@ export async function register () {
     }
     try {
       const { start: startCommuncations } = await import("./src/communications");
-      log("Instrumentation register startCommuncations imported", logger?.LogLevel.DEBUG);
+      log("Instrumentation register startCommuncations imported", logger?.LogLevel.DEBUG, typeof startCommuncations);
       const result = startCommuncations();
       if (!result) {
         throw new Error("Communications loops not started");

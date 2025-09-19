@@ -36,3 +36,5 @@ export const API_TEST_STATUS: Route = "/api/teststatus" as Route;
 export const API_TEST_STATUS_FORMAT = (testId: string): Route => `${API_TEST_STATUS}?testId=${testId}` as Route;
 export const API_YAML: Route = "/api/yaml" as Route;
 export const API_YAML_FORMAT = (s3Folder: string, filename: string): Route => `${API_YAML}/${s3Folder}/${filename}` as Route;
+export const API_DOWNLOAD: Route = "/api/download" as Route;
+export const API_DOWNLOAD_FORMAT = (testId: string, filename?: string): Route => `${API_DOWNLOAD}?testId=${testId}${filename ? `&file=${filename}` : ""}` as Route;

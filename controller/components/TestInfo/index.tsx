@@ -1,4 +1,6 @@
 import {
+  API_DOWNLOAD,
+  API_DOWNLOAD_FORMAT,
   API_SCHEDULE,
   API_SCHEDULE_FORMAT,
   API_STOP,
@@ -9,14 +11,14 @@ import {
   TestData,
   TestManagerMessage
 } from "../../types";
+import { Button, LinkButton, defaultButtonTheme } from "../LinkButton";
 import { Danger, Success } from "../Alert";
+import { Div, DivRight } from "../Div";
 import { LogLevel, log } from "../../src/log";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
-import Div from "../Div";
 import { H3 } from "../Headers";
-import LinkButton from "../LinkButton";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import styled from "styled-components";
 import { useRouter } from "next/router";
@@ -34,12 +36,16 @@ export interface TestInfoState {
   message: string | undefined;
   messageId: string | undefined;
   killTest: boolean | undefined;
+  downloadFiles: string[] | undefined;
   error: any;
 }
 
 // What this returns or calls from the parents
 export interface TestInfoProps {
   testData: TestData;
+}
+
+interface TestInfoStorybookProps extends TestInfoProps {
   /** Export for storybook. DO NOT USE */
   message?: string;
   /** Export for storybook. DO NOT USE */
@@ -47,16 +53,19 @@ export interface TestInfoProps {
   /** Export for storybook. DO NOT USE */
   killTest?: boolean;
   /** Export for storybook. DO NOT USE */
+  downloadFiles?: string[];
+  /** Export for storybook. DO NOT USE */
   error?: any;
 }
 
-export const TestInfo = ({ testData, ...testInfoProps }: TestInfoProps) => {
+export const TestInfo = ({ testData, ...testInfoProps }: TestInfoStorybookProps) => {
   let doubleClickCheck: boolean = false;
   // The default states coming in from props is only so we can storybook them.
   const defaultState: TestInfoState = {
     message: testInfoProps.message || undefined,
     messageId: testInfoProps.messageId || undefined,
     killTest: testInfoProps.killTest || undefined,
+    downloadFiles: testInfoProps.downloadFiles || undefined,
     error: testInfoProps.error || undefined
   };
   const [state, setState] = useState(defaultState);
@@ -138,6 +147,54 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
     }
   };
 
+  const onDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (doubleClickCheck) {
+      return;
+    }
+    // Save the current state of killTest and use it
+    try {
+      doubleClickCheck = true;
+      updateState({
+        message: undefined,
+        messageId: undefined,
+        error: undefined
+      });
+      const response: AxiosResponse = await axios.get(formatPageHref(API_DOWNLOAD_FORMAT(testData.testId)));
+      log("onDownload response", LogLevel.DEBUG, response.data);
+      if (Array.isArray(response.data) && response.data.length >= 0 && typeof response.data[0] === "string") {
+        updateState({ downloadFiles: response.data });
+        return;
+      }
+      if (!isTestManagerMessage(response.data)) {
+        const errorString = API_DOWNLOAD + " did not return a TestManagerMessage object";
+        log(errorString, LogLevel.WARN, response.data);
+        throw new Error(errorString);
+      }
+      const json: TestManagerMessage | undefined = response.data; // Could also be an empty array
+      updateState({
+        error: json?.message || "Could not get files for download"
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } catch (error) {
+      log("onClick error", LogLevel.ERROR, error);
+      updateState({
+        message: undefined,
+        messageId: undefined,
+        error: formatError(error)
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } finally {
+      doubleClickCheck = false;
+    }
+  };
+
   return (
     <React.Fragment>
       <Div>
@@ -158,6 +215,16 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
           {testData.resultsFileLocation && testData.resultsFileLocation.map((resultsLocation: string, index: number) =>
             <li key={"resultsFileLocation" + index}><a href={resultsLocation} target="_blank">S3 Results Url{index > 0 ? ` ${index + 1}` : ""}</a></li>)}
           <li key="testStatus">Status: {testData.status === TestStatus.Created ? "Test Uploaded, Waiting for Agent" : testData.status}</li>
+          {state.downloadFiles && state.downloadFiles.length > 0
+            ? <li key={"downloadFiles"}>
+                <DivRight>Download Test Files</DivRight>
+                <ul>
+                  {state.downloadFiles.map((downloadFile: string, index: number) =>
+                    <li key={"downloadFile" + index}><LinkButton href={API_DOWNLOAD_FORMAT(testData.testId, downloadFile)} theme={{ buttonFontSize: "1.2rem" } }>{downloadFile}</LinkButton></li>
+                  )}
+                </ul>
+              </li>
+            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Download Test Files</Button></li>}
           {testData.lastUpdated && <li key="lastUpdated" style={lastUpdatedStyle}>Last Updated: {new Date(testData.lastUpdated).toLocaleString()}</li>}
         </ul>
       </Div>

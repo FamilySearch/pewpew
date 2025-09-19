@@ -382,7 +382,7 @@ export async function authApi (req: NextApiRequest, res: NextApiResponse, requir
     }
     // If we don't have permissions or the permissions are not greater than requiredPermissions
     if (authPermissions.authPermission < requiredPermissions) {
-      log("User was not authorized for api", LogLevel.WARN, { token, method: req.method, url: req.url });
+      log("User was not authorized for api", LogLevel.WARN, { method: req.method, url: req.url, ...authPermissions, token: undefined });
       res.status(403).json({ message: "User is not authorized for this api. If you think this is an error, please contact the Performance team." });
       return undefined;
     }

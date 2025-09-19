@@ -4,7 +4,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { cleanupAcceptanceFiles, uploadAcceptanceFiles } from "./util";
 import { Socket } from "net";
 import { expect } from "chai";
-import { getS3Response } from "../pages/api/util/s3";
+import { getS3Response } from "../src/s3";
 
 const GZIP_HEADER_NAME = "content-encoding";
 const GZIP_HEADER_VALUE = "gzip";
@@ -185,6 +185,83 @@ describe("S3 Integration", () => {
         done();
       }).catch((error) => {
         log("getS3Response failed", LogLevel.ERROR, error, { filename: "bogus.yaml", s3Folder, redirectToS3 });
+        done(error);
+      });
+    });
+
+    it("getS3Response with downloadFile=true and no redirect should set download headers", (done: Mocha.Done) => {
+      const redirectToS3 = false;
+      const unzipS3Objects = false;
+      const downloadFile = true;
+      getS3Response({ request, response, filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+        expect(result, "result").to.equal(true);
+        expect(response.statusCode, "res.statusCode").to.equal(200);
+        expect(responseBody, "responseBody").to.not.equal(undefined);
+        const headerNames = response.getHeaderNames();
+        log("headerNames", LogLevel.DEBUG, headerNames);
+        expect(headerNames.includes("content-disposition"), `${JSON.stringify(headerNames)}.includes("content-disposition")`).to.equal(true);
+        expect(response.getHeader("content-disposition"), "res.getHeader(\"content-disposition\")").to.equal(`attachment; filename="${filename}"`);
+        for (const expectedHeaderName of EXPECTED_HEADER_NAMES) {
+          expect(headerNames.includes(expectedHeaderName), `${JSON.stringify(headerNames)}.includes("${expectedHeaderName}")`).to.equal(true);
+        }
+        done();
+      }).catch((error) => {
+        log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
+        done(error);
+      });
+    });
+
+    it("getS3Response with downloadFile=false and no redirect should set inline headers", (done: Mocha.Done) => {
+      const redirectToS3 = false;
+      const unzipS3Objects = false;
+      const downloadFile = false;
+      getS3Response({ request, response, filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+        expect(result, "result").to.equal(true);
+        expect(response.statusCode, "res.statusCode").to.equal(200);
+        expect(responseBody, "responseBody").to.not.equal(undefined);
+        const headerNames = response.getHeaderNames();
+        log("headerNames", LogLevel.DEBUG, headerNames);
+        expect(headerNames.includes("content-disposition"), `${JSON.stringify(headerNames)}.includes("content-disposition")`).to.equal(true);
+        expect(response.getHeader("content-disposition"), "res.getHeader(\"content-disposition\")").to.equal("inline");
+        for (const expectedHeaderName of EXPECTED_HEADER_NAMES) {
+          expect(headerNames.includes(expectedHeaderName), `${JSON.stringify(headerNames)}.includes("${expectedHeaderName}")`).to.equal(true);
+        }
+        done();
+      }).catch((error) => {
+        log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
+        done(error);
+      });
+    });
+
+    it("getS3Response with downloadFile=true and redirect should create presigned URL with download parameters", (done: Mocha.Done) => {
+      const redirectToS3 = true;
+      const unzipS3Objects = false;
+      const downloadFile = true;
+      getS3Response({ request, response, filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+        expect(result, "result").to.equal(true);
+        expect(response.statusCode, "res.statusCode").to.equal(302);
+        expect(responseBody, "responseBody").to.equal(undefined);
+        // Note: The presigned URL with download parameters is created but we can't easily test the URL content
+        // in this integration test without mocking the AWS SDK. The important thing is that it returns 302
+        // and doesn't throw an error when downloadFile=true
+        done();
+      }).catch((error) => {
+        log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
+        done(error);
+      });
+    });
+
+    it("getS3Response with downloadFile=false and redirect should create presigned URL without download parameters", (done: Mocha.Done) => {
+      const redirectToS3 = true;
+      const unzipS3Objects = false;
+      const downloadFile = false;
+      getS3Response({ request, response, filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+        expect(result, "result").to.equal(true);
+        expect(response.statusCode, "res.statusCode").to.equal(302);
+        expect(responseBody, "responseBody").to.equal(undefined);
+        done();
+      }).catch((error) => {
+        log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
         done(error);
       });
     });

@@ -15,11 +15,11 @@ import { StartTestForm, StartTestProps } from "../components/StartTestForm";
 import Layout from "../components/Layout";
 import { QueueInitialProps } from "../components/TestQueues";
 import React from "react";
-import { TestManager } from "./api/util/testmanager";
+import { TestManager } from "../src/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { VersionInitalProps } from "../components/PewPewVersions";
-import { authPage } from "./api/util/authserver";
-import { formatError } from "./api/util/clientutil";
+import { authPage } from "../src/authserver";
+import { formatError } from "../src/clientutil";
 import { getServerSideProps as getPropsPewPewVersions } from "../components/PewPewVersions/initialProps";
 import { getServerSideProps as getPropsTestQueues } from "../components/TestQueues/initialProps";
 

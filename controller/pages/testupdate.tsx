@@ -1,4 +1,4 @@
-import { API_TEST, AuthPermission, AuthPermissions, PAGE_TEST_HISTORY, TestManagerMessage } from "../types";
+import { API_TEST, AuthPermission, AuthPermissions, PAGE_TEST_HISTORY_FORMAT, TestManagerMessage } from "../types";
 import { Danger, Info, Success } from "../components/Alert";
 import Div, { Column } from "../components/Div";
 import {
@@ -6,7 +6,7 @@ import {
   GetServerSidePropsContext,
   GetServerSidePropsResult
 } from "next";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { useState } from "react";
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
@@ -15,14 +15,14 @@ import {
   formatPageHref,
   isTestManagerMessage,
   isYamlFile
-} from "./api/util/clientutil";
+} from "../src/clientutil";
 import DropFile from "../components/DropFile";
 import FilesList from "../components/FilesList";
 import { H1 } from "../components/Headers";
 import Layout from "../components/Layout";
 import { Line } from "rc-progress";
 import LinkButton from "../components/LinkButton";
-import { authPage } from "./api/util/authserver";
+import { authPage } from "../src/authserver";
 import styled from "styled-components";
 
 const TestUpdateRow = styled(Div)`
@@ -203,7 +203,7 @@ const TestUpdate = ({ testId, authPermission }: TestUpdateProps) => {
                   : <>
                       <UpdateYamlButton type="submit">Update Yaml File</UpdateYamlButton>
                       <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
-                        href={PAGE_TEST_HISTORY + "?testId=" + testId}>Back to Test Status</LinkButton>
+                        href={PAGE_TEST_HISTORY_FORMAT(testId)}>Back to Test Status</LinkButton>
                     </>
                 }
               </ButtonDiv>

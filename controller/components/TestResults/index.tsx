@@ -1,10 +1,10 @@
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import { RTT, totalCalls } from "./charts";
 import React, { useCallback, useEffect, useState } from "react";
 import { TABLE, TD, TR } from "../Table";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref } from "../../pages/api/util/clientutil";
+import { formatError, formatPageHref } from "../../src/clientutil";
 import { API_JSON } from "../../types";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";

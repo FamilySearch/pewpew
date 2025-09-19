@@ -2,7 +2,7 @@ import * as path from "path";
 import {
   AuthPermissions,
   TestManagerError
-} from "../../../types";
+} from "../types";
 import {
   LogLevel,
   PpaasS3File,

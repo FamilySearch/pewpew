@@ -14,7 +14,7 @@ import {
   log,
   sleep
 } from "@fs/ppaas-common";
-import { ParsedForm, createFormidableFile, unzipFile } from "../pages/api/util/util";
+import { ParsedForm, createFormidableFile, unzipFile } from "../src/util";
 import {
   VERSION_TAG_NAME,
   deletePewPew,
@@ -22,13 +22,13 @@ import {
   getPewPewVersionsInS3,
   getPewpew,
   postPewPew
-} from "../pages/api/util/pewpew";
+} from "../src/pewpew";
 import { expect } from "chai";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../src/clientutil";
 import path from "path";
 import { platform } from "os";
 import semver from "semver";
-import { waitForSecrets } from "../pages/api/util/secrets";
+import { waitForSecrets } from "../src/secrets";
 
 const UNIT_TEST_FOLDER = process.env.UNIT_TEST_FOLDER || "test";
 const PEWPEW_ZIP_LEGACY_FILEPATH = process.env.PEWPEW_ZIP_LEGACY_FILEPATH || path.join(UNIT_TEST_FOLDER, PEWPEW_BINARY_EXECUTABLE + ".zip");

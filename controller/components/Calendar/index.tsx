@@ -1,7 +1,7 @@
 import { CalendarOptions, PluginDef } from "@fullcalendar/core";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import React, { useEffect, useState } from "react";
-import { formatPageHref, getHourMinuteFromTimestamp } from "../../pages/api/util/clientutil";
+import { formatPageHref, getHourMinuteFromTimestamp } from "../../src/clientutil";
 import Div from "../Div";
 import Script from "next/script";
 import dynamic from "next/dynamic";

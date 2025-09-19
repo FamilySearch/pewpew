@@ -2,7 +2,7 @@ import {
   AuthPermissions,
   ErrorResponse,
   PewPewVersionsResponse
-} from "../../../types";
+} from "../types";
 import type { Fields, File, Files } from "formidable";
 import {
   LOCAL_FILE_LOCATION,

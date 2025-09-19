@@ -28,8 +28,16 @@
     "baseUrl": "test",
     "lib": ["ES2022", "esnext.asynciterable", "dom", "dom.iterable"]
   },
-  "exclude": ["node_modules", "pages/**/*", "components/**/*", "src/**/*"],
-  "include": ["test/**/*", "types/**/*", "pages/api/util/*", "acceptance/**/*", "integration/**/*", "testcleanup/**/*"],
+  "exclude": ["node_modules", "pages/**/*", "components/**/*"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "types/**/*",
+    "pages/api/util/*",
+    "acceptance/**/*",
+    "integration/**/*",
+    "testcleanup/**/*"
+  ],
   "compileOnSave": true,
   "buildOnSave": false
 }

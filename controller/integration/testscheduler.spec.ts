@@ -21,11 +21,11 @@ import {
   s3,
   util
 } from "@fs/ppaas-common";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
+import { TestScheduler, TestSchedulerItem } from "../src/testscheduler";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
-import { getHourMinuteFromTimestamp } from "../pages/api/util/clientutil";
-import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
+import { getHourMinuteFromTimestamp } from "../src/clientutil";
+import { getPewPewVersionsInS3 } from "../src/pewpew";
 
 const sleep = util.sleep;
 

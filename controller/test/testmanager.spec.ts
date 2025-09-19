@@ -20,7 +20,7 @@ import {
   getValidateLegacyOnly,
   removeOldest,
   validateYamlfile
-} from "../pages/api/util/testmanager";
+} from "../src/testmanager";
 import {
   EnvironmentVariables,
   LogLevel,
@@ -35,11 +35,11 @@ import {
 import type { File, FileJSON } from "formidable";
 import { mockGetObjectTagging, mockS3, resetMockS3 } from "./mock";
 import { Test as MochaTest } from "mocha";
-import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
+import { PpaasEncryptS3File } from "../src/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
-import { VERSION_TAG_NAME } from "../pages/api/util/pewpew";
+import { VERSION_TAG_NAME } from "../src/pewpew";
 import { expect } from "chai";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../src/clientutil";
 import path from "path";
 
 const localDirectory: string = path.resolve(process.env.UNIT_TEST_FOLDER || "test");

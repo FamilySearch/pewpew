@@ -11,7 +11,7 @@ import {
   getMaxVersion,
   latestPewPewVersion,
   versionSort
-} from "../pages/api/util/clientutil";
+} from "../src/clientutil";
 import { expect } from "chai";
 
 describe("Client Utils", () => {

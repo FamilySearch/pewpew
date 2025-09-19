@@ -1,7 +1,7 @@
-import { GetObjectCommand, GetObjectCommandOutput } from "@aws-sdk/client-s3";
+import { GetObjectCommand, GetObjectCommandInput, GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
-import type { TestManagerError } from "../../../types";
+import type { TestManagerError } from "../types";
 import getConfig from "next/config";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";
@@ -28,16 +28,18 @@ const gunzip = promisify(zlibGunzip);
  * @param s3Folder {string} s3 folder
  * @returns true if object was found and response has been created. false if the object was not found
  */
-export async function getS3Response ({ request, response, filename, s3Folder, redirectToS3 = REDIRECT_TO_S3, unzipS3Objects = UNZIP_S3_FILES }: {
+export async function getS3Response ({ request, response, filename, s3Folder, redirectToS3 = REDIRECT_TO_S3, unzipS3Objects = UNZIP_S3_FILES, downloadFile }: {
   request: NextApiRequest,
   response: NextApiResponse<GetObjectCommandOutput["Body"] | Buffer | TestManagerError>,
   filename: string,
   s3Folder: string,
   redirectToS3?: boolean
   unzipS3Objects?: boolean;
+  downloadFile?: boolean;
 }): Promise<boolean> {
   try {
     const key: string = `${s3Folder}/${filename}`;
+    log(`getS3Response: ${request.method} ${request.url}, filename: ${filename}, s3Folder: ${s3Folder}`, LogLevel.DEBUG, { filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile });
     const files = await listFiles(key);
     if (files && files.length > 0 && files.some((file) => file.Key?.endsWith(key))) {
       // https://github.com/vercel/next.js/issues/49963
@@ -50,10 +52,15 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       if (redirectToS3) {
         try {
           const s3Client = s3.init();
-          const command = new GetObjectCommand({
+          const commandParams: GetObjectCommandInput = {
             Bucket: s3.BUCKET_NAME,
             Key: key.startsWith(s3.KEYSPACE_PREFIX) ? key : (s3.KEYSPACE_PREFIX + key)
-          });
+          };
+          // Add response parameters to force download when redirecting to S3
+          if (downloadFile) {
+            commandParams.ResponseContentDisposition = `attachment; filename="${filename}"`;
+          }
+          const command = new GetObjectCommand(commandParams);
           const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
           log(`${key} presignedUrl: ${presignedUrl}`, LogLevel.DEBUG, presignedUrl);
           response.writeHead(302, { Location: presignedUrl });
@@ -87,7 +94,12 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
         log("s3Object: " + s3Object, LogLevel.DEBUG, { ...s3Object, Body: !!s3Object.Body });
         // res.writeHead and res.send don't mix so we have to set each header separately
         response.status(200);
-        response.setHeader("Content-Disposition", "inline");
+        if (downloadFile) {
+          // Force download with proper headers
+          response.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        } else {
+          response.setHeader("Content-Disposition", "inline");
+        }
         if (s3Object.CacheControl) { response.setHeader("Cache-Control", s3Object.CacheControl); }
         if (s3Object.ContentType) { response.setHeader("Content-Type", s3Object.ContentType); }
         if (s3Object.ETag) { response.setHeader("ETag", s3Object.ETag); }

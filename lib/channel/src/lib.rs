@@ -513,7 +513,7 @@ impl<T: Serialize> ChannelStatsReader<T> {
         }
     }
 
-    pub fn get_stats(&self, timestamp: u64) -> ChannelStats {
+    pub fn get_stats(&self, timestamp: u64) -> ChannelStats<'_> {
         ChannelStats {
             provider: &self.provider,
             timestamp,

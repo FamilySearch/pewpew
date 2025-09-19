@@ -1,7 +1,8 @@
 import {
   API_ERROR_FORMAT,
-  API_SEARCH,
+  API_SEARCH_FORMAT,
   API_TEST,
+  API_TEST_FORMAT,
   AllTests,
   AllTestsResponse,
   AuthPermission,
@@ -19,19 +20,19 @@ import {
   GetServerSidePropsResult
 } from "next";
 import { H1, H3 } from "../components/Headers";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosError, AxiosResponse } from "axios";
-import { formatError, formatPageHref, isTestData } from "./api/util/clientutil";
+import { formatError, formatPageHref, isTestData } from "../src/clientutil";
 import Div from "../components/Div";
 import { Layout } from "../components/Layout";
 import { TestInfo } from "../components/TestInfo";
-import { TestManager } from "./api/util/testmanager";
+import { TestManager } from "../src/testmanager";
 import { TestResults } from "../components/TestResults";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { TestsList } from "../components/TestsList";
-import { authPage } from "./api/util/authserver";
+import { authPage } from "../src/authserver";
 import getConfig from "next/config";
 import styled from "styled-components";
 import { useRouter } from "next/router";
@@ -99,7 +100,7 @@ const TestStatusPage = ({
   const router = useRouter();
   const fetchData = async (testId: string) => {
     try {
-      const url = formatPageHref(`${API_TEST}?testId=${testId}`);
+      const url = formatPageHref(API_TEST_FORMAT(testId));
       // If we're client-side the cookie gets passed automatically
       const response: AxiosResponse = await axios.get(url);
       // Convert it to json
@@ -275,7 +276,7 @@ const TestStatusPage = ({
         return;
       }
       // PUT /api/search - Don't include the extension here. Only on page loads
-      const url = formatPageHref(`${API_SEARCH}?s3Folder=${searchString}`);
+      const url = formatPageHref(API_SEARCH_FORMAT(searchString));
       const response: AxiosResponse = await axios.get(url);
       // Update the URL to include the search param `?search=${searchString}`
       const searchUrl = `${router.pathname}?search=${searchString}`;

@@ -2,9 +2,9 @@ import {
   ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME,
   PpaasEncryptEnvironmentFile,
   PpaasEncryptEnvironmentFileParams
-} from "../pages/api/util/ppaasencryptenvfile";
+} from "../src/ppaasencryptenvfile";
 import { LogLevel, PpaasTestId, log, s3, util } from "@fs/ppaas-common";
-import { decrypt, waitForSecrets } from "../pages/api/util/secrets";
+import { decrypt, waitForSecrets } from "../src/secrets";
 import { EnvironmentVariablesFile } from "../types";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";

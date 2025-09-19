@@ -1,8 +1,8 @@
 import { AuthPermissions, TokenResponse } from "../../types";
 import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
-import { getTokenFromCode, getTokenFromRefreshToken, validateToken } from "./util/authserver";
-import { createErrorResponse } from "./util/util";
+import { getTokenFromCode, getTokenFromRefreshToken, validateToken } from "../../src/authserver";
+import { createErrorResponse } from "../../src/util";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 

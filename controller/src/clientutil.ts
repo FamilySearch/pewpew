@@ -1,5 +1,5 @@
 import { LogLevel, log } from "./log";
-import { TestData, TestManagerError, TestManagerMessage } from "../../../types";
+import { TestData, TestManagerError, TestManagerMessage } from "../types";
 import { AxiosError } from "axios";
 import { IncomingMessage } from "http";
 // Must import from sub-path to avoid other dependencies

@@ -1,15 +1,15 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
 import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
-import { NextApiRequest, NextApiResponse, PageConfig } from "next";
+import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
   parseForm
-} from "./util/util";
-import TestManager from "./util/testmanager";
-import { authApi } from "./util/authserver";
+} from "../../src/util";
+import TestManager from "../../src/testmanager";
+import { authApi } from "../../src/authserver";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view the schedule, but not modify
@@ -87,7 +87,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
   }
 };
 
-export const config: PageConfig = {
+export const config = {
   api: {
     bodyParser: false
   }

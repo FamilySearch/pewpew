@@ -2,9 +2,9 @@ import { AuthPermission, AuthPermissions, TestManagerError } from "../../../../.
 import { LogLevel, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { authApi } from "../../../util/authserver";
-import { createErrorResponse } from "../../../util/util";
-import { getS3Response } from "../../../util/s3";
+import { authApi } from "../../../../../src/authserver";
+import { createErrorResponse } from "../../../../../src/util";
+import { getS3Response } from "../../../../../src/s3";
 
 async function getOrRedirect ({ request, response, resultsFile: filename, s3Folder, redirectToS3 }: {
   request: NextApiRequest,

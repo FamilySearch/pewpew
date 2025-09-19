@@ -1,6 +1,6 @@
 import { s3, sqs } from "@fs/ppaas-common";
 import { expect } from "chai";
-import { getGlobalHealthcheckConfig } from "../pages/api/util/healthcheck";
+import { getGlobalHealthcheckConfig } from "../src/healthcheck";
 
 describe("Healthcheck Integration", () => {
   it("Pinging s3 should succeed and update config on success", (done: Mocha.Done) => {

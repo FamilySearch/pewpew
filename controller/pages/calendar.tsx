@@ -1,9 +1,11 @@
 import {
   API_SCHEDULE,
+  API_SCHEDULE_FORMAT,
   AuthPermission,
   AuthPermissions,
   PAGE_START_TEST,
-  PAGE_TEST_HISTORY,
+  PAGE_START_TEST_FORMAT,
+  PAGE_TEST_HISTORY_FORMAT,
   TestManagerError
 } from "../types";
 import { Alert, Danger } from "../components/Alert";
@@ -14,16 +16,16 @@ import {
   GetServerSidePropsResult
 } from "next";
 import { H1, H3 } from "../components/Headers";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref, isTestManagerError } from "./api/util/clientutil";
+import { formatError, formatPageHref, isTestManagerError } from "../src/clientutil";
 import Div from "../components/Div";
 import { GridView } from "../components/Calendar";
 import Layout from "../components/Layout";
-import { TestScheduler } from "./api/util/testscheduler";
-import { authPage } from "./api/util/authserver";
+import { TestScheduler } from "../src/testscheduler";
+import { authPage } from "../src/authserver";
 import dynamic from "next/dynamic";
 import styled from "styled-components";
 import { useRouter } from "next/router";
@@ -83,7 +85,7 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
 
   const deleteEvent = async (testId: string) => {
     try {
-      const response: AxiosResponse = await axios.delete(formatPageHref(API_SCHEDULE + "?testId=" + testId));
+      const response: AxiosResponse = await axios.delete(formatPageHref(API_SCHEDULE_FORMAT(testId)));
       log("Calendar delete response", LogLevel.DEBUG, response);
       if (!isTestManagerError(response.data)) {
         const errorString = API_SCHEDULE + " did not return a TestManagerError object";
@@ -118,10 +120,9 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
       }
       return undefined;
     }
-    const url: string = (arg.event.start && arg.event.start.getTime() < Date.now()
-        ? (PAGE_TEST_HISTORY + "?testId=")
-        : (PAGE_START_TEST + "?edit&testId=")
-      ) + testId;
+    const url: string = (arg.event.start && arg.event.start.getTime() < Date.now())
+        ? PAGE_TEST_HISTORY_FORMAT(testId)
+        : PAGE_START_TEST_FORMAT(testId, true);
     // We must use route.push "as" similar to our next/link
     router.push(url, formatPageHref(url))
     .catch((error) => log("Could not Router.push to the schedule", LogLevel.ERROR, error));

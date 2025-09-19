@@ -8,11 +8,11 @@ import {
 } from "../../types";
 import { Button, LinkButton, defaultButtonTheme } from "../LinkButton";
 import React, { useEffect } from "react";
-import { formatAssetHref, getBasePath } from "../../pages/api/util/clientutil";
+import { formatAssetHref, getBasePath } from "../../src/clientutil";
 import styled, { createGlobalStyle } from "styled-components";
 import Div from "../Div";
 import Head from "next/head";
-import { logout as authLogout } from "../../pages/api/util/authclient";
+import { logout as authLogout } from "../../src/authclient";
 import getConfig from "next/config";
 
 // Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
@@ -155,7 +155,9 @@ export const Layout = ({
             <LinkButton href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">Yaml Writer</LinkButton>
+            <a href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">
+              <Button theme={{...defaultButtonTheme}}>Yaml Writer</Button>
+            </a>
           </LinkDiv>
           {authPermission === AuthPermission.Admin &&
             <LinkDiv>

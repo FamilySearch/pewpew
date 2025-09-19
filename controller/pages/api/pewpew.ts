@@ -1,15 +1,15 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
 import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
-import { NextApiRequest, NextApiResponse, PageConfig } from "next";
+import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
   parseForm
-} from "./util/util";
-import { deletePewPew, getPewpew, postPewPew } from "./util/pewpew";
-import { authApi } from "./util/authserver";
+} from "../../src/util";
+import { deletePewPew, getPewpew, postPewPew } from "../../src/pewpew";
+import { authApi } from "../../src/authserver";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 
@@ -65,7 +65,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
   }
 };
 
-export const config: PageConfig = {
+export const config = {
   api: {
     bodyParser: false
   }

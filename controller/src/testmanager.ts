@@ -17,7 +17,7 @@ import {
   TestDataResponse,
   TestListResponse,
   TestManagerError
-} from "../../../types";
+} from "../types";
 import {
   ENCRYPTED_TEST_SCHEDULER_FOLDERNAME,
   ParsedForm,

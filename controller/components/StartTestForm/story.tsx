@@ -8,7 +8,7 @@ import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import { QueueInitialProps } from "../TestQueues";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { VersionInitalProps } from "../PewPewVersions";
-import { latestPewPewVersion } from "../../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../../src/clientutil";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.

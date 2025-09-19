@@ -51,6 +51,7 @@ pub use parser::Segment;
 #[derive(serde::Serialize)]
 #[serde(into = "TemplatedString<T>")]
 #[serde(bound(serialize = "V: std::fmt::Display + Clone"))]
+#[allow(unpredictable_function_pointer_comparisons)]
 pub enum Template<
     V: FromStr,
     T: TemplateType,

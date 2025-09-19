@@ -802,7 +802,7 @@ mod builtins {
     #[boa_fn]
     fn join(value: SJV, separator: String, separator2: Option<String>) -> String {
         // The std ToString impl for SJV put extra "" around the String
-        fn get_as_str(v: &SJV) -> Cow<str> {
+        fn get_as_str(v: &SJV) -> Cow<'_, str> {
             match v {
                 SJV::String(s) => Cow::Borrowed(s),
                 other => Cow::Owned(other.to_string()),

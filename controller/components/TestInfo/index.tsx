@@ -162,7 +162,7 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
       });
       const response: AxiosResponse = await axios.get(formatPageHref(API_DOWNLOAD_FORMAT(testData.testId)));
       log("onDownload response", LogLevel.DEBUG, response.data);
-      if (Array.isArray(response.data) && response.data.length >= 0 && typeof response.data[0] === "string") {
+      if (Array.isArray(response.data) && response.data.length > 0 && typeof response.data[0] === "string") {
         updateState({ downloadFiles: response.data });
         return;
       }

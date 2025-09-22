@@ -42,6 +42,9 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
     log(`getS3Response: ${request.method} ${request.url}, filename: ${filename}, s3Folder: ${s3Folder}`, LogLevel.DEBUG, { filename, s3Folder, redirectToS3, unzipS3Objects, downloadFile });
     const files = await listFiles(key);
     if (files && files.length > 0 && files.some((file) => file.Key?.endsWith(key))) {
+      const isFileTooLarge: boolean = files.length === 1 && files[0].Size !== undefined && files[0].Size >= MAX_API_SIZE;
+      // Downloads that are too large we sould redirect to S3
+      const redirectDownloadFiles = downloadFile && isFileTooLarge;
       // https://github.com/vercel/next.js/issues/49963
       // Next 13.4.x has a bug that stops this from working. 13.3.4 still works.
       // Possible options for going forward:
@@ -49,7 +52,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       //   2. Unzip the file ourselves and return text - UNZIP_S3_FILES=true
       // https://stackoverflow.com/questions/73872687/is-there-a-way-to-pipe-readablestreamuint8array-into-nextapiresponse
       // https://stackoverflow.com/questions/74699607/how-to-pipe-to-next-js-13-api-response
-      if (redirectToS3) {
+      if (redirectToS3 || redirectDownloadFiles) {
         try {
           const s3Client = s3.init();
           const commandParams: GetObjectCommandInput = {
@@ -72,7 +75,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
         }
       }
       // Check for too large of file AFTER the redirect. Only limit on our own API. Redirect can bypass with auth
-      if (files.length === 1 && files[0].Size && files[0].Size >= MAX_API_SIZE) {
+      if (isFileTooLarge) {
         // Too Large
         response.status(413).json({ message: `Reponse is too large - Size: ${files[0].Size}, Max: ${MAX_API_SIZE}` });
         return true;

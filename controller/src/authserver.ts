@@ -362,7 +362,7 @@ export async function getLogoutUrl (req: NextApiRequest): Promise<string> {
 export async function authApi (req: NextApiRequest, res: NextApiResponse, requiredPermissions: AuthPermission = AuthPermission.User): Promise<AuthPermissions | undefined> {
   if (!isAuthEnabled()) {
     log("Authentication is turned off", IS_RUNNING_IN_AWS ? LogLevel.ERROR : LogLevel.WARN);
-    return { token: undefined, authPermission: TEST_AUTH_PERMISSION || AuthPermission.Admin };
+    return { token: undefined, authPermission: TEST_AUTH_PERMISSION ?? AuthPermission.Admin };
   }
 
   log(`Checking authorization for ${req.method} ${req.url}`, LogLevel.DEBUG);
@@ -484,7 +484,7 @@ export function getRefreshTokenFromCookie (ctx: GetServerSidePropsContext): stri
 export async function authPage (ctx: GetServerSidePropsContext, requiredPermissions: AuthPermission = AuthPermission.User): Promise<AuthPermissions | string> {
   if (!isAuthEnabled()) {
     log("Authentication is turned off", IS_RUNNING_IN_AWS ? LogLevel.ERROR : LogLevel.WARN);
-    return { token: undefined, authPermission: TEST_AUTH_PERMISSION || AuthPermission.Admin };
+    return { token: undefined, authPermission: TEST_AUTH_PERMISSION ?? AuthPermission.Admin };
   }
   const token: string | undefined = getTokenFromCookieOrHeader(ctx);
 

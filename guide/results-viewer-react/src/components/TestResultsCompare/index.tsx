@@ -1,4 +1,5 @@
 import { ComparisonData, ComparisonResult, ComparisonValue, compareResults } from "../TestResults/comparison";
+import { ENDPOINT, ENDPOINTDIV1, H3, TABLE, TR, UL, RTTTABLE as _RTTTABLE, TD as _TD } from "../TestResults";
 import { LogLevel, formatError, log } from "../../util/log";
 import React, { useEffect, useState } from "react";
 import { Danger } from "../Alert";
@@ -81,6 +82,14 @@ const minMaxTime = (testResults: any) => {
   return testTimes;
 };
 
+const RTTTABLE = styled(_RTTTABLE)`
+  max-width: 600px;
+`;
+
+const TD = styled(_TD)`
+  max-width: 250px;
+`;
+
 const CONTAINER = styled.div`
   text-align: left;
 `;
@@ -107,8 +116,8 @@ const COMPARISON_COLUMN = styled.div`
   flex-direction: column;
 `;
 
-const ENDPOINT = styled.div`
-  margin-bottom: 2em;
+// Comparison-specific styled components
+const COMPARISON_ENDPOINT = styled(ENDPOINT)`
   padding: 1em;
   border: 1px solid #333;
   border-radius: 4px;
@@ -123,23 +132,9 @@ const H2 = styled.h2`
   margin-bottom: 1em;
 `;
 
-const H3 = styled.h3`
-  text-align: left;
-  word-break: break-all;
-  margin-bottom: 0.5em;
-`;
-
 const H4 = styled.h4`
   text-align: center;
   margin: 1em 0 0.5em 0;
-`;
-
-const TABLE = styled.table`
-  color: white;
-  border-spacing: 0;
-  background-color: grey;
-  width: 100%;
-  margin-bottom: 1em;
 `;
 
 const TH = styled.th`
@@ -149,19 +144,6 @@ const TH = styled.th`
   font-weight: bold;
   &:not(:first-child) {
     text-align: right;
-  }
-`;
-
-const TD = styled.td`
-  padding: 5px 8px;
-  &:not(:first-child) {
-    text-align: right;
-  }
-`;
-
-const TR = styled.tr`
-  &:nth-child(even) {
-    background: #474747;
   }
 `;
 
@@ -177,11 +159,6 @@ const CHANGE_NEGATIVE = styled.span`
 
 const CHANGE_NEUTRAL = styled.span`
   color: #868e96;
-`;
-
-const UL = styled.ul`
-  list-style: none;
-  padding-left: 0;
 `;
 
 export interface TestResultsCompareProps {
@@ -249,7 +226,7 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
   const { bucketId, stats, statusCounts, otherErrors } = comparison;
 
   return (
-    <ENDPOINT>
+    <COMPARISON_ENDPOINT>
       <H3>{bucketId.method} {bucketId.url}</H3>
       <UL>
         {Object.entries(bucketId).map(([key, value], idx) => {
@@ -264,85 +241,91 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
         })}
       </UL>
 
-      <H4>RTT Statistics Comparison</H4>
-      <TABLE>
-        <thead>
-          <TR>
-            <TH>Metric</TH>
-            <TH>Baseline</TH>
-            <TH>Comparison</TH>
-            <TH>Change</TH>
-          </TR>
-        </thead>
-        <tbody>
-          <TR>
-            <TD>Avg</TD>
-            <TD>{formatValue(stats.avg.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.avg.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.avg, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>Min</TD>
-            <TD>{formatValue(stats.min.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.min.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.min, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>Max</TD>
-            <TD>{formatValue(stats.max.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.max.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.max, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>Std Dev</TD>
-            <TD>{formatValue(stats.stdDev.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.stdDev.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.stdDev, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>90th PCTL</TD>
-            <TD>{formatValue(stats.p90.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.p90.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.p90, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>95th PCTL</TD>
-            <TD>{formatValue(stats.p95.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.p95.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.p95, "ms")}</TD>
-          </TR>
-          <TR>
-            <TD>99th PCTL</TD>
-            <TD>{formatValue(stats.p99.baseline, "ms")}</TD>
-            <TD>{formatValue(stats.p99.comparison, "ms")}</TD>
-            <TD>{formatChangeValue(stats.p99, "ms")}</TD>
-          </TR>
-        </tbody>
-      </TABLE>
-
-      <H4>HTTP Status Counts Comparison</H4>
-      <TABLE>
-        <thead>
-          <TR>
-            <TH>Status</TH>
-            <TH>Baseline</TH>
-            <TH>Comparison</TH>
-            <TH>Change</TH>
-          </TR>
-        </thead>
-        <tbody>
-          {Object.entries(statusCounts)
-            .sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10))
-            .map(([status, counts]) => (
-              <TR key={status}>
-                <TD>{status}</TD>
-                <TD>{formatValue(counts.baseline)}</TD>
-                <TD>{formatValue(counts.comparison)}</TD>
-                <TD>{formatChangeValue(counts)}</TD>
+      <ENDPOINTDIV1>
+        <H4>RTT Statistics Comparison</H4>
+        <RTTTABLE>
+          <TABLE>
+            <thead>
+              <TR>
+                <TH>Metric</TH>
+                <TH>Baseline</TH>
+                <TH>Comparison</TH>
+                <TH>Change</TH>
               </TR>
-            ))}
-        </tbody>
-      </TABLE>
+            </thead>
+            <tbody>
+              <TR>
+                <TD>Avg</TD>
+                <TD>{formatValue(stats.avg.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.avg.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.avg, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>Min</TD>
+                <TD>{formatValue(stats.min.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.min.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.min, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>Max</TD>
+                <TD>{formatValue(stats.max.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.max.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.max, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>Std Dev</TD>
+                <TD>{formatValue(stats.stdDev.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.stdDev.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.stdDev, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>90th PCTL</TD>
+                <TD>{formatValue(stats.p90.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.p90.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.p90, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>95th PCTL</TD>
+                <TD>{formatValue(stats.p95.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.p95.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.p95, "ms")}</TD>
+              </TR>
+              <TR>
+                <TD>99th PCTL</TD>
+                <TD>{formatValue(stats.p99.baseline, "ms")}</TD>
+                <TD>{formatValue(stats.p99.comparison, "ms")}</TD>
+                <TD>{formatChangeValue(stats.p99, "ms")}</TD>
+              </TR>
+            </tbody>
+          </TABLE>
+        </RTTTABLE>
+
+        <H4>HTTP Status Counts Comparison</H4>
+        <RTTTABLE>
+          <TABLE>
+            <thead>
+              <TR>
+                <TH>Status</TH>
+                <TH>Baseline</TH>
+                <TH>Comparison</TH>
+                <TH>Change</TH>
+              </TR>
+            </thead>
+            <tbody>
+              {Object.entries(statusCounts)
+                .sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10))
+                .map(([status, counts]) => (
+                  <TR key={status}>
+                    <TD>{status}</TD>
+                    <TD>{formatValue(counts.baseline)}</TD>
+                    <TD>{formatValue(counts.comparison)}</TD>
+                    <TD>{formatChangeValue(counts)}</TD>
+                  </TR>
+                ))}
+            </tbody>
+          </TABLE>
+        </RTTTABLE>
+      </ENDPOINTDIV1>
 
       {(otherErrors.baseline.length > 0 || otherErrors.comparison.length > 0) && (
         <>
@@ -351,16 +334,18 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
             <COMPARISON_COLUMN>
               <strong>Baseline</strong>
               {otherErrors.baseline.length > 0 ? (
-                <TABLE>
-                  <tbody>
-                    {otherErrors.baseline.map(([msg, count], baselineIdx) => (
-                      <TR key={baselineIdx}>
-                        <TD title={msg}>{msg}</TD>
-                        <TD>{count}</TD>
-                      </TR>
-                    ))}
-                  </tbody>
-                </TABLE>
+                <RTTTABLE>
+                  <TABLE>
+                    <tbody>
+                      {otherErrors.baseline.map(([msg, count], baselineIdx) => (
+                        <TR key={baselineIdx}>
+                          <TD title={msg}>{msg}</TD>
+                          <TD>{count}</TD>
+                        </TR>
+                      ))}
+                    </tbody>
+                  </TABLE>
+                </RTTTABLE>
               ) : (
                 <div>No errors</div>
               )}
@@ -368,16 +353,18 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
             <COMPARISON_COLUMN>
               <strong>Comparison</strong>
               {otherErrors.comparison.length > 0 ? (
-                <TABLE>
-                  <tbody>
-                    {otherErrors.comparison.map(([msg, count], comparisonIdx) => (
-                      <TR key={comparisonIdx}>
-                        <TD title={msg}>{msg}</TD>
-                        <TD>{count}</TD>
-                      </TR>
-                    ))}
-                  </tbody>
-                </TABLE>
+                <RTTTABLE>
+                  <TABLE>
+                    <tbody>
+                      {otherErrors.comparison.map(([msg, count], comparisonIdx) => (
+                        <TR key={comparisonIdx}>
+                          <TD title={msg}>{msg}</TD>
+                          <TD>{count}</TD>
+                        </TR>
+                      ))}
+                    </tbody>
+                  </TABLE>
+                </RTTTABLE>
               ) : (
                 <div>No errors</div>
               )}
@@ -385,7 +372,7 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
           </COMPARISON_GRID>
         </>
       )}
-    </ENDPOINT>
+    </COMPARISON_ENDPOINT>
   );
 };
 
@@ -573,7 +560,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
         <>
           <H1>Only in {baselineLabel} ({baselineOnly.length})</H1>
           {baselineOnly.map(([bucketId], idx) => (
-            <ENDPOINT key={idx}>
+            <COMPARISON_ENDPOINT key={idx}>
               <H3>{bucketId.method} {bucketId.url}</H3>
               <UL>
                 {Object.entries(bucketId).map(([key, value], keyIdx) => {
@@ -587,7 +574,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                   return null;
                 })}
               </UL>
-            </ENDPOINT>
+            </COMPARISON_ENDPOINT>
           ))}
         </>
       )}
@@ -596,7 +583,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
         <>
           <H1>Only in {comparisonLabel} ({comparisonOnly.length})</H1>
           {comparisonOnly.map(([bucketId], idx) => (
-            <ENDPOINT key={idx}>
+            <COMPARISON_ENDPOINT key={idx}>
               <H3>{bucketId.method} {bucketId.url}</H3>
               <UL>
                 {Object.entries(bucketId).map(([key, value], keyIdx) => {
@@ -610,7 +597,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                   return null;
                 })}
               </UL>
-            </ENDPOINT>
+            </COMPARISON_ENDPOINT>
           ))}
         </>
       )}

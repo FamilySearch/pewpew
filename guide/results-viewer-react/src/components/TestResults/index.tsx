@@ -79,6 +79,9 @@ const TR = styled.tr`
   };
 `;
 
+// Export styled components for use in other components
+export { ENDPOINT, H3, UL, TABLE, TD, TR, RTTTABLE, ENDPOINTDIV1, FLEXROW };
+
 export interface TestResultProps {
   resultsText: string;
 }

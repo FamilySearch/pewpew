@@ -338,7 +338,15 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       return {
         ...oldState,
         defaultMessage,
-        resultsData,
+        resultsData: resultsData?.sort(([a], [b]) => {
+          const aId = parseInt(a._id, 10);
+          const bId = parseInt(b._id, 10);
+          if (aId === bId) {
+            // Sort alphabetically a vs. b
+            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
+          }
+          return aId - bId;
+        }),
         filteredData,
         summaryData,
         error: undefined,

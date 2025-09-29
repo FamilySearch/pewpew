@@ -27,6 +27,13 @@
     "url": "https://github.com/FamilySearch/pewpew/issues"
   },
   "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config-wasm#readme",
+  "overrides": {
+    "eslint": "^9.15.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
   "dependencies": {
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
     "axios": "^1.7.8",
@@ -36,9 +43,9 @@
     "file-saver": "^2.0.5",
     "immutability-helper": "^3.1.1",
     "js-yaml": "^4.1.0",
-    "react": "^18.2.0",
+    "react": "^19.0.0",
     "react-accessible-accordion": "^5.0.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "^19.0.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",
     "styled-components": "^6.0.0"
@@ -55,13 +62,13 @@
     "@types/file-saver": "^2.0.5",
     "@types/har-format": "^1.2.10",
     "@types/js-yaml": "^4.0.5",
-    "@types/react": "^18.0.27",
-    "@types/react-dom": "^18.0.10",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/react-transition-group": "^4.4.5",
     "@types/styled-components": "^5.1.26",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "babel-loader": "^9.1.2",
+    "babel-loader": "^10.0.0",
     "eslint": "^9.15.0",
     "html-webpack-plugin": "^5.5.0",
     "storybook": "^9.0.0",

@@ -92,6 +92,9 @@ export const comprehensiveSort = (entries: ParsedFileEntry[]): ParsedFileEntry[]
 // Cached model import to avoid repeated dynamic imports
 let modelCache: any = null;
 
+// Constants moved outside function to avoid recreation
+const TEST_START_KEYS = ["test", "bin", "bucketSize"];
+
 export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]> => {
   try {
     const results = text.replace(/}{/g, "}\n{")
@@ -103,10 +106,9 @@ export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]>
       modelCache = await import("./model");
     }
 
-    const testStartKeys = ["test", "bin", "bucketSize"];
     const isOnlyTestStart: boolean = results.length === 1
-      && Object.keys(results[0]).length === testStartKeys.length
-      && testStartKeys.every((key) => key in results[0]);
+      && Object.keys(results[0]).length === TEST_START_KEYS.length
+      && TEST_START_KEYS.every((key) => key in results[0]);
 
     let parsedData: ParsedFileEntry[];
     if (results.length === 1 && !isOnlyTestStart) {

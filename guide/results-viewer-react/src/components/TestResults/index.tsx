@@ -1,7 +1,7 @@
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
-import { RTT, totalCalls } from "./charts";
+// Dynamic import for charts to reduce bundle size
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
@@ -211,20 +211,23 @@ const getSummaryData = ({
   return summaryData;
 };
 
-export const TestResults = ({ resultsText }: TestResultProps) => {
-  const defaultMessage = "Select Results File";
-  const defaultState: TestResultState = {
-    defaultMessage,
-    summaryTagFilter: "",
-    summaryTagValueFilter: "",
-    resultsData: undefined,
-    filteredData: undefined,
-    summaryData: undefined,
-    minMaxTime: undefined,
-    error: undefined
-  };
+// Constants moved outside component to avoid recreation on every render
+const DEFAULT_MESSAGE = "Select Results File";
+const DEFAULT_STATE: TestResultState = {
+  defaultMessage: DEFAULT_MESSAGE,
+  summaryTagFilter: "",
+  summaryTagValueFilter: "",
+  resultsData: undefined,
+  filteredData: undefined,
+  summaryData: undefined,
+  minMaxTime: undefined,
+  error: undefined
+};
+const MICROS_TO_MS = 1000;
 
-  const [state, setState] = useState(defaultState);
+export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
+
+  const [state, setState] = useState(DEFAULT_STATE);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -248,7 +251,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
       return {
         ...oldState,
-        defaultMessage,
+        defaultMessage: DEFAULT_MESSAGE,
         resultsData, // Already sorted by parseResultsData
         filteredData,
         summaryData,
@@ -259,7 +262,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     } catch (error) {
       log("Error parsing Data", LogLevel.ERROR, error);
       updateState({
-        defaultMessage,
+        defaultMessage: DEFAULT_MESSAGE,
         error: formatError(error)
       });
     }
@@ -368,7 +371,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       )}
     </React.Fragment>
   );
-};
+});
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }
@@ -409,7 +412,6 @@ const total = (dataPoints: DataPoint[]) => {
   if (requestTimeouts > 0) {
     otherErrorsArray.push(["Timeout", requestTimeouts]);
   }
-  const MICROS_TO_MS = 1000;
 
   return {
     otherErrors: otherErrorsArray,
@@ -469,12 +471,14 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
     chart.update();
   };
 
-  const rttCanvas = useCallback((node: HTMLCanvasElement) => {
+  const rttCanvas = useCallback(async (node: HTMLCanvasElement) => {
     if (node) {
       if (rttChart) {
         // We need to clean up the old one before creating a new one
         rttChart.destroy();
       }
+      // Dynamic import to reduce bundle size
+      const { RTT } = await import("./charts");
       const currentChart = RTT(node, dataPoints);
       setRttChart(currentChart);
       setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
@@ -484,12 +488,14 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
     }
   }, [dataPoints]);
 
-  const totalCanvas = useCallback((node: HTMLCanvasElement) => {
+  const totalCanvas = useCallback(async (node: HTMLCanvasElement) => {
     if (node) {
       if (totalChart) {
         // We need to clean up the old one before creating a new one
         totalChart.destroy();
       }
+      // Dynamic import to reduce bundle size
+      const { totalCalls } = await import("./charts");
       const currentChart = totalCalls(node, dataPoints);
       setTotalChart(currentChart);
       setTotalButtonDisplay("logarithmic");

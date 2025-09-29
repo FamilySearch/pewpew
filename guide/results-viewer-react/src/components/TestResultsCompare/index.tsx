@@ -12,7 +12,7 @@ import {
 } from "../TestResults";
 import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime, parseResultsData } from "../TestResults/utils";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Danger } from "../Alert";
 import { ParsedFileEntry } from "../TestResults/model";
 import styled from "styled-components";
@@ -108,26 +108,10 @@ interface TestResultsCompareState {
 }
 
 
-function formatChangeValue (compValue: ComparisonValue, unit: string = ""): React.ReactNode {
-  const { diff, percentChange } = compValue;
-  const isPositive = diff > 0;
-  const isZero = Math.abs(diff) < 0.01 && Math.abs(percentChange) < 0.01;
-
-  if (isZero) {
-    return <CHANGE_NEUTRAL>0{unit}</CHANGE_NEUTRAL>;
-  }
-
-  const changeText = `${diff > 0 ? "+" : ""}${diff.toLocaleString()}${unit} (${percentChange > 0 ? "+" : ""}${percentChange.toFixed(1)}%)`;
-
-  return isPositive ? (
-    <CHANGE_POSITIVE>{changeText}</CHANGE_POSITIVE>
-  ) : (
-    <CHANGE_NEGATIVE>{changeText}</CHANGE_NEGATIVE>
-  );
-}
-
-
-const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparison }) => {
+const ComparisonEndpoint: React.FC<{
+  comparison: ComparisonData;
+  formatChangeValue: (compValue: ComparisonValue, unit?: string) => React.ReactNode;
+}> = React.memo(({ comparison, formatChangeValue }) => {
   const { bucketId, stats, statusCounts, otherErrors } = comparison;
 
   return (
@@ -279,9 +263,9 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
       )}
     </COMPARISON_ENDPOINT>
   );
-};
+});
 
-export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
+export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(({
   baselineText,
   comparisonText,
   baselineLabel = "Baseline",
@@ -305,6 +289,25 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     state.comparisonResult || { matchedEndpoints: [], baselineOnly: [], comparisonOnly: [] },
     [state.comparisonResult]
   );
+
+  // Memoized formatChangeValue function to prevent recalculations
+  const formatChangeValue = useCallback((compValue: ComparisonValue, unit: string = ""): React.ReactNode => {
+    const { diff, percentChange } = compValue;
+    const isPositive = diff > 0;
+    const isZero = Math.abs(diff) < 0.01 && Math.abs(percentChange) < 0.01;
+
+    if (isZero) {
+      return <CHANGE_NEUTRAL>0{unit}</CHANGE_NEUTRAL>;
+    }
+
+    const changeText = `${diff > 0 ? "+" : ""}${diff.toLocaleString()}${unit} (${percentChange > 0 ? "+" : ""}${percentChange.toFixed(1)}%)`;
+
+    return isPositive ? (
+      <CHANGE_POSITIVE>{changeText}</CHANGE_POSITIVE>
+    ) : (
+      <CHANGE_NEGATIVE>{changeText}</CHANGE_NEGATIVE>
+    );
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -425,7 +428,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
         <>
           <H1>Matched Endpoints ({matchedEndpoints.length})</H1>
           {matchedEndpoints.map((comparison, idx) => (
-            <ComparisonEndpoint key={idx} comparison={comparison} />
+            <ComparisonEndpoint key={idx} comparison={comparison} formatChangeValue={formatChangeValue} />
           ))}
         </>
       )}
@@ -477,6 +480,6 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
       )}
     </CONTAINER>
   );
-};
+});
 
 export default TestResultsCompare;

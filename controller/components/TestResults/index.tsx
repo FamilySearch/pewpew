@@ -1,7 +1,8 @@
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, log } from "../../src/log";
-import { RTT, totalCalls } from "./charts";
-import React, { useCallback, useEffect, useState } from "react";
+import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
+// Dynamic import for charts to reduce bundle size
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TABLE, TD, TR } from "../Table";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref } from "../../src/clientutil";
@@ -20,36 +21,36 @@ const TIMETAKEN = styled.div`
   text-align: left;
 `;
 
-const ENDPOINT = styled.div`
+export const ENDPOINT = styled.div`
   margin-bottom: 1em;
   padding: 0;
 `;
 
-const H3 = styled.h3`
+export const H3 = styled.h3`
   text-align: left;
   word-break: break-all;
 `;
 
-const ENDPOINTDIV1 = styled.div`
+export const ENDPOINTDIV1 = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
 
-const RTTDIV = styled(ENDPOINTDIV1)`
+export const RTTDIV = styled(ENDPOINTDIV1)`
   margin-bottom: 2em;
 `;
 
-const FLEXROW = styled.div`
+export const FLEXROW = styled.div`
   display: flex;
   flex-direction: row;
 `;
 
-const ENDPOINTDIV2 = styled(FLEXROW)`
+export const ENDPOINTDIV2 = styled(FLEXROW)`
   align-items: center;
 `;
 
-const RTTTABLE = styled(ENDPOINTDIV1)`
+export const RTTTABLE = styled(ENDPOINTDIV1)`
   max-width: 400px;
   margin-right: 15px;
 `;
@@ -59,7 +60,7 @@ const CANVASBOX = styled.div`
   width: calc(55vw - 100px);
 `;
 
-const UL = styled.ul`
+export const UL = styled.ul`
   list-style: none;
 `;
 
@@ -85,11 +86,6 @@ export interface TestResultState {
   error: string | undefined;
 }
 
-export interface MinMaxTime {
-  startTime?: string;
-  endTime?: string;
-  deltaTime?: string;
-}
 
 export interface EndpointProps {
   bucketId: BucketId;
@@ -100,75 +96,6 @@ export const configureURL = {
   baseS3Url: API_JSON + "/"
 };
 
-const dateToString = (dateTime: Date, timeOnly: boolean) => {
-  let stringDate = dateTime.toLocaleTimeString("en-us", { hour12: false });
-  if (!timeOnly) {
-    stringDate += ` ${dateTime.getDate()}-${dateTime.toLocaleString("en-us", {
-      month: "short"
-    })}-${dateTime.getFullYear()}`;
-  }
-  return stringDate;
-};
-
-const minMaxTime = (testResults: any) => {
-  const testTimes: MinMaxTime = {
-    startTime: undefined,
-    endTime: undefined,
-    deltaTime: undefined
-  };
-
-  let startTime2 = Infinity;
-  let endTime2 = -Infinity;
-
-  for (const [_, dataPoints] of testResults) {
-    for (const point of dataPoints) {
-      if (point.startTime) {
-        startTime2 = Math.min(startTime2, point.startTime);
-        break;
-      }
-    }
-
-    for (let i = dataPoints.length - 1; i >= 0; i--) {
-      const point = dataPoints[i];
-      if (point.endTime) {
-        endTime2 = Math.max(endTime2, point.endTime);
-        break;
-      }
-    }
-  }
-
-  const second: number = 1;
-  const minute: number = 60;
-  const hour: number = minute * 60;
-  const day: number = hour * 24;
-  let deltaTimeInSeconds: number = (endTime2 - startTime2) / 1000;
-
-  const startTime3: Date = new Date(startTime2);
-  const endTime3: Date = new Date(endTime2);
-
-  const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
-  testTimes.startTime = dateToString(startTime3, includeDateWithStart);
-  testTimes.endTime = dateToString(endTime3, false);
-
-  const timeUnits: [number, string][] = [
-    [day, "day"],
-    [hour, "hour"],
-    [minute, "minute"],
-    [second, "second"]
-  ];
-  const prettyDurationBuilder = [];
-  for (const [unit, name] of timeUnits) {
-    const count = Math.floor(deltaTimeInSeconds / unit);
-    if (count > 0) {
-      deltaTimeInSeconds -= count * unit;
-      prettyDurationBuilder.push(`${count} ${name}${count > 1 ? "s" : ""}`);
-    }
-  }
-
-  testTimes.deltaTime = prettyDurationBuilder.join(", ");
-
-  return testTimes;
-};
 
 const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
   const oldData: ParsedFileEntry[] = [
@@ -226,7 +153,7 @@ const getFilteredEndpoints = ({
         filteredEntries.push([tags, dataPoints]);
       }
     }
-    return filteredEntries.length > 0 ? filteredEntries : undefined;
+    return filteredEntries.length > 0 ? comprehensiveSort(filteredEntries) : undefined;
   }
   return undefined;
 };
@@ -274,22 +201,26 @@ const getSummaryData = ({
   return summaryData;
 };
 
-export const TestResults = ({ testData }: TestResultProps) => {
-  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
-  const defaultState: TestResultState = {
-    defaultMessage: defaultMessage(),
-    summaryTagFilter: "",
-    summaryTagValueFilter: "",
-    resultsPath: undefined,
-    resultsText: undefined,
-    resultsData: undefined,
-    filteredData: undefined,
-    summaryData: undefined,
-    minMaxTime: undefined,
-    error: undefined
-  };
+// Constants moved outside component to avoid recreation on every render
+const DEFAULT_MESSAGE = "Select Results File";
+const DEFAULT_STATE: TestResultState = {
+  defaultMessage: DEFAULT_MESSAGE,
+  summaryTagFilter: "",
+  summaryTagValueFilter: "",
+  resultsPath: undefined,
+  resultsText: undefined,
+  resultsData: undefined,
+  filteredData: undefined,
+  summaryData: undefined,
+  minMaxTime: undefined,
+  error: undefined
+};
+const MICROS_TO_MS = 1000;
 
-  const [state, setState] = useState(defaultState);
+export const TestResults = React.memo(({ testData }: TestResultProps) => {
+  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
+
+  const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -313,24 +244,8 @@ export const TestResults = ({ testData }: TestResultProps) => {
         return;
       }
 
-      // if there are multiple jsons (new format), split them up and parse them separately
-      const results = resultsText.replace(/}{/g, "}\n{")
-        .split("\n")
-        .map((s) => JSON.parse(s));
-      const model = await import("./model");
-      let resultsData: ParsedFileEntry[];
-      const testStartKeys = ["test", "bin", "bucketSize"];
-      const isOnlyTestStart: boolean = results.length === 1
-        && Object.keys(results[0]).length === testStartKeys.length
-        && testStartKeys.every((key) => key in results[0]);
-      log("isOnlyTestStart", LogLevel.DEBUG, { isOnlyTestStart, results, testStartKeys });
-      if (results.length === 1 && !isOnlyTestStart) {
-        // old stats format
-        resultsData = model.processJson(results[0]);
-      } else {
-        // new stats format
-        resultsData = model.processNewJson(results);
-      }
+      // Use shared parsing utility (includes sorting)
+      const resultsData = await parseResultsData(resultsText);
       setState((oldState: TestResultState) => {
         // Free the old ones
       freeHistograms(oldState.resultsData, oldState.summaryData);
@@ -460,11 +375,19 @@ export const TestResults = ({ testData }: TestResultProps) => {
     return undefined;
   }, [testData.status]);
 
-  const displayData = state.filteredData || state.resultsData;
+  // Memoized display data to avoid unnecessary recalculations
+  const displayData = useMemo(() => {
+    return state.filteredData || state.resultsData;
+  }, [state.filteredData, state.resultsData]);
+
+  // Memoized summary tags calculation
+  const summaryTags: BucketId = useMemo(() => {
+    return state.summaryData && state.filteredData
+      ? state.summaryData[0]
+      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
+  }, [state.summaryData, state.filteredData]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
-  const summaryTags: BucketId = state.summaryData && state.filteredData
-    ? state.summaryData[0]
-    : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
@@ -517,7 +440,7 @@ export const TestResults = ({ testData }: TestResultProps) => {
       )}
     </React.Fragment>
   );
-};
+});
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }
@@ -558,7 +481,6 @@ const total = (dataPoints: DataPoint[]) => {
   if (requestTimeouts > 0) {
     otherErrorsArray.push(["Timeout", requestTimeouts]);
   }
-  const MICROS_TO_MS = 1000;
 
   return {
     otherErrors: otherErrorsArray,
@@ -618,30 +540,36 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
     chart.update();
   };
 
-  const rttCanvas = useCallback((node: HTMLCanvasElement) => {
+  const rttCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (rttChart) {
         // We need to clean up the old one before creating a new one
         rttChart.destroy();
       }
-      const currentChart = RTT(node, dataPoints);
-      setRttChart(currentChart);
-      setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
-        ? "logarithmic"
-        : "linear"
-      );
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ RTT }) => {
+        const currentChart = RTT(node, dataPoints);
+        setRttChart(currentChart);
+        setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
+          ? "logarithmic"
+          : "linear"
+        );
+      });
     }
   }, [dataPoints]);
 
-  const totalCanvas = useCallback((node: HTMLCanvasElement) => {
+  const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (totalChart) {
         // We need to clean up the old one before creating a new one
         totalChart.destroy();
       }
-      const currentChart = totalCalls(node, dataPoints);
-      setTotalChart(currentChart);
-      setTotalButtonDisplay("logarithmic");
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ totalCalls }) => {
+        const currentChart = totalCalls(node, dataPoints);
+        setTotalChart(currentChart);
+        setTotalButtonDisplay("logarithmic");
+      });
     }
   }, [dataPoints]);
 

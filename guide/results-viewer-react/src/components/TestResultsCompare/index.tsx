@@ -1,86 +1,22 @@
 import { ComparisonData, ComparisonResult, ComparisonValue, compareResults } from "../TestResults/comparison";
-import { ENDPOINT, ENDPOINTDIV1, H3, TABLE, TR, UL, RTTTABLE as _RTTTABLE, TD as _TD } from "../TestResults";
+import {
+  ENDPOINT,
+  ENDPOINTDIV1,
+  ENDPOINTDIV2,
+  H3,
+  TABLE,
+  TR,
+  UL,
+  RTTTABLE as _RTTTABLE,
+  TD as _TD
+} from "../TestResults";
 import { LogLevel, formatError, log } from "../../util/log";
-import React, { useEffect, useState } from "react";
+import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime, parseResultsData } from "../TestResults/utils";
+import React, { useEffect, useMemo, useState } from "react";
 import { Danger } from "../Alert";
 import { ParsedFileEntry } from "../TestResults/model";
 import styled from "styled-components";
 
-interface MinMaxTime {
-  startTime?: string;
-  endTime?: string;
-  deltaTime?: string;
-}
-
-const dateToString = (dateTime: Date, timeOnly: boolean) => {
-  let stringDate = dateTime.toLocaleTimeString("en-us", { hour12: false });
-  if (!timeOnly) {
-    stringDate += ` ${dateTime.getDate()}-${dateTime.toLocaleString("en-us", {
-      month: "short"
-    })}-${dateTime.getFullYear()}`;
-  }
-  return stringDate;
-};
-
-const minMaxTime = (testResults: any) => {
-  const testTimes: MinMaxTime = {
-    startTime: undefined,
-    endTime: undefined,
-    deltaTime: undefined
-  };
-
-  let startTime2 = Infinity;
-  let endTime2 = -Infinity;
-
-  for (const [_, dataPoints] of testResults) {
-    for (const point of dataPoints) {
-      if (point.startTime) {
-        startTime2 = Math.min(startTime2, point.startTime);
-        break;
-      }
-    }
-
-    for (let i = dataPoints.length - 1; i >= 0; i--) {
-      const point = dataPoints[i];
-      if (point.endTime) {
-        endTime2 = Math.max(endTime2, point.endTime);
-        break;
-      }
-    }
-  }
-
-  const second: number = 1;
-  const minute: number = 60;
-  const hour: number = minute * 60;
-  const day: number = hour * 24;
-  let deltaTimeInSeconds: number = (endTime2 - startTime2) / 1000;
-
-  const startTime3: Date = new Date(startTime2);
-  const endTime3: Date = new Date(endTime2);
-
-  const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
-  testTimes.startTime = dateToString(startTime3, includeDateWithStart);
-  testTimes.endTime = dateToString(endTime3, false);
-
-  const timeUnits: [number, string][] = [
-    [day, "day"],
-    [hour, "hour"],
-    [minute, "minute"],
-    [second, "second"]
-  ];
-  const prettyDurationBuilder = [];
-  for (const [unit, name] of timeUnits) {
-    const count = Math.floor(deltaTimeInSeconds / unit);
-    if (count > 0) {
-      deltaTimeInSeconds -= count * unit;
-      prettyDurationBuilder.push(`${count} ${name}${count > 1 ? "s" : ""}`);
-    }
-  }
-
-  testTimes.deltaTime = prettyDurationBuilder.join(", ");
-
-  return testTimes;
-};
 
 const RTTTABLE = styled(_RTTTABLE)`
   max-width: 600px;
@@ -104,16 +40,9 @@ const COMPARISON_SECTION = styled.div`
   flex: 1;
 `;
 
-const COMPARISON_GRID = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+const COMPARISON_GRID = styled(ENDPOINTDIV2)`
   gap: 1em;
   margin-bottom: 2em;
-`;
-
-const COMPARISON_COLUMN = styled.div`
-  display: flex;
-  flex-direction: column;
 `;
 
 // Comparison-specific styled components
@@ -178,9 +107,6 @@ interface TestResultsCompareState {
   loading: boolean;
 }
 
-function formatValue (value: number, unit: string = ""): string {
-  return `${value.toLocaleString()}${unit}`;
-}
 
 function formatChangeValue (compValue: ComparisonValue, unit: string = ""): React.ReactNode {
   const { diff, percentChange } = compValue;
@@ -200,27 +126,6 @@ function formatChangeValue (compValue: ComparisonValue, unit: string = ""): Reac
   );
 }
 
-const parseResultsData = async (text: string): Promise<ParsedFileEntry[]> => {
-  try {
-    const results = text.replace(/}{/g, "}\n{")
-      .split("\n")
-      .map((s) => JSON.parse(s));
-    const model = await import("../TestResults/model");
-
-    const testStartKeys = ["test", "bin", "bucketSize"];
-    const isOnlyTestStart: boolean = results.length === 1
-      && Object.keys(results[0]).length === testStartKeys.length
-      && testStartKeys.every((key) => key in results[0]);
-
-    if (results.length === 1 && !isOnlyTestStart) {
-      return model.processJson(results[0]);
-    } else {
-      return model.processNewJson(results);
-    }
-  } catch (error) {
-    throw new Error(`Failed to parse results: ${error}`);
-  }
-};
 
 const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparison }) => {
   const { bucketId, stats, statusCounts, otherErrors } = comparison;
@@ -328,10 +233,10 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
       </ENDPOINTDIV1>
 
       {(otherErrors.baseline.length > 0 || otherErrors.comparison.length > 0) && (
-        <>
+        <ENDPOINTDIV1>
           <H4>Other Errors</H4>
           <COMPARISON_GRID>
-            <COMPARISON_COLUMN>
+            <ENDPOINTDIV1>
               <strong>Baseline</strong>
               {otherErrors.baseline.length > 0 ? (
                 <RTTTABLE>
@@ -349,8 +254,8 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
               ) : (
                 <div>No errors</div>
               )}
-            </COMPARISON_COLUMN>
-            <COMPARISON_COLUMN>
+            </ENDPOINTDIV1>
+            <ENDPOINTDIV1>
               <strong>Comparison</strong>
               {otherErrors.comparison.length > 0 ? (
                 <RTTTABLE>
@@ -368,9 +273,9 @@ const ComparisonEndpoint: React.FC<{ comparison: ComparisonData }> = ({ comparis
               ) : (
                 <div>No errors</div>
               )}
-            </COMPARISON_COLUMN>
+            </ENDPOINTDIV1>
           </COMPARISON_GRID>
-        </>
+        </ENDPOINTDIV1>
       )}
     </COMPARISON_ENDPOINT>
   );
@@ -395,6 +300,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   const updateState = (newState: Partial<TestResultsCompareState>) =>
     setState((oldState) => ({ ...oldState, ...newState }));
 
+  // Memoize the destructured comparison result to avoid unnecessary re-renders
+  const { matchedEndpoints, baselineOnly, comparisonOnly } = useMemo(() =>
+    state.comparisonResult || { matchedEndpoints: [], baselineOnly: [], comparisonOnly: [] },
+    [state.comparisonResult]
+  );
+
   useEffect(() => {
     const loadData = async () => {
       if (!baselineText || !comparisonText) {
@@ -418,25 +329,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           parseResultsData(comparisonText)
         ]);
 
-        const baselineData = unsortedBaselineData.sort(([a], [b]) => {
-          const aId = parseInt(a._id, 10);
-          const bId = parseInt(b._id, 10);
-          if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
-          }
-          return aId - bId;
-        });
-
-        const comparisonData = unsortedComparisonData.sort(([a], [b]) => {
-          const aId = parseInt(a._id, 10);
-          const bId = parseInt(b._id, 10);
-          if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
-          }
-          return aId - bId;
-        });
+        const baselineData = comprehensiveSort(unsortedBaselineData);
+        const comparisonData = comprehensiveSort(unsortedComparisonData);
 
         // Calculate timing information
         const baselineMinMaxTime = minMaxTime(baselineData);
@@ -444,36 +338,18 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
         const comparisonResult = compareResults(baselineData, comparisonData);
 
-        // Sort the comparison results by _id
+        // Sort the comparison results by _id using comprehensiveSort
         comparisonResult.matchedEndpoints.sort((a, b) => {
           const aId = parseInt(a.bucketId._id, 10);
           const bId = parseInt(b.bucketId._id, 10);
           if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
+            return JSON.stringify(a.bucketId) < JSON.stringify(b.bucketId) ? -1 : 1;
           }
           return aId - bId;
         });
 
-        comparisonResult.baselineOnly.sort(([a], [b]) => {
-          const aId = parseInt(a._id, 10);
-          const bId = parseInt(b._id, 10);
-          if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
-          }
-          return aId - bId;
-        });
-
-        comparisonResult.comparisonOnly.sort(([a], [b]) => {
-          const aId = parseInt(a._id, 10);
-          const bId = parseInt(b._id, 10);
-          if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
-          }
-          return aId - bId;
-        });
+        comparisonResult.baselineOnly = comprehensiveSort(comparisonResult.baselineOnly);
+        comparisonResult.comparisonOnly = comprehensiveSort(comparisonResult.comparisonOnly);
 
         updateState({
           baselineData,
@@ -515,8 +391,6 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   if (!state.comparisonResult) {
     return <H1>Select two results files to compare</H1>;
   }
-
-  const { matchedEndpoints, baselineOnly, comparisonOnly } = state.comparisonResult;
 
   return (
     <CONTAINER>

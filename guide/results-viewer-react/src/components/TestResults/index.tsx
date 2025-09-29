@@ -1,7 +1,8 @@
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, formatError, log } from "../../util/log";
+import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
 import { RTT, totalCalls } from "./charts";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import styled from "styled-components";
@@ -10,36 +11,36 @@ const TIMETAKEN = styled.div`
   text-align: left;
 `;
 
-const ENDPOINT = styled.div`
+export const ENDPOINT = styled.div`
   margin-bottom: 1em;
   padding: 0;
 `;
 
-const H3 = styled.h3`
+export const H3 = styled.h3`
   text-align: left;
   word-break: break-all;
 `;
 
-const ENDPOINTDIV1 = styled.div`
+export const ENDPOINTDIV1 = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
 
-const RTTDIV = styled(ENDPOINTDIV1)`
+export const RTTDIV = styled(ENDPOINTDIV1)`
   margin-bottom: 2em;
 `;
 
-const FLEXROW = styled.div`
+export const FLEXROW = styled.div`
   display: flex;
   flex-direction: row;
 `;
 
-const ENDPOINTDIV2 = styled(FLEXROW)`
+export const ENDPOINTDIV2 = styled(FLEXROW)`
   align-items: center;
 `;
 
-const RTTTABLE = styled(ENDPOINTDIV1)`
+export const RTTTABLE = styled(ENDPOINTDIV1)`
   max-width: 400px;
   margin-right: 15px;
 `;
@@ -49,17 +50,17 @@ const CANVASBOX = styled.div`
   width: calc(55vw - 100px);
 `;
 
-const UL = styled.ul`
+export const UL = styled.ul`
   list-style: none;
 `;
 
-const TABLE = styled.table`
+export const TABLE = styled.table`
   color: white;
   border-spacing: 0;
   background-color: grey;
 `;
 
-const TD = styled.td`
+export const TD = styled.td`
   max-width: 150px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -73,14 +74,11 @@ const TD = styled.td`
   };
 `;
 
-const TR = styled.tr`
+export const TR = styled.tr`
   &:nth-child(even) {
     background: #474747;
   };
 `;
-
-// Export styled components for use in other components
-export { ENDPOINT, H3, UL, TABLE, TD, TR, RTTTABLE, ENDPOINTDIV1, FLEXROW };
 
 export interface TestResultProps {
   resultsText: string;
@@ -102,86 +100,12 @@ export interface TestResultState {
   error: string | undefined;
 }
 
-export interface MinMaxTime {
-  startTime?: string;
-  endTime?: string;
-  deltaTime?: string;
-}
 
 export interface EndpointProps {
   bucketId: BucketId;
   dataPoints: DataPoint[];
 }
 
-const dateToString = (dateTime: Date, timeOnly: boolean) => {
-  let stringDate = dateTime.toLocaleTimeString("en-us", { hour12: false });
-  if (!timeOnly) {
-    stringDate += ` ${dateTime.getDate()}-${dateTime.toLocaleString("en-us", {
-      month: "short"
-    })}-${dateTime.getFullYear()}`;
-  }
-  return stringDate;
-};
-
-const minMaxTime = (testResults: any) => {
-  const testTimes: MinMaxTime = {
-    startTime: undefined,
-    endTime: undefined,
-    deltaTime: undefined
-  };
-
-  let startTime2 = Infinity;
-  let endTime2 = -Infinity;
-
-  for (const [_, dataPoints] of testResults) {
-    for (const point of dataPoints) {
-      if (point.startTime) {
-        startTime2 = Math.min(startTime2, point.startTime);
-        break;
-      }
-    }
-
-    for (let i = dataPoints.length - 1; i >= 0; i--) {
-      const point = dataPoints[i];
-      if (point.endTime) {
-        endTime2 = Math.max(endTime2, point.endTime);
-        break;
-      }
-    }
-  }
-
-  const second: number = 1;
-  const minute: number = 60;
-  const hour: number = minute * 60;
-  const day: number = hour * 24;
-  let deltaTimeInSeconds: number = (endTime2 - startTime2) / 1000;
-
-  const startTime3: Date = new Date(startTime2);
-  const endTime3: Date = new Date(endTime2);
-
-  const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
-  testTimes.startTime = dateToString(startTime3, includeDateWithStart);
-  testTimes.endTime = dateToString(endTime3, false);
-
-  const timeUnits: [number, string][] = [
-    [day, "day"],
-    [hour, "hour"],
-    [minute, "minute"],
-    [second, "second"]
-  ];
-  const prettyDurationBuilder = [];
-  for (const [unit, name] of timeUnits) {
-    const count = Math.floor(deltaTimeInSeconds / unit);
-    if (count > 0) {
-      deltaTimeInSeconds -= count * unit;
-      prettyDurationBuilder.push(`${count} ${name}${count > 1 ? "s" : ""}`);
-    }
-  }
-
-  testTimes.deltaTime = prettyDurationBuilder.join(", ");
-
-  return testTimes;
-};
 
 const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
   const oldData: ParsedFileEntry[] = [
@@ -239,7 +163,7 @@ const getFilteredEndpoints = ({
         filteredEntries.push([tags, dataPoints]);
       }
     }
-    return filteredEntries.length > 0 ? filteredEntries : undefined;
+    return filteredEntries.length > 0 ? comprehensiveSort(filteredEntries) : undefined;
   }
   return undefined;
 };
@@ -310,24 +234,8 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       defaultMessage: "Results Loading..."
     });
     try {
-      // if there are multiple jsons (new format), split them up and parse them separately
-      const results = text.replace(/}{/g, "}\n{")
-        .split("\n")
-        .map((s) => JSON.parse(s));
-      const model = await import("./model");
-      let resultsData: ParsedFileEntry[];
-      const testStartKeys = ["test", "bin", "bucketSize"];
-      const isOnlyTestStart: boolean = results.length === 1
-        && Object.keys(results[0]).length === testStartKeys.length
-        && testStartKeys.every((key) => key in results[0]);
-      log("isOnlyTestStart", LogLevel.DEBUG, { isOnlyTestStart, results, testStartKeys });
-      if (results.length === 1 && !isOnlyTestStart) {
-        // old stats format
-        resultsData = model.processJson(results[0]);
-      } else {
-        // new stats format
-        resultsData = model.processNewJson(results);
-      }
+      // Use shared parsing utility (includes sorting)
+      const resultsData = await parseResultsData(text);
       setState((oldState: TestResultState) => {
         // Free the old ones
       freeHistograms(oldState.resultsData, oldState.summaryData);
@@ -341,15 +249,7 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
       return {
         ...oldState,
         defaultMessage,
-        resultsData: resultsData?.sort(([a], [b]) => {
-          const aId = parseInt(a._id, 10);
-          const bId = parseInt(b._id, 10);
-          if (aId === bId) {
-            // Sort alphabetically a vs. b
-            return JSON.stringify(a) < JSON.stringify(b) ? -1 : 1;
-          }
-          return aId - bId;
-        }),
+        resultsData, // Already sorted by parseResultsData
         filteredData,
         summaryData,
         error: undefined,
@@ -415,12 +315,19 @@ export const TestResults = ({ resultsText }: TestResultProps) => {
     updateResultsData(resultsText);
   }, [resultsText]);
 
-  const displayData = state.filteredData || state.resultsData;
+  // Memoized display data to avoid unnecessary recalculations
+  const displayData = useMemo(() => {
+    return state.filteredData || state.resultsData;
+  }, [state.filteredData, state.resultsData]);
+
+  // Memoized summary tags calculation
+  const summaryTags: BucketId = useMemo(() => {
+    return state.summaryData && state.filteredData
+      ? state.summaryData[0]
+      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
+  }, [state.summaryData, state.filteredData]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
-  // If we're showing all endpoints, fix the summary tags
-  const summaryTags: BucketId = state.summaryData && state.filteredData
-    ? state.summaryData[0]
-    : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}

@@ -471,34 +471,36 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
     chart.update();
   };
 
-  const rttCanvas = useCallback(async (node: HTMLCanvasElement) => {
+  const rttCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (rttChart) {
         // We need to clean up the old one before creating a new one
         rttChart.destroy();
       }
-      // Dynamic import to reduce bundle size
-      const { RTT } = await import("./charts");
-      const currentChart = RTT(node, dataPoints);
-      setRttChart(currentChart);
-      setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
-        ? "logarithmic"
-        : "linear"
-      );
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ RTT }) => {
+        const currentChart = RTT(node, dataPoints);
+        setRttChart(currentChart);
+        setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
+          ? "logarithmic"
+          : "linear"
+        );
+      });
     }
   }, [dataPoints]);
 
-  const totalCanvas = useCallback(async (node: HTMLCanvasElement) => {
+  const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (totalChart) {
         // We need to clean up the old one before creating a new one
         totalChart.destroy();
       }
-      // Dynamic import to reduce bundle size
-      const { totalCalls } = await import("./charts");
-      const currentChart = totalCalls(node, dataPoints);
-      setTotalChart(currentChart);
-      setTotalButtonDisplay("logarithmic");
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ totalCalls }) => {
+        const currentChart = totalCalls(node, dataPoints);
+        setTotalChart(currentChart);
+        setTotalButtonDisplay("logarithmic");
+      });
     }
   }, [dataPoints]);
 

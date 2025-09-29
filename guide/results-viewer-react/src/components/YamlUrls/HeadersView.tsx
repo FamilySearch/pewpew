@@ -1,9 +1,9 @@
 import { Button, Input } from "../YamlStyles";
 import { HeaderType, PewPewHeaderStringType } from ".";
+import React, { type JSX } from "react";
 import { AddIcon } from "../Icons/AddIcon";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewHeader } from "../../util/yamlwriter";
-import React from "react";
 
 export interface HeadersViewProps {
     id: string;

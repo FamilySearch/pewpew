@@ -352,12 +352,18 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     if (doubleClickCheckRef.current) {
       return;
     }
-    // TODO: Should we check if we already have state.compareTests and not do it again?
     try {
       doubleClickCheckRef.current = true;
       updateState({
         error: undefined
       });
+      // Check if we already have state.compareTests and just open the modal
+      if (state.compareTests && state.compareTests.length > 0) {
+        if (compareSearchModalRef.current) {
+          compareSearchModalRef.current.openModal();
+        }
+        return;
+      }
       const searchString = testData.s3Folder.split("/")[0];
       const response: AxiosResponse = await axios.get(formatPageHref(API_SEARCH_FORMAT(searchString)));
       log("search response", LogLevel.DEBUG, response.data);
@@ -428,8 +434,6 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       if (state.compareText === compareText) {
         log("compareText not changed", LogLevel.DEBUG);
       } else {
-        // Use shared parsing utility (includes sorting)
-        const compareData = await parseResultsData(compareText);
         setState((oldState: TestResultState) => {
           // Free the old ones
           freeHistograms(undefined, undefined, oldState.compareData);
@@ -438,10 +442,19 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           return {
             ...oldState,
             compareTest,
-            compareText,
-            compareData,
+            compareText: undefined,
+            compareData: undefined, // Set this back to undefined while loading. Need compareData to be freed
             error: undefined
           };
+        });
+        // Use shared parsing utility (includes sorting)
+        const compareData = await parseResultsData(compareText);
+        // Update the state with the new compare data
+        log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
+        updateState({
+          compareTest,
+          compareText,
+          compareData
         });
       }
     } catch (error) {
@@ -533,6 +546,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
               : <p>No prior tests found to compare with</p>}
           </Modal>
           {/* This is the compare test UI. We want it above the normal results */}
+          {state.resultsData && state.compareTest && state.compareData === undefined && <H3>Loading Results {state.compareTest?.testId} for Comparison</H3>}
           {state.resultsData && state.compareData && <TestResultsCompare
             baselineData={state.compareData}
             comparisonData={state.resultsData}

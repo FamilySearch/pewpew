@@ -346,15 +346,15 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     });
   };
 
-  let doubleClickCheck: boolean = false;
+  const doubleClickCheckRef = useRef<boolean>(false);
   const onPriorTestSearch = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    if (doubleClickCheck) {
+    if (doubleClickCheckRef.current) {
       return;
     }
     // TODO: Should we check if we already have state.compareTests and not do it again?
     try {
-      doubleClickCheck = true;
+      doubleClickCheckRef.current = true;
       updateState({
         error: undefined
       });
@@ -397,17 +397,17 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
         error: undefined
       }), 30000);
     } finally {
-      doubleClickCheck = false;
+      doubleClickCheckRef.current = false;
     }
   };
 
   const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
     event.preventDefault();
-    if (doubleClickCheck) {
+    if (doubleClickCheckRef.current) {
       return;
     }
     try {
-      doubleClickCheck = true;
+      doubleClickCheckRef.current = true;
       compareSearchModalRef.current?.closeModal();
       // Load the Status and find results
       const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(compareTest.testId)));
@@ -455,7 +455,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
         error: undefined
       }), 30000);
     } finally {
-      doubleClickCheck = false;
+      doubleClickCheckRef.current = false;
     }
   };
 
@@ -488,7 +488,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       );
     }
     return undefined;
-  }, [testData.status]);
+  }, [testData.status, state.resultsPath]);
 
   // Memoized display data to avoid unnecessary recalculations
   const displayData = useMemo(() => {
@@ -638,14 +638,21 @@ const total = (dataPoints: DataPoint[]) => {
   }
 };
 
-const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
+const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
   const [rttButtonDisplay, setRttButtonDisplay] = useState("");
   const [totalButtonDisplay, setTotalButtonDisplay] = useState("");
 
   const [rttChart, setRttChart] = useState<Chart>();
   const [totalChart, setTotalChart] = useState<Chart>();
 
-  const totalResults = total(dataPoints);
+  // Memoize totalResults calculation to avoid recalculation on every render
+  const totalResults = useMemo(() => total(dataPoints), [dataPoints]);
+
+  // Create stable key for dataPoints to determine when charts need recreation
+  const dataPointsKey = useMemo(() =>
+    dataPoints.map(dp => `${dp.time}-${dp.rttHistogram.getTotalCount()}`).join(","),
+    [dataPoints]
+  );
 
   const toggleChart = (chart: Chart) => {
     const chartConfig = chart.config.options?.scales?.y;
@@ -685,7 +692,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         );
       });
     }
-  }, [dataPoints]);
+  }, [dataPointsKey, dataPoints]); // Stable key + dataPoints for actual chart creation
 
   const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
@@ -700,7 +707,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         setTotalButtonDisplay("logarithmic");
       });
     }
-  }, [dataPoints]);
+  }, [dataPointsKey, dataPoints]); // Stable key + dataPoints for actual chart creation
 
   return (
     <React.Fragment>
@@ -785,7 +792,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         <FLEXROW>
         <RTTDIV>
           <h3>RTT Stats</h3>
-          <button onClick={() => toggleChart(rttChart!)}>
+          <button onClick={() => rttChart && toggleChart(rttChart)} disabled={!rttChart}>
             Switch to {rttButtonDisplay}
           </button>
           <ENDPOINTDIV2>
@@ -796,7 +803,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </RTTDIV>
         <ENDPOINTDIV1>
           <h3>HTTP Status Counts and Errors</h3>
-          <button onClick={() => toggleChart(totalChart!)}>
+          <button onClick={() => totalChart && toggleChart(totalChart)} disabled={!totalChart}>
             Switch to {totalButtonDisplay}
           </button>
           <ENDPOINTDIV2>
@@ -809,6 +816,6 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
       </ENDPOINT>
     </React.Fragment>
   );
-};
+});
 
 export default TestResults;

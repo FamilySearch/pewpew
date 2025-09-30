@@ -9,7 +9,7 @@ import {
 } from "../TestResults/styled";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime } from "../TestResults/utils";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { TABLE, TR, TD as _TD } from "../Table";
 import { Danger } from "../Alert";
 import { ParsedFileEntry } from "../TestResults/model";
@@ -278,11 +278,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
   const updateState = (newState: Partial<TestResultsCompareState>) =>
     setState((oldState) => ({ ...oldState, ...newState }));
 
-  // Memoize the destructured comparison result to avoid unnecessary re-renders
-  const { matchedEndpoints, baselineOnly, comparisonOnly } = useMemo(() =>
-    state.comparisonResult || { matchedEndpoints: [], baselineOnly: [], comparisonOnly: [] },
-    [state.comparisonResult]
-  );
+  // Destructure comparison result with defaults
+  const { matchedEndpoints = [], baselineOnly = [], comparisonOnly = [] } = state.comparisonResult || {};
 
   // Memoized formatChangeValue function to prevent recalculations
   const formatChangeValue = useCallback((compValue: ComparisonValue, unit: string = ""): React.ReactNode => {
@@ -409,8 +406,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       {matchedEndpoints.length > 0 && (
         <>
           <H1>Matched Endpoints ({matchedEndpoints.length})</H1>
-          {matchedEndpoints.map((comparison, idx) => (
-            <ComparisonEndpoint key={idx} comparison={comparison} formatChangeValue={formatChangeValue} />
+          {matchedEndpoints.map((comparison) => (
+            <ComparisonEndpoint key={JSON.stringify(comparison.bucketId)} comparison={comparison} formatChangeValue={formatChangeValue} />
           ))}
         </>
       )}
@@ -418,8 +415,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       {baselineOnly.length > 0 && (
         <>
           <H1>Only in {baselineLabel} ({baselineOnly.length})</H1>
-          {baselineOnly.map(([bucketId], idx) => (
-            <COMPARISON_ENDPOINT key={idx}>
+          {baselineOnly.map(([bucketId]) => (
+            <COMPARISON_ENDPOINT key={JSON.stringify(bucketId)}>
               <H3>{bucketId.method} {bucketId.url}</H3>
               <UL>
                 {Object.entries(bucketId).map(([key, value], keyIdx) => {
@@ -441,8 +438,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       {comparisonOnly.length > 0 && (
         <>
           <H1>Only in {comparisonLabel} ({comparisonOnly.length})</H1>
-          {comparisonOnly.map(([bucketId], idx) => (
-            <COMPARISON_ENDPOINT key={idx}>
+          {comparisonOnly.map(([bucketId]) => (
+            <COMPARISON_ENDPOINT key={JSON.stringify(bucketId)}>
               <H3>{bucketId.method} {bucketId.url}</H3>
               <UL>
                 {Object.entries(bucketId).map(([key, value], keyIdx) => {

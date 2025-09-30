@@ -6,7 +6,7 @@ import {
   H3,
   UL,
   RTTTABLE as _RTTTABLE
-} from "../TestResults";
+} from "../TestResults/styled";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime, parseResultsData } from "../TestResults/utils";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -86,7 +86,7 @@ const CHANGE_NEGATIVE = styled.span`
 `;
 
 const CHANGE_NEUTRAL = styled.span`
-  color: #868e96;
+  /* color: #868e96; */
 `;
 
 export interface TestResultsCompareProps {

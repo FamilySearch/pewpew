@@ -1,16 +1,29 @@
+import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
+import { Button, defaultButtonTheme } from "../LinkButton";
+import {
+  ENDPOINT,
+  ENDPOINTDIV1,
+  ENDPOINTDIV2,
+  FLEXROW,
+  H3,
+  RTTDIV,
+  RTTTABLE,
+  UL
+} from "./styled";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
-// Dynamic import for charts to reduce bundle size
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Modal, ModalObject, useEffectModal } from "../Modal";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TABLE, TD, TR } from "../Table";
+import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref } from "../../src/clientutil";
-import { API_JSON } from "../../types";
+import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
-import { TestData } from "../../types/testmanager";
+import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import { TestsList } from "../TestsList";
 import styled from "styled-components";
 
 const SELECT = styled.select`
@@ -21,47 +34,9 @@ const TIMETAKEN = styled.div`
   text-align: left;
 `;
 
-export const ENDPOINT = styled.div`
-  margin-bottom: 1em;
-  padding: 0;
-`;
-
-export const H3 = styled.h3`
-  text-align: left;
-  word-break: break-all;
-`;
-
-export const ENDPOINTDIV1 = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
-export const RTTDIV = styled(ENDPOINTDIV1)`
-  margin-bottom: 2em;
-`;
-
-export const FLEXROW = styled.div`
-  display: flex;
-  flex-direction: row;
-`;
-
-export const ENDPOINTDIV2 = styled(FLEXROW)`
-  align-items: center;
-`;
-
-export const RTTTABLE = styled(ENDPOINTDIV1)`
-  max-width: 400px;
-  margin-right: 15px;
-`;
-
 const CANVASBOX = styled.div`
   position: relative;
   width: calc(55vw - 100px);
-`;
-
-export const UL = styled.ul`
-  list-style: none;
 `;
 
 export interface TestResultProps {
@@ -82,6 +57,14 @@ export interface TestResultState {
   filteredData: ParsedFileEntry[] | undefined;
   /** Overall merged stats from all filteredData */
   summaryData: ParsedFileEntry | undefined;
+  /** List of tests to compare against */
+  compareTests: TestData[] | undefined;
+  /** Test to compare against */
+  compareTest: TestData | undefined;
+  /** string data for comparison */
+  compareText: string | undefined;
+  /** Parsed data for comparison */
+  compareData: ParsedFileEntry[] | undefined;
   minMaxTime: MinMaxTime | undefined;
   error: string | undefined;
 }
@@ -92,6 +75,7 @@ export interface EndpointProps {
   dataPoints: DataPoint[];
 }
 
+/** Let's us override for Storybook to use static files */
 export const configureURL = {
   baseS3Url: API_JSON + "/"
 };
@@ -212,6 +196,10 @@ const DEFAULT_STATE: TestResultState = {
   resultsData: undefined,
   filteredData: undefined,
   summaryData: undefined,
+  compareTests: undefined,
+  compareTest: undefined,
+  compareText: undefined,
+  compareData: undefined,
   minMaxTime: undefined,
   error: undefined
 };
@@ -221,23 +209,30 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
+  const compareSearchModalRef = useRef<ModalObject| null>(null);
+  useEffectModal(compareSearchModalRef);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
 
-  const fetchData = async (s3ResultPath: string): Promise<void> => {
-    try {
-      // s3ResultPath ends with /yamlFile/datestring/stats-name.json
-      const localResultsPath: string = formatPageHref(configureURL.baseS3Url + s3ResultPath.split("/").slice(-3).join("/"));
-      log("localResultsPath: " + localResultsPath, LogLevel.DEBUG);
-      // https://github.com/axios/axios/issues/2791
-      const response: AxiosResponse = await axios.get(localResultsPath, { responseType: "text", transformResponse: [] });
+  const fetchResults = async (s3ResultPath: string): Promise<string> => {
+    // s3ResultPath ends with /yamlFile/datestring/stats-name.json
+    const localResultsPath: string = formatPageHref(configureURL.baseS3Url + s3ResultPath.split("/").slice(-3).join("/"));
+    log("localResultsPath: " + localResultsPath, LogLevel.DEBUG);
+    // https://github.com/axios/axios/issues/2791
+    const response: AxiosResponse = await axios.get(localResultsPath, { responseType: "text", transformResponse: [] });
 
-      // get the response text
-      log("typeof response.data: " + typeof response.data, LogLevel.DEBUG);
-      const resultsText: string = typeof response.data !== "string" && response.data !== undefined
-        ? JSON.stringify(response.data) // https://github.com/axios/axios/issues/907
-        : response.data;
+    // get the response text
+    log("typeof response.data: " + typeof response.data, LogLevel.DEBUG);
+    const resultsText: string = typeof response.data !== "string" && response.data !== undefined
+      ? JSON.stringify(response.data) // https://github.com/axios/axios/issues/907
+      : response.data;
+    return resultsText;
+  };
+
+  const updateResults = async (s3ResultPath: string): Promise<void> => {
+    try {
+      const resultsText: string = await fetchResults(s3ResultPath);
       // Check if the data has changed. No need to reprocess and redraw if it didn't
       if (state.resultsText === resultsText) {
         log("resultsText not changed", LogLevel.DEBUG);
@@ -248,22 +243,22 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       const resultsData = await parseResultsData(resultsText);
       setState((oldState: TestResultState) => {
         // Free the old ones
-      freeHistograms(oldState.resultsData, oldState.summaryData);
+        freeHistograms(oldState.resultsData, oldState.summaryData);
 
-      const startEndTime: MinMaxTime = minMaxTime(resultsData);
-      const { summaryTagFilter, summaryTagValueFilter } = oldState;
-      const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
-      const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
+        const startEndTime: MinMaxTime = minMaxTime(resultsData);
+        const { summaryTagFilter, summaryTagValueFilter } = oldState;
+        const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
+        const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
-      log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
-      return {
-        ...oldState,
-        resultsData,
-        filteredData,
-        resultsText,
-        summaryData,
-        error: undefined,
-        minMaxTime: startEndTime
+        log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
+        return {
+          ...oldState,
+          resultsData,
+          filteredData,
+          resultsText,
+          summaryData,
+          error: undefined,
+          minMaxTime: startEndTime
         };
       });
     } catch (error) {
@@ -283,7 +278,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       resultsPath: event.target.value
     });
     if (event.target.selectedIndex !== 0) {
-      await fetchData(event.target.value);
+      await updateResults(event.target.value);
     } else {
       setState((oldState: TestResultState) => {
         // Free the old data
@@ -344,6 +339,119 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     });
   };
 
+  let doubleClickCheck: boolean = false;
+  const onPriorTestSearch = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (doubleClickCheck) {
+      return;
+    }
+    // TODO: Should we check if we already have state.compareTests and not do it again?
+    try {
+      doubleClickCheck = true;
+      updateState({
+        error: undefined
+      });
+      const searchString = testData.s3Folder.split("/")[0];
+      const response: AxiosResponse = await axios.get(formatPageHref(API_SEARCH_FORMAT(searchString)));
+      log("search response", LogLevel.DEBUG, response.data);
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // It's going to be an array of TestData that can be put into a TestList and update status like normal search
+        const compareTests: TestData[] = response.data.filter((test: TestData) => test.testId !== testData.testId);
+        // Pop up the modal with all the comparison options
+        updateState({ compareTests });
+        if (compareSearchModalRef.current) {
+          compareSearchModalRef.current.openModal();
+        } else {
+          log("compareModalRef is null", LogLevel.WARN);
+        }
+        return;
+      }
+      if (!isTestManagerMessage(response.data)) {
+        const errorString = API_SEARCH + " did not return a TestManagerMessage object";
+        log(errorString, LogLevel.WARN, response.data);
+        throw new Error(errorString);
+      }
+      const json: TestManagerMessage | undefined = response.data; // Could also be an empty array
+      updateState({
+        error: json?.message || "Could not get other results for compare"
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } catch (error) {
+      log("onPriorTestSearch error", LogLevel.ERROR, error);
+      updateState({
+        // message: undefined,
+        error: formatError(error)
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } finally {
+      doubleClickCheck = false;
+    }
+  };
+
+  const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
+    event.preventDefault();
+    if (doubleClickCheck) {
+      return;
+    }
+    try {
+      doubleClickCheck = true;
+      compareSearchModalRef.current?.closeModal();
+      // Load the Status and find results
+      const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(compareTest.testId)));
+      // It's either a TestManagerError | TestData
+      log("test data response", LogLevel.DEBUG, response.data);
+      const compareTestData: TestManagerError | TestData = response.data;
+      if ("message" in compareTestData) {
+        throw compareTestData;
+      }
+      const s3ResultPath = compareTestData.resultsFileLocation && compareTestData.resultsFileLocation.length > 0
+        ? compareTestData.resultsFileLocation[0]
+        : undefined;
+      if (!s3ResultPath) {
+        throw new Error(`No results path found for test ${compareTest.testId}`);
+      }
+      const compareText: string = await fetchResults(s3ResultPath);
+      // Check if the data has changed. No need to reprocess and redraw if it didn't
+      if (state.compareText === compareText) {
+        log("compareText not changed", LogLevel.DEBUG);
+      } else {
+        // Use shared parsing utility (includes sorting)
+        const compareData = await parseResultsData(compareText);
+        setState((oldState: TestResultState) => {
+          // Free the old ones
+          freeHistograms(oldState.compareData, undefined);
+
+          log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
+          return {
+            ...oldState,
+            compareTest,
+            compareText,
+            compareData,
+            error: undefined
+          };
+        });
+      }
+    } catch (error) {
+      log("onPriorTestLoad error", LogLevel.ERROR, error);
+      updateState({
+        // message: undefined,
+        error: formatError(error)
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } finally {
+      doubleClickCheck = false;
+    }
+  };
+
   useEffect(() => {
     import("chartjs-adapter-date-fns")
     .catch((error) => log("Could not load chartjs-adapter-date-fns import", LogLevel.WARN, error));
@@ -357,7 +465,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       testData.status === TestStatus.Running
     ) {
       const intervalId = setInterval(() => {
-      fetchData(state.resultsPath!).catch((error) =>
+      updateResults(state.resultsPath!).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
       );
       }, 15000);
@@ -368,7 +476,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       !state.error &&
       (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)
     ) {
-      fetchData(state.resultsPath).catch((error) =>
+      updateResults(state.resultsPath).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
       );
     }
@@ -410,6 +518,20 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
+          <p>Compare results with: <Button onClick={onPriorTestSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Prior Test</Button></p>
+          {/* This is the compare search modal */}
+          <Modal ref={compareSearchModalRef} title="Compare With" closeText="Cancel">
+            {state.compareTests && state.compareTests.length > 0
+              ? <TestsList tests={state.compareTests} onClick={onPriorTestLoad}/>
+              : <p>No prior tests found to compare with</p>}
+          </Modal>
+          {/* This is the compare test UI. We want it above the normal results */}
+          {state.resultsText && state.compareText && <TestResultsCompare
+            baselineText={state.compareText}
+            comparisonText={state.resultsText}
+            baselineLabel={state.compareTest?.testId}
+            comparisonLabel={testData.testId}
+          />}
           <h1>Overview charts</h1>
           <p>Filter which endpoints are included in the summary:</p>
           <label htmlFor="summaryTagFilter">

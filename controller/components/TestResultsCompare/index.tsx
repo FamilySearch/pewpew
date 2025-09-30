@@ -8,14 +8,13 @@ import {
   RTTTABLE as _RTTTABLE
 } from "../TestResults/styled";
 import { LogLevel, log } from "../../src/log";
-import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime, parseResultsData } from "../TestResults/utils";
+import { MinMaxTime, comprehensiveSort, formatValue, minMaxTime } from "../TestResults/utils";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TABLE, TR, TD as _TD } from "../Table";
 import { Danger } from "../Alert";
 import { ParsedFileEntry } from "../TestResults/model";
 import { formatError } from "../../src/clientutil";
 import styled from "styled-components";
-
 
 const RTTTABLE = styled(_RTTTABLE)`
   max-width: 600px;
@@ -90,15 +89,13 @@ const CHANGE_NEUTRAL = styled.span`
 `;
 
 export interface TestResultsCompareProps {
-  baselineText: string;
-  comparisonText: string;
+  baselineData: ParsedFileEntry[];
+  comparisonData: ParsedFileEntry[];
   baselineLabel?: string;
   comparisonLabel?: string;
 }
 
 interface TestResultsCompareState {
-  baselineData: ParsedFileEntry[] | undefined;
-  comparisonData: ParsedFileEntry[] | undefined;
   comparisonResult: ComparisonResult | undefined;
   baselineMinMaxTime: MinMaxTime | undefined;
   comparisonMinMaxTime: MinMaxTime | undefined;
@@ -265,19 +262,17 @@ const ComparisonEndpoint: React.FC<{
 });
 
 export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(({
-  baselineText,
-  comparisonText,
+  baselineData,
+  comparisonData,
   baselineLabel = "Baseline",
   comparisonLabel = "Comparison"
 }) => {
   const [state, setState] = useState<TestResultsCompareState>({
-    baselineData: undefined,
-    comparisonData: undefined,
     comparisonResult: undefined,
     baselineMinMaxTime: undefined,
     comparisonMinMaxTime: undefined,
     error: undefined,
-    loading: false
+    loading: true // Default to loading until data is processed
   });
 
   const updateState = (newState: Partial<TestResultsCompareState>) =>
@@ -309,11 +304,9 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
   }, []);
 
   useEffect(() => {
-    const loadData = async () => {
-      if (!baselineText || !comparisonText) {
+    const processData = () => {
+      if (!baselineData || !comparisonData || baselineData.length === 0 || comparisonData.length === 0) {
         updateState({
-          baselineData: undefined,
-          comparisonData: undefined,
           comparisonResult: undefined,
           baselineMinMaxTime: undefined,
           comparisonMinMaxTime: undefined,
@@ -326,15 +319,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       updateState({ loading: true, error: undefined });
 
       try {
-        const [unsortedBaselineData, unsortedComparisonData] = await Promise.all([
-          parseResultsData(baselineText),
-          parseResultsData(comparisonText)
-        ]);
-
-        const baselineData = comprehensiveSort(unsortedBaselineData);
-        const comparisonData = comprehensiveSort(unsortedComparisonData);
-
-        // Calculate timing information
+        // Data is already parsed and sorted, just calculate timing and comparison
         const baselineMinMaxTime = minMaxTime(baselineData);
         const comparisonMinMaxTime = minMaxTime(comparisonData);
 
@@ -354,8 +339,6 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
         comparisonResult.comparisonOnly = comprehensiveSort(comparisonResult.comparisonOnly);
 
         updateState({
-          baselineData,
-          comparisonData,
           comparisonResult,
           baselineMinMaxTime,
           comparisonMinMaxTime,
@@ -379,8 +362,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       }
     };
 
-    loadData();
-  }, [baselineText, comparisonText]);
+    processData();
+  }, [baselineData, comparisonData]);
 
   if (state.loading) {
     return <H1>Loading comparison...</H1>;
@@ -391,7 +374,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
   }
 
   if (!state.comparisonResult) {
-    return <H1>Select two results files to compare</H1>;
+    return <H1>No data to compare</H1>;
   }
 
   return (
@@ -399,7 +382,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
       <COMPARISON_HEADER>
         <COMPARISON_SECTION>
           <H2>{baselineLabel}</H2>
-          <p>{state.baselineData?.length || 0} endpoints</p>
+          <p>{baselineData?.length || 0} endpoints</p>
           {state.baselineMinMaxTime?.startTime && (
             <p>
               {state.baselineMinMaxTime.startTime} to {state.baselineMinMaxTime.endTime}
@@ -411,7 +394,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
         </COMPARISON_SECTION>
         <COMPARISON_SECTION>
           <H2>{comparisonLabel}</H2>
-          <p>{state.comparisonData?.length || 0} endpoints</p>
+          <p>{comparisonData?.length || 0} endpoints</p>
           {state.comparisonMinMaxTime?.startTime && (
             <p>
               {state.comparisonMinMaxTime.startTime} to {state.comparisonMinMaxTime.endTime}

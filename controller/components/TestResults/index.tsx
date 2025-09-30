@@ -81,10 +81,11 @@ export const configureURL = {
 };
 
 
-const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
+const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined, compareData: ParsedFileEntry[] | undefined) => {
   const oldData: ParsedFileEntry[] = [
     ...(resultsData || []),
-    ...(summaryData ? [summaryData] : [])
+    ...(summaryData ? [summaryData] : []),
+    ...(compareData || [])
   ];
   log("freeHistograms", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
   for (const [bucketId, dataPoints] of oldData) {
@@ -243,7 +244,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       const resultsData = await parseResultsData(resultsText);
       setState((oldState: TestResultState) => {
         // Free the old ones
-        freeHistograms(oldState.resultsData, oldState.summaryData);
+        freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
 
         const startEndTime: MinMaxTime = minMaxTime(resultsData);
         const { summaryTagFilter, summaryTagValueFilter } = oldState;
@@ -257,6 +258,9 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           filteredData,
           resultsText,
           summaryData,
+          compareTest: undefined,
+          compareText: undefined,
+          compareData: undefined,
           error: undefined,
           minMaxTime: startEndTime
         };
@@ -282,7 +286,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     } else {
       setState((oldState: TestResultState) => {
         // Free the old data
-        freeHistograms(oldState.resultsData, oldState.summaryData);
+        freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
         return {
           ...oldState,
           defaultMessage: defaultMessage(),
@@ -291,6 +295,9 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           filteredData: undefined,
           resultsText: undefined,
           summaryData: undefined,
+          compareTest: undefined,
+          compareText: undefined,
+          compareData: undefined,
           error: undefined,
           minMaxTime: undefined
         };
@@ -328,7 +335,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
 
     setState((oldState: TestResultState) => {
       // Free the old data (only the summary)
-      freeHistograms(undefined, oldState.summaryData);
+      freeHistograms(undefined, oldState.summaryData, undefined);
       const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
       return {
         ...oldState,
@@ -425,7 +432,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
         const compareData = await parseResultsData(compareText);
         setState((oldState: TestResultState) => {
           // Free the old ones
-          freeHistograms(oldState.compareData, undefined);
+          freeHistograms(undefined, undefined, oldState.compareData);
 
           log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
           return {
@@ -526,9 +533,9 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
               : <p>No prior tests found to compare with</p>}
           </Modal>
           {/* This is the compare test UI. We want it above the normal results */}
-          {state.resultsText && state.compareText && <TestResultsCompare
-            baselineText={state.compareText}
-            comparisonText={state.resultsText}
+          {state.resultsData && state.compareData && <TestResultsCompare
+            baselineData={state.compareData}
+            comparisonData={state.resultsData}
             baselineLabel={state.compareTest?.testId}
             comparisonLabel={testData.testId}
           />}

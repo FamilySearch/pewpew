@@ -17,7 +17,7 @@ import { TestStatus } from "@fs/ppaas-common/dist/types";
  * Source: https://storybook.js.org
  */
  let counter = 0;
- const makeTestData = (status: TestStatus): TestData => {
+ const makeTestData = (status: TestStatus, testName: string = "Story"): TestData => {
    counter++;
    const date: Date = new Date();
    date.setTime(date.getTime() - counter * 235 * 60000);
@@ -28,7 +28,7 @@ import { TestStatus } from "@fs/ppaas-common/dist/types";
      });
    } catch (error) { // eslint-disable-line  @typescript-eslint/no-unused-vars
      // For some reason newer versions of storybook do not have path.extname()
-     ppaasTestId = PpaasTestId.getFromS3Folder(`Story${counter}/` + PpaasTestId.getDateString(date));
+     ppaasTestId = PpaasTestId.getFromS3Folder(`${testName}${counter}/` + PpaasTestId.getDateString(date));
    }
    const basicTest: TestData = {
      testId: ppaasTestId.testId,
@@ -103,6 +103,19 @@ const propsLoaded: TestListProps = {
   tests: Object.values(TestStatus).map((status: string) => makeTestData(status as TestStatus))
 };
 
+const propsLoadedLarge: TestListProps = {
+  tests: [
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus),
+    ...Object.values(TestStatus)
+  ].map((status: string) => makeTestData(status as TestStatus, "ReallyReallyReallyLongStory"))
+};
+
 const ModalFileListDemo = () => {
  const modalRef = useRef<ModalObject | null>(null);
  useEffectModal(modalRef, LogLevel.INFO);
@@ -111,13 +124,34 @@ const ModalFileListDemo = () => {
    <div>
      <GlobalStyle />
      <Div>
-       Compare results with:<Button onClick={() => modalRef.current?.openModal()}>Prior Test</Button>
+       Compare results with:&nbsp;<Button onClick={() => modalRef.current?.openModal()}>Prior Test</Button>
        <Modal
          ref={modalRef}
          title={"Compare With"}
          closeText={"Cancel"}
        >
         <TestsList {...propsLoaded} />
+       </Modal>
+     </Div>
+   </div>
+ );
+};
+
+const ModalFileListLargeDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
+
+ return (
+   <div>
+     <GlobalStyle />
+     <Div>
+       Compare results with:&nbsp;<Button onClick={() => modalRef.current?.openModal()}>Prior Test</Button>
+       <Modal
+         ref={modalRef}
+         title={"Compare With"}
+         closeText={"Cancel"}
+       >
+        <TestsList {...propsLoadedLarge} />
        </Modal>
      </Div>
    </div>
@@ -135,4 +169,8 @@ export const UploadModal: StoryFn = () => (
 
 export const FileList: StoryFn = () => (
   <ModalFileListDemo/>
+);
+
+export const FileListLarge: StoryFn = () => (
+  <ModalFileListLargeDemo/>
 );

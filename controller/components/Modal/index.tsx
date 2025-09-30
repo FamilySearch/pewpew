@@ -9,37 +9,69 @@ import React, {
 import { Button } from "../LinkButton";
 import styled from "styled-components";
 
+const ModalBackdrop = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9;
+`;
+
 const ModalDiv = styled.div`
-  width: 70vw;
+  width: min(85vw, 1200px);
+  max-width: 95vw;
+  min-width: 300px;
+  max-height: 85vh;
   position: fixed;
   background: white;
   border: 2px solid rgb(97, 97, 97);
   transition: 1.1s ease-out;
   box-shadow: -2rem 2rem 2rem rgba(0, 0, 0, 0.2);
   filter: blur(0);
-  transform: scale(1);
   opacity: 1;
   visibility: visible;
-  left: 0;
-  right: 0;
-  margin: 0 auto;
-  top: 15%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(1);
   z-index: 10;
   background-color: rgb(61, 64, 67);
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+
+  @media (max-width: 768px) {
+    width: 98vw;
+    max-height: 90vh;
+    min-width: 280px;
+  }
+
+  @media (max-height: 600px) {
+    max-height: 95vh;
+    top: 50%;
+  }
 `;
 const ModalTitle = styled.h2`
   border-bottom: 1px solid #ccc;
   padding: 1rem;
   margin: 0;
+  flex-shrink: 0;
 `;
 const ModalContent = styled.div`
   padding: 1rem;
-  max-height: 450px;
-  overflow: auto;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0; /* Allow flex item to shrink below content size */
 `;
 const ModalActions = styled.div`
   border-top: 1px solid #ccc;
   padding: 0.5rem 1rem;
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
 `;
 
 const ModalStyle = styled.div`
@@ -47,7 +79,7 @@ const ModalStyle = styled.div`
     opacity: 0;
     visibility: hidden;
     filter: blur(8px);
-    transform: scale(0.33);
+    transform: translate(-50%, -50%) scale(0.33);
     box-shadow: 1rem 0 0 rgba(0, 0, 0, 0.2);
     }
     @supports (offset-rotation: 0deg) and
@@ -68,7 +100,6 @@ const ModalStyle = styled.div`
     font-size: 0.8rem;
     line-height: 1;
     cursor: pointer;
-    margin-right: 5px;
     }
     #submitBtn:disabled {
       cursor: default;
@@ -87,7 +118,7 @@ const ModalStyle = styled.div`
 
 interface ModalProps {
   title?: string;
-  onClose?: (event?: React.MouseEvent<HTMLButtonElement>) => void;
+  onClose?: (event?: React.MouseEvent<HTMLButtonElement | HTMLDivElement>) => void;
   closeText?: string;
   onSubmit?: (event?: React.MouseEvent<HTMLButtonElement>) => Promise<void>;
   submitText?: string;
@@ -165,7 +196,7 @@ export const Modal = forwardRef(({
     setDisplay(true);
   };
 
-  const close = (event?: React.MouseEvent<HTMLButtonElement>) => {
+  const close = (event?: React.MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
     const root = document.getElementById("root");
     if (root) {
       const scrollY = root.style.top;
@@ -203,9 +234,10 @@ export const Modal = forwardRef(({
   }
   return (
   <ModalStyle>
+    <ModalBackdrop onClick={close} />
     <ModalDiv id="modal">
       {title && <ModalTitle>{title}</ModalTitle>}
-      <ModalContent style={!scrollable ? {overflow: "unset"} : {}}>{children}</ModalContent>{/* Any elements that are children of modal will be rendered here */}
+      <ModalContent style={!scrollable ? {overflowY: "unset"} : {}}>{children}</ModalContent>{/* Any elements that are children of modal will be rendered here */}
       <ModalActions>
         {onSubmit &&
           <Button onClick={submit} disabled={!isReady}>

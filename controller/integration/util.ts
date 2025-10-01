@@ -25,6 +25,7 @@ export interface AcceptanceFiles {
   resultsFile: string;
   stdoutFile: string;
   stderrFile: string;
+  largeS3File: string;
   variablesFile: string;
 }
 
@@ -36,6 +37,7 @@ const ACCEPTANCE_FILES: AcceptanceFiles = {
   resultsFile: "stats-rmsdeletestage20240617T193912876.json",
   stdoutFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-out.json",
   stderrFile: "app-ppaas-pewpew-rmsdeletestage20240617T193912876-error.json",
+  largeS3File: "5mb-test-file.txt",
   variablesFile: ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME
 };
 
@@ -46,6 +48,7 @@ const ACCEPTANCE_PPAASS3FILES: {
   resultsFile?: PpaasS3File;
   stdoutFile?: PpaasS3File;
   stderrFile?: PpaasS3File;
+  largeS3File?: PpaasS3File;
   variablesFile?: PpaasS3File | PpaasEncryptEnvironmentFile;
 } = {};
 

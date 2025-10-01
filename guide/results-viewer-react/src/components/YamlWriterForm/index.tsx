@@ -39,7 +39,7 @@ import {
   PROVIDER_RESPONSE,
   Providers
 } from "../YamlProviders";
-import React, { useEffect, useRef, useState } from "react";
+import React, { type JSX, useEffect, useRef, useState } from "react";
 import { createYamlString, writeFile } from "./writeyaml";
 import { Endpoints } from "../YamlEndpoints";
 import { QuestionBubble } from "../YamlQuestionBubble";

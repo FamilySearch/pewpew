@@ -1,5 +1,5 @@
 import { Button, Div, Input, Label, Span} from "../YamlStyles";
-import React, { ChangeEvent } from "react";
+import React, { ChangeEvent, type JSX } from "react";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewVars } from "../../util/yamlwriter";
 import { PewPewVarsStringType } from ".";

@@ -1,11 +1,11 @@
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
 import { API_TEST_STATUS, API_TEST_STATUS_FORMAT, PAGE_TEST_HISTORY_FORMAT, TestData, TestManagerMessage } from "../../types";
+import { Button, LinkButton } from "../LinkButton";
 import { LogLevel, log } from "../../src/log";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import Div from "../Div";
-import LinkButton from "../LinkButton";
 import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import styled from "styled-components";
@@ -22,6 +22,8 @@ interface TestIdData {
 // What this returns or calls from the parents
 export interface TestListProps {
   tests: TestData[];
+  /** If onClick is passed, that action will be taken rather than a link with an href */
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => void;
 }
 
 // It's own data that will redraw the UI on changes
@@ -31,7 +33,7 @@ export interface TestListState {
 }
 
 export const TestsList = ({
-  tests
+  tests, onClick
 }: TestListProps) => {
   const defaultState: TestListState = {
     tests,
@@ -90,9 +92,14 @@ export const TestsList = ({
     .map((testData: TestData) => ({ testData, ppaasTestId: PpaasTestId.getFromTestId(testData.testId)}))
     .map((testIdData: TestIdData) => (
       <li key={testIdData.ppaasTestId.testId}>{testIdData.ppaasTestId.yamlFile} - {testIdData.ppaasTestId.date.toLocaleString()}&nbsp;
-        <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_HISTORY_FORMAT(testIdData.ppaasTestId.testId)}>
-          {testIdData.ppaasTestId.testId}
-        </LinkButton> - {testIdData.testData.status}
+        {onClick
+          ? <Button name={testIdData.ppaasTestId.testId} onClick={(event) => onClick(event, testIdData.testData)}>
+              {testIdData.ppaasTestId.testId}
+            </Button>
+          : <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_HISTORY_FORMAT(testIdData.ppaasTestId.testId)}>
+              {testIdData.ppaasTestId.testId}
+            </LinkButton>}
+        - {testIdData.testData.status}
       </li>
     ));
   return (

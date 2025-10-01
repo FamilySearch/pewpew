@@ -1,9 +1,9 @@
 import { Button, Input } from "../YamlStyles";
 import { PewPewHeader, PewPewQueryParam } from "../../util/yamlwriter";
+import React, { type JSX } from "react";
 import { AddIcon } from "../Icons/AddIcon";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import { PewPewQueryParamStringType } from ".";
-import React from "react";
 
 export interface QueryParamsViewProps {
     id: string;

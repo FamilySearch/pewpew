@@ -35,6 +35,7 @@ describe("Download API Integration", function () {
   let resultsFile: string;
   let stdoutFile: string;
   let stderrFile: string;
+  let largeS3File: string;
   let variablesFile: string;
   let dateString: string | undefined;
   let ppaasTestId: PpaasTestId | undefined;
@@ -55,6 +56,7 @@ describe("Download API Integration", function () {
       resultsFile = uploadResult.resultsFile;
       stdoutFile = uploadResult.stdoutFile;
       stderrFile = uploadResult.stderrFile;
+      largeS3File = uploadResult.largeS3File;
       variablesFile = uploadResult.variablesFile;
       dateString = ppaasTestId.dateString;
       expectedStatus = 200;
@@ -258,7 +260,8 @@ describe("Download API Integration", function () {
     log(`GET ${testUrl} for ${fileType}`, LogLevel.DEBUG, { status: res?.status, headers: res?.headers });
     expect(res, "res").to.not.equal(undefined);
 
-    if (REDIRECT_TO_S3) {
+    // Large file always redirects
+    if (REDIRECT_TO_S3 || filename === largeS3File) {
       // Should redirect to S3 with download parameters
       expect(res.status, "status").to.equal(302);
       expect(res.headers.location, "location header").to.not.equal(undefined);
@@ -313,6 +316,12 @@ describe("Download API Integration", function () {
   it("GET /download with testId should download stderr file", async () => {
     await testFileDownload(stderrFile, "stderr");
   });
+
+  if (ACCEPTANCE_AWS_PERMISSIONS) {
+    it("GET /download with testId should download large S3 file", async () => {
+      await testFileDownload(largeS3File, "large S3");
+    });
+  }
 
   it("POST /download should respond 400 Method Not Allowed", (done: Mocha.Done) => {
     if (!testId) { done(new Error("No testId")); return; }

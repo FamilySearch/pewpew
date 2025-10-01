@@ -1,9 +1,9 @@
 import HeadersView, { HeadersViewProps } from "./HeadersView";
 import QueryParamsView, { QueryParamsViewProps } from "./QueryParamsView";
+import React, { type JSX } from "react";
 import RequestBodyView, { RequestBodyViewProps } from "./RequestBodyView";
 import ResponseView, { ResponseViewProps } from "./ResponseView";
 import { Button } from "../YamlStyles";
-import React from "react";
 import { TabType } from ".";
 
 interface RequestDetailsTabsProps extends HeadersViewProps, ResponseViewProps, QueryParamsViewProps, RequestBodyViewProps {

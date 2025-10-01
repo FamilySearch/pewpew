@@ -1,15 +1,29 @@
+import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
+import { Button, defaultButtonTheme } from "../LinkButton";
+import {
+  ENDPOINT,
+  ENDPOINTDIV1,
+  ENDPOINTDIV2,
+  FLEXROW,
+  H3,
+  RTTDIV,
+  RTTTABLE,
+  UL
+} from "./styled";
 import { LogLevel, log } from "../../src/log";
-import { RTT, totalCalls } from "./charts";
-import React, { useCallback, useEffect, useState } from "react";
+import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
+import { Modal, ModalObject, useEffectModal } from "../Modal";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TABLE, TD, TR } from "../Table";
+import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref } from "../../src/clientutil";
-import { API_JSON } from "../../types";
+import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
-import { TestData } from "../../types/testmanager";
+import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import { TestsList } from "../TestsList";
 import styled from "styled-components";
 
 const SELECT = styled.select`
@@ -20,47 +34,9 @@ const TIMETAKEN = styled.div`
   text-align: left;
 `;
 
-const ENDPOINT = styled.div`
-  margin-bottom: 1em;
-  padding: 0;
-`;
-
-const H3 = styled.h3`
-  text-align: left;
-  word-break: break-all;
-`;
-
-const ENDPOINTDIV1 = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
-const RTTDIV = styled(ENDPOINTDIV1)`
-  margin-bottom: 2em;
-`;
-
-const FLEXROW = styled.div`
-  display: flex;
-  flex-direction: row;
-`;
-
-const ENDPOINTDIV2 = styled(FLEXROW)`
-  align-items: center;
-`;
-
-const RTTTABLE = styled(ENDPOINTDIV1)`
-  max-width: 400px;
-  margin-right: 15px;
-`;
-
 const CANVASBOX = styled.div`
   position: relative;
   width: calc(55vw - 100px);
-`;
-
-const UL = styled.ul`
-  list-style: none;
 `;
 
 export interface TestResultProps {
@@ -81,99 +57,35 @@ export interface TestResultState {
   filteredData: ParsedFileEntry[] | undefined;
   /** Overall merged stats from all filteredData */
   summaryData: ParsedFileEntry | undefined;
+  /** List of tests to compare against */
+  compareTests: TestData[] | undefined;
+  /** Test to compare against */
+  compareTest: TestData | undefined;
+  /** string data for comparison */
+  compareText: string | undefined;
+  /** Parsed data for comparison */
+  compareData: ParsedFileEntry[] | undefined;
   minMaxTime: MinMaxTime | undefined;
   error: string | undefined;
 }
 
-export interface MinMaxTime {
-  startTime?: string;
-  endTime?: string;
-  deltaTime?: string;
-}
 
 export interface EndpointProps {
   bucketId: BucketId;
   dataPoints: DataPoint[];
 }
 
+/** Let's us override for Storybook to use static files */
 export const configureURL = {
   baseS3Url: API_JSON + "/"
 };
 
-const dateToString = (dateTime: Date, timeOnly: boolean) => {
-  let stringDate = dateTime.toLocaleTimeString("en-us", { hour12: false });
-  if (!timeOnly) {
-    stringDate += ` ${dateTime.getDate()}-${dateTime.toLocaleString("en-us", {
-      month: "short"
-    })}-${dateTime.getFullYear()}`;
-  }
-  return stringDate;
-};
 
-const minMaxTime = (testResults: any) => {
-  const testTimes: MinMaxTime = {
-    startTime: undefined,
-    endTime: undefined,
-    deltaTime: undefined
-  };
-
-  let startTime2 = Infinity;
-  let endTime2 = -Infinity;
-
-  for (const [_, dataPoints] of testResults) {
-    for (const point of dataPoints) {
-      if (point.startTime) {
-        startTime2 = Math.min(startTime2, point.startTime);
-        break;
-      }
-    }
-
-    for (let i = dataPoints.length - 1; i >= 0; i--) {
-      const point = dataPoints[i];
-      if (point.endTime) {
-        endTime2 = Math.max(endTime2, point.endTime);
-        break;
-      }
-    }
-  }
-
-  const second: number = 1;
-  const minute: number = 60;
-  const hour: number = minute * 60;
-  const day: number = hour * 24;
-  let deltaTimeInSeconds: number = (endTime2 - startTime2) / 1000;
-
-  const startTime3: Date = new Date(startTime2);
-  const endTime3: Date = new Date(endTime2);
-
-  const includeDateWithStart = startTime3.toLocaleDateString() === endTime3.toLocaleDateString();
-  testTimes.startTime = dateToString(startTime3, includeDateWithStart);
-  testTimes.endTime = dateToString(endTime3, false);
-
-  const timeUnits: [number, string][] = [
-    [day, "day"],
-    [hour, "hour"],
-    [minute, "minute"],
-    [second, "second"]
-  ];
-  const prettyDurationBuilder = [];
-  for (const [unit, name] of timeUnits) {
-    const count = Math.floor(deltaTimeInSeconds / unit);
-    if (count > 0) {
-      deltaTimeInSeconds -= count * unit;
-      prettyDurationBuilder.push(`${count} ${name}${count > 1 ? "s" : ""}`);
-    }
-  }
-
-  testTimes.deltaTime = prettyDurationBuilder.join(", ");
-
-  return testTimes;
-};
-
-const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined) => {
+const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData: ParsedFileEntry | undefined, compareData: ParsedFileEntry[] | undefined) => {
   const oldData: ParsedFileEntry[] = [
     ...(resultsData || []),
-    ...(summaryData ? [summaryData] : [])
+    ...(summaryData ? [summaryData] : []),
+    ...(compareData || [])
   ];
   log("freeHistograms", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
   for (const [bucketId, dataPoints] of oldData) {
@@ -226,7 +138,7 @@ const getFilteredEndpoints = ({
         filteredEntries.push([tags, dataPoints]);
       }
     }
-    return filteredEntries.length > 0 ? filteredEntries : undefined;
+    return filteredEntries.length > 0 ? comprehensiveSort(filteredEntries) : undefined;
   }
   return undefined;
 };
@@ -274,81 +186,83 @@ const getSummaryData = ({
   return summaryData;
 };
 
-export const TestResults = ({ testData }: TestResultProps) => {
-  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
-  const defaultState: TestResultState = {
-    defaultMessage: defaultMessage(),
-    summaryTagFilter: "",
-    summaryTagValueFilter: "",
-    resultsPath: undefined,
-    resultsText: undefined,
-    resultsData: undefined,
-    filteredData: undefined,
-    summaryData: undefined,
-    minMaxTime: undefined,
-    error: undefined
-  };
+// Constants moved outside component to avoid recreation on every render
+const DEFAULT_MESSAGE = "Select Results File";
+const DEFAULT_STATE: TestResultState = {
+  defaultMessage: DEFAULT_MESSAGE,
+  summaryTagFilter: "",
+  summaryTagValueFilter: "",
+  resultsPath: undefined,
+  resultsText: undefined,
+  resultsData: undefined,
+  filteredData: undefined,
+  summaryData: undefined,
+  compareTests: undefined,
+  compareTest: undefined,
+  compareText: undefined,
+  compareData: undefined,
+  minMaxTime: undefined,
+  error: undefined
+};
+const MICROS_TO_MS = 1000;
 
-  const [state, setState] = useState(defaultState);
+export const TestResults = React.memo(({ testData }: TestResultProps) => {
+  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
+
+  const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
+  const compareSearchModalRef = useRef<ModalObject| null>(null);
+  useEffectModal(compareSearchModalRef);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
 
-  const fetchData = async (s3ResultPath: string): Promise<void> => {
-    try {
-      // s3ResultPath ends with /yamlFile/datestring/stats-name.json
-      const localResultsPath: string = formatPageHref(configureURL.baseS3Url + s3ResultPath.split("/").slice(-3).join("/"));
-      log("localResultsPath: " + localResultsPath, LogLevel.DEBUG);
-      // https://github.com/axios/axios/issues/2791
-      const response: AxiosResponse = await axios.get(localResultsPath, { responseType: "text", transformResponse: [] });
+  const fetchResults = async (s3ResultPath: string): Promise<string> => {
+    // s3ResultPath ends with /yamlFile/datestring/stats-name.json
+    const localResultsPath: string = formatPageHref(configureURL.baseS3Url + s3ResultPath.split("/").slice(-3).join("/"));
+    log("localResultsPath: " + localResultsPath, LogLevel.DEBUG);
+    // https://github.com/axios/axios/issues/2791
+    const response: AxiosResponse = await axios.get(localResultsPath, { responseType: "text", transformResponse: [] });
 
-      // get the response text
-      log("typeof response.data: " + typeof response.data, LogLevel.DEBUG);
-      const resultsText: string = typeof response.data !== "string" && response.data !== undefined
-        ? JSON.stringify(response.data) // https://github.com/axios/axios/issues/907
-        : response.data;
+    // get the response text
+    log("typeof response.data: " + typeof response.data, LogLevel.DEBUG);
+    const resultsText: string = typeof response.data !== "string" && response.data !== undefined
+      ? JSON.stringify(response.data) // https://github.com/axios/axios/issues/907
+      : response.data;
+    return resultsText;
+  };
+
+  const updateResults = async (s3ResultPath: string): Promise<void> => {
+    try {
+      const resultsText: string = await fetchResults(s3ResultPath);
       // Check if the data has changed. No need to reprocess and redraw if it didn't
       if (state.resultsText === resultsText) {
         log("resultsText not changed", LogLevel.DEBUG);
         return;
       }
 
-      // if there are multiple jsons (new format), split them up and parse them separately
-      const results = resultsText.replace(/}{/g, "}\n{")
-        .split("\n")
-        .map((s) => JSON.parse(s));
-      const model = await import("./model");
-      let resultsData: ParsedFileEntry[];
-      const testStartKeys = ["test", "bin", "bucketSize"];
-      const isOnlyTestStart: boolean = results.length === 1
-        && Object.keys(results[0]).length === testStartKeys.length
-        && testStartKeys.every((key) => key in results[0]);
-      log("isOnlyTestStart", LogLevel.DEBUG, { isOnlyTestStart, results, testStartKeys });
-      if (results.length === 1 && !isOnlyTestStart) {
-        // old stats format
-        resultsData = model.processJson(results[0]);
-      } else {
-        // new stats format
-        resultsData = model.processNewJson(results);
-      }
+      // Use shared parsing utility (includes sorting)
+      const resultsData = await parseResultsData(resultsText);
       setState((oldState: TestResultState) => {
         // Free the old ones
-      freeHistograms(oldState.resultsData, oldState.summaryData);
+        freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
 
-      const startEndTime: MinMaxTime = minMaxTime(resultsData);
-      const { summaryTagFilter, summaryTagValueFilter } = oldState;
-      const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
-      const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
+        const startEndTime: MinMaxTime = minMaxTime(resultsData);
+        const { summaryTagFilter, summaryTagValueFilter } = oldState;
+        const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
+        const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
-      log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
-      return {
-        ...oldState,
-        resultsData,
-        filteredData,
-        resultsText,
-        summaryData,
-        error: undefined,
-        minMaxTime: startEndTime
+        log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
+        return {
+          ...oldState,
+          resultsData,
+          filteredData,
+          resultsText,
+          summaryData,
+          compareTest: undefined,
+          compareText: undefined,
+          compareData: undefined,
+          error: undefined,
+          minMaxTime: startEndTime
         };
       });
     } catch (error) {
@@ -368,11 +282,11 @@ export const TestResults = ({ testData }: TestResultProps) => {
       resultsPath: event.target.value
     });
     if (event.target.selectedIndex !== 0) {
-      await fetchData(event.target.value);
+      await updateResults(event.target.value);
     } else {
       setState((oldState: TestResultState) => {
         // Free the old data
-        freeHistograms(oldState.resultsData, oldState.summaryData);
+        freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
         return {
           ...oldState,
           defaultMessage: defaultMessage(),
@@ -381,6 +295,9 @@ export const TestResults = ({ testData }: TestResultProps) => {
           filteredData: undefined,
           resultsText: undefined,
           summaryData: undefined,
+          compareTest: undefined,
+          compareText: undefined,
+          compareData: undefined,
           error: undefined,
           minMaxTime: undefined
         };
@@ -418,7 +335,7 @@ export const TestResults = ({ testData }: TestResultProps) => {
 
     setState((oldState: TestResultState) => {
       // Free the old data (only the summary)
-      freeHistograms(undefined, oldState.summaryData);
+      freeHistograms(undefined, oldState.summaryData, undefined);
       const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
       return {
         ...oldState,
@@ -427,6 +344,132 @@ export const TestResults = ({ testData }: TestResultProps) => {
         summaryData
       };
     });
+  };
+
+  const doubleClickCheckRef = useRef<boolean>(false);
+  const onPriorTestSearch = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (doubleClickCheckRef.current) {
+      return;
+    }
+    try {
+      doubleClickCheckRef.current = true;
+      updateState({
+        error: undefined
+      });
+      // Check if we already have state.compareTests and just open the modal
+      if (state.compareTests && state.compareTests.length > 0) {
+        if (compareSearchModalRef.current) {
+          compareSearchModalRef.current.openModal();
+        }
+        return;
+      }
+      const searchString = testData.s3Folder.split("/")[0];
+      const response: AxiosResponse = await axios.get(formatPageHref(API_SEARCH_FORMAT(searchString)));
+      log("search response", LogLevel.DEBUG, response.data);
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // It's going to be an array of TestData that can be put into a TestList and update status like normal search
+        const compareTests: TestData[] = response.data.filter((test: TestData) => test.testId !== testData.testId);
+        // Pop up the modal with all the comparison options
+        updateState({ compareTests });
+        if (compareSearchModalRef.current) {
+          compareSearchModalRef.current.openModal();
+        } else {
+          log("compareModalRef is null", LogLevel.WARN);
+        }
+        return;
+      }
+      if (!isTestManagerMessage(response.data)) {
+        const errorString = API_SEARCH + " did not return a TestManagerMessage object";
+        log(errorString, LogLevel.WARN, response.data);
+        throw new Error(errorString);
+      }
+      const json: TestManagerMessage | undefined = response.data; // Could also be an empty array
+      updateState({
+        error: json?.message || "Could not get other results for compare"
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } catch (error) {
+      log("onPriorTestSearch error", LogLevel.ERROR, error);
+      updateState({
+        // message: undefined,
+        error: formatError(error)
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } finally {
+      doubleClickCheckRef.current = false;
+    }
+  };
+
+  const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
+    event.preventDefault();
+    if (doubleClickCheckRef.current) {
+      return;
+    }
+    try {
+      doubleClickCheckRef.current = true;
+      compareSearchModalRef.current?.closeModal();
+      // Load the Status and find results
+      const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(compareTest.testId)));
+      // It's either a TestManagerError | TestData
+      log("test data response", LogLevel.DEBUG, response.data);
+      const compareTestData: TestManagerError | TestData = response.data;
+      if ("message" in compareTestData) {
+        throw compareTestData;
+      }
+      const s3ResultPath = compareTestData.resultsFileLocation && compareTestData.resultsFileLocation.length > 0
+        ? compareTestData.resultsFileLocation[0]
+        : undefined;
+      if (!s3ResultPath) {
+        throw new Error(`No results path found for test ${compareTest.testId}`);
+      }
+      const compareText: string = await fetchResults(s3ResultPath);
+      // Check if the data has changed. No need to reprocess and redraw if it didn't
+      if (state.compareText === compareText) {
+        log("compareText not changed", LogLevel.DEBUG);
+      } else {
+        setState((oldState: TestResultState) => {
+          // Free the old ones
+          freeHistograms(undefined, undefined, oldState.compareData);
+
+          log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
+          return {
+            ...oldState,
+            compareTest,
+            compareText: undefined,
+            compareData: undefined, // Set this back to undefined while loading. Need compareData to be freed
+            error: undefined
+          };
+        });
+        // Use shared parsing utility (includes sorting)
+        const compareData = await parseResultsData(compareText);
+        // Update the state with the new compare data
+        log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
+        updateState({
+          compareTest,
+          compareText,
+          compareData
+        });
+      }
+    } catch (error) {
+      log("onPriorTestLoad error", LogLevel.ERROR, error);
+      updateState({
+        // message: undefined,
+        error: formatError(error)
+      });
+      // Clear the message after 30 seconds or it never goes away
+      setTimeout(() => updateState({
+        error: undefined
+      }), 30000);
+    } finally {
+      doubleClickCheckRef.current = false;
+    }
   };
 
   useEffect(() => {
@@ -442,7 +485,7 @@ export const TestResults = ({ testData }: TestResultProps) => {
       testData.status === TestStatus.Running
     ) {
       const intervalId = setInterval(() => {
-      fetchData(state.resultsPath!).catch((error) =>
+      updateResults(state.resultsPath!).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
       );
       }, 15000);
@@ -453,18 +496,26 @@ export const TestResults = ({ testData }: TestResultProps) => {
       !state.error &&
       (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)
     ) {
-      fetchData(state.resultsPath).catch((error) =>
+      updateResults(state.resultsPath).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
       );
     }
     return undefined;
-  }, [testData.status]);
+  }, [testData.status, state.resultsPath]);
 
-  const displayData = state.filteredData || state.resultsData;
+  // Memoized display data to avoid unnecessary recalculations
+  const displayData = useMemo(() => {
+    return state.filteredData || state.resultsData;
+  }, [state.filteredData, state.resultsData]);
+
+  // Memoized summary tags calculation
+  const summaryTags: BucketId = useMemo(() => {
+    return state.summaryData && state.filteredData
+      ? state.summaryData[0]
+      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
+  }, [state.summaryData, state.filteredData]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
-  const summaryTags: BucketId = state.summaryData && state.filteredData
-    ? state.summaryData[0]
-    : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
@@ -487,6 +538,21 @@ export const TestResults = ({ testData }: TestResultProps) => {
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
+          <p>Compare results with: <Button onClick={onPriorTestSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Prior Test</Button></p>
+          {/* This is the compare search modal */}
+          <Modal ref={compareSearchModalRef} title="Compare With" closeText="Cancel">
+            {state.compareTests && state.compareTests.length > 0
+              ? <TestsList tests={state.compareTests} onClick={onPriorTestLoad}/>
+              : <p>No prior tests found to compare with</p>}
+          </Modal>
+          {/* This is the compare test UI. We want it above the normal results */}
+          {state.resultsData && state.compareTest && state.compareData === undefined && <H3>Loading Results {state.compareTest?.testId} for Comparison</H3>}
+          {state.resultsData && state.compareData && <TestResultsCompare
+            baselineData={state.compareData}
+            comparisonData={state.resultsData}
+            baselineLabel={state.compareTest?.testId}
+            comparisonLabel={testData.testId}
+          />}
           <h1>Overview charts</h1>
           <p>Filter which endpoints are included in the summary:</p>
           <label htmlFor="summaryTagFilter">
@@ -517,7 +583,7 @@ export const TestResults = ({ testData }: TestResultProps) => {
       )}
     </React.Fragment>
   );
-};
+});
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }
@@ -558,7 +624,6 @@ const total = (dataPoints: DataPoint[]) => {
   if (requestTimeouts > 0) {
     otherErrorsArray.push(["Timeout", requestTimeouts]);
   }
-  const MICROS_TO_MS = 1000;
 
   return {
     otherErrors: otherErrorsArray,
@@ -587,14 +652,21 @@ const total = (dataPoints: DataPoint[]) => {
   }
 };
 
-const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
+const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
   const [rttButtonDisplay, setRttButtonDisplay] = useState("");
   const [totalButtonDisplay, setTotalButtonDisplay] = useState("");
 
   const [rttChart, setRttChart] = useState<Chart>();
   const [totalChart, setTotalChart] = useState<Chart>();
 
-  const totalResults = total(dataPoints);
+  // Memoize totalResults calculation to avoid recalculation on every render
+  const totalResults = useMemo(() => total(dataPoints), [dataPoints]);
+
+  // Create stable key for dataPoints to determine when charts need recreation
+  const dataPointsKey = useMemo(() =>
+    dataPoints.map(dp => `${dp.time}-${dp.rttHistogram.getTotalCount()}`).join(","),
+    [dataPoints]
+  );
 
   const toggleChart = (chart: Chart) => {
     const chartConfig = chart.config.options?.scales?.y;
@@ -618,32 +690,38 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
     chart.update();
   };
 
-  const rttCanvas = useCallback((node: HTMLCanvasElement) => {
+  const rttCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (rttChart) {
         // We need to clean up the old one before creating a new one
         rttChart.destroy();
       }
-      const currentChart = RTT(node, dataPoints);
-      setRttChart(currentChart);
-      setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
-        ? "logarithmic"
-        : "linear"
-      );
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ RTT }) => {
+        const currentChart = RTT(node, dataPoints);
+        setRttChart(currentChart);
+        setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
+          ? "logarithmic"
+          : "linear"
+        );
+      });
     }
-  }, [dataPoints]);
+  }, [dataPointsKey, dataPoints]); // Stable key + dataPoints for actual chart creation
 
-  const totalCanvas = useCallback((node: HTMLCanvasElement) => {
+  const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       if (totalChart) {
         // We need to clean up the old one before creating a new one
         totalChart.destroy();
       }
-      const currentChart = totalCalls(node, dataPoints);
-      setTotalChart(currentChart);
-      setTotalButtonDisplay("logarithmic");
+      // Dynamic import to reduce bundle size - handle async inside
+      import("./charts").then(({ totalCalls }) => {
+        const currentChart = totalCalls(node, dataPoints);
+        setTotalChart(currentChart);
+        setTotalButtonDisplay("logarithmic");
+      });
     }
-  }, [dataPoints]);
+  }, [dataPointsKey, dataPoints]); // Stable key + dataPoints for actual chart creation
 
   return (
     <React.Fragment>
@@ -728,7 +806,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         <FLEXROW>
         <RTTDIV>
           <h3>RTT Stats</h3>
-          <button onClick={() => toggleChart(rttChart!)}>
+          <button onClick={() => rttChart && toggleChart(rttChart)} disabled={!rttChart}>
             Switch to {rttButtonDisplay}
           </button>
           <ENDPOINTDIV2>
@@ -739,7 +817,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </RTTDIV>
         <ENDPOINTDIV1>
           <h3>HTTP Status Counts and Errors</h3>
-          <button onClick={() => toggleChart(totalChart!)}>
+          <button onClick={() => totalChart && toggleChart(totalChart)} disabled={!totalChart}>
             Switch to {totalButtonDisplay}
           </button>
           <ENDPOINTDIV2>
@@ -752,6 +830,6 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
       </ENDPOINT>
     </React.Fragment>
   );
-};
+});
 
 export default TestResults;

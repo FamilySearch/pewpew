@@ -19,13 +19,15 @@ const EXPECTED_HEADER_NAMES = [
 describe("S3 Integration", () => {
   let filename: string;
   let s3Folder: string;
+  let largeS3File: string;
 
   before(async () => {
     try {
       // Upload files in case createtest hasn't run.
-      const { yamlFile, ppaasTestId, ...rest } = await uploadAcceptanceFiles();
+      const { yamlFile, ppaasTestId, largeS3File: uploadedLargeS3File, ...rest } = await uploadAcceptanceFiles();
       filename = yamlFile;
       s3Folder = ppaasTestId.s3Folder;
+      largeS3File = uploadedLargeS3File;
       log("S3 Integration files", LogLevel.WARN, { filename, s3Folder, yamlFile, ppaasTestId, ...rest });
       expect(filename, "filename").to.not.equal(undefined);
       expect(filename.length, "filename.length").to.be.greaterThan(0);
@@ -65,8 +67,25 @@ describe("S3 Integration", () => {
       const serverResponse = new ServerResponse(incomingMessage);
       response = Object.assign(serverResponse, {
         send: (data: unknown) => { responseBody = data; return; },
-        json: (data: any) => { serverResponse.end(JSON.stringify(data)); },
-        status: (statusCode: number) => serverResponse.statusCode = statusCode,
+        json: (data: any) => {
+          responseBody = data;
+          serverResponse.end(JSON.stringify(data));
+          return response;
+        },
+        status: (statusCode: number) => {
+          serverResponse.statusCode = statusCode;
+          return response;
+        },
+        // Next.js writeHead lets us pass headers as an object, but ServerResponse wants a Map so override
+        writeHead: (statusCode: number, headers?: any) => {
+          serverResponse.statusCode = statusCode;
+          if (headers) {
+            // Next.js lets us use an object, ServerResponse wants a Map
+            const headersMap = new Map<string, string>(Object.entries(headers));
+            serverResponse.setHeaders(headersMap);
+          }
+          return serverResponse;
+        },
         redirect: () => serverResponse as unknown as NextApiResponse,
         setDraftMode: () => serverResponse as unknown as NextApiResponse,
         setPreviewData: () => serverResponse as unknown as NextApiResponse,
@@ -162,9 +181,8 @@ describe("S3 Integration", () => {
         expect(response.statusCode, "res.statusCode").to.equal(302);
         expect(responseBody, "responseBody").to.equal(undefined);
         const headerNames = response.getHeaderNames();
-        log("headerNames", LogLevel.WARN, { headerNames, headers: response.getHeaders() });
-        // The default writeHead only sets the statusCode. Headers are set elsewhere on the return
-        // expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
+        log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+        expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
         done();
       }).catch((error) => {
         log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3 });
@@ -241,9 +259,9 @@ describe("S3 Integration", () => {
         expect(result, "result").to.equal(true);
         expect(response.statusCode, "res.statusCode").to.equal(302);
         expect(responseBody, "responseBody").to.equal(undefined);
-        // Note: The presigned URL with download parameters is created but we can't easily test the URL content
-        // in this integration test without mocking the AWS SDK. The important thing is that it returns 302
-        // and doesn't throw an error when downloadFile=true
+        const headerNames = response.getHeaderNames();
+        log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+        expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
         done();
       }).catch((error) => {
         log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
@@ -259,10 +277,127 @@ describe("S3 Integration", () => {
         expect(result, "result").to.equal(true);
         expect(response.statusCode, "res.statusCode").to.equal(302);
         expect(responseBody, "responseBody").to.equal(undefined);
+        const headerNames = response.getHeaderNames();
+        log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+        expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
         done();
       }).catch((error) => {
         log("getS3Response failed", LogLevel.ERROR, error, { filename, s3Folder, redirectToS3, downloadFile });
         done(error);
+      });
+    });
+
+    describe("Large file tests > MAX_API_SIZE", () => {
+      it("getS3Response with large file and no redirect should return 413 (downloadFile=false)", (done: Mocha.Done) => {
+        const redirectToS3 = false;
+        const unzipS3Objects = false;
+        const downloadFile = false;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(413);
+          expect(responseBody, "responseBody").to.not.equal(undefined);
+          const errorResponse = responseBody as any;
+          expect(errorResponse.message, "error message").to.include("Reponse is too large");
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile });
+          done(error);
+        });
+      });
+
+      it("getS3Response with large file and no redirect should return 302 (downloadFile=true)", (done: Mocha.Done) => {
+        const redirectToS3 = false;
+        const unzipS3Objects = false;
+        const downloadFile = true;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(302);
+          expect(responseBody, "responseBody").to.equal(undefined);
+          const headerNames = response.getHeaderNames();
+          log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+          expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile });
+          done(error);
+        });
+      });
+
+      it("getS3Response with large file and redirect should return 302 (downloadFile=false)", (done: Mocha.Done) => {
+        const redirectToS3 = true;
+        const unzipS3Objects = false;
+        const downloadFile = false;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(302);
+          expect(responseBody, "responseBody").to.equal(undefined);
+          const headerNames = response.getHeaderNames();
+          log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+          expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile });
+          done(error);
+        });
+      });
+
+      it("getS3Response with large file and redirect should return 302 (downloadFile=true)", (done: Mocha.Done) => {
+        const redirectToS3 = true;
+        const unzipS3Objects = false;
+        const downloadFile = true;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(302);
+          expect(responseBody, "responseBody").to.equal(undefined);
+          const headerNames = response.getHeaderNames();
+          log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+          expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile });
+          done(error);
+        });
+      });
+
+      it("getS3Response with large file, unzip, and no redirect should return 413 (downloadFile=false)", (done: Mocha.Done) => {
+        const redirectToS3 = false;
+        const unzipS3Objects = true;
+        const downloadFile = false;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(413);
+          expect(responseBody, "responseBody").to.not.equal(undefined);
+          const errorResponse = responseBody as any;
+          expect(errorResponse.message, "error message").to.include("Reponse is too large");
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile, unzipS3Objects });
+          done(error);
+        });
+      });
+
+      it("getS3Response with large file, unzip, and no redirect should return 302 (downloadFile=true)", (done: Mocha.Done) => {
+        const redirectToS3 = false;
+        const unzipS3Objects = true;
+        const downloadFile = true;
+        getS3Response({ request, response, filename: largeS3File, s3Folder, redirectToS3, unzipS3Objects, downloadFile }).then((result: boolean) => {
+          log("Large file tests getS3Response", LogLevel.DEBUG, { redirectToS3, unzipS3Objects, downloadFile, statusCode: response.statusCode, location: response.getHeader("Location") });
+          expect(result, "result").to.equal(true);
+          expect(response.statusCode, "res.statusCode").to.equal(302);
+          expect(responseBody, "responseBody").to.equal(undefined);
+          const headerNames = response.getHeaderNames();
+          log("headerNames", LogLevel.DEBUG, { headerNames, headers: response.getHeaders() });
+          expect(headerNames.includes("location"), `${JSON.stringify(headerNames)}.includes("location")`).to.equal(true);
+          done();
+        }).catch((error) => {
+          log("getS3Response failed", LogLevel.ERROR, error, { filename: largeS3File, s3Folder, redirectToS3, downloadFile, unzipS3Objects });
+          done(error);
+        });
       });
     });
   });

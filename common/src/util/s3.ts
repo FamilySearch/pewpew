@@ -42,6 +42,7 @@ export type { S3File };
 const gunzip = promisify(zlibGunzip);
 const writeFile = promisify(fsWriteFile);
 
+export const ALLOW_S3_ACL: boolean = process.env.S3_ALLOW_ACL?.toLowerCase() === "true";
 export const SHARED_ENVIRONMENT_PREFIX: string = process.env.SHARED_ENVIRONMENT_PREFIX || "s3-environment/";
 export let BUCKET_NAME: string;
 export let BUCKET_URL: string;
@@ -556,7 +557,6 @@ export async function uploadObject (file: S3File): Promise<CompleteMultipartUplo
     taggingString += (taggingString.length > 0 ? "&" : "") + formattedPair;
   }
   const params: PutObjectCommandInput = {
-    ACL: file.publicRead ? "public-read" : "authenticated-read",
     Body: file.body,
     Bucket: BUCKET_NAME,
     CacheControl: "max-age=60",
@@ -566,6 +566,9 @@ export async function uploadObject (file: S3File): Promise<CompleteMultipartUplo
     StorageClass: file.storageClass,
     Tagging: taggingString
   };
+  if (ALLOW_S3_ACL) {
+    params.ACL = file.publicRead ? "public-read" : "authenticated-read";
+  }
   try {
     log("uploadObject request", LogLevel.DEBUG, Object.assign({}, params, { Body: undefined })); // Log it without the body
     const upload = new Upload({
@@ -625,7 +628,6 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
     taggingString += (taggingString.length > 0 ? "&" : "") + formattedPair;
   }
   const params: CopyObjectCommandInput = {
-    ACL: destinationFile.publicRead ? "public-read" : "authenticated-read",
     CopySource: `${BUCKET_NAME}/${sourceFile.key}`,
     Bucket: BUCKET_NAME,
     Key: destinationFile.key,
@@ -633,6 +635,9 @@ export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObj
     TaggingDirective: tags ? "REPLACE" : "COPY",
     Tagging: tags && taggingString
   };
+  if (ALLOW_S3_ACL) {
+    params.ACL = destinationFile.publicRead ? "public-read" : "authenticated-read";
+  }
   try {
     log("copyObject request", LogLevel.DEBUG, Object.assign({}, params, { Body: undefined })); // Log it without the body
     const result: CopyObjectCommandOutput = await s3Client.send(new CopyObjectCommand(params));

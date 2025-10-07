@@ -13,7 +13,7 @@ import {
 } from "./styled";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
-import { Modal, ModalObject, useEffectModal } from "../Modal";
+import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TABLE, TD, TR } from "../Table";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
@@ -23,7 +23,6 @@ import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
-import { TestsList } from "../TestsList";
 import styled from "styled-components";
 
 const SELECT = styled.select`
@@ -57,7 +56,7 @@ export interface TestResultState {
   filteredData: ParsedFileEntry[] | undefined;
   /** Overall merged stats from all filteredData */
   summaryData: ParsedFileEntry | undefined;
-  /** List of tests to compare against */
+  /** List of tests to compare against. Undefined is not searched yet, empty is no matches found */
   compareTests: TestData[] | undefined;
   /** Test to compare against */
   compareTest: TestData | undefined;
@@ -354,14 +353,17 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     }
     try {
       doubleClickCheckRef.current = true;
+      // We should open the modal right away and then show a loading if we don't have compareTests yet
+      if (compareSearchModalRef.current) {
+        compareSearchModalRef.current.openModal();
+      } else {
+        log("compareModalRef is null", LogLevel.WARN);
+      }
       updateState({
         error: undefined
       });
       // Check if we already have state.compareTests and just open the modal
-      if (state.compareTests && state.compareTests.length > 0) {
-        if (compareSearchModalRef.current) {
-          compareSearchModalRef.current.openModal();
-        }
+      if (state.compareTests !== undefined) {
         return;
       }
       const searchString = testData.s3Folder.split("/")[0];
@@ -372,11 +374,6 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
         const compareTests: TestData[] = response.data.filter((test: TestData) => test.testId !== testData.testId);
         // Pop up the modal with all the comparison options
         updateState({ compareTests });
-        if (compareSearchModalRef.current) {
-          compareSearchModalRef.current.openModal();
-        } else {
-          log("compareModalRef is null", LogLevel.WARN);
-        }
         return;
       }
       if (!isTestManagerMessage(response.data)) {
@@ -398,6 +395,9 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
         // message: undefined,
         error: formatError(error)
       });
+      if (compareSearchModalRef.current) {
+        compareSearchModalRef.current.closeModal();
+      }
       // Clear the message after 30 seconds or it never goes away
       setTimeout(() => updateState({
         error: undefined
@@ -540,11 +540,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
           <p>Compare results with: <Button onClick={onPriorTestSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Prior Test</Button></p>
           {/* This is the compare search modal */}
-          <Modal ref={compareSearchModalRef} title="Compare With" closeText="Cancel">
-            {state.compareTests && state.compareTests.length > 0
-              ? <TestsList tests={state.compareTests} onClick={onPriorTestLoad}/>
-              : <p>No prior tests found to compare with</p>}
-          </Modal>
+          <TestsListModal ref={compareSearchModalRef} tests={state.compareTests} onClick={onPriorTestLoad} />
           {/* This is the compare test UI. We want it above the normal results */}
           {state.resultsData && state.compareTest && state.compareData === undefined && <H3>Loading Results {state.compareTest?.testId} for Comparison</H3>}
           {state.resultsData && state.compareData && <TestResultsCompare

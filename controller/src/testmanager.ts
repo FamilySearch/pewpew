@@ -1361,7 +1361,33 @@ export abstract class TestManager {
           return await TestScheduler.addTest(scheduledTestData, authPermissions);
         } else {
           // Create our message in the scaling queue
-          const testData: StoredTestData = await this.sendTestToQueue(testMessage, queueName, ppaasTestId, testRunTimeMn, authPermissions);
+          // If this throws, we need to clean-up the files
+          const testData: StoredTestData = await this.sendTestToQueue(testMessage, queueName, ppaasTestId, testRunTimeMn, authPermissions)
+          .catch(async (error) => {
+            // If send test failed, delete the files from S3
+            try {
+              log("postTest Failed: Deleting Test Files " + testId, LogLevel.INFO, { testId, s3Folder });
+              const s3Files: string[] = [
+                ...[yamlFile, ...additionalFiles].map((file) => file.originalFilename || path.basename(file.filepath)),
+                ...copyFiles.map((file) => file.filename)
+              ];
+              // const s3Files: string[] = (await s3.listFiles({ s3Folder, maxKeys: 100 })).map((s3File) => s3File.Key!) ;
+              const deleteResult = await Promise.allSettled<Promise<void>[]>(
+                s3Files.map((filename) =>
+                  s3.deleteFile({ s3Folder, filename })
+                  .catch((error2) => log("postTest Failed: Error deleting file " + filename + " for test " + testId, LogLevel.ERROR, error2, { testId, s3Folder }))
+                )
+              );
+              const deleteError = deleteResult.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
+              if (deleteError) {
+                throw deleteError.reason;
+              }
+              log("postTest Failed: Deleted " + testId, LogLevel.INFO, { testId, s3Folder, deletedFiles: s3Files.length, files: s3Files });
+            } catch (error2) {
+              log("postTest Failed: Error deleting files for test " + testId, LogLevel.ERROR, error2, { testId, s3Folder });
+            }
+            throw error;
+          });
           return { json: testData, status: 200 };
         }
       }

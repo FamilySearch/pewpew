@@ -110,6 +110,10 @@ export class PpaasTestStatus implements TestStatusMessage {
     return this.ppaasTestId.s3Folder;
   }
 
+  public getYamlFile (): string {
+    return this.ppaasTestId.yamlFile;
+  }
+
   /**
    * Internal function to get the latest TestStatusMessage
    * @param ppaasTestId testId to retrieve

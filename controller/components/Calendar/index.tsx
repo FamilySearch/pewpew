@@ -50,9 +50,16 @@ export const PPaaSCalendar = ({ ...calendarProps}: CalendarProps) => {
     for (const event of calendarProps.events) {
       if (typeof event.startRecur === "number") {
         event.startTime = getHourMinuteFromTimestamp(event.startRecur);
-        event.endTime = typeof event.testRunTimeMn === "number"
-          ? getHourMinuteFromTimestamp(event.startRecur + (60000 * event.testRunTimeMn))
-          : undefined;
+        // For recurring events, always use duration instead of endTime.
+        // This is more robust and handles midnight-crossing events correctly.
+        // Duration is unambiguous and works consistently across timezones.
+        // Using milliseconds works for any duration length (minutes, hours, days, etc.)
+        if (typeof event.testRunTimeMn === "number") {
+          // Convert minutes to milliseconds
+          event.duration = event.testRunTimeMn * 60000;
+          // Clear endTime to ensure duration takes precedence
+          event.endTime = undefined;
+        }
         log("Updated recurring event", LogLevel.DEBUG, event);
       }
       if (event.url && typeof event.url === "string") {

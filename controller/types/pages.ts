@@ -1,7 +1,7 @@
 import type { Route } from "next";
 
 export const PAGE_START_TEST: Route = "/test";
-export const PAGE_START_TEST_FORMAT = (testId: string, edit?: boolean): Route => `${PAGE_START_TEST}?testId=${testId}${edit ? "&edit" : ""}  ` as Route;
+export const PAGE_START_TEST_FORMAT = (testId: string, edit?: boolean): Route => `${PAGE_START_TEST}?testId=${testId}${edit ? "&edit" : ""}` as Route;
 export const PAGE_TEST_HISTORY: Route = "/";
 export const PAGE_TEST_HISTORY_FORMAT = (testId: string): Route => `${PAGE_TEST_HISTORY}?testId=${testId}` as Route;
 export const PAGE_TEST_UPDATE: Route = "/testupdate";

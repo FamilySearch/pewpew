@@ -50,9 +50,22 @@ export const PPaaSCalendar = ({ ...calendarProps}: CalendarProps) => {
     for (const event of calendarProps.events) {
       if (typeof event.startRecur === "number") {
         event.startTime = getHourMinuteFromTimestamp(event.startRecur);
-        event.endTime = typeof event.testRunTimeMn === "number"
-          ? getHourMinuteFromTimestamp(event.startRecur + (60000 * event.testRunTimeMn))
-          : undefined;
+        if (typeof event.testRunTimeMn === "number") {
+          const endTimestamp = event.startRecur + (60000 * event.testRunTimeMn);
+          const calculatedEndTime = getHourMinuteFromTimestamp(endTimestamp);
+          // If the event crosses midnight (endTime < startTime), use duration instead
+          // FullCalendar has issues rendering recurring events that cross midnight with startTime/endTime
+          // Using duration makes it explicit and works correctly
+          if (calculatedEndTime < event.startTime) {
+            // Use duration in format "HH:MM:SS" instead of endTime
+            const hours = Math.floor(event.testRunTimeMn / 60);
+            const minutes = event.testRunTimeMn % 60;
+            event.duration = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`;
+            event.endTime = undefined;
+          } else {
+            event.endTime = calculatedEndTime;
+          }
+        }
         log("Updated recurring event", LogLevel.DEBUG, event);
       }
       if (event.url && typeof event.url === "string") {

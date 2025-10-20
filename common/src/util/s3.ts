@@ -602,7 +602,9 @@ export interface CopyObjectOptions {
 /**
  * Copies the s3 object to the new location copying the metadata and tags. The only properties that
  * can be changed is the `publicRead` property.
- * @param param0 {CopyObjectOptions}
+ * @param {S3File} sourceFile
+ * @param {S3File} destinationFile
+ * @param {Map<string, string> | undefined} tags
  * @returns {CopyObjectCommandOutput}
  */
 export async function copyObject ({ sourceFile, destinationFile, tags }: CopyObjectOptions): Promise<CopyObjectCommandOutput> {

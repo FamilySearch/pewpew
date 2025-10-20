@@ -20,6 +20,7 @@ const { getQueueAttributesMap } = sqs;
 const COMMUCATION_NO_MESSAGE_DELAY = parseInt(process.env.COMMUCATION_NO_MESSAGE_DELAY || "0", 10) || (5 * 1000);
 const AGENT_QUEUE_POLL_INTERVAL_MN = parseInt(process.env.AGENT_QUEUE_POLL_INTERVAL_MN || "0", 10) || 1;
 const AGENT_QUEUE_STUCK_MESSAGE_WARN_MS = parseInt(process.env.AGENT_QUEUE_STUCK_MESSAGE_WARN_MS || "0", 10) || (20 * 60 * 1000);
+const MONITOR_SQS_QUEUE_SIZE: boolean = process.env.MONITOR_SQS_QUEUE_SIZE?.toLowerCase() === "true";
 
 // https://stackoverflow.com/questions/70260701/how-to-share-data-between-api-route-and-getserversideprops
 declare global {
@@ -138,7 +139,7 @@ async function logQueueSize (sqsQueueType: SqsQueueType, queueName?: string): Pr
   }
 }
 
-function startTestQueueLoop (): boolean {
+function startTestQueueMonitorLoop (): boolean {
   if (global.testLoopRunning) {
     return global.testLoopRunning;
   }
@@ -184,7 +185,12 @@ function startTestQueueLoop (): boolean {
 export function start (): boolean {
   log("Communcations Start enter", LogLevel.DEBUG, { testCommuncations: global.communicationsRunning , testQueue: global.testLoopRunning, testScheduler: global.testSchedulerLoopRunning });
   const testCommuncations = startCommuncationsLoop();
-  const testQueue = startTestQueueLoop();
+  let testQueue: boolean = false;
+  if (MONITOR_SQS_QUEUE_SIZE) {
+    testQueue = startTestQueueMonitorLoop();
+  } else {
+    testQueue = true;
+  }
   const testScheduler = TestScheduler.startTestSchedulerLoop();
   const result = testCommuncations && testQueue && testScheduler;
   log("Communcations Start", result ? LogLevel.DEBUG : LogLevel.ERROR, { testCommuncations, testQueue, testScheduler });

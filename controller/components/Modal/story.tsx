@@ -1,6 +1,6 @@
 import { LogLevel, log } from "../../src/log";
 import type { Meta, StoryFn } from "@storybook/react";
-import { Modal, ModalObject, useEffectModal } from ".";
+import { Modal, ModalObject, TestsListModal, useEffectModal } from ".";
 import React, { useRef, useState } from "react";
 import TestsList, { TestListProps } from "../TestsList";
 import { Button } from "../LinkButton";
@@ -158,6 +158,125 @@ const ModalFileListLargeDemo = () => {
  );
 };
 
+const TestsListModalUndefinedDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
+
+ const handleClick = (event: React.MouseEvent<HTMLButtonElement>, test: TestData) => {
+   log("Test clicked", LogLevel.INFO, test);
+ };
+
+ return (
+   <div>
+     <GlobalStyle />
+     <Div>
+       Compare results with:&nbsp;<Button onClick={() => modalRef.current?.openModal()}>Prior Test</Button>
+       <TestsListModal
+         ref={modalRef}
+         tests={undefined}
+         onClick={handleClick}
+       />
+     </Div>
+   </div>
+ );
+};
+
+const TestsListModalEmptyDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
+ const [tests, setTests] = useState<TestData[] | undefined>(undefined);
+
+ const handleClick = (event: React.MouseEvent<HTMLButtonElement>, test: TestData) => {
+   log("Test clicked", LogLevel.INFO, test);
+ };
+
+ const handleOpenModal = () => {
+   setTests(undefined);
+   modalRef.current?.openModal();
+   setTimeout(() => {
+     setTests([]);
+   }, 1000);
+ };
+
+ return (
+   <div>
+     <GlobalStyle />
+     <Div>
+       Compare results with:&nbsp;<Button onClick={handleOpenModal}>Prior Test</Button>
+       <TestsListModal
+         ref={modalRef}
+         tests={tests}
+         onClick={handleClick}
+       />
+     </Div>
+   </div>
+ );
+};
+
+const TestsListModalLoadedDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
+ const [tests, setTests] = useState<TestData[] | undefined>(undefined);
+
+ const handleClick = (event: React.MouseEvent<HTMLButtonElement>, test: TestData) => {
+   log("Test clicked", LogLevel.INFO, test);
+ };
+
+ const handleOpenModal = () => {
+   setTests(undefined);
+   modalRef.current?.openModal();
+   setTimeout(() => {
+     setTests(propsLoaded.tests);
+   }, 1000);
+ };
+
+ return (
+   <div>
+     <GlobalStyle />
+     <Div>
+       Compare results with:&nbsp;<Button onClick={handleOpenModal}>Prior Test</Button>
+       <TestsListModal
+         ref={modalRef}
+         tests={tests}
+         onClick={handleClick}
+       />
+     </Div>
+   </div>
+ );
+};
+
+const TestsListModalLoadedLargeDemo = () => {
+ const modalRef = useRef<ModalObject | null>(null);
+ useEffectModal(modalRef, LogLevel.INFO);
+ const [tests, setTests] = useState<TestData[] | undefined>(undefined);
+
+ const handleClick = (event: React.MouseEvent<HTMLButtonElement>, test: TestData) => {
+   log("Test clicked", LogLevel.INFO, test);
+ };
+
+ const handleOpenModal = () => {
+   setTests(undefined);
+   modalRef.current?.openModal();
+   setTimeout(() => {
+     setTests(propsLoadedLarge.tests);
+   }, 1000);
+ };
+
+ return (
+   <div>
+     <GlobalStyle />
+     <Div>
+       Compare results with:&nbsp;<Button onClick={handleOpenModal}>Prior Test</Button>
+       <TestsListModal
+         ref={modalRef}
+         tests={tests}
+         onClick={handleClick}
+       />
+     </Div>
+   </div>
+ );
+};
+
 
 export default {
   title: "Modal"
@@ -173,4 +292,20 @@ export const FileList: StoryFn = () => (
 
 export const FileListLarge: StoryFn = () => (
   <ModalFileListLargeDemo/>
+);
+
+export const TestsListModalUndefined: StoryFn = () => (
+  <TestsListModalUndefinedDemo/>
+);
+
+export const TestsListModalEmpty: StoryFn = () => (
+  <TestsListModalEmptyDemo/>
+);
+
+export const TestsListModalLoaded: StoryFn = () => (
+  <TestsListModalLoadedDemo/>
+);
+
+export const TestsListModalLoadedLarge: StoryFn = () => (
+  <TestsListModalLoadedLargeDemo/>
 );

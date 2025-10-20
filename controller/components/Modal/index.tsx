@@ -7,6 +7,9 @@ import React, {
   useState
 } from "react";
 import { Button } from "../LinkButton";
+import { H3 } from "../Headers";
+import type { TestData } from "../../types";
+import { TestsList } from "../TestsList";
 import styled from "styled-components";
 
 const ModalBackdrop = styled.div`
@@ -250,6 +253,24 @@ export const Modal = forwardRef(({
       </ModalActions>
     </ModalDiv>
   </ModalStyle>
+  );
+});
+
+// CompareModal component for test comparison selection
+interface TestsListModalProps {
+  tests: TestData[] | undefined;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>, test: TestData) => void;
+}
+
+export const TestsListModal = forwardRef(({ tests, onClick }: TestsListModalProps, ref: Ref<ModalObject>) => {
+  return (
+    <Modal ref={ref} title="Compare With" closeText="Cancel">
+      {tests === undefined
+        ? <H3>Loading...</H3>
+        : tests.length > 0
+          ? <TestsList tests={tests} onClick={onClick}/>
+          : <p>No prior tests found</p>}
+    </Modal>
   );
 });
 

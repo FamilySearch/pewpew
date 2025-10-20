@@ -41,6 +41,7 @@ import { PpaasEncryptS3File } from "./ppaasencrypts3file";
 const { sleep } = util;
 const TEST_SCHEDULER_POLL_INTERVAL_MS: number = parseInt(process.env.TEST_SCHEDULER_POLL_INTERVAL_MS || "0", 10) || 60000;
 const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH?.toLowerCase() === "true";
+const HISTORICAL_SEARCH_START_DELAY_MINUTES: number = parseInt(process.env.HISTORICAL_SEARCH_START_DELAY_MINUTES || "0", 10) || 30;
 const HISTORICAL_SEARCH_MAX_FILES: number = parseInt(process.env.HISTORICAL_SEARCH_MAX_FILES || "0", 10) || 100000;
 const RUN_HISTORICAL_DELETE: boolean = process.env.RUN_HISTORICAL_DELETE?.toLowerCase() === "true";
 const DELETE_OLD_FILES_DAYS: number = parseInt(process.env.DELETE_OLD_FILES_DAYS || "0") || 365;
@@ -814,6 +815,13 @@ export class TestScheduler implements TestSchedulerItem {
     try {
       // Load existing ones
       await TestScheduler.loadHistoricalFromS3();
+      // Don't start right away, let the controller become healthy first
+      const searchStart: number = Date.now() + (IS_RUNNING_IN_AWS ? (HISTORICAL_SEARCH_START_DELAY_MINUTES * 60000) : 0);
+      if (searchStart > Date.now()) {
+        const delay = searchStart - Date.now();
+        log("runHistoricalSearch: start: " + new Date(searchStart), LogLevel.DEBUG, { delay, nextLoop: searchStart });
+        await sleep(delay);
+      }
       log("Starting Test Historical Search", LogLevel.DEBUG, { sizeBefore: TestScheduler.historicalTests!.size });
       // Create an ignore list
       const ignoreList: string[] = Array.from((TestScheduler.historicalTests || new Map<string, EventInput>()).keys());
@@ -832,7 +840,7 @@ export class TestScheduler implements TestSchedulerItem {
             }
             const testId: string = ppaasTestStatus.getTestId();
             if (ppaasTestStatus.status === TestStatus.Failed || ppaasTestStatus.status === TestStatus.Finished) {
-              const yamlFile = PpaasTestId.getFromTestId(testId).yamlFile;
+              const yamlFile = ppaasTestStatus.getYamlFile();
               const eventInput: EventInput = createHistoricalEvent(testId, yamlFile, ppaasTestStatus.startTime, ppaasTestStatus.endTime, ppaasTestStatus.status);
               log("Found Historical Test " + testId, LogLevel.DEBUG, eventInput);
               TestScheduler.historicalTests!.set(testId, eventInput);

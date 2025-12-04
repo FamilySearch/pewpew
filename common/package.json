@@ -39,6 +39,7 @@
     "rimraf": "^6.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/types": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.8.0",
     "@fs/config-wasm": "*",

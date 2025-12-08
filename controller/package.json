@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "4.0.3",
+  "version": "4.0.5",
   "description": "Controller Service for running pewpew tests",
   "type": "module",
   "private": true,
@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": "22"
+    "node": "24"
   },
   "overrides": {
     "eslint": "^9.15.0",
@@ -44,6 +44,7 @@
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-secrets-manager": "^3.363.0",
     "@aws-sdk/s3-request-presigner": "^3.363.0",
+    "@aws-sdk/types": "^3.363.0",
     "@fs/config-wasm": "*",
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
     "@fs/ppaas-common": "*",

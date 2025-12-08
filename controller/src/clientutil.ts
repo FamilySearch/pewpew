@@ -4,20 +4,15 @@ import { AxiosError } from "axios";
 import { IncomingMessage } from "http";
 // Must import from sub-path to avoid other dependencies
 import { PEWPEW_VERSION_LATEST } from "@fs/ppaas-common/dist/src/util/util";
-import getConfig from "next/config";
 import semver from "semver";
 
-// We can't use process.env because it's set at build time for nextjs
-// https://nextjs.org/docs/api-reference/next.config.js/runtime-configuration
-// Export for testing.
-export const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
-export const CNAME_DOMAIN: string = publicRuntimeConfig.CNAME_DOMAIN || ".pewpewlocal.org";
-export const ROUTING_DOMAIN: string = publicRuntimeConfig.ROUTING_DOMAIN || ".pewpew.org";
-export const TEST_LOCALHOST: boolean = publicRuntimeConfig.TEST_LOCALHOST === "true";
+export const CNAME_DOMAIN: string = process.env.CNAME_DOMAIN || ".pewpewlocal.org";
+export const ROUTING_DOMAIN: string = process.env.ROUTING_DOMAIN || ".pewpew.org";
+export const TEST_LOCALHOST: boolean = process.env.TEST_LOCALHOST === "true";
 export const LOCALHOST_DOMAIN: string = "localhost";
 
 export function getBasePath (): string {
-  return publicRuntimeConfig.BASE_PATH || "";
+  return process.env.BASE_PATH || "";
 }
 
 /**
@@ -27,7 +22,7 @@ export function getBasePath (): string {
  * @returns formatted url including any asset prefix
  */
 export function formatAssetHref (href: string): string {
-  return `${publicRuntimeConfig.ASSET_PREFIX || getBasePath()}${href}`;
+  return `${process.env.ASSET_PREFIX || getBasePath()}${href}`;
 }
 
 /**

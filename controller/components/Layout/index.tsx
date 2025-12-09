@@ -13,11 +13,8 @@ import styled, { createGlobalStyle } from "styled-components";
 import Div from "../Div";
 import Head from "next/head";
 import { logout as authLogout } from "../../src/authclient";
-import getConfig from "next/config";
 
-// Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
-const HIDE_ENVIRONMENT: unknown = publicRuntimeConfig.HIDE_ENVIRONMENT;
+const HIDE_ENVIRONMENT: unknown = process.env.HIDE_ENVIRONMENT;
 
 export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/results-viewer-react/yaml.html";
 

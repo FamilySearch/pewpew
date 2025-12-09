@@ -2,17 +2,13 @@ import { GetObjectCommand, GetObjectCommandInput, GetObjectCommandOutput } from 
 import { LogLevel, log, s3 } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { TestManagerError } from "../types";
-import getConfig from "next/config";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { promisify } from "util";
 import { gunzip as zlibGunzip} from "zlib";
 
-// Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
-
 // If REDIRECT_TO_S3 is turned on, it must also be turned on for the acceptance tests
-const REDIRECT_TO_S3: boolean = publicRuntimeConfig.REDIRECT_TO_S3 === "true";
-const UNZIP_S3_FILES: boolean = publicRuntimeConfig.UNZIP_S3_FILES === "true";
+const REDIRECT_TO_S3: boolean = process.env.REDIRECT_TO_S3 === "true";
+const UNZIP_S3_FILES: boolean = process.env.UNZIP_S3_FILES === "true";
 // Next.js Max API size is 4MB
 const MAX_API_SIZE = 4 * 1024 * 1024;
 

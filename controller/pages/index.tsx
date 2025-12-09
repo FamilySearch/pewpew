@@ -33,15 +33,12 @@ import { TestResults } from "../components/TestResults";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { TestsList } from "../components/TestsList";
 import { authPage } from "../src/authserver";
-import getConfig from "next/config";
 import styled from "styled-components";
 import { useRouter } from "next/router";
 
-// Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : {};
-const TEST_STATUS_REFRESH_DELAY: number = Number(publicRuntimeConfig.TEST_STATUS_REFRESH_DELAY) || 10000;
-const TEST_ERRORS_MAX_DISPLAYED: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_DISPLAYED) || 20;
-const TEST_ERRORS_MAX_LINE_LENGTH: number = Number(publicRuntimeConfig.TEST_ERRORS_MAX_LINE_LENGTH) || 200;
+const TEST_STATUS_REFRESH_DELAY: number = Number(process.env.TEST_STATUS_REFRESH_DELAY) || 10000;
+const TEST_ERRORS_MAX_DISPLAYED: number = Number(process.env.TEST_ERRORS_MAX_DISPLAYED) || 20;
+const TEST_ERRORS_MAX_LINE_LENGTH: number = Number(process.env.TEST_ERRORS_MAX_LINE_LENGTH) || 200;
 const SEARCH_REGEX: RegExp = /^[\w\d/]*$/;
 
 const TestStatusDiv = styled(Div)`

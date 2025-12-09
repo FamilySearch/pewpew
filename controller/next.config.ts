@@ -13,11 +13,6 @@ if (process.env.BASE_PATH && !process.env.BASE_PATH.startsWith("/")) {
 }
 /** @type {import('next').NextConfig} */
 const nextConfig: NextConfig = {
-  eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
-    ignoreDuringBuilds: true
-  },
   // swcMinify: true,
   // Base path doesn't work because it changes the path on the local server. We actually are running via a proxy base path
   // https://nextjs.org/docs/api-reference/next.config.js/basepath
@@ -33,8 +28,12 @@ const nextConfig: NextConfig = {
       // ["styled-components", { "ssr": true, "displayName": true, "preprocess": false } ]
     }
   },
+  typedRoutes: true,
+  turbopack: {
+    // Empty config to acknowledge Turbopack as default bundler
+    // WASM files are still configured via webpack for backwards compatibility
+  },
   experimental: {
-    typedRoutes: true
     // instrumentationHook: true,
   },
   // Defaults to any but is actually type { import('webpack').Configuration }
@@ -112,35 +111,6 @@ const nextConfig: NextConfig = {
     return config;
   },
   distDir: "dist",
-  // env: {} // env variables are set at build time, not run time. They are better optimized during the build process
-  publicRuntimeConfig: { // These are sent to the client and the server and are set at run time
-    LOGGING_LEVEL: process.env.LOGGING_LEVEL || process.env.LoggingLevel,
-    APPLICATION_NAME: process.env.APPLICATION_NAME,
-    SYSTEM_NAME: process.env.SYSTEM_NAME,
-    FS_SITE: process.env.FS_SITE,
-    NODE_ENV: process.env.NODE_ENV,
-    BASE_PATH: process.env.BASE_PATH,
-    ASSET_PREFIX: process.env.ASSET_PREFIX,
-    TEST_STATUS_REFRESH_DELAY: process.env.TEST_STATUS_REFRESH_DELAY,
-    TEST_ERRORS_MAX_DISPLAYED: process.env.TEST_ERRORS_MAX_DISPLAYED,
-    TEST_ERRORS_MAX_LINE_LENGTH: process.env.TEST_ERRORS_MAX_LINE_LENGTH,
-    TEST_AUTH_PERMISSION: process.env.TEST_AUTH_PERMISSION,
-    REDIRECT_TO_S3: process.env.REDIRECT_TO_S3,
-    UNZIP_S3_FILES: process.env.UNZIP_S3_FILES,
-    AUTH_MODE: process.env.AUTH_MODE,
-    OPENID_ONLY_ADMIN_RUN_TESTS: process.env.OPENID_ONLY_ADMIN_RUN_TESTS,
-    TEST_LOCALHOST: process.env.TEST_LOCALHOST,
-    CNAME_DOMAIN: process.env.CNAME_DOMAIN,
-    ROUTING_DOMAIN: process.env.ROUTING_DOMAIN,
-    AUTH_COOKIE_PATH: process.env.AUTH_COOKIE_PATH,
-    AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME,
-    REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME,
-    HINT_COOKIE_NAME: process.env.HINT_COOKIE_NAME,
-    AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME,
-    COOKIE_DURATION_DAYS: process.env.COOKIE_DURATION_DAYS,
-    REFRESH_COOKIE_DURATION_DAYS: process.env.REFRESH_COOKIE_DURATION_DAYS,
-    HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT
-  },
   // https://github.com/vercel/next.js/discussions/11493#discussioncomment-14606
   env: { // These are sent to the client and the server and are set at build time for static pages
     LOGGING_LEVEL: process.env.LOGGING_LEVEL || process.env.LoggingLevel || "", // Only checks if debug
@@ -152,7 +122,21 @@ const nextConfig: NextConfig = {
     HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT, // Used by Layout
     AUTH_MODE: process.env.AUTH_MODE, // Used by auth client/Layout
     AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME, // Used by auth client/Layout
-    AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME // Used by auth client/Layout
+    AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME, // Used by auth client/Layout
+    // Client-side test configuration
+    TEST_STATUS_REFRESH_DELAY: process.env.TEST_STATUS_REFRESH_DELAY, // pages/index.tsx
+    TEST_ERRORS_MAX_DISPLAYED: process.env.TEST_ERRORS_MAX_DISPLAYED, // pages/index.tsx
+    TEST_ERRORS_MAX_LINE_LENGTH: process.env.TEST_ERRORS_MAX_LINE_LENGTH, // pages/index.tsx
+    // Client-side domain configuration
+    CNAME_DOMAIN: process.env.CNAME_DOMAIN, // clientutil
+    ROUTING_DOMAIN: process.env.ROUTING_DOMAIN, // clientutil
+    TEST_LOCALHOST: process.env.TEST_LOCALHOST, // clientutil
+    // Client-side cookie configuration
+    AUTH_COOKIE_PATH: process.env.AUTH_COOKIE_PATH, // authclient
+    REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME, // authclient
+    HINT_COOKIE_NAME: process.env.HINT_COOKIE_NAME, // authclient
+    COOKIE_DURATION_DAYS: process.env.COOKIE_DURATION_DAYS, // authclient
+    REFRESH_COOKIE_DURATION_DAYS: process.env.REFRESH_COOKIE_DURATION_DAYS // authclient
   }
 };
 

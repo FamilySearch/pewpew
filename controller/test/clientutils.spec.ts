@@ -3,7 +3,6 @@ import {
   log
 } from "@fs/ppaas-common";
 import {
-  publicRuntimeConfig as clientPublicRuntimeConfig,
   formatAssetHref,
   formatError,
   formatPageHref,
@@ -15,22 +14,21 @@ import {
 import { expect } from "chai";
 
 describe("Client Utils", () => {
-  const publicRuntimeConfig: Record<string, string | undefined> = clientPublicRuntimeConfig;
   let savedBasePath: string | undefined;
   let savedAssetPrefix: string | undefined;
 
   before(() => {
-    // Save off the publicRuntimeConfig
-    savedBasePath = publicRuntimeConfig.BASE_PATH;
-    savedAssetPrefix = publicRuntimeConfig.ASSET_PREFIX;
+    // Save off the process.env values
+    savedBasePath = process.env.BASE_PATH;
+    savedAssetPrefix = process.env.ASSET_PREFIX;
   });
 
   after(() => {
-    delete publicRuntimeConfig.BASE_PATH;
-    delete publicRuntimeConfig.ASSET_PREFIX;
-    // Restore publicRuntimeConfig
-    if (savedBasePath !== undefined) { publicRuntimeConfig.BASE_PATH = savedBasePath; }
-    if (savedAssetPrefix !== undefined) { publicRuntimeConfig.ASSET_PREFIX = savedAssetPrefix; }
+    delete process.env.BASE_PATH;
+    delete process.env.ASSET_PREFIX;
+    // Restore process.env
+    if (savedBasePath !== undefined) { process.env.BASE_PATH = savedBasePath; }
+    if (savedAssetPrefix !== undefined) { process.env.ASSET_PREFIX = savedAssetPrefix; }
   });
 
   describe("versionSort", () => {
@@ -215,17 +213,17 @@ describe("Client Utils", () => {
   });
 
   describe("getBasePath", () => {
-    beforeEach(() => delete publicRuntimeConfig.BASE_PATH);
+    beforeEach(() => delete process.env.BASE_PATH);
 
     it("should handle undefined", (done: Mocha.Done) => {
-      delete publicRuntimeConfig.BASE_PATH;
+      delete process.env.BASE_PATH;
       const basePath = getBasePath();
       expect(basePath).to.equal("");
       done();
     });
 
     it("should handle empty string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "";
+      process.env.BASE_PATH = "";
       const basePath = getBasePath();
       expect(basePath).to.equal("");
       done();
@@ -233,7 +231,7 @@ describe("Client Utils", () => {
 
     it("should handle base path", (done: Mocha.Done) => {
       const expected = "/pewpew/unittest";
-      publicRuntimeConfig.BASE_PATH = expected;
+      process.env.BASE_PATH = expected;
       const basePath = getBasePath();
       expect(basePath).to.equal(expected);
       done();
@@ -241,7 +239,7 @@ describe("Client Utils", () => {
 
     it("should handle long strings", (done: Mocha.Done) => {
       const expected = "/kjsdklfjaskdlfjsdklfajsdkfljsdkfljsdfksdjafklsadjfksadjfksadljfkas/skljdfksdajfdkslajfksdljfkljafkdsljaskdlfjskldfjasdklfjsakdlfjslkdfjaskdlfjsdlfjka/jklsdfjkasldjfksdljafklsadjfklsdjfksldajfklsajdfklsjdfklsdjfklsajf/jaskdfljsdalkjfksladjfsdklajfsa";
-      publicRuntimeConfig.BASE_PATH = expected;
+      process.env.BASE_PATH = expected;
       const basePath = getBasePath();
       expect(basePath).to.equal(expected);
       done();
@@ -250,12 +248,12 @@ describe("Client Utils", () => {
 
   describe("formatAssetHref", () => {
     beforeEach(() => {
-      delete publicRuntimeConfig.BASE_PATH;
-      delete publicRuntimeConfig.ASSET_PREFIX;
+      delete process.env.BASE_PATH;
+      delete process.env.ASSET_PREFIX;
     });
 
     it("should handle empty BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "";
+      process.env.BASE_PATH = "";
       const path = "/bogus";
       const expected = path;
       const actual = formatAssetHref(path);
@@ -264,7 +262,7 @@ describe("Client Utils", () => {
     });
 
     it("should handle empty ASSET_PREFIX string", (done: Mocha.Done) => {
-      publicRuntimeConfig.ASSET_PREFIX = "";
+      process.env.ASSET_PREFIX = "";
       const path = "/bogus";
       const expected = path;
       const actual = formatAssetHref(path);
@@ -273,37 +271,37 @@ describe("Client Utils", () => {
     });
 
     it("should handle BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.BASE_PATH + path;
+      const expected = process.env.BASE_PATH + path;
       const actual = formatAssetHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should handle ASSET_PREFIX string", (done: Mocha.Done) => {
-      publicRuntimeConfig.ASSET_PREFIX = "/pewpew/unittest";
+      process.env.ASSET_PREFIX = "/pewpew/unittest";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.ASSET_PREFIX + path;
+      const expected = process.env.ASSET_PREFIX + path;
       const actual = formatAssetHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should override BASE_PATH with ASSET_PREFIX", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/wrong/path";
-      publicRuntimeConfig.ASSET_PREFIX = "/pewpew/unittest";
+      process.env.BASE_PATH = "/wrong/path";
+      process.env.ASSET_PREFIX = "/pewpew/unittest";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.ASSET_PREFIX + path;
+      const expected = process.env.ASSET_PREFIX + path;
       const actual = formatAssetHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should handle long strings", (done: Mocha.Done) => {
-      publicRuntimeConfig.ASSET_PREFIX = "/kjsdklfjaskdlfjsdklfajsdkfljsdkfljsdfksdjafklsadjfksadjfksadljfkas/skljdfksdajfdkslajfksdljfkljafkdsljaskdlfjskldfjasdklfjsakdlfjslkdfjaskdlfjsdlfjka/jklsdfjkasldjfksdljafklsadjfklsdjfksldajfklsajdfklsjdfklsdjfklsajf/jaskdfljsdalkjfksladjfsdklajfsa";
+      process.env.ASSET_PREFIX = "/kjsdklfjaskdlfjsdklfajsdkfljsdkfljsdfksdjafklsadjfksadjfksadljfkas/skljdfksdajfdkslajfksdljfkljafkdsljaskdlfjskldfjasdklfjsakdlfjslkdfjaskdlfjsdlfjka/jklsdfjkasldjfksdljafklsadjfklsdjfksldajfklsajdfklsjdfklsdjfklsajf/jaskdfljsdalkjfksladjfsdklajfsa";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.ASSET_PREFIX + path;
+      const expected = process.env.ASSET_PREFIX + path;
       const actual = formatAssetHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
@@ -312,11 +310,11 @@ describe("Client Utils", () => {
 
   describe("formatPageHref", () => {
     beforeEach(() => {
-      delete publicRuntimeConfig.BASE_PATH;
+      delete process.env.BASE_PATH;
     });
 
     it("should handle undefined BASE_PATH string", (done: Mocha.Done) => {
-      delete publicRuntimeConfig.BASE_PATH;
+      delete process.env.BASE_PATH;
       const path = "/bogus";
       const expected = path;
       const actual = formatPageHref(path);
@@ -325,7 +323,7 @@ describe("Client Utils", () => {
     });
 
     it("should handle empty BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "";
+      process.env.BASE_PATH = "";
       const path = "/bogus";
       const expected = path;
       const actual = formatPageHref(path);
@@ -334,34 +332,34 @@ describe("Client Utils", () => {
     });
 
     it("should handle BASE_PATH string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.BASE_PATH + path;
+      const expected = process.env.BASE_PATH + path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should handle empty path string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "";
-      const expected = publicRuntimeConfig.BASE_PATH + path;
+      const expected = process.env.BASE_PATH + path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should handle slash only path string", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "/";
-      const expected = publicRuntimeConfig.BASE_PATH + path;
+      const expected = process.env.BASE_PATH + path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
       done();
     });
 
     it("should not add BASE_PATH if path is http://", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "http://bogus.com/";
       const expected = path;
       const actual = formatPageHref(path);
@@ -370,7 +368,7 @@ describe("Client Utils", () => {
     });
 
     it("should not add BASE_PATH if path is https://", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "https://bogus.com/";
       const expected = path;
       const actual = formatPageHref(path);
@@ -379,8 +377,8 @@ describe("Client Utils", () => {
     });
 
     it("should not add BASE_PATH if path has it", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
-      const path = publicRuntimeConfig.BASE_PATH + "/bogus";
+      process.env.BASE_PATH = "/pewpew/unittest";
+      const path = process.env.BASE_PATH + "/bogus";
       const expected = path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
@@ -388,7 +386,7 @@ describe("Client Utils", () => {
     });
 
     it("should not add BASE_PATH if path has it without the slash", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "pewpew/unittest/bogus/";
       const expected = path;
       const actual = formatPageHref(path);
@@ -397,7 +395,7 @@ describe("Client Utils", () => {
     });
 
     it("should add BASE_PATH without the slash if path has it without the slash", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/pewpew/unittest";
+      process.env.BASE_PATH = "/pewpew/unittest";
       const path = "bogus/";
       const expected = "pewpew/unittest/bogus/";
       const actual = formatPageHref(path);
@@ -406,9 +404,9 @@ describe("Client Utils", () => {
     });
 
     it("should handle long strings", (done: Mocha.Done) => {
-      publicRuntimeConfig.BASE_PATH = "/kjsdklfjaskdlfjsdklfajsdkfljsdkfljsdfksdjafklsadjfksadjfksadljfkas/skljdfksdajfdkslajfksdljfkljafkdsljaskdlfjskldfjasdklfjsakdlfjslkdfjaskdlfjsdlfjka/jklsdfjkasldjfksdljafklsadjfklsdjfksldajfklsajdfklsjdfklsdjfklsajf/jaskdfljsdalkjfksladjfsdklajfsa";
+      process.env.BASE_PATH = "/kjsdklfjaskdlfjsdklfajsdkfljsdkfljsdfksdjafklsadjfksadjfksadljfkas/skljdfksdajfdkslajfksdljfkljafkdsljaskdlfjskldfjasdklfjsakdlfjslkdfjaskdlfjsdlfjka/jklsdfjkasldjfksdljafklsadjfklsdjfksldajfklsajdfklsjdfklsdjfklsajf/jaskdfljsdalkjfksladjfsdklajfsa";
       const path = "/bogus";
-      const expected = publicRuntimeConfig.BASE_PATH + path;
+      const expected = process.env.BASE_PATH + path;
       const actual = formatPageHref(path);
       expect(actual, "actual").to.equal(expected);
       done();

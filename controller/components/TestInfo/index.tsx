@@ -81,13 +81,6 @@ export const TestInfo = ({ testData, ...testInfoProps }: TestInfoStorybookProps)
       ? { color: "red" }
       : {};
 
-  // Hostname fix for legacy tests, we're missing the -app
-  if (testData.hostname &&  /^\w+-\w+-\d+-\d+-\d+$/.test(testData.hostname)) {
-    const split = testData.hostname.split("-");
-    split.splice(2, 0, "app");
-    testData.hostname = split.join("-");
-  }
-
   const onClick = async (event: React.MouseEvent<HTMLButtonElement>, deleteSchedule?: boolean) => {
     event.preventDefault();
     if (doubleClickCheck) {

@@ -41,21 +41,18 @@ import { createErrorResponse } from "./util";
 import { getClientSecretOpenId } from "./secrets";
 import nextCookie from "next-cookies";
 
-// server side we want to use process.env rather than publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = process.env;
-
 const AUTH_CALLBACK_PAGE_NAME = PAGE_LOGIN;
-const OPENID_CLIENT_ID: string = `${publicRuntimeConfig.OPENID_CLIENT_ID}`;
-const OPENID_OIDC_BASE_URL: string = `https://${publicRuntimeConfig.OPENID_HOST}`;
+const OPENID_CLIENT_ID: string = `${process.env.OPENID_CLIENT_ID}`;
+const OPENID_OIDC_BASE_URL: string = `https://${process.env.OPENID_HOST}`;
 
 /** If set, only admins can run tests */
-const OPENID_ONLY_ADMIN_RUN_TESTS: boolean = publicRuntimeConfig.OPENID_ONLY_ADMIN_RUN_TESTS === "true";
-if (publicRuntimeConfig.OPENID_ONLY_ADMIN_RUN_TESTS) {
-  log("OPENID_ONLY_ADMIN_RUN_TESTS: " + publicRuntimeConfig.OPENID_ONLY_ADMIN_RUN_TESTS, LogLevel.WARN, { OPENID_ONLY_ADMIN_RUN_TESTS });
+const OPENID_ONLY_ADMIN_RUN_TESTS: boolean = process.env.OPENID_ONLY_ADMIN_RUN_TESTS === "true";
+if (process.env.OPENID_ONLY_ADMIN_RUN_TESTS) {
+  log("OPENID_ONLY_ADMIN_RUN_TESTS: " + process.env.OPENID_ONLY_ADMIN_RUN_TESTS, LogLevel.WARN, { OPENID_ONLY_ADMIN_RUN_TESTS });
 }
-const TEST_AUTH_PERMISSION: AuthPermission | undefined = publicRuntimeConfig.TEST_AUTH_PERMISSION
-   && Object.values(AuthPermission).includes(parseInt(publicRuntimeConfig.TEST_AUTH_PERMISSION))
-   ? parseInt(publicRuntimeConfig.TEST_AUTH_PERMISSION)
+const TEST_AUTH_PERMISSION: AuthPermission | undefined = process.env.TEST_AUTH_PERMISSION
+   && Object.values(AuthPermission).includes(parseInt(process.env.TEST_AUTH_PERMISSION))
+   ? parseInt(process.env.TEST_AUTH_PERMISSION)
    : undefined;
 if (TEST_AUTH_PERMISSION !== undefined) {
   const [permissionName, permissionValue] = Object.entries(AuthPermission).find(([_key, value]) => TEST_AUTH_PERMISSION === value)!;
@@ -67,7 +64,7 @@ const getOpenIdClientId = (): string => OPENID_CLIENT_ID;
 
 async function getOpenIdConfiguration (): Promise<Configuration> {
   if (openIdConfiguration === undefined) {
-    log("getOpenIdClient", LogLevel.DEBUG, { OPENID_CLIENT_ID, OPENID_OIDC_BASE_URL, OPENID_HOST: publicRuntimeConfig.OPENID_HOST, env: process.env });
+    log("getOpenIdClient", LogLevel.DEBUG, { OPENID_CLIENT_ID, OPENID_OIDC_BASE_URL, OPENID_HOST: process.env.OPENID_HOST, env: process.env });
     const serverMetadata: ServerMetadata = {
       issuer: OPENID_OIDC_BASE_URL,
       authorization_endpoint: OPENID_OIDC_BASE_URL + "/oauth2/v1/authorize",

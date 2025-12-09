@@ -22,3 +22,5 @@ testmerge.json
 .env.production.local*
 .DS_Store
 package-lock.json.scripting
+Cargo.lock.scripting
+CLAUDE.md

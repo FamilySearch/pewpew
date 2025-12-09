@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source /home/fs/.nvm/nvm.sh
-nvm install v22
+nvm install v24
 
 # Environment variables are not passed to our run-build hook/script. Hard code them in the script
 # And platform scripts are not available on the build server either.

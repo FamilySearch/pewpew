@@ -3,9 +3,9 @@ import { REFRESH_COOKIE_NAME, SESSION_EXPIRED_MESSAGE } from "../../src/authclie
 import { ROUTING_DOMAIN, formatError, formatPageHref } from "../../src/clientutil";
 import { cookies, headers } from "next/headers";
 import { API_AUTH } from "../../types/pages";
+import type { GetServerSidePropsContext } from "next";
 import { LoginClient } from "./LoginClient";
 import type { Route } from "next";
-import type { GetServerSidePropsContext } from "next";
 import { getLoginApiUrl } from "../../src/authserver";
 import { redirect } from "next/navigation";
 

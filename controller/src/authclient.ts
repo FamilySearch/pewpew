@@ -8,6 +8,7 @@ import {
 } from "./clientutil";
 import { LogLevel, log } from "./log";
 import { IncomingMessage } from "http";
+import type { NextRequest } from "next/server";
 import jsCookie from "js-cookie";
 
 // AUTH_MODE overrides FS_SITE
@@ -63,7 +64,7 @@ export function getDomain (req?: IncomingMessage): string {
  * @param req {IncomingMessage} optional request object if we're server side
  * @returns {string} a path if we have one, or undefined if we shouldn't use one.
  */
-export function getCookiePath (req?: IncomingMessage): string | undefined {
+export function getCookiePath (req?: IncomingMessage | NextRequest): string | undefined {
   if (getBasePath() && !isCurrentUrlCname(req)) {
     return AUTH_COOKIE_PATH;
   }

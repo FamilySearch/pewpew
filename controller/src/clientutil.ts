@@ -1,7 +1,8 @@
 import { LogLevel, log } from "./log";
 import { TestData, TestManagerError, TestManagerMessage } from "../types";
 import { AxiosError } from "axios";
-import { IncomingMessage } from "http";
+import type { IncomingMessage } from "http";
+import type { NextRequest } from "next/server";
 // Must import from sub-path to avoid other dependencies
 import { PEWPEW_VERSION_LATEST } from "@fs/ppaas-common/dist/src/util/util";
 import semver from "semver";
@@ -82,14 +83,28 @@ export function formatPageHref (href: string): string {
   return `${basePath}${href}`;
 }
 
-export function getHostUrl (req: IncomingMessage | undefined): string {
+export function getHostUrl (req: IncomingMessage | NextRequest | undefined): string {
   // CNames are always http, main domain is https
-  const protocol = req && req.headers.host && req.headers.host.includes(ROUTING_DOMAIN)
+  let host: string | undefined;
+
+  if (req) {
+    // Handle NextRequest
+    if ("headers" in req && typeof req.headers.get === "function") {
+      host = req.headers.get("host") || undefined;
+    }
+    // Handle IncomingMessage
+    else if ("headers" in req && "host" in req.headers) {
+      host = req.headers.host;
+    }
+  }
+
+  const protocol = host && host.includes(ROUTING_DOMAIN)
     ? "https"
     : "http";
+
   // If we have a request, we're server-side
-  if (req && req.headers.host) {
-    return `${protocol}://${req.headers.host}`;
+  if (host) {
+    return `${protocol}://${host}`;
   }
   if (typeof window !== "undefined") {
     return window.location.origin;
@@ -203,10 +218,22 @@ export const isYamlFile = (filename: string) => filename.endsWith(".yaml") || fi
  * @param req {IncomingMessage} A Request object. Required if server side, will be undefined clientside
  * @returns A boolean if we have a request host or a window object. undefined otherwise.
  */
-export function isCurrentUrlCname (req: IncomingMessage | undefined): boolean | undefined {
-  if (req && req.headers.host !== undefined) {
-    log("isCurrentUrlCname req.headers.host: " + req.headers.host, LogLevel.DEBUG, { TEST_LOCALHOST });
-    return req.headers.host.includes(CNAME_DOMAIN) || (TEST_LOCALHOST && req.headers.host.includes(LOCALHOST_DOMAIN));
+export function isCurrentUrlCname (req: IncomingMessage | NextRequest | undefined): boolean | undefined {
+  if (req) {
+    // Handle NextRequest
+    if ("headers" in req && typeof req.headers.get === "function") {
+      const host = req.headers.get("host");
+      if (host) {
+        log("isCurrentUrlCname req.headers.host: " + host, LogLevel.DEBUG, { TEST_LOCALHOST });
+        return host.includes(CNAME_DOMAIN) || (TEST_LOCALHOST && host.includes(LOCALHOST_DOMAIN));
+      }
+    }
+    // Handle IncomingMessage
+    else if ("headers" in req && "host" in req.headers && req.headers.host !== undefined) {
+      const host = req.headers.host;
+      log("isCurrentUrlCname req.headers.host: " + host, LogLevel.DEBUG, { TEST_LOCALHOST });
+      return host.includes(CNAME_DOMAIN) || (TEST_LOCALHOST && host.includes(LOCALHOST_DOMAIN));
+    }
   }
   if (typeof window !== "undefined") {
     log("isCurrentUrlCname window.location.hostname: " + window.location.hostname, LogLevel.DEBUG, { TEST_LOCALHOST });

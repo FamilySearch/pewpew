@@ -34,9 +34,11 @@ import type {
 } from "openid-client";
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from "next";
 import { LogLevel, log } from "@fs/ppaas-common";
+import type { NextRequest, NextResponse } from "next/server";
 import { parse as cookieParse, serialize as cookieSerialize } from "cookie";
 import { formatPageHref, getHostUrl } from "./clientutil";
-import { IncomingMessage } from "http";
+import type { IncomingMessage } from "http";
+import type { Route } from "next";
 import { createErrorResponse } from "./util";
 import { getClientSecretOpenId } from "./secrets";
 import nextCookie from "next-cookies";
@@ -120,7 +122,7 @@ function getPermissions (userInfoResponse: UserInfoResponse): AuthPermission {
     log("TEST_AUTH_PERMISSION overridden, using: " + TEST_AUTH_PERMISSION, LogLevel.ERROR, { TEST_AUTH_PERMISSION });
     return TEST_AUTH_PERMISSION;
   }
-  const groups = (userInfoResponse as any).groups;
+  const groups = userInfoResponse.groups;
   if (groups && Array.isArray(groups) && groups.length > 0 && typeof groups[0] === "string") {
     const openIdPermissionNames: OpenIdPermissionNames = OpenIdPermissions;
     if (groups.includes(openIdPermissionNames.Admin)) {
@@ -185,12 +187,11 @@ export async function validateToken (token: string): Promise<AuthPermissions> {
   // Check CAS for permissions
   const authPermission = getPermissions(sessionResponse);
   log("getPermissions(token): " + authPermission, LogLevel.DEBUG);
-  const sessionAny = sessionResponse as any;
   return {
     token,
     authPermission,
-    userId: sessionAny.preferred_username || sessionAny.email || sessionAny.cisId || sessionAny.userId,
-    groups: (sessionResponse as any).groups
+    userId: sessionResponse.preferred_username || sessionResponse.email || sessionResponse.cisId as string || sessionResponse.userId as string,
+    groups: sessionResponse.groups as string[]
   };
 }
 
@@ -210,25 +211,40 @@ export function validateUrlDomain (url: URL): void {
   }
 }
 
-function getFullCallbackUrl (req: IncomingMessage): string {
+function getFullCallbackUrl (req: IncomingMessage | NextRequest): string {
   // There is an issue with our new "LocalHost" api calling that we need the real domain/host passed
   // to the auth api so we can use the same redirect_uri used by the auth call. We'll pass it down as a header
   let hostUrl: string = getHostUrl(req);
-  log("getFullCallbackUrl hostUrl: " + hostUrl, LogLevel.DEBUG, { hostUrl, host: req.headers.host, [AUTH_HEADER_HOST]: req.headers[AUTH_HEADER_HOST] });
-  if (hostUrl.startsWith("http://localhost") && typeof req.headers[AUTH_HEADER_HOST] === "string") {
-    hostUrl = req.headers[AUTH_HEADER_HOST] as string;
-    log("getFullCallbackUrl modified hostUrl: " + hostUrl, LogLevel.DEBUG, { hostUrl, host: req.headers.host, [AUTH_HEADER_HOST]: req.headers[AUTH_HEADER_HOST] });
+
+  // Get host and authhost header for both request types
+  let host: string | undefined;
+  let authHost: string | undefined;
+
+  if ("headers" in req && typeof req.headers.get === "function") {
+    // NextRequest
+    host = req.headers.get("host") || undefined;
+    authHost = req.headers.get(AUTH_HEADER_HOST) || undefined;
+  } else if ("headers" in req && "host" in req.headers) {
+    // IncomingMessage
+    host = req.headers.host;
+    authHost = typeof req.headers[AUTH_HEADER_HOST] === "string" ? req.headers[AUTH_HEADER_HOST] : undefined;
+  }
+
+  log("getFullCallbackUrl hostUrl: " + hostUrl, LogLevel.DEBUG, { hostUrl, host, [AUTH_HEADER_HOST]: authHost });
+  if (hostUrl.startsWith("http://localhost") && authHost) {
+    hostUrl = authHost;
+    log("getFullCallbackUrl modified hostUrl: " + hostUrl, LogLevel.DEBUG, { hostUrl, host, [AUTH_HEADER_HOST]: authHost });
     // The authheader needs to be our domain. Don't allow others to spoof. But only if the requester is localhost.
     try {
       const url: URL = new URL(hostUrl);
       validateUrlDomain(url);
     } catch (error) {
-      log("Error parsing FullCallbackUrl from hostUrl: " + hostUrl, LogLevel.ERROR, error, { hostUrl, host: req.headers.host, [AUTH_HEADER_HOST]: req.headers[AUTH_HEADER_HOST] });
+      log("Error parsing FullCallbackUrl from hostUrl: " + hostUrl, LogLevel.ERROR, error, { hostUrl, host, [AUTH_HEADER_HOST]: authHost });
       throw error;
     }
   }
   if (IS_RUNNING_IN_AWS && hostUrl.includes("localhost")) {
-    log("getFullCallbackUrl hostUrl: " + hostUrl, LogLevel.WARN, { hostUrl, host: req.headers.host, [AUTH_HEADER_HOST]: req.headers[AUTH_HEADER_HOST] });
+    log("getFullCallbackUrl hostUrl: " + hostUrl, LogLevel.WARN, { hostUrl, host, [AUTH_HEADER_HOST]: authHost });
   }
   return `${hostUrl}${formatPageHref(AUTH_CALLBACK_PAGE_NAME)}`;
 }
@@ -252,26 +268,54 @@ export async function getAuthUrl (req: NextApiRequest): Promise<string> {
   return authUrl.toString();
 }
 
-function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AUTH_HEADER_NAME): string | undefined {
+function getTokenFromQueryOrHeader (req: NextApiRequest | NextRequest, headerName: string = AUTH_HEADER_NAME): string | undefined {
   let token: string | undefined;
-  // If we don't have a cookie token, check the querystring (for a redirect)
-  const queryToken: string | string[] | undefined = req.query[headerName];
-  log("req.query: " + JSON.stringify(req.query), LogLevel.DEBUG);
-  if (queryToken && !Array.isArray(queryToken)) {
-    token = queryToken;
-    log("query token: " + JSON.stringify(token), LogLevel.DEBUG);
-  }
-  // Or check the headers
-  const headersToken: string | string[] | undefined = req.headers[headerName];
-  log("req.headers: " + JSON.stringify(req.headers), LogLevel.DEBUG);
-  if (!token && headersToken && !Array.isArray(headersToken)) {
-    token = headersToken;
-    log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
-  }
-  if (!token && req.headers.cookie && !Array.isArray(req.headers.cookie)) {
-    const cookies = cookieParse(req.headers.cookie);
-    token = cookies[headerName];
-    log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
+
+  if ("nextUrl" in req) {
+    // NextRequest
+    const queryToken = req.nextUrl.searchParams.get(headerName);
+    log("req.query: " + queryToken, LogLevel.DEBUG);
+    if (queryToken) {
+      token = queryToken;
+      log("query token: " + JSON.stringify(token), LogLevel.DEBUG);
+    }
+    // Or check the headers
+    const headersToken = req.headers.get(headerName);
+    log("req.headers: " + headersToken, LogLevel.DEBUG);
+    if (!token && headersToken) {
+      token = headersToken;
+      log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
+    }
+    // Check cookies
+    if (!token) {
+      const cookieHeader = req.headers.get("cookie");
+      if (cookieHeader) {
+        const cookies = cookieParse(cookieHeader);
+        token = cookies[headerName];
+        log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
+      }
+    }
+  } else {
+    // NextApiRequest
+    // If we don't have a cookie token, check the querystring (for a redirect)
+    const queryToken: string | string[] | undefined = req.query[headerName];
+    log("req.query: " + JSON.stringify(req.query), LogLevel.DEBUG);
+    if (queryToken && !Array.isArray(queryToken)) {
+      token = queryToken;
+      log("query token: " + JSON.stringify(token), LogLevel.DEBUG);
+    }
+    // Or check the headers
+    const headersToken: string | string[] | undefined = req.headers[headerName];
+    log("req.headers: " + JSON.stringify(req.headers), LogLevel.DEBUG);
+    if (!token && headersToken && !Array.isArray(headersToken)) {
+      token = headersToken;
+      log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
+    }
+    if (!token && req.headers.cookie && !Array.isArray(req.headers.cookie)) {
+      const cookies = cookieParse(req.headers.cookie);
+      token = cookies[headerName];
+      log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
+    }
   }
   return token;
 }
@@ -281,17 +325,35 @@ function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AU
  * and refreshToken if the two-week checkbox was checked
  * @param code code queryparam returned by Web Auth call
  */
-export async function getTokenFromCode (req: NextApiRequest): Promise<TokenResponse> {
-  log("getTokenFromCode: " + req.url, LogLevel.DEBUG, req.query);
+export async function getTokenFromCode (req: NextApiRequest | NextRequest): Promise<TokenResponse> {
+  // Extract properties that work for both request types
+  const url = req.url || "";
+  let code: string | undefined;
+  let query: Record<string, string | string[] | undefined>;
+  let headers: Record<string, string | string[] | undefined>;
+
+  if ("nextUrl" in req) {
+    // NextRequest
+    code = req.nextUrl.searchParams.get("code") || undefined;
+    query = Object.fromEntries(req.nextUrl.searchParams.entries());
+    headers = Object.fromEntries(req.headers.entries());
+  } else {
+    // NextApiRequest
+    code = typeof req.query.code === "string" ? req.query.code : undefined;
+    query = req.query;
+    headers = req.headers;
+  }
+
+  log("getTokenFromCode: " + url, LogLevel.DEBUG, query);
   let loginUrl: string | undefined;
   try {
     // https://github.com/panva/node-openid-client
     const configuration: Configuration = await getOpenIdConfiguration();
     // const params: CallbackParamsType = openIdClient.callbackParams(req);
-    loginUrl = getFullCallbackUrl(req) + `?code=${req.query.code}`;
+    loginUrl = getFullCallbackUrl(req) + `?code=${code}`;
     // When it was a NextApiRequest, this parsed fine, with the new GetServerSideContext we parse an extra "state"
     // which causes an error if it's there.
-    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl, url: req.url, query: req.query });
+    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl, url, query });
     const tokenSet: TokenEndpointResponse & TokenEndpointResponseHelpers = await openIdClient.authorizationCodeGrant(
       configuration,
       new URL(loginUrl),
@@ -306,7 +368,7 @@ export async function getTokenFromCode (req: NextApiRequest): Promise<TokenRespo
       throw new Error("Could not get the auth token from: " + JSON.stringify(tokenSet));
     }
   } catch (error) {
-    log("Error calling getTokenFromCode", LogLevel.WARN, error, { loginUrl, headers: req.headers });
+    log("Error calling getTokenFromCode", LogLevel.WARN, error, { loginUrl, headers });
     throw error;
   }
 }
@@ -505,4 +567,106 @@ export async function authPage (ctx: GetServerSidePropsContext, requiredPermissi
   }
 
   return redirectToLogin(ctx);
+}
+
+/**
+ * App Router auth helper for Server Components
+ * Validates token and redirects if needed
+ * @param requiredPermissions minimum permission level required
+ * @returns AuthPermissions if authorized
+ * @throws Redirect if not authorized or session expired
+ */
+export async function authServerComponent (requiredPermissions: AuthPermission = AuthPermission.User): Promise<AuthPermissions> {
+  const { cookies: cookiesFn, headers: headersFn } = await import("next/headers");
+
+  if (!isAuthEnabled()) {
+    log("Authentication is turned off", IS_RUNNING_IN_AWS ? LogLevel.ERROR : LogLevel.WARN);
+    return { token: undefined, authPermission: TEST_AUTH_PERMISSION ?? AuthPermission.Admin };
+  }
+
+  const cookieStore = await cookiesFn();
+  const headersList = await headersFn();
+
+  // Try to get token from cookie, query, or header
+  let token: string | undefined = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+
+  // Check headers if no cookie
+  if (!token) {
+    token = headersList.get(AUTH_HEADER_NAME) || undefined;
+  }
+
+  // If we have a token, validate it
+  if (token) {
+    const authPermissions: AuthPermissions = await validateToken(token);
+    log("validateToken(token): " + JSON.stringify(authPermissions), LogLevel.DEBUG);
+
+    // If it's expired redirect to login
+    if (authPermissions.authPermission === AuthPermission.Expired) {
+      const { redirect } = await import("next/navigation");
+      redirect(formatPageHref(`${PAGE_LOGIN}?error=${encodeURIComponent(SESSION_EXPIRED_MESSAGE)}`) as Route);
+      throw new Error("Redirect"); // Never reached, but satisfies TypeScript
+    }
+
+    // If we don't have sufficient permissions
+    if (authPermissions.authPermission < requiredPermissions) {
+      log("User was not authorized for page", LogLevel.WARN, { ...authPermissions, token: undefined });
+      const { redirect } = await import("next/navigation");
+      redirect(formatPageHref(`${PAGE_LOGIN}?error=${encodeURIComponent(NOT_AUTHORIZED_MESSAGE)}`) as Route);
+      throw new Error("Redirect"); // Never reached, but satisfies TypeScript
+    }
+
+    return authPermissions;
+  }
+
+  // No token - redirect to login
+  const { redirect } = await import("next/navigation");
+  redirect(formatPageHref(PAGE_LOGIN) as Route);
+  throw new Error("Redirect"); // Never reached, but satisfies TypeScript
+}
+
+/**
+ * App Router auth helper for Route Handlers
+ * Validates token and returns error response if needed
+ * @param request NextRequest object
+ * @param requiredPermissions minimum permission level required
+ * @returns AuthPermissions if authorized, NextResponse with error if not
+ */
+export async function authRouteHandler (
+  request: NextRequest,
+  requiredPermissions: AuthPermission = AuthPermission.User
+): Promise<AuthPermissions | NextResponse> {
+  const { NextResponse: NextResponseClass } = await import("next/server");
+
+  if (!isAuthEnabled()) {
+    log("Authentication is turned off", IS_RUNNING_IN_AWS ? LogLevel.ERROR : LogLevel.WARN);
+    return { token: undefined, authPermission: TEST_AUTH_PERMISSION ?? AuthPermission.Admin };
+  }
+
+  log(`Checking authorization for ${request.method} ${request.url}`, LogLevel.DEBUG);
+
+  try {
+    const token: string | undefined = getTokenFromQueryOrHeader(request);
+    if (!token) {
+      return NextResponseClass.json({ message: "Not Authorized" }, { status: 401 });
+    }
+
+    const authPermissions: AuthPermissions = await validateToken(token);
+    log(`${request.method} ${request.url} authPermissions: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
+
+    // If it's expired
+    if (authPermissions.authPermission === AuthPermission.Expired) {
+      return NextResponseClass.json({ message: SESSION_EXPIRED_MESSAGE }, { status: 401 });
+    }
+
+    // If we don't have sufficient permissions
+    if (authPermissions.authPermission < requiredPermissions) {
+      log("User was not authorized for api", LogLevel.WARN, { method: request.method, url: request.url, ...authPermissions, token: undefined });
+      return NextResponseClass.json({ message: NOT_AUTHORIZED_MESSAGE }, { status: 403 });
+    }
+
+    return authPermissions;
+  } catch (error) {
+    log("Error checking authorization", LogLevel.ERROR, error);
+    return NextResponseClass.json({ message: "Authentication failed" }, { status: 500 });
+  }
 }

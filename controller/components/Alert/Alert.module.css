@@ -1,0 +1,40 @@
+.alert {
+  display: flex;
+  vertical-align: middle;
+  align-content: start;
+  text-align: center;
+  justify-content: center;
+  padding: .75rem 1.25rem;
+  border: 1px solid;
+  border-radius: .25rem;
+  margin-bottom: .5rem;
+  margin-top: .5rem;
+}
+
+.success {
+  composes: alert;
+  color: rgb(168, 234, 183);
+  background-color: rgb(23, 54, 30);
+  border-color: rgb(41, 99, 54);
+}
+
+.danger {
+  composes: alert;
+  color: rgb(230, 155, 162);
+  background-color: rgb(64, 11, 16);
+  border-color: rgb(129, 23, 34);
+}
+
+.warning {
+  composes: alert;
+  color: rgb(251, 219, 127);
+  background-color: rgb(81, 62, 0);
+  border-color: rgb(167, 126, 0);
+}
+
+.info {
+  composes: alert;
+  color: rgb(156, 230, 243);
+  background-color: rgb(18, 54, 60);
+  border-color: rgb(34, 101, 112);
+}

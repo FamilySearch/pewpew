@@ -1,21 +1,14 @@
-import styled from "styled-components";
+import styles from "./Headers.module.css";
+import React from "react";
 
-const H1 = styled.h1`
-  font-size: 2.0rem;
-  margin: 1rem 0 0.75rem 0;
-  text-align: center;
-`;
+export const H1: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({ className, ...props }) => (
+  <h1 className={`${styles.h1} ${className || ""}`} {...props} />
+);
 
-const H2 = styled.h2`
-  font-size: 1.75rem;
-  margin: .75rem 0 0.5rem 0;
-  text-align: center;
-`;
+export const H2: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({ className, ...props }) => (
+  <h2 className={`${styles.h2} ${className || ""}`} {...props} />
+);
 
-const H3 = styled.h3`
-  font-size: 1.5rem;
-  margin: .5rem 0 0.25rem 0;
-  text-align: center;
-`;
-
-export { H1, H2, H3 };
+export const H3: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({ className, ...props }) => (
+  <h3 className={`${styles.h3} ${className || ""}`} {...props} />
+);

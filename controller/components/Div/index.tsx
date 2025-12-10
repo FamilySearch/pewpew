@@ -1,42 +1,30 @@
-import styled from "styled-components";
+import styles from "./Div.module.css";
+import React from "react";
 
-export const Div = styled.div`
-  display: flex;
-  vertical-align: middle;
-  align-content: start;
-  text-align: center;
-  justify-content: center;
-  padding: 1px;
-  /* border-width: 1px;
-  border-style: solid;
-  border-color: white; */
-`;
+export const Div: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={`${styles.div} ${className || ""}`} {...props} />
+);
 
-export const Row = styled(Div)`
-  flex-flow: row wrap;
-  flex: initial;
-`;
-export const Column = styled(Div)`
-  flex-flow: column;
-  flex: 1;
-  text-align: center;
-  justify-content: flex-start;
-`;
+export const Row: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={`${styles.row} ${className || ""}`} {...props} />
+);
+
+export const Column: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={`${styles.column} ${className || ""}`} {...props} />
+);
 
 /**
  * Left Div (content-align: right)
  */
-export const DivLeft = styled(Div)`
-  text-align: right;
-  justify-content: right;
-`;
+export const DivLeft: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={`${styles.divLeft} ${className || ""}`} {...props} />
+);
 
 /**
  * Right Div (content-align: left)
  */
- export const DivRight = styled(Div)`
-  text-align: left;
-  justify-content: left;
-`;
+export const DivRight: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={`${styles.divRight} ${className || ""}`} {...props} />
+);
 
 export default Div;

@@ -78,29 +78,43 @@ const nextConfig: NextConfig = {
             "SymlinkWebpackPlugin",
             async (compilation: Compilation) => {
               if (isServer) {
-                const from = join(compilation.options.output.path!, "config_wasm_bg.wasm");
                 const to = join(optionsDir, "../lib/config-wasm/pkg/config_wasm_bg.wasm");
-                // options.dir /.../pewpew/controller
-                // console.log(`from/to: ${from} -> ${to}`);
 
-                try {
-                  await access(from);
-                  // eslint-disable-next-line no-console
-                  console.log(`${from} already exists`);
-                  return;
-                } catch (error: any) {
-                  if (error?.code === "ENOENT") {
-                    // No link exists
-                  } else {
+                // Create symlinks in multiple locations for Pages Router and App Router
+                const locations = [
+                  join(compilation.options.output.path!, "config_wasm_bg.wasm"),
+                  join(compilation.options.output.path!, "chunks/config_wasm_bg.wasm"),
+                  join(compilation.options.output.path!, "app/login/config_wasm_bg.wasm")
+                ];
+
+                for (const from of locations) {
+                  try {
+                    await access(from);
                     // eslint-disable-next-line no-console
-                    console.error(`access ${from} error ${error}`, error);
-                    throw error;
+                    console.log(`${from} already exists`);
+                    continue;
+                  } catch (error: any) {
+                    if (error?.code === "ENOENT") {
+                      // No link exists, create it
+                    } else {
+                      // eslint-disable-next-line no-console
+                      console.error(`access ${from} error ${error}`, error);
+                      throw error;
+                    }
+                  }
+
+                  try {
+                    await symlink(to, from, "junction");
+                    // eslint-disable-next-line no-console
+                    console.log(`created symlink ${from} -> ${to}`);
+                  } catch (error: any) {
+                    // Ignore errors if directory doesn't exist yet
+                    if (error?.code !== "ENOENT") {
+                      // eslint-disable-next-line no-console
+                      console.error(`symlink ${from} error ${error}`, error);
+                    }
                   }
                 }
-
-                await symlink(to, from, "junction");
-                // eslint-disable-next-line no-console
-                console.log(`created symlink ${from} -> ${to}`);
               }
             }
           );

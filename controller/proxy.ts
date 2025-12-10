@@ -2,15 +2,15 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 /**
- * Middleware to handle basePath routing across different deployment scenarios:
+ * Proxy to handle basePath routing across different deployment scenarios:
  *
  * 1. DTM Routing (familysearch.org domains):
  *    - CloudFront/DTM adds x-orig-base header
- *    - Middleware reads and propagates it
+ *    - Proxy reads and propagates it
  *
  * 2. CName Access (pewpewlocal.org):
  *    - Beanstalk nginx adds x-orig-base header
- *    - Middleware reads and propagates it
+ *    - Proxy reads and propagates it
  *
  * 3. Local Dev:
  *    - Local nginx adds x-orig-base header
@@ -18,9 +18,9 @@ import { NextResponse } from "next/server";
  *
  * 4. Build System (no basePath):
  *    - No x-orig-base header, no BASE_PATH env var
- *    - Middleware does nothing, app runs on /
+ *    - Proxy does nothing, app runs on /
  */
-export function middleware (request: NextRequest) {
+export function proxy (request: NextRequest) {
   // Check for x-orig-base from infrastructure (DTM routing or nginx)
   let origBase = request.headers.get("x-orig-base");
 

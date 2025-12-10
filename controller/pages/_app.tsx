@@ -6,17 +6,26 @@ import { Router } from "next/router";
 import { getBasePath } from "../src/clientutil";
 import { useEffect } from "react";
 
-// https://stackoverflow.com/questions/70791571/nextjs-use-getserversideprops-with-a-specific-url-path
-// https://github.com/vercel/next.js/discussions/25681#discussioncomment-2026813
+/**
+ * Intercepts Next.js data fetching URLs and adds basePath prefix.
+ * This is required because Next.js Pages Router doesn't natively support
+ * our reverse proxy setup where the server runs on / but is accessed via
+ * a basePath like /pewpew/load-test/.
+ *
+ * The middleware sets the basePath cookie, and this hook reads it to
+ * prefix /_next/data URLs for client-side navigation.
+ *
+ * See: https://github.com/vercel/next.js/discussions/25681
+ */
 const useInterceptNextDataHref = ({
   router,
-  namespace
+  basePath
 }: {
   router: Router;
-  namespace: string;
+  basePath: string;
 }) => {
   useEffect(() => {
-    if (router.pageLoader?.getDataHref) {
+    if (basePath && router.pageLoader?.getDataHref) {
       const originalGetDataHref = router.pageLoader.getDataHref;
       router.pageLoader.getDataHref = function (args: {
         href: string;
@@ -25,27 +34,53 @@ const useInterceptNextDataHref = ({
         rsc?: boolean;
         locale?: string | false;
       }) {
-        const r = originalGetDataHref.call(router.pageLoader, args);
-        log(`useInterceptNextDataHref(${namespace})`, LogLevel.DEBUG, { args, r, namespaceR: `${namespace}${r}` });
-        return r && r.startsWith("/_next/data")
-          ? `${namespace}${r}`
-          : r;
+        const result = originalGetDataHref.call(router.pageLoader, args);
+
+        if (result && result.startsWith("/_next/data")) {
+          // Next.js data URLs have format: /_next/data/[buildId]/[...page-path].json
+          // If the page-path includes the basePath, we need to remove it before prepending
+          // Example: /_next/data/abc123/pewpew/load-test/calendar.json
+          //       -> /pewpew/load-test/_next/data/abc123/calendar.json
+
+          const dataUrlPattern = /^\/_next\/data\/[^/]+\//;
+          const match = result.match(dataUrlPattern);
+
+          if (match) {
+            const prefix = match[0]; // "/_next/data/[buildId]/"
+            let pagePath = result.substring(prefix.length); // "pewpew/load-test/calendar.json"
+
+            // Remove basePath from page path if present
+            if (pagePath.startsWith(basePath.substring(1) + "/")) {
+              pagePath = pagePath.substring(basePath.length);
+            } else if (pagePath.startsWith(basePath.substring(1))) {
+              pagePath = pagePath.substring(basePath.length - 1);
+            }
+
+            const finalUrl = `${basePath}${prefix}${pagePath}`;
+            log(`useInterceptNextDataHref(${basePath})`, LogLevel.DEBUG, {
+              args,
+              result,
+              pagePath,
+              finalUrl
+            });
+            return finalUrl;
+          }
+        }
+
+        return result;
       };
     }
-  }, [router, namespace]);
+  }, [router, basePath]);
 };
 
 /**
  * Global App function to import global CSS.
  * https://github.com/vercel/next.js/blob/master/errors/css-global.md
- * @param {*} param0
  */
 export default function MyApp ({ Component, pageProps, router }: AppProps) {
-  if (getBasePath()) {
-    useInterceptNextDataHref({
-      router,
-      namespace: getBasePath()
-    });
-  }
+  useInterceptNextDataHref({
+    router,
+    basePath: getBasePath()
+  });
   return <Component {...pageProps} />;
 }

@@ -11,7 +11,27 @@ export const ROUTING_DOMAIN: string = process.env.ROUTING_DOMAIN || ".pewpew.org
 export const TEST_LOCALHOST: boolean = process.env.TEST_LOCALHOST === "true";
 export const LOCALHOST_DOMAIN: string = "localhost";
 
+/**
+ * Gets the basePath from middleware cookie (client-side) or env var (server-side).
+ * The middleware reads x-orig-base header from infrastructure and sets BASE_PATH cookie.
+ */
 export function getBasePath (): string {
+  // Server-side: use environment variable
+  if (typeof window === "undefined") {
+    return process.env.BASE_PATH || "";
+  }
+
+  // Client-side: read from cookie set by middleware
+  // Cookie is scoped to the basePath via its path attribute, so we only see the correct one
+  if (typeof document !== "undefined") {
+    const cookies = document.cookie.split("; ");
+    const basePathCookie = cookies.find(c => c.startsWith("BASE_PATH="));
+    if (basePathCookie) {
+      return decodeURIComponent(basePathCookie.split("=")[1]);
+    }
+  }
+
+  // Fallback to env var (for build-time rendering)
   return process.env.BASE_PATH || "";
 }
 
@@ -28,22 +48,38 @@ export function formatAssetHref (href: string): string {
 /**
  * Wrapper for Page/API calls or links where we might be running under a base path (sub-path routing)
  * https://stackoverflow.com/questions/60452054/nextjs-deploy-to-a-specific-url-path
+ *
+ * Simplified version: middleware handles basePath detection via x-orig-base header.
+ * We just need to prefix URLs when basePath is present.
+ *
  * @param href relative url to the page or API
  * @returns formatted url including any base path prefix
  */
 export function formatPageHref (href: string): string {
   const basePath: string = getBasePath();
-  // for cname, check for a window object. Check if the window.location already has the basepath. If does we need to add it, if it doesn't, we don't
-  // If we have a basePath, and are on the client (window) and the location doesn't have the basePath, then we're on the cname
-  // Or if the href already includes the basePath, return it.
-  if (!basePath || href.startsWith("http://") || href.startsWith("https://")
-    || (typeof window !== "undefined" // For unit tests we also need to exclude window.location.pathname !== "blank"
-      && !window.location.pathname.includes(basePath) && window.location.pathname !== "blank")
-    || href.startsWith(basePath) || href.startsWith(basePath.substring(1))) {
+
+  // No basePath, return as-is
+  if (!basePath) {
     return href;
   }
-  // If the href doesn't start with a / we need to insert one and strip it from the start
-  return basePath && href && !href.startsWith("/") ? `${basePath.substring(1)}/${href}` : `${basePath}${href}`;
+
+  // Absolute URLs don't need basePath
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return href;
+  }
+
+  // Already includes basePath, return as-is
+  if (href.startsWith(basePath)) {
+    return href;
+  }
+
+  // Handle href without leading slash
+  if (!href.startsWith("/")) {
+    return `${basePath}/${href}`;
+  }
+
+  // Add basePath prefix
+  return `${basePath}${href}`;
 }
 
 export function getHostUrl (req: IncomingMessage | undefined): string {

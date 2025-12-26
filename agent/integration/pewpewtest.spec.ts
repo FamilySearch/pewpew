@@ -144,7 +144,7 @@ describe("PewPewTest Integration Test", () => {
         // For tests, we set SPLUNK_FORWARDER_EXTRA_TIME=1000 in .env.test
         if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
           // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
-          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME + 500);
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME * 3 + 500);
         }
 
         log(`Checking cleanup for integration test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });

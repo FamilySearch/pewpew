@@ -1,6 +1,7 @@
 import {
   BYPASS_PARSER_RUNTIME_DEFAULT,
   PewPewTest,
+  SPLUNK_FORWARDER_EXTRA_TIME,
   getEndTime
 } from "../src/pewpewtest.js";
 import {
@@ -16,6 +17,7 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  logger,
   ppaass3message,
   ppaasteststatus,
   s3,
@@ -30,6 +32,7 @@ const {
   createS3Filename: createS3FilenameTestStatus,
   getKey: getKeyTestStatus
 } = ppaasteststatus;
+import { access, readFile } from "fs/promises";
 import {
   mockCopyObject,
   mockGetObject,
@@ -49,12 +52,22 @@ import { PEWPEW_PATH } from "../src/tests.js";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util.js";
 import { join } from "path";
-import { readFile } from "fs/promises";
 
 const CREATE_TEST_FILENAME: string = process.env.CREATE_TEST_FILENAME || "createtest.yaml";
 const CREATE_TEST_FILEDIR: string = process.env.CREATE_TEST_FILEDIR || "createtest";
 const CREATE_TEST_SHORTERDIR: string = process.env.CREATE_TEST_SHORTERDIR || "createtest/shorter";
 const CREATE_TEST_RUN_TIME_MN: number = 2;
+const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
+
+// Helper function to check if a file/directory exists
+async function fileExists (path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("PewPewTest Create Test", () => {
   let ppaasTestId: PpaasTestId | undefined;
@@ -158,6 +171,35 @@ describe("PewPewTest Create Test", () => {
         testId: ppaasTestId.testId,
         queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
       });
+    });
+
+    afterEach(async function () {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete (log files are deleted after SPLUNK_FORWARDER_EXTRA_TIME)
+        // For tests, we set SPLUNK_FORWARDER_EXTRA_TIME=1000 in .env.test
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME + 500);
+        }
+
+        log(`Checking cleanup for test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        // Log files might still exist if SPLUNK_FORWARDER_EXTRA_TIME is long, so only check if we waited
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+        }
+      }
     });
 
     it("Retrieve Test and launch should succeed", (done: Mocha.Done) => {
@@ -407,6 +449,33 @@ describe("PewPewTest Create Test", () => {
         testId: ppaasTestId.testId,
         queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
       });
+    });
+
+    afterEach(async function () {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME + 500);
+        }
+
+        log(`Checking cleanup for bypass test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+        }
+      }
     });
 
     it("Retrieve Test and launch bypass should succeed", (done: Mocha.Done) => {

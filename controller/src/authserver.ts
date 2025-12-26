@@ -120,7 +120,7 @@ function getPermissions (userInfoResponse: UserInfoResponse): AuthPermission {
     log("TEST_AUTH_PERMISSION overridden, using: " + TEST_AUTH_PERMISSION, LogLevel.ERROR, { TEST_AUTH_PERMISSION });
     return TEST_AUTH_PERMISSION;
   }
-  const groups = (userInfoResponse as any).groups;
+  const groups = userInfoResponse.groups;
   if (groups && Array.isArray(groups) && groups.length > 0 && typeof groups[0] === "string") {
     const openIdPermissionNames: OpenIdPermissionNames = OpenIdPermissions;
     if (groups.includes(openIdPermissionNames.Admin)) {
@@ -185,12 +185,11 @@ export async function validateToken (token: string): Promise<AuthPermissions> {
   // Check CAS for permissions
   const authPermission = getPermissions(sessionResponse);
   log("getPermissions(token): " + authPermission, LogLevel.DEBUG);
-  const sessionAny = sessionResponse as any;
   return {
     token,
     authPermission,
-    userId: sessionAny.preferred_username || sessionAny.email || sessionAny.cisId || sessionAny.userId,
-    groups: (sessionResponse as any).groups
+    userId: sessionResponse.preferred_username || sessionResponse.email || sessionResponse.cisId as string || sessionResponse.userId as string,
+    groups: sessionResponse.groups as string[] | undefined
   };
 }
 

@@ -20,6 +20,7 @@ export default [{
     "**/coverage/**",
     "**/dist/**",
     "target/**",
+    "scripts/**",
     "tests/**",
     "next-env.d.ts",
     "common/lib",

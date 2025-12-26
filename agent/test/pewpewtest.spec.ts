@@ -479,8 +479,8 @@ describe("PewPewTest", () => {
 
         // Wait a bit for fire-and-forget cleanup to complete
         if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
-          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
-          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME + 500);
+          // Wait for cleanup + small buffer (cleanup uses SPLUNK_FORWARDER_EXTRA_TIME * 3)
+          await util.sleep((SPLUNK_FORWARDER_EXTRA_TIME * 3) + 500);
         }
 
         log(`Checking cleanup for unit test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });

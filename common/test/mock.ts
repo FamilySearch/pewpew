@@ -154,15 +154,20 @@ export function mockGetObject (
   if (typeof body === "number") {
     log("mockGetObject size: " + body, LogLevel.DEBUG, { body, MAX_STRING_LENGTH });
     const size = body;
-    if (size < MAX_STRING_LENGTH) {
+    // Use a smaller chunk size to avoid OOM when testing large buffers
+    // Create buffer in chunks to avoid string length limits
+    const chunkSize = 10 * 1024 * 1024; // 10MB chunks
+    if (size < chunkSize) {
       body = Buffer.from("x".repeat(size));
     } else {
-      const remainder = size - MAX_STRING_LENGTH;
-      log("mockGetObject remainder: " + remainder, LogLevel.DEBUG, { remainder, size, MAX_STRING_LENGTH });
-      body = Buffer.concat([
-        Buffer.from("x".repeat(MAX_STRING_LENGTH)),
-        Buffer.from("x".repeat(remainder))
-      ]);
+      const chunks: Buffer[] = [];
+      let remaining = size;
+      while (remaining > 0) {
+        const thisChunkSize = Math.min(chunkSize, remaining);
+        chunks.push(Buffer.from("x".repeat(thisChunkSize)));
+        remaining -= thisChunkSize;
+      }
+      body = Buffer.concat(chunks);
     }
     log("mockGetObject created size: " + body.length, LogLevel.DEBUG);
   }

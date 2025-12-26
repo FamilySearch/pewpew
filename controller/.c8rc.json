@@ -1,0 +1,19 @@
+{
+  "exclude": [
+    "dist/test/**",
+    "dist/integration/**",
+    "dist/acceptance/**",
+    "dist/testcleanup/**",
+    "test/**",
+    "integration/**",
+    "acceptance/**",
+    "testcleanup/**",
+    ".storybook/**",
+    "storybook-static/**",
+    "components/**/story.tsx",
+    "next.config.ts"
+  ],
+  "reporter": ["lcov", "text"],
+  "temp-directory": "./coverage/tmp",
+  "reports-dir": "./coverage"
+}

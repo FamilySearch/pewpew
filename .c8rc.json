@@ -1,0 +1,30 @@
+{
+  "exclude": [
+    "**/test/**",
+    "**/tests/**",
+    "**/integration/**",
+    "**/browser/**",
+    "**/acceptance/**",
+    "**/testcleanup/**",
+    "**/createtest/**",
+    "**/dist/test/**",
+    "**/dist/integration/**",
+    "**/dist/browser/**",
+    "**/dist/acceptance/**",
+    "**/dist/testcleanup/**",
+    "**/dist/createtest/**",
+    "**/build/test/**",
+    "**/lib/test/**",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/.storybook/**",
+    "**/storybook-static/**",
+    "**/components/**/story.tsx",
+    "**/next.config.ts"
+  ],
+  "reporter": ["lcov", "text", "html"],
+  "temp-directory": "./coverage/tmp",
+  "reports-dir": "./coverage"
+}

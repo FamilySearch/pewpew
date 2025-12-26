@@ -1,0 +1,15 @@
+{
+  "exclude": [
+    "dist/test/**",
+    "dist/integration/**",
+    "dist/acceptance/**",
+    "dist/createtest/**",
+    "test/**",
+    "integration/**",
+    "acceptance/**",
+    "createtest/**"
+  ],
+  "reporter": ["lcov", "text"],
+  "temp-directory": "./coverage/tmp",
+  "reports-dir": "./coverage"
+}

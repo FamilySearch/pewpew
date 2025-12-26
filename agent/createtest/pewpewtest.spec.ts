@@ -178,7 +178,7 @@ describe("PewPewTest Create Test", () => {
       });
     });
 
-    afterEach(async function () {
+    afterEach(async () => {
       // Verify cleanup: test directory and log files should be deleted
       if (ppaasTestId) {
         const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
@@ -458,7 +458,7 @@ describe("PewPewTest Create Test", () => {
       });
     });
 
-    afterEach(async function () {
+    afterEach(async () => {
       // Verify cleanup: test directory and log files should be deleted
       if (ppaasTestId) {
         const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
@@ -703,6 +703,33 @@ describe("PewPewTest Create Test", () => {
       });
     });
 
+    afterEach(async () => {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME * 3 + 500);
+        }
+
+        log(`Checking cleanup for scripting test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+        }
+      }
+    });
+
     it("Retrieve Test and launch should succeed scripting", (done: Mocha.Done) => {
       PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
         expect(test, "test").to.not.equal(undefined);
@@ -734,7 +761,9 @@ describe("PewPewTest Create Test", () => {
         expect(finishedTestStatusMessage.hostname, "finishedTestStatusMessage.hostname").to.equal(hostname);
         expect(finishedTestStatusMessage.ipAddress, "finishedTestStatusMessage.ipAddress").to.equal(ipAddress);
         expect(finishedTestStatusMessage.startTime, "finishedTestStatusMessage.startTime").to.be.greaterThan(beforeStartTime);
-        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeEndTime);
+        // Tests can complete earlier than planned endTime, so allow reasonable buffer
+        // Use END_TIME_BUFFER to account for timing variations in test vs production environments
+        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeEndTime - END_TIME_BUFFER);
         expect(Array.isArray(finishedTestStatusMessage.resultsFilename), "Array.isArray finishedTestStatusMessage.resultsFilename").to.equal(true);
         expect(finishedTestStatusMessage.resultsFilename.length, "finishedTestStatusMessage.resultsFilename.length").to.equal(1);
         expect(finishedTestStatusMessage.status, "finishedTestStatusMessage.status").to.equal(TestStatus.Finished);

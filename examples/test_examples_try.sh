@@ -20,7 +20,17 @@ echo "Testing examples against version $PEWPEW_VERSION"
 for file in *.yaml; do
   [ -f "$file" ] || break
   echo "Running: $PEWPEW_PATH try -f json $file"
-  "$PEWPEW_PATH" try -f json "$file" > "$file.try.out"
-  echo "Result: $?"
+  # Use timeout to prevent hanging (30 seconds should be plenty for try scripts)
+  if timeout 30 "$PEWPEW_PATH" try -f json "$file" > "$file.try.out"; then
+    echo "Result: PASS"
+  else
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 124 ]; then
+      echo "Result: TIMEOUT (exceeded 30 seconds)"
+    else
+      echo "Result: FAILED with exit code $EXIT_CODE"
+    fi
+    exit $EXIT_CODE
+  fi
 done
 echo "All try examples passed!"

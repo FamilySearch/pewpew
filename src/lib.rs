@@ -67,11 +67,12 @@ use std::{
 type Body = BoxBody<bytes::Bytes, std::io::Error>;
 
 struct Endpoints {
-    // yaml index of the endpoint, (endpoint tags, builder)
+    // yaml index of the endpoint, (endpoint tags, builder, required_providers, is_on_demand)
     inner: Vec<(
         BTreeMap<String, String>,
         request::EndpointBuilder,
         BTreeSet<String>,
+        bool,
     )>,
     // provider name, yaml index of endpoints which provide the provider
     providers: BTreeMap<String, Vec<usize>>,
@@ -91,10 +92,11 @@ impl Endpoints {
         builder: request::EndpointBuilder,
         provides: BTreeSet<String>,
         required_providers: config::RequiredProviders,
+        is_on_demand: bool,
     ) {
         let i = self.inner.len();
         let set = required_providers.unique_providers();
-        self.inner.push((endpoint_tags, builder, set));
+        self.inner.push((endpoint_tags, builder, set, is_on_demand));
         for p in provides {
             self.providers.entry(p).or_default().push(i);
         }
@@ -110,15 +112,31 @@ impl Endpoints {
     where
         F: Fn(&BTreeMap<String, String>) -> bool,
     {
+        debug!(
+            "Endpoints::build start, {} total endpoints, response_providers: {:?}",
+            self.inner.len(),
+            response_providers
+        );
+        debug!("Provider mappings: {:?}", self.providers);
+
         let mut endpoints: BTreeMap<_, _> = self
             .inner
             .into_iter()
             .enumerate()
-            .map(|(i, (tags, builder, required_providers))| {
+            .map(|(i, (tags, builder, required_providers, is_on_demand))| {
                 let included = filter_fn(&tags);
+                debug!(
+                    "Endpoint {}: included={}, required_providers={:?}, is_on_demand={}",
+                    i, included, required_providers, is_on_demand
+                );
                 (
                     i,
-                    (included, builder.build(builder_ctx), required_providers),
+                    (
+                        included,
+                        builder.build(builder_ctx),
+                        required_providers,
+                        is_on_demand,
+                    ),
                 )
             })
             .collect();
@@ -133,27 +151,57 @@ impl Endpoints {
                 required_indices.borrow_mut().pop_front().map(|i| (true, i))
             }));
         for (bypass_filter, i) in iter {
+            debug!("Processing endpoint {}, bypass_filter={}", i, bypass_filter);
             if let Some((included, ..)) = endpoints.get(&i) {
                 if *included || bypass_filter {
-                    if let Some((_, ep, required_providers)) = endpoints.remove(&i) {
+                    if let Some((_, ep, required_providers, is_on_demand)) = endpoints.remove(&i) {
+                        debug!(
+                            "Endpoint {} selected, required_providers={:?}, is_on_demand={}",
+                            i, required_providers, is_on_demand
+                        );
                         for request_provider in required_providers.intersection(response_providers)
                         {
+                            debug!(
+                                "Endpoint {} needs response provider '{}', looking for providers",
+                                i, request_provider
+                            );
                             if let Some(indices) = providers.remove(request_provider) {
+                                debug!(
+                                    "Adding endpoints {:?} as dependencies for provider '{}'",
+                                    indices, request_provider
+                                );
                                 required_indices.borrow_mut().extend(indices);
+                            } else {
+                                debug!("No endpoints provide '{}'", request_provider);
                             }
                         }
-                        endpoints_needed_for_test.insert(i, (ep, bypass_filter));
+                        endpoints_needed_for_test.insert(i, (ep, bypass_filter, is_on_demand));
                     }
                 }
-            } else if let Some((_, provides_needed)) = endpoints_needed_for_test.get_mut(&i) {
+            } else if let Some((_, provides_needed, _)) = endpoints_needed_for_test.get_mut(&i) {
+                debug!(
+                    "Endpoint {} already selected, marking provides_needed=true",
+                    i
+                );
                 *provides_needed = true;
             }
         }
+        debug!(
+            "Endpoints selected for try run: {:?}",
+            endpoints_needed_for_test.keys().collect::<Vec<_>>()
+        );
         let ret = endpoints_needed_for_test
             .into_iter()
-            .map(|(_, (mut ep, provides_needed))| {
+            .map(|(i, (mut ep, provides_needed, is_on_demand))| {
+                debug!(
+                    "Endpoint {}: provides_needed={}, on_demand={}",
+                    i, provides_needed, is_on_demand
+                );
                 if !provides_needed {
                     ep.clear_provides();
+                }
+                // All non-on_demand endpoints need a start stream to actually run in try mode
+                if !is_on_demand {
                     ep.add_start_stream(future::ready(Ok(request::StreamItem::None)).into_stream());
                 }
                 ep.into_future()
@@ -975,12 +1023,26 @@ fn create_try_run_future(
         let provides_set = endpoint
             .provides
             .iter_mut()
-            .filter_map(|(k, s)| {
+            .map(|(k, s)| {
                 s.set_send_behavior(config::EndpointProvidesSendOptions::Block);
-                (!required_providers.contains(k)).then(|| k.clone())
+                k.clone()
             })
             .collect::<BTreeSet<_>>();
-        endpoint.on_demand = true;
+
+        // Only force on_demand=true for endpoints without peak_load
+        // Endpoints with peak_load need to run actively, especially self-referencing ones
+        if endpoint.peak_load.is_none() {
+            endpoint.on_demand = true;
+        }
+
+        debug!(
+            "try mode endpoint {}: requires {:?}, provides {:?}, peak_load: {:?}, on_demand: {}",
+            endpoints.inner.len(),
+            required_providers.clone().unique_providers(),
+            provides_set,
+            endpoint.peak_load.is_some(),
+            endpoint.on_demand
+        );
 
         let static_tags = endpoint
             .tags
@@ -999,8 +1061,15 @@ fn create_try_run_future(
             //
             .collect::<Result<_, _>>()?;
 
+        let is_on_demand = endpoint.on_demand;
         let builder = request::EndpointBuilder::new(endpoint, None);
-        endpoints.append(static_tags, builder, provides_set, required_providers);
+        endpoints.append(
+            static_tags,
+            builder,
+            provides_set,
+            required_providers,
+            is_on_demand,
+        );
     }
 
     let client = create_http_client(config_config.client.keepalive)?;

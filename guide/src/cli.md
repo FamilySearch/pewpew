@@ -94,3 +94,44 @@ While most environment variables are passed on to the [vars](./config/vars-secti
 
 - **`RUST_BACKTRACE`** <sub><sup>*Optional*</sup></sub> - Enable display of the stack backtrace on errors. Providing any parameter (other than falsey/0) will enable this. Examples. `RUST_BACKTRACE=1` or `RUST_BACKTRACE=full`.
 - **`RUST_LOG`** <sub><sup>*Optional*</sup></sub> - A [LevelFilter](https://github.com/rust-lang/log/blob/master/src/lib.rs#L575) specifying what level for pewpew to log at. Allowed values are `Off`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`. Default is `Error`. See [Enable Logging](https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging) for more complex options for `RUST_LOG`.
+
+## Exit Codes
+
+Pewpew uses different exit codes to indicate how a test ended. This allows scripts and automation tools to detect specific termination scenarios.
+
+| Exit Code | Reason | Description |
+|-----------|--------|-------------|
+| **0** | Normal completion | Test completed successfully |
+| **1** | Test error | Configuration errors, network failures, or other runtime errors occurred |
+| **2** | Provider ended early | A provider exhausted before the test reached 90% of its expected duration |
+| **3** | Logger killed test | A logger with `kill: true` reached its `limit` and terminated the test |
+| **130** | User interrupted | User pressed Ctrl-C (SIGINT) to stop the test |
+
+### Exit Code Usage Examples
+
+```bash
+# Check if test completed successfully
+pewpew run test.yaml
+if [ $? -eq 0 ]; then
+    echo "Test completed successfully"
+fi
+
+# Detect logger kill
+pewpew run test.yaml
+if [ $? -eq 3 ]; then
+    echo "Test was killed by logger - check logs for details"
+fi
+
+# Handle interruption
+pewpew run test.yaml
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 130 ]; then
+    echo "Test was interrupted by user"
+elif [ $EXIT_CODE -eq 0 ]; then
+    echo "Test completed"
+else
+    echo "Test failed with error"
+fi
+```
+
+See the [src/EXIT_CODES.md](https://github.com/FamilySearch/pewpew/blob/master/src/EXIT_CODES.md) file in the repository for more detailed information about exit codes and their implementation.

@@ -494,18 +494,63 @@ export class PewPewTest {
           .on("exit", (code: number, signal: string) => {
             this.pewpewRunning = false;
             this.pewpewEnd = Date.now();
-            const message = `pewpew exited with code ${code} and signal ${signal}`;
-            if (code !== 0) {
-              this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
+
+            // Determine the exit reason and appropriate message
+            let message: string;
+            let logLevel: LogLevel;
+            let shouldResolve = false;
+            let statusError: string | undefined;
+
+            if (code === 0) {
+              // Normal completion
+              message = "pewpew completed successfully";
+              logLevel = LogLevel.DEBUG;
+              shouldResolve = true;
+            } else if (code === 2) {
+              // Provider ended early
+              statusError = message = "Test ended early - a provider exhausted before expected duration";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // Not a fatal error, test ran but provider exhausted early
+            } else if (code === 3) {
+              // Logger killed the test
+              statusError = message = "Test killed early by logger - a logger reached its limit";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // Not a fatal error, test ran but was stopped by logger
+            } else if (code === 130 || signal === "SIGINT") {
+              // User interrupted with Ctrl-C
+              statusError = message = "Test interrupted by user (Ctrl-C)";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // User-initiated stop, not an error
+            } else if (code !== null && code !== 0) {
+              // Other error codes
+              statusError = message = `pewpew exited with error code ${code}`;
+              logLevel = LogLevel.ERROR;
+              shouldResolve = false;
+            } else if (signal) {
+              // Killed by signal (other than SIGINT)
+              statusError = message = `pewpew killed by signal ${signal}`;
+              logLevel = LogLevel.ERROR;
+              shouldResolve = false;
+            } else {
+              // Unknown exit condition
+              statusError = message = `pewpew exited with code ${code} and signal ${signal}`;
+              logLevel = LogLevel.ERROR;
+              shouldResolve = false;
             }
-            if (code === 0 || signal === "SIGINT") {
-              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.DEBUG);
-              // We still want to resolve on SIGINT (stop called) so we don't get errors down the line. Just log one warning here
+
+            // Add error to status if needed
+            if (statusError) {
+              this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), statusError];
+            }
+
+            this.log(message, logLevel);
+
+            if (shouldResolve) {
               resolve();
             } else {
-              this.log(message, LogLevel.ERROR);
               reject(message);
             }
+
             this.pewpewProcess = undefined;
             try { // Close the streams
               pewpewOutStream.end();

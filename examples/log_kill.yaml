@@ -1,0 +1,29 @@
+# This example demonstrates a logger with kill: true that terminates the test after 5 calls
+# Run this file with the test-server, then specify the PORT as a parameter
+
+vars:
+  port: "${PORT}"
+
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 60s
+
+config:
+  general:
+    bucket_size: 10s
+
+loggers:
+  kill_logger:
+    to: stdout
+    kill: true
+    limit: 5
+
+endpoints:
+  - method: GET
+    url: 'http://localhost:${port}/'
+    peak_load: 1hps
+    logs:
+      kill_logger:
+        select: response.status

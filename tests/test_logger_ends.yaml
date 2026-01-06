@@ -1,0 +1,20 @@
+load_pattern:
+  - linear:
+      to: 100%
+      over: 10s
+config:
+  general:
+    bucket_size: 1s
+vars:
+  port: "${PORT}"
+loggers:
+  test_logger:
+    to: stderr
+    kill: true
+    limit: 1
+endpoints:
+  - url: http://localhost:${port}/
+    peak_load: 10hps
+    logs:
+      test_logger:
+        select: "true"

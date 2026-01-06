@@ -329,6 +329,9 @@ mod tests {
 
             let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
+            // Give the spawned task time to complete before runtime shutdown
+            time::sleep(Duration::from_millis(10)).await;
+
             assert_eq!(values, expect, "third");
         });
     }

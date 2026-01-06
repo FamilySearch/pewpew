@@ -566,7 +566,7 @@ async fn _create_run(
                     config_file_path,
                     stats_tx.clone(),
                     config_providers,
-                    providers.clone(),
+                    Arc::downgrade(&providers),
                 );
             }
 
@@ -726,7 +726,7 @@ fn create_config_watcher(
     config_file_path: PathBuf,
     stats_tx: FCUnboundedSender<StatsMessage>,
     mut previous_config_providers: BTreeMap<String, config::Provider>,
-    mut previous_providers: Arc<BTreeMap<String, providers::Provider>>,
+    mut previous_providers: std::sync::Weak<BTreeMap<String, providers::Provider>>,
 ) {
     let start_time = Instant::now();
     let mut interval = IntervalStream::new(tokio::time::interval(Duration::from_millis(1000)));
@@ -833,19 +833,21 @@ fn create_config_watcher(
             };
 
             // see which providers haven't changed and reuse the old providers for the new run
-            for (name, p) in &config_providers {
-                match previous_config_providers.get(name) {
-                    Some(p2) if p == p2 => {
-                        if let Some(p) = previous_providers.get(name) {
-                            providers.insert(name.clone(), p.clone());
+            if let Some(prev_providers) = previous_providers.upgrade() {
+                for (name, p) in &config_providers {
+                    match previous_config_providers.get(name) {
+                        Some(p2) if p == p2 => {
+                            if let Some(p) = prev_providers.get(name) {
+                                providers.insert(name.clone(), p.clone());
+                            }
                         }
+                        _ => (),
                     }
-                    _ => (),
                 }
             }
 
             let providers = Arc::new(providers);
-            previous_providers = providers.clone();
+            previous_providers = Arc::downgrade(&providers);
             previous_config_providers = config_providers;
 
             let mut run_config = run_config.clone();
@@ -1194,6 +1196,7 @@ fn create_load_test_future(
     let mut f = try_join_all(endpoint_calls);
     let mut test_timeout = Delay::new(duration);
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
+    let test_start = Instant::now();
     let f = future::poll_fn(move |cx| {
         // Check if something externally killed the test (Ctrl-C, logger, etc)
         match test_ended_rx.poll_next_unpin(cx) {
@@ -1201,23 +1204,41 @@ fn create_load_test_future(
             Poll::Pending => {}
         }
 
-        // Check if endpoints completed (providers ended or finished normally)
-        match f.poll_unpin(cx) {
-            Poll::Ready(r) => {
-                let reason = r.map(|_| TestEndReason::ProviderEnded);
-                let _ = test_ended_tx.send(reason);
-                return Poll::Ready(());
-            }
-            Poll::Pending => {}
-        }
+        // Check both timeout and endpoints to determine completion reason
+        let timeout_ready = test_timeout.poll_unpin(cx).is_ready();
+        let endpoints_ready = f.poll_unpin(cx);
 
-        // Check if timeout expired
-        match test_timeout.poll_unpin(cx) {
-            Poll::Ready(_) => {
+        match (timeout_ready, endpoints_ready) {
+            // Timeout expired - normal completion
+            (true, _) => {
                 let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
                 Poll::Ready(())
             }
-            Poll::Pending => Poll::Pending,
+            // Endpoints completed - check if something else (logger, etc) already sent end reason
+            (false, Poll::Ready(r)) => {
+                // Check if something already sent an end reason (e.g., logger killed the test)
+                if let Poll::Ready(Some(_existing_reason)) = test_ended_rx.poll_next_unpin(cx) {
+                    debug!("Endpoints completed but another end reason already sent");
+                    return Poll::Ready(());
+                }
+
+                let elapsed = test_start.elapsed();
+                // Determine threshold: 90% of duration OR within 1 second (whichever is more lenient).
+                // This handles both short tests (use 1 second buffer) and long tests (use percentage).
+                let percent_threshold = duration.mul_f64(0.90);
+                let time_threshold = duration.saturating_sub(Duration::from_secs(1));
+                let threshold = percent_threshold.min(time_threshold);
+
+                let reason = if elapsed >= threshold {
+                    Ok(TestEndReason::Completed)
+                } else {
+                    r.map(|_| TestEndReason::ProviderEnded)
+                };
+                let _ = test_ended_tx.send(reason);
+                Poll::Ready(())
+            }
+            // Both still pending
+            (false, Poll::Pending) => Poll::Pending,
         }
     });
 

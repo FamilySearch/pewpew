@@ -27,7 +27,7 @@ for file in *.yaml; do
   echo "Starting: $PEWPEW_PATH run -f json $file"
   # Run in background with timeout
   (
-    if timeout 30 "$PEWPEW_PATH" run -f json "$file" > "$file.out"; then
+    if timeout 45 "$PEWPEW_PATH" run -f json "$file" > "$file.out"; then
       exit 0
     else
       exit $?

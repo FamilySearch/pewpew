@@ -1194,21 +1194,31 @@ fn create_load_test_future(
     let mut f = try_join_all(endpoint_calls);
     let mut test_timeout = Delay::new(duration);
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
-    let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
-        Poll::Ready(r) => {
-            let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
-            Poll::Ready(())
+    let f = future::poll_fn(move |cx| {
+        // Check if something externally killed the test (Ctrl-C, logger, etc)
+        match test_ended_rx.poll_next_unpin(cx) {
+            Poll::Ready(_) => return Poll::Ready(()),
+            Poll::Pending => {}
         }
-        Poll::Pending => match test_ended_rx.poll_next_unpin(cx).map(|_| ()) {
-            Poll::Ready(_) => Poll::Ready(()),
-            Poll::Pending => match test_timeout.poll_unpin(cx) {
-                Poll::Ready(_) => {
-                    let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
-                    Poll::Ready(())
-                }
-                Poll::Pending => Poll::Pending,
-            },
-        },
+
+        // Check if endpoints completed (providers ended or finished normally)
+        match f.poll_unpin(cx) {
+            Poll::Ready(r) => {
+                let reason = r.map(|_| TestEndReason::ProviderEnded);
+                let _ = test_ended_tx.send(reason);
+                return Poll::Ready(());
+            }
+            Poll::Pending => {}
+        }
+
+        // Check if timeout expired
+        match test_timeout.poll_unpin(cx) {
+            Poll::Ready(_) => {
+                let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
+                Poll::Ready(())
+            }
+            Poll::Pending => Poll::Pending,
+        }
     });
 
     debug!("create_load_test_future finish");

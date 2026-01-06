@@ -1,4 +1,6 @@
 #!/bin/bash
+set +e # Continue on errors
+set -x # Echo commands
 rm fs_home.yaml
 rm integration.json
 rm test-epoch*.json

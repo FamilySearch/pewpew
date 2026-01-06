@@ -26,7 +26,6 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)
 - [Update lib.rs](https://github.com/FamilySearch/pewpew/pull/342)
-- [Bump js-yaml from 4.1.0 to 4.1.1 in /lib/hdr-histogram-wasm/tests](https://github.com/FamilySearch/pewpew/pull/345)
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
 - [Provider end early](https://github.com/FamilySearch/pewpew/pull/348)
 

@@ -526,11 +526,6 @@ export class PewPewTest {
               statusError = message = `pewpew exited with error code ${code}`;
               logLevel = LogLevel.ERROR;
               shouldResolve = false;
-            } else if (signal) {
-              // Killed by signal (other than SIGINT)
-              statusError = message = `pewpew killed by signal ${signal}`;
-              logLevel = LogLevel.ERROR;
-              shouldResolve = false;
             } else {
               // Unknown exit condition
               statusError = message = `pewpew exited with code ${code} and signal ${signal}`;

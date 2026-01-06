@@ -17,20 +17,50 @@ PEWPEW_VERSION=$($PEWPEW_PATH --version)
 echo "Testing examples against version $PEWPEW_VERSION"
 
 
+# Arrays to track background jobs
+declare -a PIDS=()
+declare -a FILES=()
+
+# Start all tests in parallel
 for file in *.yaml; do
   [ -f "$file" ] || break
-  echo "Running: $PEWPEW_PATH run -f json $file"
-  # Use timeout to prevent hanging (30 seconds should be plenty for short run scripts)
-  if timeout 30 "$PEWPEW_PATH" run -f json "$file" > "$file.out"; then
-    echo "Result: PASS"
+  echo "Starting: $PEWPEW_PATH run -f json $file"
+  # Run in background with timeout
+  (
+    if timeout 30 "$PEWPEW_PATH" run -f json "$file" > "$file.out"; then
+      exit 0
+    else
+      exit $?
+    fi
+  ) &
+  PIDS+=($!)
+  FILES+=("$file")
+done
+
+echo "Running ${#PIDS[@]} tests in parallel..."
+
+# Wait for all jobs and collect results
+FAILED=0
+for i in "${!PIDS[@]}"; do
+  pid=${PIDS[$i]}
+  file=${FILES[$i]}
+
+  if wait $pid; then
+    echo "✓ PASS: $file"
   else
     EXIT_CODE=$?
     if [ $EXIT_CODE -eq 124 ]; then
-      echo "Result: TIMEOUT (exceeded 30 seconds)"
+      echo "✗ TIMEOUT: $file (exceeded 30 seconds)"
     else
-      echo "Result: FAILED with exit code $EXIT_CODE"
+      echo "✗ FAILED: $file (exit code $EXIT_CODE)"
     fi
-    exit $EXIT_CODE
+    FAILED=$((FAILED + 1))
   fi
 done
-echo "All examples passed!"
+
+if [ $FAILED -gt 0 ]; then
+  echo "❌ $FAILED test(s) failed"
+  exit 1
+fi
+
+echo "✅ All examples passed!"

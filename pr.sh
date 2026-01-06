@@ -42,17 +42,20 @@ END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 echo "✅ Try examples completed in ${ELAPSED}s"
 
-echo "Running run examples..."
-START_TIME=$(date +%s)
-RUST_LOG=warn PORT=8082 ./test_examples.sh ../target/debug/pewpew || {
-  EXIT_CODE=$?
-  echo "ERROR: test_examples.sh failed with exit code $EXIT_CODE"
-  kill $TEST_SERVER_PID 2>/dev/null || true
-  exit $EXIT_CODE
-}
-END_TIME=$(date +%s)
-ELAPSED=$((END_TIME - START_TIME))
-echo "✅ Run examples completed in ${ELAPSED}s"
+read -e -p "Run Examples Tests y/N: " choice
+if [[ "$choice" == [Yy]* ]]; then
+  echo "Running run examples..."
+  START_TIME=$(date +%s)
+  RUST_LOG=warn PORT=8082 ./test_examples.sh ../target/debug/pewpew || {
+    EXIT_CODE=$?
+    echo "ERROR: test_examples.sh failed with exit code $EXIT_CODE"
+    kill $TEST_SERVER_PID 2>/dev/null || true
+    exit $EXIT_CODE
+  }
+  END_TIME=$(date +%s)
+  ELAPSED=$((END_TIME - START_TIME))
+  echo "✅ Run examples completed in ${ELAPSED}s"
+fi
 cd ..
 
 # Clean up test-server

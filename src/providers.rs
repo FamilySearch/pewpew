@@ -329,6 +329,9 @@ mod tests {
 
             let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
+            // Give the spawned task time to complete before runtime shutdown
+            time::sleep(Duration::from_millis(10)).await;
+
             assert_eq!(values, expect, "third");
         });
     }
@@ -385,7 +388,14 @@ mod tests {
             let p = list(lwo.into(), &"literals_provider_works3".to_string());
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-            let values: Vec<_> = p.rx.take(100).collect().await;
+            let Provider { rx, tx, .. } = p;
+            // Drop the tx reference so we don't get infinite streams
+            drop(tx);
+
+            let values: Vec<_> = rx.take(100).collect().await;
+
+            // Give the spawned task time to complete before moving to next test
+            time::sleep(Duration::from_millis(10)).await;
 
             assert_eq!(values, expect, "third");
 
@@ -404,7 +414,13 @@ mod tests {
                 .map(|j| j.as_u64().unwrap())
                 .collect();
 
-            let mut values: Vec<_> = p.rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
+
+            let mut values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+
+            // Give the spawned task time to complete before moving to next test
+            time::sleep(Duration::from_millis(10)).await;
 
             assert_ne!(values, expect, "fourth");
 

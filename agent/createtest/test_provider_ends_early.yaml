@@ -1,0 +1,22 @@
+vars:
+  serviceUrlAgent: ${SERVICE_URL_AGENT}
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 1m
+config:
+  general:
+    bucket_size: 10s
+providers:
+  ids:
+    list:
+      values:
+        - 1
+        - 2
+        - 3
+      repeat: false
+endpoints:
+  - method: GET
+    url: http://${serviceUrlAgent}/healthcheck?id=${ids}
+    peak_load: 10hpm

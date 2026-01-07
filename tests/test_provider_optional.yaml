@@ -1,0 +1,21 @@
+load_pattern:
+  - linear:
+      to: 100%
+      over: 5s
+vars:
+  port: "${PORT}"
+providers:
+  counter:
+    range:
+      start: 0
+      end: 10
+  response_provider:
+    response: {}
+endpoints:
+  - url: http://localhost:${port}/?count=${counter}
+    peak_load: 10hps
+    provides:
+      response_provider:
+        select: 1
+  - url: http://localhost:${port}/?value=${response_provider}
+    peak_load: 5hps

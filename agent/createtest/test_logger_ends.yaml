@@ -1,0 +1,22 @@
+vars:
+  serviceUrlAgent: ${SERVICE_URL_AGENT}
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 1m
+config:
+  general:
+    bucket_size: 10s
+loggers:
+  kill_logger:
+    to: stdout
+    kill: true
+    limit: 5
+endpoints:
+  - method: GET
+    url: http://${serviceUrlAgent}/healthcheck
+    peak_load: 10hpm
+    logs:
+      kill_logger:
+        select: response.status

@@ -1,0 +1,46 @@
+vars:
+  port: ${PORT}
+load_pattern:
+  - linear:
+      from: 100%
+      to: 100%
+      over: 5m
+config:
+  client:
+    headers:
+      Accept: 'application/json'
+  general:
+    bucket_size: 1m
+    log_provider_stats: 1m
+providers:
+  counterProvider:
+    range:
+      start: 1
+      end: 10
+      repeat: false
+  response1:
+    response: {}
+  response2:
+    response: {}
+endpoints:
+  - method: GET
+    url: 'http://localhost:${port}?count=${counterProvider}'
+    on_demand: true
+    peak_load: 60hpm
+    provides:
+      response1:
+        select: counterProvider
+        where: response.status <= 300
+        send: force
+  - method: GET
+    url: 'http://localhost:${port}?count=${response1}'
+    on_demand: true
+    peak_load: 60hpm
+    provides:
+      response2:
+        select: response1
+        where: response.status <= 300
+        send: force
+  - method: GET
+    url: 'http://localhost:${port}?count=${response2}'
+    peak_load: 60hpm

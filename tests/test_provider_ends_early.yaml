@@ -1,7 +1,7 @@
 load_pattern:
   - linear:
       to: 100%
-      over: 60s
+      over: 10s
 vars:
   port: "${PORT}"
 providers:

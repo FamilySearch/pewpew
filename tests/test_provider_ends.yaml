@@ -1,7 +1,7 @@
 load_pattern:
   - linear:
       to: 100%
-      over: 20s
+      over: 10s
 vars:
   port: "${PORT}"
 providers:
@@ -11,4 +11,4 @@ providers:
       end: 2
 endpoints:
   - url: http://localhost:${port}/?id=${short_provider}
-    peak_load: 1hps
+    peak_load: 20hps

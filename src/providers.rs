@@ -384,10 +384,13 @@ mod tests {
 
             let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
-            // Give the spawned task time to complete before runtime shutdown
-            time::sleep(Duration::from_millis(10)).await;
+            // Give the spawned task time to complete and thread pool to drain before runtime shutdown
+            time::sleep(Duration::from_millis(200)).await;
 
             assert_eq!(values, expect, "third");
+
+            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+            time::sleep(Duration::from_millis(100)).await;
         });
     }
 
@@ -450,7 +453,7 @@ mod tests {
             let values: Vec<_> = rx.take(100).collect().await;
 
             // Give the spawned task time to complete before moving to next test
-            time::sleep(Duration::from_millis(10)).await;
+            time::sleep(Duration::from_millis(200)).await;
 
             assert_eq!(values, expect, "third");
 
@@ -474,8 +477,8 @@ mod tests {
 
             let mut values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
-            // Give the spawned task time to complete before moving to next test
-            time::sleep(Duration::from_millis(10)).await;
+            // Give the spawned task time to complete and thread pool to drain before moving to next test
+            time::sleep(Duration::from_millis(200)).await;
 
             assert_ne!(values, expect, "fourth");
 
@@ -509,6 +512,9 @@ mod tests {
             // NOTE: if this test causes issues in CI, remove it as there are enough other tests covering
             // unique providers
             assert_eq!(values, expect, "sixth");
+
+            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+            time::sleep(Duration::from_millis(100)).await;
         });
     }
 

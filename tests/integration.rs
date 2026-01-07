@@ -1,4 +1,4 @@
-use std::env;
+use std::collections::BTreeMap;
 
 use test_common::{start_test_server, TestWriter};
 use tokio::runtime::Runtime;
@@ -13,15 +13,21 @@ fn run_test(
     let rt = Runtime::new().unwrap();
     rt.block_on(async move {
         let (port, kill_server, _) = start_test_server(None).await;
-        env::set_var("PORT", port.to_string());
+
+        // Build env vars map with PORT set
+        let mut env_vars = BTreeMap::new();
+        env_vars.insert("PORT".to_string(), port.to_string());
 
         let (_, ctrlc_channel) = futures::channel::mpsc::unbounded();
+
+        // Use a unique stats file name based on the test file to avoid parallel test interference
+        let stats_file = format!("stats-{}.json", path.replace('/', "_").replace(".yaml", ""));
 
         let run_config = pewpew::RunConfig {
             config_file: path.into(),
             output_format: pewpew::RunOutputFormat::Human,
             results_dir: Some("./".into()),
-            stats_file: "integration.json".into(),
+            stats_file: stats_file.into(),
             stats_file_format: pewpew::StatsFileFormat::Json,
             start_at: None,
             watch_config_file: true,
@@ -34,7 +40,7 @@ fn run_test(
         let stdout2 = stdout.clone();
         let stderr2 = stderr.clone();
 
-        let result = pewpew::create_run(exec_config, ctrlc_channel, stdout, stderr).await;
+        let result = pewpew::create_run_with_env(exec_config, ctrlc_channel, stdout, stderr, env_vars).await;
 
         let _ = kill_server.send(());
 

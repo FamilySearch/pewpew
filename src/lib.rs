@@ -468,6 +468,7 @@ async fn _create_run(
     stderr: FCSender<MsgType>,
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     mut test_ended_rx: BroadcastStream<Result<TestEndReason, TestError>>,
+    env_vars: BTreeMap<String, String>,
 ) -> Result<TestEndReason, TestError> {
     debug!("{{\"_create_run enter");
     let config_file = exec_config.get_config_file().clone();
@@ -518,12 +519,9 @@ async fn _create_run(
         }
     }));
 
-    let env_vars: BTreeMap<String, String> = std::env::vars_os()
-        .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
-        .collect();
     // Don't log the values in case there are passwords
-    debug!("env_vars={:?}", env_vars.clone().keys());
-    log::trace!("env_vars={:?}", env_vars.clone());
+    debug!("env_vars={:?}", env_vars.keys());
+    log::trace!("env_vars={:?}", env_vars);
     let output_format = exec_config.get_output_format();
     let config_file_path = exec_config.get_config_file().clone();
     let mut config =
@@ -632,6 +630,25 @@ where
     So: Write + Send + 'static,
     Se: Write + Send + 'static,
 {
+    // Collect OS environment variables
+    let env_vars: BTreeMap<String, String> = std::env::vars_os()
+        .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
+        .collect();
+    create_run_with_env(exec_config, ctrlc_channel, stdout, stderr, env_vars).await
+}
+
+/// Version of create_run that accepts env vars for testing
+pub async fn create_run_with_env<So, Se>(
+    exec_config: ExecConfig,
+    ctrlc_channel: FCUnboundedReceiver<()>,
+    stdout: So,
+    stderr: Se,
+    env_vars: BTreeMap<String, String>,
+) -> Result<TestEndReason, TestError>
+where
+    So: Write + Send + 'static,
+    Se: Write + Send + 'static,
+{
     debug!(
         "{{\"method\":\"create_run enter\",\"exec_config\":{}}}",
         exec_config
@@ -648,6 +665,7 @@ where
         stderr.clone(),
         test_ended_tx.clone(),
         test_ended_rx,
+        env_vars,
     )
     .await;
 

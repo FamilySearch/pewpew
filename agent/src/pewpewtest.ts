@@ -39,12 +39,13 @@ const DEFAULT_PEWPEW_PARAMS = [
 ];
 
 const PEWPEW_PATH: string = process.env.PEWPEW_PATH || util.PEWPEW_BINARY_EXECUTABLE;
-const DOWNLOAD_PEWPEW: boolean = (process.env.DOWNLOAD_PEWPEW || "false") === "true";
+const DOWNLOAD_PEWPEW: boolean = process.env.DOWNLOAD_PEWPEW?.toLowerCase() === "true";
 const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
 const RESULTS_FILE_MAX_WAIT: number = parseInt(process.env.RESULTS_FILE_MAX_WAIT || "0", 10) || 5000; // S3_UPLOAD_INTERVAL + this Could take up to a minute
 const KILL_MAX_WAIT: number = parseInt(process.env.KILL_MAX_WAIT || "0", 10) || 180000; // How long to wait between SIGINT (Ctrl-C) and SIGKILL
 const ALLOW_TEST_OVERAGE: number = parseInt(process.env.ALLOW_TEST_OVERAGE || "0", 10) || 300000;
 export const SPLUNK_FORWARDER_EXTRA_TIME: number = parseInt(process.env.SPLUNK_FORWARDER_EXTRA_TIME || "0", 10) || 10000;
+export const SPLUNK_LOGS_CLEANUP: boolean = process.env.SPLUNK_LOGS_CLEANUP?.toLowerCase() === "true";
 /** Have to run for at least 5 minutes for us to restart */
 const MIN_RUNTIME_FOR_RETRY: number = parseInt(process.env.MIN_RUNTIME_FOR_RETRY || "0", 10) || 300000;
 export const IS_RUNNING_IN_AWS: boolean = process.env.APPLICATION_NAME !== undefined && process.env.SYSTEM_NAME !== undefined;
@@ -734,41 +735,43 @@ export class PewPewTest {
       }
     }
 
-    // Schedule log file cleanup after Splunk has time to ingest (fire-and-forget)
-    // Don't await - we don't want to block the agent from picking up the next test
-    const logFilesToClean: string[] = [];
-    if (this.pewpewStdOutS3File?.localFilePath) {
-      logFilesToClean.push(this.pewpewStdOutS3File.localFilePath);
-    }
-    if (this.pewpewStdErrS3File?.localFilePath) {
-      logFilesToClean.push(this.pewpewStdErrS3File.localFilePath);
-    }
+    if (SPLUNK_LOGS_CLEANUP) {
+      // Schedule log file cleanup after Splunk has time to ingest (fire-and-forget)
+      // Don't await - we don't want to block the agent from picking up the next test
+      const logFilesToClean: string[] = [];
+      if (this.pewpewStdOutS3File?.localFilePath) {
+        logFilesToClean.push(this.pewpewStdOutS3File.localFilePath);
+      }
+      if (this.pewpewStdErrS3File?.localFilePath) {
+        logFilesToClean.push(this.pewpewStdErrS3File.localFilePath);
+      }
 
-    if (logFilesToClean.length > 0) {
-      const deleteLogFiles = async () => {
-        await Promise.all(logFilesToClean.map(async (logFile) => {
-          try {
-            await rimraf(logFile);
-            this.log(`Successfully cleaned up log file: ${logFile}`, LogLevel.DEBUG);
-          } catch (error) {
-            this.log(`Failed to clean up log file: ${logFile}`, LogLevel.WARN, error);
-          }
-        }));
-        this.log("Log file cleanup complete", LogLevel.DEBUG);
-      };
+      if (logFilesToClean.length > 0) {
+        const deleteLogFiles = async () => {
+          await Promise.all(logFilesToClean.map(async (logFile) => {
+            try {
+              await rimraf(logFile);
+              this.log(`Successfully cleaned up log file: ${logFile}`, LogLevel.DEBUG);
+            } catch (error) {
+              this.log(`Failed to clean up log file: ${logFile}`, LogLevel.WARN, error);
+            }
+          }));
+          this.log("Log file cleanup complete", LogLevel.DEBUG);
+        };
 
-      if (splunkForwarderExtraTime > 0) {
-        // Sleep first, then delete (fire-and-forget)
-        this.log(`Scheduling log file cleanup in ${splunkForwarderExtraTime}ms for Splunk ingestion`, LogLevel.DEBUG, { logFilesToClean });
-        sleep(splunkForwarderExtraTime).then(deleteLogFiles).catch((error) => {
-          this.log("Error during scheduled log file cleanup", LogLevel.WARN, error);
-        });
-      } else {
-        // Delete immediately (fire-and-forget)
-        this.log(`Deleting log files immediately (splunkForwarderExtraTime <= 0: ${splunkForwarderExtraTime})`, LogLevel.DEBUG, { logFilesToClean });
-        deleteLogFiles().catch((error) => {
-          this.log("Error during immediate log file cleanup", LogLevel.WARN, error);
-        });
+        if (splunkForwarderExtraTime > 0) {
+          // Sleep first, then delete (fire-and-forget)
+          this.log(`Scheduling log file cleanup in ${splunkForwarderExtraTime}ms for Splunk ingestion`, LogLevel.DEBUG, { logFilesToClean });
+          sleep(splunkForwarderExtraTime).then(deleteLogFiles).catch((error) => {
+            this.log("Error during scheduled log file cleanup", LogLevel.WARN, error);
+          });
+        } else {
+          // Delete immediately (fire-and-forget)
+          this.log(`Deleting log files immediately (splunkForwarderExtraTime <= 0: ${splunkForwarderExtraTime})`, LogLevel.DEBUG, { logFilesToClean });
+          deleteLogFiles().catch((error) => {
+            this.log("Error during immediate log file cleanup", LogLevel.WARN, error);
+          });
+        }
       }
     }
 

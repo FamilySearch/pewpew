@@ -20,6 +20,7 @@ import {
 import {
   PewPewTest,
   SPLUNK_FORWARDER_EXTRA_TIME,
+  SPLUNK_LOGS_CLEANUP,
   copyTestStatus,
   findYamlCreatedFiles,
   getEndTime,
@@ -491,8 +492,8 @@ describe("PewPewTest", () => {
         if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
           const stdoutExists = await fileExists(stdoutLogFile);
           const stderrExists = await fileExists(stderrLogFile);
-          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
-          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
         }
       }
     });
@@ -649,8 +650,8 @@ describe("PewPewTest", () => {
 
       // Verify files are deleted
       expect(await fileExists(testDirectory), "Test directory should be deleted").to.equal(false);
-      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(false);
-      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(false);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
 
       log("Cleanup with splunkForwarderExtraTime=0 completed and verified", LogLevel.DEBUG);
     });
@@ -669,8 +670,8 @@ describe("PewPewTest", () => {
 
       // Verify files are deleted
       expect(await fileExists(testDirectory), "Test directory should be deleted").to.equal(false);
-      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(false);
-      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(false);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
 
       log("Cleanup with splunkForwarderExtraTime=-1 completed and verified", LogLevel.DEBUG);
     });
@@ -708,8 +709,8 @@ describe("PewPewTest", () => {
       await util.sleep(3000);
 
       // Verify log files are deleted
-      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted after wait").to.equal(false);
-      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted after wait").to.equal(false);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted after wait").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted after wait").to.equal(!SPLUNK_LOGS_CLEANUP);
 
       log("Cleanup with splunkForwarderExtraTime=2000 completed and verified", LogLevel.DEBUG);
     });

@@ -1,21 +1,64 @@
-load_pattern:
-  - linear:
-      to: 100%
-      over: 5s
 vars:
-  port: "${PORT}"
+  port: ${e:PORT}
+load_pattern:
+- !linear
+  from: 0%
+  to: 100%
+  over: 5s
+config:
+  client:
+    request_timeout: 1m
+    headers: {}
+    keepalive: 90s
+  general:
+    auto_buffer_start_size: 5
+    bucket_size: 1m
+    log_provider_stats: true
+    watch_transition_time: null
+loggers: {}
 providers:
-  counter:
-    range:
-      start: 0
-      end: 10
-  response_provider:
-    response: {}
+  counter: !range
+    start: 0
+    end: 10
+    step: 1
+    repeat: false
+    unique: false
+  response_provider: !response
+    auto_return: null
+    buffer: auto
+    unique: false
 endpoints:
-  - url: http://localhost:${port}/?count=${counter}
-    peak_load: 10hps
-    provides:
-      response_provider:
-        select: 1
-  - url: http://localhost:${port}/?value=${response_provider}
-    peak_load: 5hps
+- method: GET
+  url: http://localhost:${v:port}/?count=${p:counter}
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 600hpm
+  provides:
+    response_provider:
+      query:
+        select: '1'
+        for_each: []
+        where: null
+      send: block
+  on_demand: false
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- method: GET
+  url: http://localhost:${v:port}/?value=${p:response_provider}
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 300hpm
+  provides: {}
+  on_demand: false
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null

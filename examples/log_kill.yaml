@@ -1,29 +1,44 @@
-# This example demonstrates a logger with kill: true that terminates the test after 5 calls
-# Run this file with the test-server, then specify the PORT as a parameter
-
 vars:
-  port: "${PORT}"
-
+  port: ${e:PORT}
 load_pattern:
-  - linear:
-      from: 100%
-      to: 100%
-      over: 60s
-
+- !linear
+  from: 100%
+  to: 100%
+  over: 1m
 config:
+  client:
+    request_timeout: 1m
+    headers: {}
+    keepalive: 90s
   general:
+    auto_buffer_start_size: 5
     bucket_size: 10s
-
+    log_provider_stats: true
+    watch_transition_time: null
 loggers:
   kill_logger:
-    to: stdout
-    kill: true
+    query: null
     limit: 5
-
+    to: stdout
+    pretty: false
+    kill: true
+providers: {}
 endpoints:
-  - method: GET
-    url: 'http://localhost:${port}/'
-    peak_load: 1hps
-    logs:
-      kill_logger:
-        select: response.status
+- method: GET
+  url: http://localhost:${v:port}/
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 60hpm
+  provides: {}
+  on_demand: false
+  logs:
+    kill_logger:
+      select: response.status
+      for_each: []
+      where: null
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null

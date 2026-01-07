@@ -1,46 +1,89 @@
 vars:
-  port: ${PORT}
+  port: ${e:PORT}
 load_pattern:
-  - linear:
-      from: 100%
-      to: 100%
-      over: 5m
+- !linear
+  from: 100%
+  to: 100%
+  over: 5m
 config:
   client:
+    request_timeout: 1m
     headers:
-      Accept: 'application/json'
+      Accept: application/json
+    keepalive: 90s
   general:
+    auto_buffer_start_size: 5
     bucket_size: 1m
-    log_provider_stats: 1m
+    log_provider_stats: true
+    watch_transition_time: null
+loggers: {}
 providers:
-  counterProvider:
-    range:
-      start: 1
-      end: 10
-      repeat: false
-  response1:
-    response: {}
-  response2:
-    response: {}
+  counterProvider: !range
+    start: 1
+    end: 10
+    step: 1
+    repeat: false
+    unique: false
+  response1: !response
+    auto_return: null
+    buffer: auto
+    unique: false
+  response2: !response
+    auto_return: null
+    buffer: auto
+    unique: false
 endpoints:
-  - method: GET
-    url: 'http://localhost:${port}?count=${counterProvider}'
-    on_demand: true
-    peak_load: 60hpm
-    provides:
-      response1:
+- method: GET
+  url: http://localhost:${v:port}?count=${p:counterProvider}
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 60hpm
+  provides:
+    response1:
+      query:
         select: counterProvider
+        for_each: []
         where: response.status <= 300
-        send: force
-  - method: GET
-    url: 'http://localhost:${port}?count=${response1}'
-    on_demand: true
-    peak_load: 60hpm
-    provides:
-      response2:
+      send: force
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- method: GET
+  url: http://localhost:${v:port}?count=${p:response1}
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 60hpm
+  provides:
+    response2:
+      query:
         select: response1
+        for_each: []
         where: response.status <= 300
-        send: force
-  - method: GET
-    url: 'http://localhost:${port}?count=${response2}'
-    peak_load: 60hpm
+      send: force
+  on_demand: true
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null
+- method: GET
+  url: http://localhost:${v:port}?count=${p:response2}
+  tags: {}
+  declare: {}
+  headers: {}
+  body: null
+  load_pattern: null
+  peak_load: 60hpm
+  provides: {}
+  on_demand: false
+  logs: {}
+  max_parallel_requests: null
+  no_auto_returns: false
+  request_timeout: null

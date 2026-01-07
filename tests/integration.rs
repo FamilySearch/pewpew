@@ -40,7 +40,8 @@ fn run_test(
         let stdout2 = stdout.clone();
         let stderr2 = stderr.clone();
 
-        let result = pewpew::create_run_with_env(exec_config, ctrlc_channel, stdout, stderr, env_vars).await;
+        let result =
+            pewpew::create_run_with_env(exec_config, ctrlc_channel, stdout, stderr, env_vars).await;
 
         let _ = kill_server.send(());
 

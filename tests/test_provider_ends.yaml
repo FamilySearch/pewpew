@@ -1,0 +1,14 @@
+load_pattern:
+  - linear:
+      to: 100%
+      over: 10s
+vars:
+  port: "${PORT}"
+providers:
+  short_provider:
+    range:
+      start: 0
+      end: 2
+endpoints:
+  - url: http://localhost:${port}/?id=${short_provider}
+    peak_load: 20hps

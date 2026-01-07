@@ -6,6 +6,8 @@ Pewpew is an HTTP load test tool designed for ease of use and high performance. 
 ### Development
 Building pewpew requires openssl development libraries
 
+See [EXIT_CODES.md](EXIT_CODES.md) for information about pewpew's exit codes.
+
 On linux, install `libss-dev`:
 ```bash
 $ sudo apt-get install libssl-dev openssl
@@ -21,6 +23,12 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ```
 
 ## Changelog
+### v0.5.15
+- [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)
+- [Update lib.rs](https://github.com/FamilySearch/pewpew/pull/342)
+- [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
+- [Provider end early](https://github.com/FamilySearch/pewpew/pull/348)
+
 ### v0.5.14
 - [Bump openssl from 0.10.57 to 0.10.60](https://github.com/FamilySearch/pewpew/pull/181)
 - [Bump h2 from 0.3.21 to 0.3.24](https://github.com/FamilySearch/pewpew/pull/193)

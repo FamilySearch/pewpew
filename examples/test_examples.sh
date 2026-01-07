@@ -49,8 +49,23 @@ for i in "${!PIDS[@]}"; do
     echo "✓ PASS: $file"
   else
     EXIT_CODE=$?
+    # Some examples exit with non-zero codes that are not errors:
+    # - Exit code 2: Provider exhausted early
+    # - Exit code 3: Logger killed the test
+    if [ "$file" == "delete_sequential_count.yaml" ] || [ "$file" == "provider_ends_early.yaml" ]; then
+      if [ $EXIT_CODE -eq 2 ]; then
+        echo "✓ PASS: $file (exit code 2 - provider ended early)"
+        continue
+      fi
+    elif [ "$file" == "log_kill.yaml" ]; then
+      if [ $EXIT_CODE -eq 3 ]; then
+        echo "✓ PASS: $file (exit code 3 - killed by logger)"
+        continue
+      fi
+    fi
+
     if [ $EXIT_CODE -eq 124 ]; then
-      echo "✗ TIMEOUT: $file (exceeded 30 seconds)"
+      echo "✗ TIMEOUT: $file (exceeded 45 seconds)"
     else
       echo "✗ FAILED: $file (exit code $EXIT_CODE)"
     fi

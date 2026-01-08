@@ -36,7 +36,14 @@ Changes:
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)
 - [Update lib.rs](https://github.com/FamilySearch/pewpew/pull/342)
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
+  - Fixed [Try script never exits on long provider chains](https://github.com/FamilySearch/pewpew/issues/123)
+  - Added testing examples to the PR flow
 - [Provider end early](https://github.com/FamilySearch/pewpew/pull/348)
+  - Fixed [on_demand api's exit when provider empties rather than when relying api's are finished](https://github.com/FamilySearch/pewpew/issues/36)
+  - [Major change to return codes](https://github.com/FamilySearch/pewpew/pull/348/commits/95c41fac8389e963bf8622b55c690c84bd28221b)
+- [Update rust dependencies 2026-01-08](https://github.com/FamilySearch/pewpew/pull/350)
+  - Updated Cargo lock file to latest
+  - Updated yaml-rust2 to 0.11
 
 ### v0.5.14
 - [Bump openssl from 0.10.57 to 0.10.60](https://github.com/FamilySearch/pewpew/pull/181)

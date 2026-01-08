@@ -10,8 +10,8 @@ mod request;
 mod stats;
 mod util;
 
-use crate::error::TestError;
 use crate::stats::{create_stats_channel, create_try_run_stats_channel, StatsMessage};
+pub use error::TestError;
 
 use config::providers::ProviderName;
 use config::query::Query;
@@ -70,10 +70,12 @@ use std::{
 type Body = BoxBody<bytes::Bytes, std::io::Error>;
 
 struct Endpoints {
+    // yaml index of the endpoint, (endpoint tags, builder, required_providers, is_on_demand)
     inner: Vec<(
         BTreeMap<Arc<str>, String>,
         request::EndpointBuilder,
         BTreeSet<Arc<str>>,
+        bool,
     )>,
     // provider name, yaml index of endpoints which provide the provider
     providers: BTreeMap<Arc<str>, Vec<usize>>,
@@ -93,10 +95,11 @@ impl Endpoints {
         builder: request::EndpointBuilder,
         provides: BTreeSet<Arc<str>>,
         required_providers: BTreeSet<Arc<str>>,
+        is_on_demand: bool,
     ) {
         let i = self.inner.len();
         self.inner
-            .push((endpoint_tags, builder, required_providers));
+            .push((endpoint_tags, builder, required_providers, is_on_demand));
         for p in provides {
             self.providers.entry(p).or_default().push(i);
         }
@@ -112,15 +115,31 @@ impl Endpoints {
     where
         F: Fn(&BTreeMap<Arc<str>, String>) -> bool,
     {
+        debug!(
+            "Endpoints::build start, {} total endpoints, response_providers: {:?}",
+            self.inner.len(),
+            response_providers
+        );
+        debug!("Provider mappings: {:?}", self.providers);
+
         let mut endpoints: BTreeMap<_, _> = self
             .inner
             .into_iter()
             .enumerate()
-            .map(|(i, (tags, builder, required_providers))| {
+            .map(|(i, (tags, builder, required_providers, is_on_demand))| {
                 let included = filter_fn(&tags);
+                debug!(
+                    "Endpoint {}: included={}, required_providers={:?}, is_on_demand={}",
+                    i, included, required_providers, is_on_demand
+                );
                 (
                     i,
-                    (included, builder.build(builder_ctx), required_providers),
+                    (
+                        included,
+                        builder.build(builder_ctx),
+                        required_providers,
+                        is_on_demand,
+                    ),
                 )
             })
             .collect();
@@ -135,27 +154,57 @@ impl Endpoints {
                 required_indices.borrow_mut().pop_front().map(|i| (true, i))
             }));
         for (bypass_filter, i) in iter {
+            debug!("Processing endpoint {}, bypass_filter={}", i, bypass_filter);
             if let Some((included, ..)) = endpoints.get(&i) {
                 if *included || bypass_filter {
-                    if let Some((_, ep, required_providers)) = endpoints.remove(&i) {
+                    if let Some((_, ep, required_providers, is_on_demand)) = endpoints.remove(&i) {
+                        debug!(
+                            "Endpoint {} selected, required_providers={:?}, is_on_demand={}",
+                            i, required_providers, is_on_demand
+                        );
                         for request_provider in required_providers.intersection(response_providers)
                         {
+                            debug!(
+                                "Endpoint {} needs response provider '{}', looking for providers",
+                                i, request_provider
+                            );
                             if let Some(indices) = providers.remove(request_provider) {
+                                debug!(
+                                    "Adding endpoints {:?} as dependencies for provider '{}'",
+                                    indices, request_provider
+                                );
                                 required_indices.borrow_mut().extend(indices);
+                            } else {
+                                debug!("No endpoints provide '{}'", request_provider);
                             }
                         }
-                        endpoints_needed_for_test.insert(i, (ep, bypass_filter));
+                        endpoints_needed_for_test.insert(i, (ep, bypass_filter, is_on_demand));
                     }
                 }
-            } else if let Some((_, provides_needed)) = endpoints_needed_for_test.get_mut(&i) {
+            } else if let Some((_, provides_needed, _)) = endpoints_needed_for_test.get_mut(&i) {
+                debug!(
+                    "Endpoint {} already selected, marking provides_needed=true",
+                    i
+                );
                 *provides_needed = true;
             }
         }
+        debug!(
+            "Endpoints selected for try run: {:?}",
+            endpoints_needed_for_test.keys().collect::<Vec<_>>()
+        );
         let ret = endpoints_needed_for_test
             .into_iter()
-            .map(|(_, (mut ep, provides_needed))| {
+            .map(|(i, (mut ep, provides_needed, is_on_demand))| {
+                debug!(
+                    "Endpoint {}: provides_needed={}, on_demand={}",
+                    i, provides_needed, is_on_demand
+                );
                 if !provides_needed {
                     ep.clear_provides();
+                }
+                // All non-on_demand endpoints need a start stream to actually run in try mode
+                if !is_on_demand {
                     ep.add_start_stream(future::ready(Ok(request::StreamItem::None)).into_stream());
                 }
                 ep.into_future()
@@ -394,7 +443,7 @@ impl ExecConfig {
 ///
 /// [`Self::ConfigUpdate`] end will allow the test to continue with the updated config, if watch mode was
 /// enabled in the [`ExecConfig`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TestEndReason {
     Completed,
     CtrlC,
@@ -422,6 +471,7 @@ async fn _create_run(
     stderr: FCSender<MsgType>,
     test_ended_tx: broadcast::Sender<Result<TestEndReason, TestError>>,
     mut test_ended_rx: BroadcastStream<Result<TestEndReason, TestError>>,
+    env_vars: BTreeMap<String, String>,
 ) -> Result<TestEndReason, TestError> {
     debug!("{{\"_create_run enter");
     let config_file: Arc<Path> = Arc::from(exec_config.get_config_file().clone());
@@ -477,12 +527,9 @@ async fn _create_run(
         }
     }));
 
-    let env_vars: BTreeMap<String, String> = std::env::vars_os()
-        .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
-        .collect();
     // Don't log the values in case there are passwords
-    debug!("env_vars={:?}", env_vars.clone().keys());
-    log::trace!("env_vars={:?}", env_vars.clone());
+    debug!("env_vars={:?}", env_vars.keys());
+    log::trace!("env_vars={:?}", env_vars);
     let output_format = exec_config.get_output_format();
     let mut config = LoadTest::from_yaml(
         std::str::from_utf8(&config_bytes).expect("TODO: HANDLE THIS"),
@@ -497,12 +544,16 @@ async fn _create_run(
         }
         ExecConfig::Run(r) => {
             let config_providers = mem::take(&mut config.providers);
+            // Create channel to track when provider sources exhaust
+            let (provider_exhausted_tx, provider_exhausted_rx) = broadcast::channel::<String>(16);
+
             // build and register the providers
             let (providers, _) = get_providers_from_config(
                 &config_providers,
                 config.config.general.auto_buffer_start_size as usize,
                 &test_ended_tx,
                 &r.config_file,
+                Some(&provider_exhausted_tx),
             )?;
 
             let stats_tx = create_stats_channel(
@@ -528,7 +579,7 @@ async fn _create_run(
                     Arc::clone(&config_file),
                     stats_tx.clone(),
                     config_providers,
-                    providers.clone(),
+                    Arc::downgrade(&providers),
                     config.get_lib_path(),
                 );
             }
@@ -541,6 +592,8 @@ async fn _create_run(
                 stats_tx,
                 stdout,
                 stderr,
+                provider_exhausted_tx,
+                provider_exhausted_rx,
             )
             .map(Either::B)
         }
@@ -578,13 +631,32 @@ async fn _create_run(
 ///
 /// # Errors
 ///
-/// Returns `Err(())` if the worker future returns an `Err`.
+/// Returns `Err(TestError)` if the worker future returns an `Err`.
 pub async fn create_run<So, Se>(
     exec_config: ExecConfig,
     ctrlc_channel: FCUnboundedReceiver<()>,
     stdout: So,
     stderr: Se,
-) -> Result<(), ()>
+) -> Result<TestEndReason, TestError>
+where
+    So: Write + Send + 'static,
+    Se: Write + Send + 'static,
+{
+    // Collect OS environment variables
+    let env_vars: BTreeMap<String, String> = std::env::vars_os()
+        .map(|(k, v)| (k.to_string_lossy().into(), v.to_string_lossy().into()))
+        .collect();
+    create_run_with_env(exec_config, ctrlc_channel, stdout, stderr, env_vars).await
+}
+
+/// Version of create_run that accepts env vars for testing
+pub async fn create_run_with_env<So, Se>(
+    exec_config: ExecConfig,
+    ctrlc_channel: FCUnboundedReceiver<()>,
+    stdout: So,
+    stderr: Se,
+    env_vars: BTreeMap<String, String>,
+) -> Result<TestEndReason, TestError>
 where
     So: Write + Send + 'static,
     Se: Write + Send + 'static,
@@ -605,10 +677,11 @@ where
         stderr.clone(),
         test_ended_tx.clone(),
         test_ended_rx,
+        env_vars,
     )
     .await;
 
-    match test_result {
+    let test_end_reason = match test_result {
         Err(e) => {
             // send the test end message to ensure the stats channel closes
             error!("TestError: {}", e);
@@ -621,7 +694,11 @@ where
                 }
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
-            return Err(());
+            drop(stderr);
+            // wait for all stderr and stdout output to be written
+            let _ = stderr_done.await;
+            let _ = stdout_done.await;
+            return Err(e);
         }
         Ok(TestEndReason::KilledByLogger) => {
             let msg = match output_format {
@@ -634,6 +711,7 @@ where
                 }
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
+            TestEndReason::KilledByLogger
         }
         Ok(TestEndReason::CtrlC) => {
             let msg = match output_format {
@@ -646,6 +724,7 @@ where
                 }
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
+            TestEndReason::CtrlC
         }
         Ok(TestEndReason::ProviderEnded) => {
             let msg = match output_format {
@@ -660,16 +739,23 @@ where
                 }
             };
             let _ = stderr.send(MsgType::Final(msg)).await;
+            TestEndReason::ProviderEnded
         }
         // Instead of implementing Display for TestEndReason, just log these other two
-        Ok(TestEndReason::Completed) => info!("Test Ended with: Completed"),
-        Ok(TestEndReason::ConfigUpdate(_)) => info!("Test Ended with: ConfigUpdate"),
+        Ok(TestEndReason::Completed) => {
+            info!("Test Ended with: Completed");
+            TestEndReason::Completed
+        }
+        Ok(TestEndReason::ConfigUpdate(providers)) => {
+            info!("Test Ended with: ConfigUpdate");
+            TestEndReason::ConfigUpdate(providers)
+        }
     };
     drop(stderr);
     // wait for all stderr and stdout output to be written
     let _ = stderr_done.await;
     let _ = stdout_done.await;
-    Ok(())
+    Ok(test_end_reason)
 }
 
 /// Create a watcher to see when the config file has been updated.
@@ -689,7 +775,7 @@ fn create_config_watcher(
     config_file_path: Arc<Path>,
     stats_tx: FCUnboundedSender<StatsMessage>,
     mut previous_config_providers: BTreeMap<ProviderName, config::ProviderType>,
-    mut previous_providers: Arc<BTreeMap<Arc<str>, providers::Provider>>,
+    mut previous_providers: std::sync::Weak<BTreeMap<Arc<str>, providers::Provider>>,
     lib_path: Option<Arc<Path>>,
 ) {
     let start_time = Instant::now();
@@ -786,12 +872,16 @@ fn create_config_watcher(
 
             let config_providers = mem::take(&mut config.providers);
 
+            // Create provider exhausted channel for the reloaded config
+            let (provider_exhausted_tx, provider_exhausted_rx) = broadcast::channel::<String>(16);
+
             // build and register the providers
             let providers = get_providers_from_config(
                 &config_providers,
                 config.config.general.auto_buffer_start_size as usize,
                 &test_ended_tx,
                 &run_config.config_file,
+                Some(&provider_exhausted_tx),
             );
             let mut providers = match providers {
                 Ok((p, _)) => p,
@@ -813,19 +903,21 @@ fn create_config_watcher(
             };
 
             // see which providers haven't changed and reuse the old providers for the new run
-            for (name, p) in &config_providers {
-                match previous_config_providers.get(name) {
-                    Some(p2) if p == p2 => {
-                        if let Some(p) = previous_providers.get(&name.get()) {
-                            providers.insert(name.get(), p.clone());
+            if let Some(prev_providers) = previous_providers.upgrade() {
+                for (name, p) in &config_providers {
+                    match previous_config_providers.get(name) {
+                        Some(p2) if p == p2 => {
+                            if let Some(p) = prev_providers.get(name.get().as_ref()) {
+                                providers.insert(name.get(), p.clone());
+                            }
                         }
+                        _ => (),
                     }
-                    _ => (),
                 }
             }
 
             let providers = Arc::new(providers);
-            previous_providers = providers.clone();
+            previous_providers = Arc::downgrade(&providers);
             previous_config_providers = config_providers;
 
             let mut run_config = run_config.clone();
@@ -851,6 +943,8 @@ fn create_config_watcher(
                 stats_tx.clone(),
                 stdout.clone(),
                 stderr.clone(),
+                provider_exhausted_tx,
+                provider_exhausted_rx,
             );
             let f = match f {
                 Ok(f) => f,
@@ -976,6 +1070,7 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
         config_config.general.auto_buffer_start_size as usize,
         &test_ended_tx,
         &try_config.config_file,
+        None, // Try mode doesn't track provider exhaustion
     )?;
 
     // setup "filters" which decide which endpoints are included in this try run
@@ -1028,12 +1123,26 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
         let provides_set = endpoint
             .provides
             .iter_mut()
-            .filter_map(|(k, s)| {
+            .map(|(k, s)| {
                 s.set_send_behavior(ProviderSend::Block);
-                (!required_providers.contains(k)).then(|| k.clone())
+                k.clone()
             })
             .collect::<BTreeSet<_>>();
-        endpoint.on_demand = true;
+
+        // Only force on_demand=true for endpoints without peak_load
+        // Endpoints with peak_load need to run actively, especially self-referencing ones
+        if endpoint.peak_load.is_none() {
+            endpoint.on_demand = true;
+        }
+
+        debug!(
+            "try mode endpoint {}: requires {:?}, provides {:?}, peak_load: {:?}, on_demand: {}",
+            endpoints.inner.len(),
+            required_providers.clone(),
+            provides_set,
+            endpoint.peak_load.is_some(),
+            endpoint.on_demand
+        );
 
         let static_tags = endpoint
             .tags
@@ -1041,8 +1150,15 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
             .filter_map(|(k, v)| v.as_static().map(|s| (k.clone(), s.to_owned())))
             .collect();
 
+        let is_on_demand = endpoint.on_demand;
         let builder = request::EndpointBuilder::new(endpoint, None);
-        endpoints.append(static_tags, builder, provides_set, required_providers);
+        endpoints.append(
+            static_tags,
+            builder,
+            provides_set,
+            required_providers,
+            is_on_demand,
+        );
     }
 
     let client = create_http_client(**config_config.client.keepalive.get())?;
@@ -1083,6 +1199,7 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
 /// # Errors
 ///
 /// Returns an `Err` if the config file is missing data that a full test requires.
+#[allow(clippy::too_many_arguments)]
 fn create_load_test_future(
     config: LoadTest,
     run_config: RunConfig,
@@ -1091,6 +1208,8 @@ fn create_load_test_future(
     stats_tx: FCUnboundedSender<StatsMessage>,
     stdout: FCSender<MsgType>,
     stderr: FCSender<MsgType>,
+    _provider_exhausted_tx: broadcast::Sender<String>,
+    provider_exhausted_rx: broadcast::Receiver<String>,
 ) -> Result<impl Future<Output = ()>, TestError> {
     debug!("create_load_test_future start");
     config.ok_for_loadtest()?;
@@ -1101,6 +1220,12 @@ fn create_load_test_future(
     }
 
     let config_config = config.config;
+
+    // Collect which providers are actually used by endpoints
+    let mut used_providers = BTreeSet::new();
+    for endpoint in &config.endpoints {
+        used_providers.extend(endpoint.get_required_providers());
+    }
 
     // create the loggers
     let loggers = get_loggers_from_config(
@@ -1158,24 +1283,85 @@ fn create_load_test_future(
     let mut f = try_join_all(endpoint_calls);
     let mut test_timeout = Delay::new(duration);
     let mut test_ended_rx = BroadcastStream::new(test_ended_tx.subscribe());
-    // Future that checks for test end, either naturally or forced.
-    let f = future::poll_fn(move |cx| match f.poll_unpin(cx) {
-        Poll::Ready(r) => {
-            // Test is done normally.
-            let _ = test_ended_tx.send(r.map(|_| TestEndReason::Completed));
-            Poll::Ready(())
+    let mut provider_exhausted_rx = BroadcastStream::new(provider_exhausted_rx);
+    let test_start = Instant::now();
+    let exhausted_providers = RefCell::new(BTreeSet::new());
+
+    let f = future::poll_fn(move |cx| {
+        // Check if something externally killed the test (Ctrl-C, logger, etc)
+        match test_ended_rx.poll_next_unpin(cx) {
+            Poll::Ready(_) => return Poll::Ready(()),
+            Poll::Pending => {}
         }
-        Poll::Pending => match test_ended_rx.poll_next_unpin(cx).map(|_| ()) {
-            // check if test is forced to stop
-            Poll::Ready(_) => Poll::Ready(()),
-            Poll::Pending => match test_timeout.poll_unpin(cx) {
-                Poll::Ready(_) => {
-                    let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
-                    Poll::Ready(())
+
+        // Poll for provider exhaustion notifications
+        loop {
+            match provider_exhausted_rx.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(provider_name))) => {
+                    debug!("Provider '{}' exhausted", provider_name);
+                    exhausted_providers.borrow_mut().insert(provider_name);
                 }
-                Poll::Pending => Poll::Pending,
-            },
-        },
+                Poll::Ready(Some(Err(_))) | Poll::Ready(None) => break,
+                Poll::Pending => break,
+            }
+        }
+
+        // Check both timeout and endpoints to determine completion reason
+        let timeout_ready = test_timeout.poll_unpin(cx).is_ready();
+        let endpoints_ready = f.poll_unpin(cx);
+
+        match (timeout_ready, endpoints_ready) {
+            // Timeout expired - normal completion
+            (true, _) => {
+                let _ = test_ended_tx.send(Ok(TestEndReason::Completed));
+                Poll::Ready(())
+            }
+            // Endpoints completed - determine if providers ended early
+            (false, Poll::Ready(r)) => {
+                // Check if something already sent an end reason (e.g., logger killed the test)
+                if let Poll::Ready(Some(_existing_reason)) = test_ended_rx.poll_next_unpin(cx) {
+                    debug!("Endpoints completed but another end reason already sent");
+                    return Poll::Ready(());
+                }
+
+                // Check if any USED provider exhausted
+                let exhausted = exhausted_providers.borrow();
+                let used_provider_exhausted = exhausted
+                    .iter()
+                    .any(|p| used_providers.contains(p.as_str()));
+
+                let elapsed = test_start.elapsed();
+                // Determine threshold: 90% of duration OR within 1 second (whichever is more lenient).
+                // This handles both short tests (use 1 second buffer) and long tests (use percentage).
+                let percent_threshold = duration.mul_f64(0.90);
+                let time_threshold = duration.saturating_sub(Duration::from_secs(1));
+                let threshold = percent_threshold.min(time_threshold);
+
+                debug!(
+                    "Checking provider exhaustion: used_provider_exhausted={}, elapsed={:?}, threshold={:?}, exhausted_providers={:?}, used_providers={:?}",
+                    used_provider_exhausted,
+                    elapsed,
+                    threshold,
+                    exhausted,
+                    used_providers
+                );
+
+                let reason = if used_provider_exhausted && elapsed < threshold {
+                    // A used provider exhausted AND we're before the threshold
+                    debug!(
+                        "Provider ended early: used providers exhausted before duration threshold"
+                    );
+                    Ok(TestEndReason::ProviderEnded)
+                } else {
+                    // Either no used providers exhausted, or we're at/near expected duration
+                    Ok(TestEndReason::Completed)
+                };
+                let _ = test_ended_tx.send(r.and(reason));
+                Poll::Ready(())
+            }
+            // Both still pending
+            (false, Poll::Pending) => Poll::Pending,
+        }
     });
 
     debug!("create_load_test_future finish");
@@ -1203,17 +1389,28 @@ fn get_providers_from_config(
     auto_size: usize,
     test_ended_tx: &broadcast::Sender<Result<TestEndReason, TestError>>,
     config_path: &Path,
+    provider_exhausted_tx: Option<&broadcast::Sender<String>>,
 ) -> ProvidersResult {
     let mut providers = BTreeMap::new();
     let mut response_providers = BTreeSet::new();
     for (name, template) in config_providers {
         use config::providers::ProviderType;
         let provider = match template.clone() {
-            ProviderType::Range(rg) => providers::range(rg, name, auto_size),
-            ProviderType::List(lp) => providers::list(lp, name, auto_size),
+            ProviderType::Range(rg) => {
+                providers::range(rg, name, auto_size, provider_exhausted_tx.cloned())
+            }
+            ProviderType::List(lp) => {
+                providers::list(lp, name, auto_size, provider_exhausted_tx.cloned())
+            }
             ProviderType::File(mut f) => {
                 util::tweak_path(f.path.get_mut(), config_path);
-                providers::file(f, test_ended_tx.clone(), name, auto_size)?
+                providers::file(
+                    f,
+                    test_ended_tx.clone(),
+                    name,
+                    auto_size,
+                    provider_exhausted_tx.cloned(),
+                )?
             }
             ProviderType::Response(r) => {
                 response_providers.insert(name.get());

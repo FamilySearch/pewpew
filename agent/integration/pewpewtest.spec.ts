@@ -18,7 +18,7 @@ import {
   sqs,
   util
 } from "@fs/ppaas-common";
-import { PewPewTest, SPLUNK_FORWARDER_EXTRA_TIME, getEndTime } from "../src/pewpewtest.js";
+import { PewPewTest, SPLUNK_FORWARDER_EXTRA_TIME, SPLUNK_LOGS_CLEANUP, getEndTime } from "../src/pewpewtest.js";
 import { basename, join } from "path";
 import { PEWPEW_PATH } from "../src/tests.js";
 import { access } from "fs/promises";
@@ -161,8 +161,8 @@ describe("PewPewTest Integration Test", () => {
         if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
           const stdoutExists = await fileExists(stdoutLogFile);
           const stderrExists = await fileExists(stderrLogFile);
-          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
-          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
         }
       }
     });
@@ -384,8 +384,8 @@ describe("PewPewTest Integration Test", () => {
         if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
           const stdoutExists = await fileExists(stdoutLogFile);
           const stderrExists = await fileExists(stderrLogFile);
-          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(false);
-          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(false);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
         }
       }
     });

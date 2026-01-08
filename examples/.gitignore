@@ -2,3 +2,4 @@
 /search-results*.json
 /log-results*
 /*.yaml.out
+/*.try.out

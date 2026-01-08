@@ -23,7 +23,7 @@ use tokio::{sync::broadcast, task::spawn_blocking};
 
 use std::{
     borrow::Cow,
-    io,
+    fmt, io,
     path::PathBuf,
     pin::Pin,
     sync::{
@@ -39,6 +39,17 @@ pub struct Provider {
     pub rx: channel::Receiver<json::Value>,
     pub tx: channel::Sender<json::Value>,
     pub on_demand: channel::OnDemandReceiver<json::Value>,
+}
+
+impl fmt::Debug for Provider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Provider")
+            .field("auto_return", &self.auto_return)
+            .field("rx", &"<Receiver>")
+            .field("tx", &"<Sender>")
+            .field("on_demand", &"<OnDemandReceiver>")
+            .finish()
+    }
 }
 
 impl Provider {
@@ -63,6 +74,7 @@ pub fn file(
     test_killer: broadcast::Sender<Result<TestEndReason, TestError>>,
     name: &str,
     auto_buffer_start_size: usize,
+    provider_exhausted_tx: Option<broadcast::Sender<String>>,
 ) -> Result<Provider, TestError> {
     //let file = std::mem::take(&mut fp.path);
     let file = fp.path.get();
@@ -92,6 +104,7 @@ pub fn file(
     let tx2 = tx.clone();
 
     // create a new task that pushes data from the file into the channel
+    let name_owned = name.to_string();
     let primer_task = async move {
         let r = stream
             .map_err(move |e| {
@@ -104,6 +117,11 @@ pub fn file(
             if let Some(e) = e.inner_cast() {
                 let _ = test_killer.send(Err(*e));
             }
+        }
+        // Signal that this provider's source stream has exhausted
+        if let Some(exhausted_tx) = provider_exhausted_tx {
+            debug!("Provider '{}' source exhausted", name_owned);
+            let _ = exhausted_tx.send(name_owned);
         }
     };
     debug!("Provider::file tokio::spawn primer_task");
@@ -127,7 +145,12 @@ pub fn response(
 }
 
 // create a list provider
-pub fn list(lp: providers::ListProvider, name: &str, auto_buffer_start_size: usize) -> Provider {
+pub fn list(
+    lp: providers::ListProvider,
+    name: &str,
+    auto_buffer_start_size: usize,
+    provider_exhausted_tx: Option<broadcast::Sender<String>>,
+) -> Provider {
     debug!("providers::list={:?}", lp);
     // create the channel for the provider
     let unique = lp.unique;
@@ -137,7 +160,15 @@ pub fn list(lp: providers::ListProvider, name: &str, auto_buffer_start_size: usi
 
     // create a new task that pushes data from the list into the channel
     let tx2 = tx.clone();
-    let primer_task = rs.forward(tx2);
+    let name_owned = name.to_string();
+    let primer_task = async move {
+        let _ = rs.forward(tx2).await;
+        // Signal that this provider's source stream has exhausted
+        if let Some(exhausted_tx) = provider_exhausted_tx {
+            debug!("Provider '{}' source exhausted", name_owned);
+            let _ = exhausted_tx.send(name_owned);
+        }
+    };
     debug!("Provider::list tokio::spawn primer_task");
     tokio::spawn(primer_task);
 
@@ -145,14 +176,30 @@ pub fn list(lp: providers::ListProvider, name: &str, auto_buffer_start_size: usi
 }
 
 // create a range provider
-pub fn range(rp: providers::RangeProvider, name: &str, auto_buffer_start_size: usize) -> Provider {
+pub fn range(
+    rp: providers::RangeProvider,
+    name: &str,
+    auto_buffer_start_size: usize,
+    provider_exhausted_tx: Option<broadcast::Sender<String>>,
+) -> Provider {
     debug!("providers::range={:?}", rp);
     // create the channel for the provider
     let limit = channel::Limit::dynamic(auto_buffer_start_size);
     let (tx, rx) = channel::channel(limit, rp.unique, name);
 
     // create a new task that pushes data from the range into the channel
-    let prime_tx = stream::iter(rp.into_iter().map(|v| Ok(v.into()))).forward(tx.clone());
+    let name_owned = name.to_string();
+    let tx2 = tx.clone();
+    let prime_tx = async move {
+        let _ = stream::iter(rp.into_iter().map(|v| Ok(v.into())))
+            .forward(tx2)
+            .await;
+        // Signal that this provider's source stream has exhausted
+        if let Some(exhausted_tx) = provider_exhausted_tx {
+            debug!("Provider '{}' source exhausted", name_owned);
+            let _ = exhausted_tx.send(name_owned);
+        }
+    };
     debug!("Provider::range tokio::spawn prime_tx");
     tokio::spawn(prime_tx);
 
@@ -301,7 +348,12 @@ mod tests {
                 end: 20
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), "range_provider_works1", BUFFER_SIZE);
+            let p = range(
+                range_params.into(),
+                "range_provider_works1",
+                BUFFER_SIZE,
+                None,
+            );
             let expect: Vec<_> = (0..=20).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -317,7 +369,12 @@ mod tests {
                 step: 2
             "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), "range_provider_works2", BUFFER_SIZE);
+            let p = range(
+                range_params.into(),
+                "range_provider_works2",
+                BUFFER_SIZE,
+                None,
+            );
 
             let expect: Vec<_> = (0..=20).step_by(2).collect();
 
@@ -334,7 +391,12 @@ mod tests {
                     repeat: true
                 "#;
             let range_params = from_yaml::<RangeProvider>(range_params).unwrap();
-            let p = range(range_params.into(), "range_provider_works3", BUFFER_SIZE);
+            let p = range(
+                range_params.into(),
+                "range_provider_works3",
+                BUFFER_SIZE,
+                None,
+            );
 
             let expect: Vec<_> = (0..=20).cycle().take(100).collect();
 
@@ -343,7 +405,13 @@ mod tests {
 
             let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
+            // Give the spawned task time to complete and thread pool to drain before runtime shutdown
+            time::sleep(Duration::from_millis(200)).await;
+
             assert_eq!(values, expect, "third");
+
+            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+            time::sleep(Duration::from_millis(100)).await;
         });
     }
 
@@ -360,7 +428,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), "literals_provider_works1", BUFFER_SIZE);
+            let p = list(lp.into(), "literals_provider_works1", BUFFER_SIZE, None);
             let expect = jsons.clone();
 
             let Provider { rx, tx, .. } = p;
@@ -377,7 +445,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), "literals_provider_works2", BUFFER_SIZE);
+            let p = list(lp.into(), "literals_provider_works2", BUFFER_SIZE, None);
             let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
             let Provider { rx, tx, .. } = p;
@@ -397,10 +465,17 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lp.into(), "literals_provider_works3", BUFFER_SIZE);
+            let p = list(lp.into(), "literals_provider_works3", BUFFER_SIZE, None);
             let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-            let values: Vec<_> = p.rx.take(100).collect().await;
+            let Provider { rx, tx, .. } = p;
+            // Drop the tx reference so we don't get infinite streams
+            drop(tx);
+
+            let values: Vec<_> = rx.take(100).collect().await;
+
+            // Give the spawned task time to complete before moving to next test
+            time::sleep(Duration::from_millis(200)).await;
 
             assert_eq!(values, expect, "third");
 
@@ -411,7 +486,7 @@ mod tests {
                 unique: false,
             };
 
-            let p = list(lwo.into(), "literals_provider_works4", BUFFER_SIZE);
+            let p = list(lwo.into(), "literals_provider_works4", BUFFER_SIZE, None);
             let mut expect: Vec<_> = jsons
                 .iter()
                 .cycle()
@@ -419,7 +494,13 @@ mod tests {
                 .map(|j| j.as_u64().unwrap())
                 .collect();
 
-            let mut values: Vec<_> = p.rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+            let Provider { rx, tx, .. } = p;
+            drop(tx);
+
+            let mut values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+
+            // Give the spawned task time to complete and thread pool to drain before moving to next test
+            time::sleep(Duration::from_millis(200)).await;
 
             assert_ne!(values, expect, "fourth");
 
@@ -439,7 +520,7 @@ mod tests {
                 unique: true,
             };
 
-            let p = list(lwo.into(), "literals_provider_works5", BUFFER_SIZE);
+            let p = list(lwo.into(), "literals_provider_works5", BUFFER_SIZE, None);
             let Provider { rx, tx, .. } = p;
             drop(tx);
 
@@ -453,6 +534,9 @@ mod tests {
             // NOTE: if this test causes issues in CI, remove it as there are enough other tests covering
             // unique providers
             assert_eq!(values, expect, "sixth");
+
+            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+            time::sleep(Duration::from_millis(100)).await;
         });
     }
 

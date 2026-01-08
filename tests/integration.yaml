@@ -24,8 +24,10 @@ providers:
     !range
   c:
     !list
-      - 123
-      - 456
+      values:
+        - 123
+        - 456
+      repeat: true
   d:
     !response
   f:

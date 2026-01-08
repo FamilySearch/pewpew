@@ -653,11 +653,7 @@ pub(super) fn bool_value(json: &json::Value) -> bool {
 }
 
 pub(super) fn f64_value(json: &json::Value) -> f64 {
-    if let Some(f) = json.as_f64() {
-        f
-    } else {
-        f64::NAN
-    }
+    json.as_f64().unwrap_or(f64::NAN)
 }
 
 #[derive(Clone, Debug)]

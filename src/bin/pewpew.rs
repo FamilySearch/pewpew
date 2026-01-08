@@ -2,7 +2,7 @@ use std::io::{self, IsTerminal};
 
 use futures::channel::mpsc as futures_channel;
 use log::{debug, info};
-use pewpew::{create_run, ExecConfig, RunOutputFormat, TryRunFormat};
+use pewpew::{create_run, ExecConfig, RunOutputFormat, TestEndReason, TryRunFormat};
 use tokio::runtime;
 
 mod args {
@@ -237,8 +237,28 @@ fn main() {
     rt.shutdown_timeout(Default::default());
     debug!("rt.shutdown_timeout finished");
 
-    if result.is_err() {
-        std::process::exit(1)
+    // Map test end reason to exit codes
+    match result {
+        Ok(TestEndReason::Completed) | Ok(TestEndReason::ConfigUpdate(_)) => {
+            // Normal completion
+            std::process::exit(0)
+        }
+        Ok(TestEndReason::ProviderEnded) => {
+            // Provider exhausted early - exit with code 2
+            std::process::exit(2)
+        }
+        Ok(TestEndReason::KilledByLogger) => {
+            // Logger killed the test - exit with code 3
+            std::process::exit(3)
+        }
+        Ok(TestEndReason::CtrlC) => {
+            // User interrupted with Ctrl-C - use standard Unix exit code 130
+            std::process::exit(130)
+        }
+        Err(_) => {
+            // Test error - exit with code 1
+            std::process::exit(1)
+        }
     }
 }
 

@@ -17,7 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install stable --profile minimal --no-self-update
-      - run: cargo test --all
+      - run: cargo test --all -- --skip providers::tests::range_provider_works --skip providers::tests::literals_provider_works
+      - run: cargo test --lib providers::tests::range_provider_works -- --test-threads=1  # Must run serially due to spawn_blocking contention
+      - run: cargo test --lib providers::tests::literals_provider_works -- --test-threads=1  # Must run serially due to spawn_blocking contention
 
   fmt:
     name: Rustfmt
@@ -118,6 +120,40 @@ jobs:
         if: matrix.build == 'linux'
         with:
           args: cargo build -q --release -p pewpew-config-updater --target x86_64-unknown-linux-musl
+
+      - name: Test Examples with Try Scripts
+        if: matrix.build == 'linux'
+        run: |
+          set -e  # Exit on any error
+          set -x  # Print commands for debugging
+
+          export RUST_LOG=warn
+          # Start test-server in background (600s = 10 minutes timeout)
+          PORT=8082 timeout 600 ./target/x86_64-unknown-linux-musl/release/test-server > /dev/null 2>&1 &
+          TEST_SERVER_PID=$!
+          sleep 2
+
+          # Test with try scripts (will exit with error if any test fails)
+          cd examples
+          PORT=8082 ./test_examples_try.sh ../target/x86_64-unknown-linux-musl/release/pewpew || {
+            EXIT_CODE=$?
+            echo "ERROR: test_examples_try.sh failed with exit code $EXIT_CODE"
+            kill $TEST_SERVER_PID 2>/dev/null || true
+            exit $EXIT_CODE
+          }
+
+          # Test with run scripts (will exit with error if any test fails)
+          PORT=8082 ./test_examples.sh ../target/x86_64-unknown-linux-musl/release/pewpew || {
+            EXIT_CODE=$?
+            echo "ERROR: test_examples.sh failed with exit code $EXIT_CODE"
+            kill $TEST_SERVER_PID 2>/dev/null || true
+            exit $EXIT_CODE
+          }
+          cd ..
+
+          # Clean up
+          kill $TEST_SERVER_PID 2>/dev/null || true
+          echo "✅ All examples testing complete - PASSED"
 
   wasm-pack:
     name: Wasm Build

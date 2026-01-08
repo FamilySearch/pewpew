@@ -1,44 +1,20 @@
+load_pattern:
+  - !linear
+      to: 100%
+      over: 10s
+config:
+  general:
+    bucket_size: 1s
 vars:
   port: ${e:PORT}
-load_pattern:
-- !linear
-  from: 0%
-  to: 100%
-  over: 10s
-config:
-  client:
-    request_timeout: 1m
-    headers: {}
-    keepalive: 90s
-  general:
-    auto_buffer_start_size: 5
-    bucket_size: 1s
-    log_provider_stats: true
-    watch_transition_time: null
 loggers:
   test_logger:
-    query: null
-    limit: 1
     to: stderr
-    pretty: false
     kill: true
-providers: {}
+    limit: 1
 endpoints:
-- method: GET
-  url: http://localhost:${v:port}/
-  tags: {}
-  declare: {}
-  headers: {}
-  body: null
-  load_pattern: null
-  peak_load: 600hpm
-  provides: {}
-  on_demand: false
+- url: http://localhost:${v:port}/
+  peak_load: 10hps
   logs:
     test_logger:
-      select: 'true'
-      for_each: []
-      where: null
-  max_parallel_requests: null
-  no_auto_returns: false
-  request_timeout: null
+      select: "true"

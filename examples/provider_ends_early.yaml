@@ -19,26 +19,26 @@ providers:
   response1: !response
   response2: !response
 endpoints:
-- method: GET
-  url: 'http://localhost:${v:port}?count=${p:counterProvider}'
-  on_demand: true
-  peak_load: 60hpm
-  provides:
-    response1:
-      query:
-        select: counterProvider
-        where: response.status <= 300
-      send: force
-- method: GET
-  url: 'http://localhost:${v:port}?count=${p:response1}'
-  on_demand: true
-  peak_load: 60hpm
-  provides:
-    response2:
-      query:
-        select: response1
-        where: response.status <= 300
-      send: force
-- method: GET
-  url: 'http://localhost:${v:port}?count=${p:response2}'
-  peak_load: 60hpm
+  - method: GET
+    url: 'http://localhost:${v:port}?count=${p:counterProvider}'
+    on_demand: true
+    peak_load: 60hpm
+    provides:
+      response1:
+        query:
+          select: counterProvider
+          where: response.status <= 300
+        send: force
+  - method: GET
+    url: 'http://localhost:${v:port}?count=${p:response1}'
+    on_demand: true
+    peak_load: 60hpm
+    provides:
+      response2:
+        query:
+          select: response1
+          where: response.status <= 300
+        send: force
+  - method: GET
+    url: 'http://localhost:${v:port}?count=${p:response2}'
+    peak_load: 60hpm

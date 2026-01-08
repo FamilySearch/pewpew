@@ -88,43 +88,46 @@ impl Take {
         let mut cache = Vec::with_capacity(self.max());
         let mut ars = vec![];
         let mut size = self.next_size();
-        futures::stream::poll_fn(move |ctx| match s.poll_next_unpin(ctx) {
-            // TODO: check why try scripts hang on collect
-            Poll::Pending => {
-                log::debug!("declare Take::collect_string Poll::Pending");
-                Poll::Pending
-            }
-            Poll::Ready(Some(Ok((v, a)))) => {
-                log::debug!("declare Take::collect_string Poll::Ready Ok cache.len: {}, size: {}, a.len: {}", cache.len(), size, a.len());
-                cache.push(v);
-                ars.extend(a);
-                if cache.len() >= size {
-                    size = self.next_size();
-                    log::debug!(
-                        "declare Take::collect_string Poll::Ready - next_size: {}, ars.len: {}",
-                        size,
-                        ars.len()
-                    );
-                    Poll::Ready(Some(Ok((
-                        replace(&mut cache, Vec::with_capacity(size)),
-                        take(&mut ars),
-                    ))))
-                } else {
-                    log::debug!("declare Take::collect_string Poll::Ready else Poll::Pending");
-                    Poll::Pending
+        futures::stream::poll_fn(move |ctx| loop {
+            match s.poll_next_unpin(ctx) {
+                Poll::Pending => {
+                    log::debug!("declare Take::collect_string Poll::Pending");
+                    return Poll::Pending;
                 }
-            }
-            Poll::Ready(Some(Err(e))) => {
-                log::debug!("declare Take::collect_string Poll::Ready Err");
-                // Don't clear cache, because an Ok() may be
-                // yielded later.
-                Poll::Ready(Some(Err(e)))
-            }
-            Poll::Ready(None) => {
-                log::debug!("declare Take::collect_string Poll::Ready None");
-                // Underlying stream has finished; yield any
-                // cached values, or return None.
-                Poll::Ready((!cache.is_empty()).then(|| Ok((take(&mut cache), take(&mut ars)))))
+                Poll::Ready(Some(Ok((v, a)))) => {
+                    log::debug!("declare Take::collect_string Poll::Ready Ok cache.len: {}, size: {}, a.len: {}", cache.len(), size, a.len());
+                    cache.push(v);
+                    ars.extend(a);
+                    if cache.len() >= size {
+                        size = self.next_size();
+                        log::debug!(
+                            "declare Take::collect_string Poll::Ready - next_size: {}, ars.len: {}",
+                            size,
+                            ars.len()
+                        );
+                        return Poll::Ready(Some(Ok((
+                            replace(&mut cache, Vec::with_capacity(size)),
+                            take(&mut ars),
+                        ))));
+                    } else {
+                        log::debug!("declare Take::collect_string Poll::Ready - need more items, continuing loop");
+                        // Continue the loop to poll for more items instead of returning Poll::Pending
+                    }
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    log::debug!("declare Take::collect_string Poll::Ready Err");
+                    // Don't clear cache, because an Ok() may be
+                    // yielded later.
+                    return Poll::Ready(Some(Err(e)));
+                }
+                Poll::Ready(None) => {
+                    log::debug!("declare Take::collect_string Poll::Ready None");
+                    // Underlying stream has finished; yield any
+                    // cached values, or return None.
+                    return Poll::Ready(
+                        (!cache.is_empty()).then(|| Ok((take(&mut cache), take(&mut ars)))),
+                    );
+                }
             }
         })
     }
@@ -291,6 +294,100 @@ mod tests {
             .insert_vars(&BTreeMap::new())
             .unwrap();
         assert_eq!(decl, Declare::Expr(Template::new_literal("expr".into())));
+    }
+
+    /// Test that collect_stream continues polling and collecting items
+    /// until it has enough, fixing the hang where it would return Poll::Pending
+    /// after receiving only one item when it needed multiple.
+    #[tokio::test]
+    async fn collect_stream_continues_polling() {
+        use futures::stream::StreamExt;
+
+        // Create a stream that yields values one at a time
+        let values: Vec<Result<(String, Vec<()>), String>> = vec![
+            Ok(("a".to_string(), vec![])),
+            Ok(("b".to_string(), vec![])),
+            Ok(("c".to_string(), vec![])),
+            Ok(("d".to_string(), vec![])),
+            Ok(("e".to_string(), vec![])),
+        ];
+        let source_stream = futures::stream::iter(values);
+
+        // Create a collect stream that needs 3 items
+        let take = Take::Fixed(3);
+        let mut collect_stream = take.collect_stream(source_stream);
+
+        // First poll should collect 3 items and return them
+        let result = collect_stream.next().await;
+        assert!(result.is_some());
+        let (collected, _) = result.unwrap().unwrap();
+        assert_eq!(collected, vec!["a", "b", "c"]);
+
+        // Second poll should collect the remaining 2 items and return them
+        let result = collect_stream.next().await;
+        assert!(result.is_some());
+        let (collected, _) = result.unwrap().unwrap();
+        assert_eq!(collected, vec!["d", "e"]);
+
+        // Third poll should return None (stream exhausted)
+        let result = collect_stream.next().await;
+        assert!(result.is_none());
+    }
+
+    /// Test collect_stream with random take size
+    #[tokio::test]
+    async fn collect_stream_random_take() {
+        use futures::stream::StreamExt;
+
+        // Create a stream with 20 values
+        let values: Vec<Result<(String, Vec<()>), String>> =
+            (0..20).map(|i| Ok((i.to_string(), vec![]))).collect();
+        let source_stream = futures::stream::iter(values);
+
+        // Create a collect stream with random take between 5 and 10
+        let take = Take::Rand(5, 10);
+        let mut collect_stream = take.collect_stream(source_stream);
+
+        let mut total_collected = 0;
+        while let Some(result) = collect_stream.next().await {
+            let (collected, _) = result.unwrap();
+            let count = collected.len();
+            // Each collection should be between 5 and 10 items
+            assert!(
+                count >= 5 || count < 5 && total_collected + count == 20,
+                "Expected 5-10 items or remaining items, got {}",
+                count
+            );
+            total_collected += count;
+        }
+
+        // All 20 items should have been collected
+        assert_eq!(total_collected, 20);
+    }
+
+    /// Test that collect_stream handles stream ending before enough items collected
+    #[tokio::test]
+    async fn collect_stream_handles_early_end() {
+        use futures::stream::StreamExt;
+
+        // Create a stream with only 2 values
+        let values: Vec<Result<(String, Vec<()>), String>> =
+            vec![Ok(("a".to_string(), vec![])), Ok(("b".to_string(), vec![]))];
+        let source_stream = futures::stream::iter(values);
+
+        // Try to collect 5 items
+        let take = Take::Fixed(5);
+        let mut collect_stream = take.collect_stream(source_stream);
+
+        // Should return the 2 available items when stream ends
+        let result = collect_stream.next().await;
+        assert!(result.is_some());
+        let (collected, _) = result.unwrap().unwrap();
+        assert_eq!(collected, vec!["a", "b"]);
+
+        // Next poll should return None
+        let result = collect_stream.next().await;
+        assert!(result.is_none());
     }
 
     #[test]

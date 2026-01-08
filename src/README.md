@@ -28,6 +28,7 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 - [Update lib.rs](https://github.com/FamilySearch/pewpew/pull/342)
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
 - [Provider end early](https://github.com/FamilySearch/pewpew/pull/348)
+- [Update rust dependencies 2026-01-08](https://github.com/FamilySearch/pewpew/pull/350)
 
 ### v0.5.14
 - [Bump openssl from 0.10.57 to 0.10.60](https://github.com/FamilySearch/pewpew/pull/181)

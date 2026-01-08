@@ -70,11 +70,12 @@ use std::{
 type Body = BoxBody<bytes::Bytes, std::io::Error>;
 
 struct Endpoints {
-    // yaml index of the endpoint, (endpoint tags, builder, required_providers, is_on_demand)
+    // yaml index of the endpoint, (endpoint tags, builder, required_providers, is_on_demand, feeds_collector)
     inner: Vec<(
         BTreeMap<Arc<str>, String>,
         request::EndpointBuilder,
         BTreeSet<Arc<str>>,
+        bool,
         bool,
     )>,
     // provider name, yaml index of endpoints which provide the provider
@@ -96,10 +97,16 @@ impl Endpoints {
         provides: BTreeSet<Arc<str>>,
         required_providers: BTreeSet<Arc<str>>,
         is_on_demand: bool,
+        feeds_collector: bool,
     ) {
         let i = self.inner.len();
-        self.inner
-            .push((endpoint_tags, builder, required_providers, is_on_demand));
+        self.inner.push((
+            endpoint_tags,
+            builder,
+            required_providers,
+            is_on_demand,
+            feeds_collector,
+        ));
         for p in provides {
             self.providers.entry(p).or_default().push(i);
         }
@@ -126,22 +133,25 @@ impl Endpoints {
             .inner
             .into_iter()
             .enumerate()
-            .map(|(i, (tags, builder, required_providers, is_on_demand))| {
-                let included = filter_fn(&tags);
-                debug!(
-                    "Endpoint {}: included={}, required_providers={:?}, is_on_demand={}",
-                    i, included, required_providers, is_on_demand
-                );
-                (
-                    i,
+            .map(
+                |(i, (tags, builder, required_providers, is_on_demand, feeds_collector))| {
+                    let included = filter_fn(&tags);
+                    debug!(
+                        "Endpoint {}: included={}, required_providers={:?}, is_on_demand={}",
+                        i, included, required_providers, is_on_demand
+                    );
                     (
-                        included,
-                        builder.build(builder_ctx),
-                        required_providers,
-                        is_on_demand,
-                    ),
-                )
-            })
+                        i,
+                        (
+                            included,
+                            builder.build(builder_ctx),
+                            required_providers,
+                            is_on_demand,
+                            feeds_collector,
+                        ),
+                    )
+                },
+            )
             .collect();
 
         let mut providers = self.providers;
@@ -157,7 +167,9 @@ impl Endpoints {
             debug!("Processing endpoint {}, bypass_filter={}", i, bypass_filter);
             if let Some((included, ..)) = endpoints.get(&i) {
                 if *included || bypass_filter {
-                    if let Some((_, ep, required_providers, is_on_demand)) = endpoints.remove(&i) {
+                    if let Some((_, ep, required_providers, is_on_demand, feeds_collector)) =
+                        endpoints.remove(&i)
+                    {
                         debug!(
                             "Endpoint {} selected, required_providers={:?}, is_on_demand={}",
                             i, required_providers, is_on_demand
@@ -178,10 +190,11 @@ impl Endpoints {
                                 debug!("No endpoints provide '{}'", request_provider);
                             }
                         }
-                        endpoints_needed_for_test.insert(i, (ep, bypass_filter, is_on_demand));
+                        endpoints_needed_for_test
+                            .insert(i, (ep, bypass_filter, is_on_demand, feeds_collector));
                     }
                 }
-            } else if let Some((_, provides_needed, _)) = endpoints_needed_for_test.get_mut(&i) {
+            } else if let Some((_, provides_needed, _, _)) = endpoints_needed_for_test.get_mut(&i) {
                 debug!(
                     "Endpoint {} already selected, marking provides_needed=true",
                     i
@@ -195,20 +208,32 @@ impl Endpoints {
         );
         let ret = endpoints_needed_for_test
             .into_iter()
-            .map(|(i, (mut ep, provides_needed, is_on_demand))| {
-                debug!(
-                    "Endpoint {}: provides_needed={}, on_demand={}",
-                    i, provides_needed, is_on_demand
-                );
-                if !provides_needed {
-                    ep.clear_provides();
-                }
-                // All non-on_demand endpoints need a start stream to actually run in try mode
-                if !is_on_demand {
-                    ep.add_start_stream(future::ready(Ok(request::StreamItem::None)).into_stream());
-                }
-                ep.into_future()
-            })
+            .map(
+                |(i, (mut ep, provides_needed, is_on_demand, feeds_collector))| {
+                    debug!(
+                        "Endpoint {}: provides_needed={}, on_demand={}, feeds_collector={}",
+                        i, provides_needed, is_on_demand, feeds_collector
+                    );
+                    if !provides_needed {
+                        ep.clear_provides();
+                    }
+                    // All non-on_demand endpoints need a start stream to actually run in try mode
+                    // Endpoints that feed collectors need multiple iterations (use 20 as a reasonable limit)
+                    if !is_on_demand {
+                        if feeds_collector {
+                            // Add a start stream with 20 yields for endpoints that feed collectors
+                            ep.add_start_stream(futures::stream::iter(
+                                (0..20).map(|_| Ok(request::StreamItem::None)),
+                            ));
+                        } else {
+                            ep.add_start_stream(
+                                future::ready(Ok(request::StreamItem::None)).into_stream(),
+                            );
+                        }
+                    }
+                    ep.into_future()
+                },
+            )
             .collect::<Vec<_>>();
         Ok(ret)
     }
@@ -1116,8 +1141,45 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
 
     let mut endpoints = Endpoints::new();
 
+    // First pass: identify which providers are used in collect operations
+    let mut providers_used_in_collects = BTreeSet::new();
+    for endpoint in &config.endpoints {
+        for decl in endpoint.declare.values() {
+            if matches!(decl, config::endpoints::Declare::Collects { .. }) {
+                // Get all providers required by this collect (includes 'from' and 'then')
+                providers_used_in_collects.extend(decl.get_required_providers());
+            }
+        }
+    }
+
+    debug!(
+        "Providers used in collect operations: {:?}",
+        providers_used_in_collects
+    );
+
+    // Second pass: identify which endpoints provide to collectors or have collectors
+    let feeds_collector: Vec<bool> = config
+        .endpoints
+        .iter()
+        .map(|endpoint| {
+            // Check if this endpoint has a collect
+            let has_collect = endpoint
+                .declare
+                .values()
+                .any(|decl| matches!(decl, config::endpoints::Declare::Collects { .. }));
+
+            // Check if this endpoint provides to a provider used in a collect
+            let provides_to_collector = endpoint
+                .provides
+                .keys()
+                .any(|p| providers_used_in_collects.contains(p));
+
+            has_collect || provides_to_collector
+        })
+        .collect();
+
     // create the endpoints
-    for mut endpoint in config.endpoints.into_iter() {
+    for (idx, mut endpoint) in config.endpoints.into_iter().enumerate() {
         let required_providers = endpoint.get_required_providers();
 
         let provides_set = endpoint
@@ -1131,17 +1193,20 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
 
         // Only force on_demand=true for endpoints without peak_load
         // Endpoints with peak_load need to run actively, especially self-referencing ones
-        if endpoint.peak_load.is_none() {
+        // Also, endpoints that have collectors or feed into collectors shouldn't be forced
+        // to on_demand because the collect operation needs multiple iterations
+        if endpoint.peak_load.is_none() && !feeds_collector[idx] {
             endpoint.on_demand = true;
         }
 
         debug!(
-            "try mode endpoint {}: requires {:?}, provides {:?}, peak_load: {:?}, on_demand: {}",
+            "try mode endpoint {}: requires {:?}, provides {:?}, peak_load: {:?}, on_demand: {}, feeds_collector: {}",
             endpoints.inner.len(),
             required_providers.clone(),
             provides_set,
             endpoint.peak_load.is_some(),
-            endpoint.on_demand
+            endpoint.on_demand,
+            feeds_collector[idx]
         );
 
         let static_tags = endpoint
@@ -1158,6 +1223,7 @@ ${{join(response.headers_all, '\n', ': ')}}\n\
             provides_set,
             required_providers,
             is_on_demand,
+            feeds_collector[idx],
         );
     }
 

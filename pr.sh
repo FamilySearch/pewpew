@@ -24,15 +24,15 @@ TZ=UTC cargo test --all
 cargo test --all --doc
 
 # Test examples with try scripts
-echo "Starting test-server for examples testing..."
-RUST_LOG=warn PORT=8082 timeout 600 ./target/debug/test-server > /dev/null 2>&1 &
+cd examples
+echo "Starting test-server for examples testing... PORT=${PORT:=8082}"
+RUST_LOG=warn PORT=$PORT timeout 600 ../target/debug/test-server > test-server.try.out 2>&1 &
 TEST_SERVER_PID=$!
 sleep 2
 
-cd examples
 echo "Running try examples..."
 START_TIME=$(date +%s)
-RUST_LOG=warn PORT=8082 ./test_examples_try.sh ../target/debug/pewpew || {
+RUST_LOG=warn PORT=$PORT ./test_examples_try.sh ../target/debug/pewpew || {
   EXIT_CODE=$?
   echo "ERROR: test_examples_try.sh failed with exit code $EXIT_CODE"
   kill $TEST_SERVER_PID 2>/dev/null || true
@@ -46,7 +46,7 @@ read -e -p "Run Examples Tests y/N: " choice
 if [[ "$choice" == [Yy]* ]]; then
   echo "Running run examples..."
   START_TIME=$(date +%s)
-  RUST_LOG=warn PORT=8082 ./test_examples.sh ../target/debug/pewpew || {
+  RUST_LOG=warn PORT=$PORT ./test_examples.sh ../target/debug/pewpew || {
     EXIT_CODE=$?
     echo "ERROR: test_examples.sh failed with exit code $EXIT_CODE"
     kill $TEST_SERVER_PID 2>/dev/null || true

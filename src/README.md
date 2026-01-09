@@ -23,6 +23,22 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ```
 
 ## Changelog
+### v0.6.1
+- [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
+  - Fixed [Try script never exits on long provider chains](https://github.com/FamilySearch/pewpew/issues/123)
+  - Added testing examples to the PR flow
+- [Provider end early](https://github.com/FamilySearch/pewpew/pull/348)
+  - Fixed [on_demand api's exit when provider empties rather than when relying api's are finished](https://github.com/FamilySearch/pewpew/issues/36)
+  - [Major change to return codes](https://github.com/FamilySearch/pewpew/pull/348/commits/95c41fac8389e963bf8622b55c690c84bd28221b)
+- [Update rust dependencies scripting 2026-01-08](https://github.com/FamilySearch/pewpew/pull/352)
+  - Updated Cargo lock file to latest
+  - Updated yaml-rust2 to 0.11
+  - Updated boa_engine, boa_gc, and boa_parser to 0.21
+    - **Breaking API changes**: JsValue is no longer an enum with pattern matching. Use constructor functions (`JsValue::new()`, `JsValue::null()`, `JsValue::undefined()`) and accessor methods (`is_null()`, `as_boolean()`, `as_number()`)
+    - **Automatic integer conversion**: Implemented conversion of whole numbers (1.0, 2.0) to integers (1, 2) for cleaner JSON output
+    - Modified files: `lib/config/src/configv2/scripting.rs`, `lib/config/src/configv2/query.rs`, `lib/config/src/configv2/templating.rs`, `src/request/body_handler.rs`, `tests/integration.rs`
+  - Removed explicit getrandom dependency from lib/config (boa_engine 0.21 handles getrandom 0.3 correctly, eliminating duplicate 0.2 dependency)
+
 ### v0.6.0
 Changes:
 - Major changes: Javascript scripting!

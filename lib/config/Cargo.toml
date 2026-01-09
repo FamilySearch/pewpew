@@ -7,20 +7,14 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
-boa_engine = "0.20"
-boa_gc = "0.20"
-boa_parser = "0.20"
+boa_engine = "0.21"
+boa_gc = "0.21"
+boa_parser = "0.21"
 derivative = "2.2.0"
 derive_more = { version = "2", features = ["deref", "deref_mut", "from", "from_str"] }
 diplomatic-bag = "0.3.1"
 ether.workspace = true
 futures.workspace = true
-# boa_engine is is pulling in 0.2
-# Not a direct dependency but get random as of 0.2.2 throws an error on "unsupported targets"
-# https://docs.rs/getrandom/0.2.2/getrandom/#unsupported-targets
-# The fix is to add it as a supported target and specify the target. As of 0.2.2 both browser and nodejs use "js"
-getrandom = { version = "0.2", features = ["js"] }
-# gc = "0.4.1"
 http.workspace = true
 itertools.workspace = true
 js-sys.workspace = true
@@ -31,7 +25,7 @@ once_cell.workspace = true
 percent-encoding = "2"
 pest = { version = "2", optional = true }
 pest_derive = { version = "2", optional = true }
-phf = { version = "0.11", features = ["macros"] }
+phf = { version = "0.13", features = ["macros"] }
 rand.workspace = true
 regex.workspace = true
 scripting-macros = { path = "../scripting-macros" }
@@ -41,7 +35,7 @@ serde-tuple-vec-map = "1.0.1"
 serde_yaml.workspace = true
 thiserror.workspace = true
 unicode-segmentation = "1"
-yaml-rust2 = { version = "0.10", optional = true }
+yaml-rust2 = { version = "0.11", optional = true }
 zip_all.workspace = true
 
 [dev-dependencies]

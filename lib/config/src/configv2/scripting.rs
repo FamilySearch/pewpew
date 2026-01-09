@@ -94,82 +94,94 @@ pub(super) fn purge_undefined(js: &JsValue, context: &mut Context) -> JsResult<s
         // trace parameter helps track where in the "root" js object the undefined was found
         trace: Vec<String>,
     ) -> JsResult<serde_json::Value> {
-        match js {
-            JsValue::Null => Ok(serde_json::Value::Null),
-            &JsValue::Boolean(b) => Ok(b.into()),
-            JsValue::String(string) => Ok(string.to_std_string_escaped().into()),
-            &JsValue::Rational(rat) => Ok(rat.into()),
-            &JsValue::Integer(int) => Ok(int.into()),
-            JsValue::BigInt(_bigint) => Err(JsError::from_native(
+        if js.is_null() {
+            Ok(serde_json::Value::Null)
+        } else if let Some(b) = js.as_boolean() {
+            Ok(b.into())
+        } else if let Some(string) = js.as_string() {
+            Ok(string.to_std_string_escaped().into())
+        } else if let Some(num) = js.as_number() {
+            // Convert whole numbers to integers for cleaner JSON output
+            if num.fract() == 0.0
+                && num.is_finite()
+                && num >= i64::MIN as f64
+                && num <= i64::MAX as f64
+            {
+                Ok(serde_json::Value::Number((num as i64).into()))
+            } else {
+                Ok(num.into())
+            }
+        } else if js.is_bigint() {
+            Err(JsError::from_native(
                 JsNativeError::typ().with_message("cannot convert bigint to JSON"),
-            )),
-            JsValue::Symbol(_sym) => Err(JsError::from_native(
+            ))
+        } else if js.is_symbol() {
+            Err(JsError::from_native(
                 JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
-            )),
-            JsValue::Object(o) => {
-                if o.is_array() {
-                    let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
-                    log::trace!("purge_undefined array: {jsarr:?}");
-                    let len = jsarr.length(context)?;
-                    (0..len)
-                        .map(|i| {
-                            jsarr.get(i, context).and_then(|js| {
-                                purge_inner(&js, context, {
-                                    let mut trace = trace.clone();
-                                    trace.push(i.to_string());
-                                    trace
-                                })
+            ))
+        } else if let Some(o) = js.as_object() {
+            if o.is_array() {
+                let jsarr = JsArray::from_object(o.clone()).expect("just checked if array");
+                log::trace!("purge_undefined array: {jsarr:?}");
+                let len = jsarr.length(context)?;
+                (0..len)
+                    .map(|i| {
+                        jsarr.get(i, context).and_then(|js| {
+                            purge_inner(&js, context, {
+                                let mut trace = trace.clone();
+                                trace.push(i.to_string());
+                                trace
                             })
                         })
-                        .collect::<JsResult<Vec<serde_json::Value>>>()
-                        .map(Into::into)
-                } else {
-                    let mut map = serde_json::Map::new();
-                    // https://github.com/boa-dev/boa/issues/3923
-                    // Starting in 0.17, to_json uses properties().shape().keys() which doesn't include integer keys
-                    // own_property_keys() does include them
-                    let keys = o
-                        .own_property_keys(context)
-                        .expect("Objects should have keys");
-                    log::trace!("purge_undefined object keys: {keys:?}");
+                    })
+                    .collect::<JsResult<Vec<serde_json::Value>>>()
+                    .map(Into::into)
+            } else {
+                let mut map = serde_json::Map::new();
+                // https://github.com/boa-dev/boa/issues/3923
+                // Starting in 0.17, to_json uses properties().shape().keys() which doesn't include integer keys
+                // own_property_keys() does include them
+                let keys = o
+                    .own_property_keys(context)
+                    .expect("Objects should have keys");
+                log::trace!("purge_undefined object keys: {keys:?}");
 
-                    for key in keys {
-                        let property = o.get(key.clone(), context);
-                        log::trace!("purge_undefined object property: {key:?} = {property:?}");
+                for key in keys {
+                    let property = o.get(key.clone(), context);
+                    log::trace!("purge_undefined object property: {key:?} = {property:?}");
 
-                        let key = match &key {
-                            PropertyKey::String(string) => {
-                                string.to_std_string_escaped().to_owned()
-                            }
-                            PropertyKey::Index(i) => i.get().to_string(),
-                            PropertyKey::Symbol(_sym) => {
-                                return Err(JsError::from_native(
-                                    JsNativeError::typ()
-                                        .with_message("cannot convert Symbol to JSON"),
-                                ))
-                            }
-                        };
+                    let key = match &key {
+                        PropertyKey::String(string) => string.to_std_string_escaped().to_owned(),
+                        PropertyKey::Index(i) => i.get().to_string(),
+                        PropertyKey::Symbol(_sym) => {
+                            return Err(JsError::from_native(
+                                JsNativeError::typ().with_message("cannot convert Symbol to JSON"),
+                            ))
+                        }
+                    };
 
-                        let value = match property {
-                            Ok(val) => purge_inner(&val, context, {
-                                let mut trace = trace.clone();
-                                trace.push(key.clone());
-                                trace
-                            })?,
-                            Err(_) => serde_json::Value::Null,
-                        };
+                    let value = match property {
+                        Ok(val) => purge_inner(&val, context, {
+                            let mut trace = trace.clone();
+                            trace.push(key.clone());
+                            trace
+                        })?,
+                        Err(_) => serde_json::Value::Null,
+                    };
 
-                        log::trace!("purge_undefined Object result: {value:?}");
-                        map.insert(key, value);
-                    }
-
-                    Ok(serde_json::Value::Object(map))
+                    log::trace!("purge_undefined Object result: {value:?}");
+                    map.insert(key, value);
                 }
+
+                Ok(serde_json::Value::Object(map))
             }
-            JsValue::Undefined => {
-                log::error!("js value at trace {trace:?} was `undefined`; falling back to `null`");
-                Ok(serde_json::Value::Null)
-            }
+        } else if js.is_undefined() {
+            log::error!("js value at trace {trace:?} was `undefined`; falling back to `null`");
+            Ok(serde_json::Value::Null)
+        } else {
+            // Fallback for any unexpected value type
+            log::error!("js value at trace {trace:?} was unexpected type; falling back to `null`");
+            Ok(serde_json::Value::Null)
         }
     }
     purge_inner(js, context, vec![])
@@ -222,7 +234,7 @@ impl EvalExpr {
                 let efn = ctx
                     .eval(Source::from_bytes("____eval".as_bytes()))
                     .ok()
-                    .and_then(|v| v.as_object().cloned())
+                    .and_then(|v| v.as_object())
                     .and_then(JsFunction::from_object)
                     .expect("just created eval fn; should be fine");
                 Ok((RefCell::new(ctx), efn))
@@ -308,8 +320,14 @@ impl EvalExpr {
         let object = object.build();
         Ok((
             purge_undefined(
-                &efn.call(&JsValue::Null, &[object.into()], ctx)
-                    .map(|js| if js.is_undefined() { JsValue::Null } else { js })
+                &efn.call(&JsValue::null(), &[object.into()], ctx)
+                    .map(|js| {
+                        if js.is_undefined() {
+                            JsValue::null()
+                        } else {
+                            js
+                        }
+                    })
                     .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(ctx)))?,
                 ctx,
             )
@@ -372,19 +390,19 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"parseInt("5")"#)),
-            Ok(JsValue::Integer(5))
+            Ok(JsValue::new(5))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"parseInt("5.1")"#)),
-            Ok(JsValue::Integer(5))
+            Ok(JsValue::new(5))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"parseFloat("5.1")"#)),
-            Ok(JsValue::Rational(5.1))
+            Ok(JsValue::new(5.1))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"parseFloat("e")"#)),
-            Ok(JsValue::Null)
+            Ok(JsValue::null())
         );
     }
 
@@ -396,9 +414,9 @@ mod tests {
         assert!(rep_arr.is_array());
         let rep_arr = JsArray::from_object(rep_arr.clone()).unwrap();
         for _ in 0..3 {
-            assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::Null);
+            assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::null());
         }
-        assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::Undefined);
+        assert_eq!(rep_arr.pop(&mut ctx).unwrap(), JsValue::undefined());
     }
 
     #[test]
@@ -406,38 +424,38 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"end_pad("foo", 6, "bar")"#)),
-            Ok(JsValue::String("foobar".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foobar")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"end_pad("foo", 7, "bar")"#)),
-            Ok(JsValue::String("foobarb".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foobarb")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"end_pad("foo", 1, "fsdajlkvshduva")"#)),
-            Ok(JsValue::String("foo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"end_pad("foo", 4, "")"#)),
-            Ok(JsValue::String("foo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo")))
         );
 
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"start_pad("foo", 6, "bar")"#)),
-            Ok(JsValue::String("barfoo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("barfoo")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"start_pad("foo", 7, "bar")"#)),
-            Ok(JsValue::String("barbfoo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("barbfoo")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(
                 r#"start_pad("foo", 1, "fsdajlkvshduva")"#
             )),
-            Ok(JsValue::String("foo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"start_pad("foo", 4, "")"#)),
-            Ok(JsValue::String("foo".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo")))
         );
     }
 
@@ -448,7 +466,7 @@ mod tests {
             ctx.eval(Source::from_bytes(
                 r#"encode("foo=bar", "percent-userinfo")"#
             )),
-            Ok(JsValue::String("foo%3Dbar".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo%3Dbar")))
         );
     }
 
@@ -495,25 +513,25 @@ mod tests {
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!([["foo", "bar"], ["baz", 123]])
+            Some(serde_json::json!([["foo", "bar"], ["baz", 123]]))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"entries(["abc", "def"])"#))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!([[0, "abc"], [1, "def"]])
+            Some(serde_json::json!([[0, "abc"], [1, "def"]]))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"entries("xyz")"#))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!([[0, "x"], [1, "y"], [2, "z"]])
+            Some(serde_json::json!([[0, "x"], [1, "y"], [2, "z"]]))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes("entries(null)")),
-            Ok(JsValue::Null)
+            Ok(JsValue::null())
         );
     }
 
@@ -521,22 +539,22 @@ mod tests {
     fn random_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
         // not testing value ranges, just int * int -> int
-        assert!(matches!(
-            ctx.eval(Source::from_bytes(r#"random(1, 4)"#)),
-            Ok(JsValue::Integer(_))
-        ));
-        assert!(matches!(
-            ctx.eval(Source::from_bytes(r#"random(1.1, 4)"#)),
-            Ok(JsValue::Rational(_))
-        ));
-        assert!(matches!(
-            ctx.eval(Source::from_bytes(r#"random(1, 4.1)"#)),
-            Ok(JsValue::Rational(_))
-        ));
-        assert!(matches!(
-            ctx.eval(Source::from_bytes(r#"random(1.001, 4.09)"#)),
-            Ok(JsValue::Rational(_))
-        ));
+        assert!(ctx
+            .eval(Source::from_bytes(r#"random(1, 4)"#))
+            .unwrap()
+            .is_number());
+        assert!(ctx
+            .eval(Source::from_bytes(r#"random(1.1, 4)"#))
+            .unwrap()
+            .is_number());
+        assert!(ctx
+            .eval(Source::from_bytes(r#"random(1, 4.1)"#))
+            .unwrap()
+            .is_number());
+        assert!(ctx
+            .eval(Source::from_bytes(r#"random(1.001, 4.09)"#))
+            .unwrap()
+            .is_number());
     }
 
     #[test]
@@ -547,14 +565,14 @@ mod tests {
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!([1, 2, 3, 4, 5, 6, 7, 8, 9])
+            Some(serde_json::json!([1, 2, 3, 4, 5, 6, 7, 8, 9]))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes("range(10, 1)"))
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!([10, 9, 8, 7, 6, 5, 4, 3, 2])
+            Some(serde_json::json!([10, 9, 8, 7, 6, 5, 4, 3, 2]))
         );
     }
 
@@ -568,7 +586,7 @@ mod tests {
             .unwrap()
             .to_json(&mut ctx)
             .unwrap(),
-            serde_json::json!("barbarisbarobar")
+            Some(serde_json::json!("barbarisbarobar"))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(
@@ -577,7 +595,7 @@ mod tests {
             .unwrap()
             .to_json(&mut ctx)
             .unwrap(),
-            serde_json::json!(["abc", 123, "baro"])
+            Some(serde_json::json!(["abc", 123, "baro"]))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(
@@ -586,7 +604,7 @@ mod tests {
             .unwrap()
             .to_json(&mut ctx)
             .unwrap(),
-            serde_json::json!({"bar": "baz", "zed": ["abc", 123, "baro"]})
+            Some(serde_json::json!({"bar": "baz", "zed": ["abc", 123, "baro"]}))
         )
     }
 
@@ -595,11 +613,11 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"join(["foo", "bar", "baz"], "-")"#)),
-            Ok(JsValue::String("foo-bar-baz".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("foo-bar-baz")))
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"join({"a": 1, "b": 2}, "\n", ": ")"#)),
-            Ok(JsValue::String("a: 1\nb: 2".into()))
+            Ok(JsValue::from(boa_engine::JsString::from("a: 1\nb: 2")))
         );
     }
 
@@ -636,7 +654,7 @@ mod tests {
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
-        assert_eq!(val, serde_json::json!([1, 2]));
+        assert_eq!(val, Some(serde_json::json!([1, 2])));
         // ensure that same cached path works as expected on different data
         let val = ctx
             .eval(Source::from_bytes(
@@ -646,7 +664,7 @@ mod tests {
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
-        assert_eq!(val, serde_json::json!([56, 88]));
+        assert_eq!(val, Some(serde_json::json!([56, 88])));
     }
 
     #[test]
@@ -682,13 +700,13 @@ mod tests {
             ctx.eval(Source::from_bytes(r#"foo_custom({x: 55})"#))
                 .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
                 .unwrap(),
-            JsValue::Integer(55)
+            JsValue::new(55)
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"foo_custom({y: 55})"#))
                 .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
                 .unwrap(),
-            JsValue::Integer(2)
+            JsValue::new(2)
         );
 
         assert_eq!(
@@ -696,10 +714,10 @@ mod tests {
                 .unwrap()
                 .to_json(&mut ctx)
                 .unwrap(),
-            serde_json::json!({
+            Some(serde_json::json!({
                 "normal": [[0, 1], [1, 2], [2, 3]],
                 "reversed": [[0, 3], [1, 2], [2, 1]],
-            })
+            }))
         );
     }
 }
@@ -1060,15 +1078,15 @@ mod builtins {
 
         impl JsInput<'_> for i64 {
             fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
-                match js {
-                    JsValue::Integer(i) => Ok(*i as i64),
-                    JsValue::Rational(r) => {
-                        log::trace!("casting float to int");
-                        Ok(*r as i64)
-                    }
-                    _ => Err(JsError::from_native(
+                if let Some(i) = js.as_i32() {
+                    Ok(i as i64)
+                } else if let Some(n) = js.as_number() {
+                    log::trace!("casting float to int");
+                    Ok(n as i64)
+                } else {
+                    Err(JsError::from_native(
                         JsNativeError::typ().with_message("not an int"),
-                    )),
+                    ))
                 }
             }
         }
@@ -1138,12 +1156,14 @@ mod builtins {
 
         impl JsInput<'_> for NumType {
             fn from_js(js: &JsValue, _ctx: &mut Context) -> JsResult<Self> {
-                match js {
-                    JsValue::Integer(i) => Ok(Self::Int(*i as i64)),
-                    JsValue::Rational(f) => Ok(Self::Real(*f)),
-                    _ => Err(JsError::from_native(
+                if let Some(i) = js.as_i32() {
+                    Ok(Self::Int(i as i64))
+                } else if let Some(f) = js.as_number() {
+                    Ok(Self::Real(f))
+                } else {
+                    Err(JsError::from_native(
                         JsNativeError::typ().with_message("needed numerical"),
-                    )),
+                    ))
                 }
             }
         }
@@ -1168,25 +1188,25 @@ mod builtins {
 
         impl AsJsResult for f64 {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
-                Ok(JsValue::Rational(self))
+                Ok(JsValue::new(self))
             }
         }
 
         impl AsJsResult for i64 {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
-                Ok(JsValue::Integer(self as i32))
+                Ok(JsValue::new(self as i32))
             }
         }
 
         impl AsJsResult for String {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
-                Ok(JsValue::String(self.into()))
+                Ok(JsValue::from(boa_engine::JsString::from(self)))
             }
         }
 
         impl AsJsResult for bool {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
-                Ok(JsValue::Boolean(self))
+                Ok(JsValue::new(self))
             }
         }
 
@@ -1204,7 +1224,7 @@ mod builtins {
 
         impl<T: AsJsResult> AsJsResult for OrNull<T> {
             fn as_js_result(self, ctx: &mut Context) -> JsResult<JsValue> {
-                Ok(self.0.as_js_result(ctx).unwrap_or(JsValue::Null))
+                Ok(self.0.as_js_result(ctx).unwrap_or_else(|_| JsValue::null()))
             }
         }
 
@@ -1212,14 +1232,20 @@ mod builtins {
             fn as_js_result(self, ctx: &mut Context) -> JsResult<JsValue> {
                 self.map(|x| x.as_js_result(ctx))
                     .transpose()?
-                    .ok_or_else(|| JsError::from_opaque(JsValue::String("missing value".into())))
+                    .ok_or_else(|| {
+                        JsError::from_opaque(JsValue::from(boa_engine::JsString::from(
+                            "missing value",
+                        )))
+                    })
             }
         }
 
         impl<T: AsJsResult, E: Display> AsJsResult for Result<T, E> {
             fn as_js_result(self, ctx: &mut Context) -> JsResult<JsValue> {
-                self.map_err(|e| JsError::from_opaque(JsValue::String(e.to_string().into())))
-                    .and_then(|x| x.as_js_result(ctx))
+                self.map_err(|e| {
+                    JsError::from_opaque(JsValue::from(boa_engine::JsString::from(e.to_string())))
+                })
+                .and_then(|x| x.as_js_result(ctx))
             }
         }
 
@@ -1237,15 +1263,15 @@ mod builtins {
 
         impl AsJsResult for () {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
-                Ok(JsValue::Null)
+                Ok(JsValue::null())
             }
         }
 
         impl AsJsResult for NumType {
             fn as_js_result(self, _: &mut Context) -> JsResult<JsValue> {
                 Ok(match self {
-                    Self::Int(i) => JsValue::Integer(i as i32),
-                    Self::Real(f) => JsValue::Rational(f),
+                    Self::Int(i) => JsValue::new(i as i32),
+                    Self::Real(f) => JsValue::new(f),
                 })
             }
         }

@@ -268,7 +268,7 @@ impl QueryInner {
                     n,
                     JsValue::from_json(o, ctx)
                         .ok()
-                        .unwrap_or(JsValue::Undefined),
+                        .unwrap_or(JsValue::undefined()),
                 )
             })
             .collect_vec()
@@ -294,8 +294,8 @@ impl QueryInner {
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .map(|jv| {
-                    Ok(match jv {
-                        JsValue::Object(o) if o.is_array() => {
+                    Ok(if let Some(o) = jv.as_object() {
+                        if o.is_array() {
                             let a = JsArray::from_object(o)
                                 .map_err(|err| ExecutionError(err.to_opaque(ctx)))?;
                             let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
@@ -310,8 +310,11 @@ impl QueryInner {
                                 vd.push_front(v)
                             }
                             vd
+                        } else {
+                            vec![jv].into()
                         }
-                        v => vec![v].into(),
+                    } else {
+                        vec![jv].into()
                     })
                 })
                 .collect::<Result<Vec<_>, EvalExprErrorInner>>()?;
@@ -322,7 +325,7 @@ impl QueryInner {
                 .collect_vec();
             // If no for_each entries are specified, just select one time.
             if for_each.is_empty() {
-                vec![JsValue::Undefined]
+                vec![JsValue::undefined()]
             } else {
                 for_each
             }
@@ -424,7 +427,7 @@ impl Select {
                 .map(|v| v.select(ctx))
                 .collect::<JsResult<Vec<JsValue>>>()
                 .map(|arr| JsArray::from_iter(arr, ctx).into()),
-            Self::Int(i) => Ok(JsValue::Integer(*i as i32)),
+            Self::Int(i) => Ok(JsValue::new(*i as i32)),
         }
     }
 }

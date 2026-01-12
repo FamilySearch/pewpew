@@ -36,7 +36,8 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
   - Updated boa_engine, boa_gc, and boa_parser to 0.21
     - **Breaking API changes**: JsValue is no longer an enum with pattern matching. Use constructor functions (`JsValue::new()`, `JsValue::null()`, `JsValue::undefined()`) and accessor methods (`is_null()`, `as_boolean()`, `as_number()`)
     - **Automatic integer conversion**: Implemented conversion of whole numbers (1.0, 2.0) to integers (1, 2) for cleaner JSON output
-    - Modified files: `lib/config/src/configv2/scripting.rs`, `lib/config/src/configv2/query.rs`, `lib/config/src/configv2/templating.rs`, `src/request/body_handler.rs`, `tests/integration.rs`
+    - **Object type preservation**: Objects from CSV providers with headers are now correctly preserved as objects in JavaScript expressions and collect operations. Previously they were incorrectly serialized as JSON strings requiring `JSON.parse()` to convert back to objects. Remove any `.map((element) => JSON.parse(element))` workarounds.
+    - **Improved error messages**: JavaScript execution errors now include the actual code that failed, making debugging much easier
   - Removed explicit getrandom dependency from lib/config (boa_engine 0.21 handles getrandom 0.3 correctly, eliminating duplicate 0.2 dependency)
 
 ### v0.6.0

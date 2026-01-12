@@ -105,8 +105,8 @@ impl From<EvalExprErrorInner> for EvalExprError {
 pub(crate) enum EvalExprErrorInner {
     #[error("provider returned invalid json: {}", .0.display())]
     InvalidJsonFromProvider(JsValue),
-    #[error("error executing JS code: {}", .0.display())]
-    ExecutionError(JsValue),
+    #[error("error executing JS code: {0}\nCode: {1}")]
+    ExecutionError(String, String),
     #[error("expression returned invalid json: {}", .0.display())]
     InvalidResultJson(JsValue),
 }

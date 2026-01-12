@@ -191,7 +191,12 @@ pub fn eval_direct(code: &str) -> Result<String, EvalExprError> {
     let context = &mut get_default_context();
     context
         .eval(Source::from_bytes(code))
-        .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(context)))
+        .map_err(|err| {
+            EvalExprErrorInner::ExecutionError(
+                err.to_opaque(context).display().to_string(),
+                code.to_string(),
+            )
+        })
         .map_err(Into::into)
         .map(|js| js.display().to_string())
 }
@@ -289,10 +294,12 @@ impl EvalExpr {
             .collect();
         self.ctx.as_ref().and_then(move |(ctx, efn)| {
             let ctx = &mut *ctx.borrow_mut();
-            Ok(match Self::eval_raw::<()>(ctx, efn, values)?.0 {
-                serde_json::Value::String(s) => s,
-                other => other.to_string(),
-            })
+            Ok(
+                match Self::eval_raw::<()>(ctx, efn, values, &self.script)?.0 {
+                    serde_json::Value::String(s) => s,
+                    other => other.to_string(),
+                },
+            )
         })
     }
 
@@ -300,6 +307,7 @@ impl EvalExpr {
         ctx: &mut Context,
         efn: &JsFunction,
         values: BTreeMap<Arc<str>, (serde_json::Value, Vec<Ar>)>,
+        script: &str,
     ) -> Result<(serde_json::Value, Vec<Ar>), EvalExprErrorInner> {
         let values: BTreeMap<_, _> = values
             .into_iter()
@@ -328,7 +336,12 @@ impl EvalExpr {
                             js
                         }
                     })
-                    .map_err(|err| EvalExprErrorInner::ExecutionError(err.to_opaque(ctx)))?,
+                    .map_err(|err| {
+                        EvalExprErrorInner::ExecutionError(
+                            err.to_opaque(ctx).display().to_string(),
+                            script.to_string(),
+                        )
+                    })?,
                 ctx,
             )
             .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))?,
@@ -363,10 +376,11 @@ impl EvalExpr {
                     .ok_or_else(|| IntoStreamError::MissingProvider(pn.clone()))
             })
             .collect::<Result<BTreeMap<Arc<str>, _>, _>>()?;
+        let script = self.script.clone();
         Ok(zip_all_map(providers, true).and_then(move |values| {
             ctx.as_ref().and_then(|(ctx, efn)| {
                 use futures::future::{err, ok};
-                match Self::eval_raw(&mut ctx.borrow_mut(), efn, values) {
+                match Self::eval_raw(&mut ctx.borrow_mut(), efn, values, &script) {
                     Ok(v) => ok(v),
                     Err(e) => err(EvalExprError::from(e).into()),
                 }

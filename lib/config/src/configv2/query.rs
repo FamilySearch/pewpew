@@ -288,25 +288,38 @@ impl QueryInner {
                 .for_each
                 .iter()
                 .map(|fe| {
-                    fe.evaluate(ctx)
-                        .map_err(|err| ExecutionError(err.to_opaque(ctx)))
+                    fe.evaluate(ctx).map_err(|err| {
+                        ExecutionError(
+                            err.to_opaque(ctx).display().to_string(),
+                            "in query for_each".to_string(),
+                        )
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .map(|jv| {
                     Ok(if let Some(o) = jv.as_object() {
                         if o.is_array() {
-                            let a = JsArray::from_object(o)
-                                .map_err(|err| ExecutionError(err.to_opaque(ctx)))?;
+                            let a = JsArray::from_object(o).map_err(|err| {
+                                ExecutionError(
+                                    err.to_opaque(ctx).display().to_string(),
+                                    "in query for_each".to_string(),
+                                )
+                            })?;
                             let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
-                            while a
-                                .length(ctx)
-                                .map_err(|err| ExecutionError(err.to_opaque(ctx)))?
-                                > 0
+                            while a.length(ctx).map_err(|err| {
+                                ExecutionError(
+                                    err.to_opaque(ctx).display().to_string(),
+                                    "in query for_each".to_string(),
+                                )
+                            })? > 0
                             {
-                                let v = a
-                                    .pop(ctx)
-                                    .map_err(|err| ExecutionError(err.to_opaque(ctx)))?;
+                                let v = a.pop(ctx).map_err(|err| {
+                                    ExecutionError(
+                                        err.to_opaque(ctx).display().to_string(),
+                                        "in query for_each".to_string(),
+                                    )
+                                })?;
                                 vd.push_front(v)
                             }
                             vd
@@ -348,13 +361,21 @@ impl QueryInner {
                     .as_ref()
                     .map_or(Ok(true), |w| {
                         Ok(w.evaluate(ctx)
-                            .map_err(|err| ExecutionError(err.to_opaque(ctx)))?
+                            .map_err(|err| {
+                                ExecutionError(
+                                    err.to_opaque(ctx).display().to_string(),
+                                    "in query where clause".to_string(),
+                                )
+                            })?
                             .to_boolean())
                     })?
                     .then(|| {
-                        self.select
-                            .select(ctx)
-                            .map_err(|err| ExecutionError(err.to_opaque(ctx)))
+                        self.select.select(ctx).map_err(|err| {
+                            ExecutionError(
+                                err.to_opaque(ctx).display().to_string(),
+                                "in query select".to_string(),
+                            )
+                        })
                     }))
             })
             .collect::<Result<Vec<_>, _>>()?

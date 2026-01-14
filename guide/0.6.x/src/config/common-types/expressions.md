@@ -19,25 +19,50 @@ sent into a provider. In addition to standard JS operations, some helper functio
 
 Any `${x:_}` interpolation within an [R-Template](./templates.md#template-types) that does not rely
 on any providers will be statically evaluated once to reduce redundant JS execution. While this
-does not cause issues in most cases, there are some functions (such as `random()`) that can return
-different values for the same input. This means that in the following example
-[declare](../endpoints-section.md#declare-subsection),
+does not cause issues in most cases, there are some functions (such as `random()` and `epoch()`)
+that can return different values for the same input.
 
-```
+#### When `${p:null}` is Required
+
+Starting in version 0.6.1, `random()` and `epoch()` are **automatically evaluated per-request** in
+most contexts (URLs, headers, body, logger queries). However, `${p:null}` is still **required** in
+`declare` blocks.
+
+**In `declare` blocks (requires `${p:null}`):**
+
+```yaml
 declare:
-  foo: !c
-    collects:
-      - take: 5
-        from: ${x:random(0, 100)}
-        as: _nums
-    then: ${x:entries(${p:_nums})}
+  # ✅ Correct - generates a new random number each time
+  randomValue: !x '${x:random(0, 100, ${p:null})}'
+  timestamp: !x '${x:epoch("ms", ${p:null})}'
+
+  # ❌ Wrong - evaluates once and reuses the same value
+  randomValue: !x '${x:random(0, 100)}'
+  timestamp: !x '${x:epoch("ms")}'
 ```
 
-which may be intended to continually yield enumerated arrays of 5 random numbers, will instead
-generate a single random number, and repeat that same number continually. In some cases, this
-behavior may be desired, but not always. Instead:
+**In URLs, headers, body, and loggers (automatic, no `${p:null}` needed):**
 
+```yaml
+endpoints:
+  - method: POST
+    # ✅ All of these automatically generate new values per-request
+    url: 'http://localhost:8080/?ts=${x:epoch("ms")}'
+    headers:
+      X-Request-Time: '${x:epoch("ms")}'
+    body: !str '{
+        "timestamp": ${x:epoch("ms")},
+        "randomId": ${x:random(1000, 9999)}
+      }'
 ```
+
+#### How the Dummy Parameter Works
+
+In `declare` blocks, expressions that don't reference providers are evaluated during configuration
+loading. By adding `${p:null}`, you create a provider reference, forcing the expression to be
+evaluated during request execution instead:
+
+```yaml
 declare:
   foo: !c
     collects:
@@ -47,11 +72,11 @@ declare:
     then: ${x:entries(${p:_nums})}
 ```
 
-Since this declare relies on a provider value, `random()` will be called each time. The dummy
-value is not used internally.
+Since this declare relies on a provider value (`${p:null}`), `random()` will be called each time.
+The dummy value is not used internally.
 
-This limitation/workaround **only** applies to `${x:_}` segments of templates. Query expressions
-will still be evaulated normally.
+This limitation/workaround **only** applies to `${x:_}` segments in `declare` blocks. Query
+expressions and request-time templates (URL, headers, body, loggers) are evaluated normally.
 
 ### Function list
 
@@ -171,7 +196,12 @@ or
 
 Returns time since the unix epoch.
 
-*unit* - A string literal of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds).
+*unit* - A string literal of `"s"` (seconds), `"ms"` (milliseconds), `"mu"` (microseconds), or `"ns"` (nanoseconds).<br/>
+*dummy* - Optional dummy parameter. Use `${p:null}` when calling `epoch()` in `declare` blocks to ensure it's evaluated per-request. Not needed in URLs, headers, body, or loggers (automatically handled in v0.6.1+).
+
+**Example**:
+- In declare: `timestamp: !x '${x:epoch("ms", ${p:null})}'`
+- In URL: `url: 'http://localhost:8080/?ts=${x:epoch("ms")}'`
 
 </td>
 </tr>
@@ -301,11 +331,11 @@ Converts a string or other value into an floating point number (`f64`). If the v
 <tr>
 <td>
 
-<code>random(<i>start</i>, </i>end</i>)</code>
+<code>random(<i>start</i>, <i>end</i>)</code>
 
 or
 
-<code>random(<i>start</i>, </i>end</i>, <i>dummy</i>)</code>
+<code>random(<i>start</i>, <i>end</i>, <i>dummy</i>)</code>
 
 </td>
 <td>
@@ -314,6 +344,12 @@ Generates a random number between *start* (inclusive) and *end* (exclusive). Bot
 must be number literals. If both numbers are integers only integers will be generated within the
 specified range. If either number is a floating point number then a floating point number will be
 generated within the specified range.
+
+*dummy* - Optional dummy parameter. Use `${p:null}` when calling `random()` in `declare` blocks to ensure it's evaluated per-request. Not needed in URLs, headers, body, or loggers (automatically handled in v0.6.1+).
+
+**Example**:
+- In declare: `randomValue: !x '${x:random(0, 100, ${p:null})}'`
+- In body: `"randomId": ${x:random(1000, 9999)}`
 
 > `1.0` is still considered an `int`
 

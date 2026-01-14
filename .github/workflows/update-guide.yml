@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 22.x
 
-      - name: Build Results Viewer and Book
+      - name: Build Results Viewer and Both Guide Versions
         run: |
           set -x
           # install mdbook and wasm-pack
@@ -31,8 +31,9 @@ jobs:
 
           # setup some envs to various paths for convenience
           PROJECT_ROOT=$PWD
-          GUIDE_DIR=$(realpath $PROJECT_ROOT/guide)
-          RESULTS_VIEWER_REACT_DIR=$(realpath $GUIDE_DIR/results-viewer-react)
+          GUIDE_0_6_DIR=$(realpath $PROJECT_ROOT/guide/0.6.x)
+          # Use the merged results-viewer-react with version selection
+          RESULTS_VIEWER_REACT_DIR=$(realpath $PROJECT_ROOT/guide/results-viewer-react)
           WASM_LIB_DIR=$(realpath $PROJECT_ROOT/lib/hdr-histogram-wasm)
           WASM_OUTPUT_REACT_DIR=$RESULTS_VIEWER_REACT_DIR/lib/hdr-histogram-wasm
 
@@ -48,26 +49,46 @@ jobs:
           cd $CFG_GEN_DIR
           wasm-pack build --release -t bundler -d $CFG_GEN_OUTPUT_REACT_DIR --scope fs
 
+          # build the results viewer (used by both guide versions)
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci
           npm run build
 
-          # build the book
-          cd $GUIDE_DIR
+          # build the 0.6.x guide (scripting version)
+          cd $GUIDE_0_6_DIR
           mdbook build
 
-      - name: Update gh-pages branch and push to Github
+          # build the 0.5.x guide (stable version)
+          cd $PROJECT_ROOT/guide/0.5.x
+          mdbook build
+
+      - name: Assemble and Deploy to gh-pages
         run: |
+          PROJECT_ROOT=$PWD
+
+          # fetch gh-pages branch
           git fetch --no-tags origin gh-pages
-          cd guide
+
+          # create a temporary directory for assembly
+          mkdir -p gh-pages-deploy
+          cd gh-pages-deploy
+
           # create a git worktree of the gh-pages branch and clear it out
           git worktree add -B gh-pages gh-pages origin/gh-pages
           find gh-pages -not -name '.git' -not -name 'gh-pages' -delete
 
-          # copy the source to the gh-pages worktree
-          cp -r book/. gh-pages/
+          # copy 0.5.x guide to root (default guide)
+          cp -r $PROJECT_ROOT/guide/0.5.x/book/. gh-pages/
 
-          # commit amend all the changes into the gh-pages branch and force push to github
+          # copy 0.6.x guide to /preview/ subdirectory
+          mkdir -p gh-pages/preview
+          cp -r $PROJECT_ROOT/guide/0.6.x/book/. gh-pages/preview/
+
+          # copy the shared results viewer (from merged viewer with version selector)
+          mkdir -p gh-pages/viewer
+          cp -r $PROJECT_ROOT/guide/results-viewer-react/dist/. gh-pages/viewer/
+
+          # commit and push to github
           git remote add github "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
           cd gh-pages
           git add --all

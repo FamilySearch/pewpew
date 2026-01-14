@@ -37,7 +37,8 @@ const props: UrlProps = {
    method: "POST", authorization: null
  },
  authenticated: false,
- defaultHeaders: false
+ defaultHeaders: false,
+ version: "0.5.x"
 };
 
 const propsLoaded: UrlProps = {

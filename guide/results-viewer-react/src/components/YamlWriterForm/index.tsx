@@ -1,6 +1,5 @@
 import {
   AUTHENTICATED,
-  HIT_RATE_REGEX,
   URLS,
   getAuthorizationHeader,
   getDefaultHeaders,
@@ -15,13 +14,15 @@ import {
   PewPewLoadPattern,
   PewPewLogger,
   PewPewProvider,
-  PewPewVars
+  PewPewVars,
+  PewPewVersion,
+  getHitRateRegex,
+  getOverRegex
 } from "../../util/yamlwriter";
 import {
   LOAD_PATTERN,
   LoadPatterns,
   NUMBER_REGEX,
-  OVER_REGEX,
   PATTERNS,
   RAMP_PATTERN,
   newLoadLoadPattern,
@@ -72,7 +73,8 @@ export const UrlsDiv = styled.div`
 `;
 export interface YamlWriterFormProps {
   clearParentEndpoints: () => void,
-  parentEndpoints: HarEndpoint[]
+  parentEndpoints: HarEndpoint[],
+  version: PewPewVersion
 }
 
 export interface YamlWriterFormState {
@@ -98,7 +100,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
   const defaultState: YamlWriterFormState = {
     urls: [],
     patterns: [newRampLoadPattern(), newLoadLoadPattern()],
-    vars: getDefaultVars(),
+    vars: getDefaultVars(undefined, props.version),
     providers: [],
     loggers: getDefaultLoggers(),
     fileName: "",
@@ -121,7 +123,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
   const addDefaults = () => {
     setState((prevState) => ({
       ...prevState,
-      vars: [...getDefaultVars(), ...prevState.vars],
+      vars: [...getDefaultVars(undefined, props.version), ...prevState.vars],
       patterns: [newRampLoadPattern(), newLoadLoadPattern(), ...prevState.patterns],
       loggers: [...getDefaultLoggers(), ...prevState.loggers]
     }));
@@ -162,6 +164,24 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
     updatePoints(props.parentEndpoints);
   }, [props.parentEndpoints]);
 
+  // When version changes, update the default variables with the correct syntax
+  useEffect(() => {
+    setState((prevState) => {
+      const updatedVars = prevState.vars.map((v) => {
+        // Only update default variables
+        if ([SESSION_ID, RAMP_TIME, LOAD_TIME, PEAK_LOAD].includes(v.id)) {
+          const defaultVarsMap = new Map(getDefaultVars(undefined, props.version).map(dv => [dv.id, dv]));
+          const defaultVar = defaultVarsMap.get(v.id);
+          if (defaultVar) {
+            return { ...v, value: defaultVar.value };
+          }
+        }
+        return v;
+      });
+      return { ...prevState, vars: updatedVars };
+    });
+  }, [props.version]);
+
   // Used for inputting file name, needs to update state on change
   const changeFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     event.persist();
@@ -176,7 +196,8 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
       vars: state.vars,
       providers: state.providers,
       loggers: state.loggers,
-      filename: state.fileName
+      filename: state.fileName,
+      version: props.version
     });
     return Promise.resolve();
   };
@@ -381,11 +402,11 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
         problems.push(<li key="patterns">Please add at least 1 load pattern</li>);
       }
     } else {
-      const validUrl: boolean = state.urls.every((url: PewPewAPI) => isValidUrl(url.url) && HIT_RATE_REGEX.test(url.hitRate));
+      const validUrl: boolean = state.urls.every((url: PewPewAPI) => isValidUrl(url.url) && getHitRateRegex(props.version).test(url.hitRate));
       if (!validUrl) {
         problems.push(<li key="urls">At least one url has an invalid url or hitRate</li>);
       }
-      const validPatterns = state.patterns.every((pattern: PewPewLoadPattern) => OVER_REGEX.test(pattern.over) && NUMBER_REGEX.test(pattern.to) && (!pattern.from || NUMBER_REGEX.test(pattern.from)));
+      const validPatterns = state.patterns.every((pattern: PewPewLoadPattern) => getOverRegex(props.version).test(pattern.over) && NUMBER_REGEX.test(pattern.to) && (!pattern.from || NUMBER_REGEX.test(pattern.from)));
       if (!validPatterns) {
         problems.push(<li key="patterns">At least one pattern is invalid</li>);
       }
@@ -422,7 +443,8 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
         patterns: state.patterns,
         vars: state.vars,
         providers: state.providers,
-        loggers: state.loggers
+        loggers: state.loggers,
+        version: props.version
       });
       updateState({ previewYaml });
     } catch (error) {
@@ -474,6 +496,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           authenticated={state.authenticated}
           urls={state.urls}
           peakLoad={state.vars.find((variable) => variable.name === "peakLoad")?.name}
+          version={props.version}
         />
         <Vars
           addVar={addVar}
@@ -483,6 +506,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           authenticated={state.authenticated}
           setAuthenticated={setAuthenticated}
           vars={state.vars}
+          version={props.version}
         />
         <LoadPatterns
           addPattern={addPattern}
@@ -491,6 +515,7 @@ export const YamlWriterForm = (props: YamlWriterFormProps) => {
           changePattern={changePattern}
           patterns={state.patterns}
           vars={state.vars}
+          version={props.version}
         />
         <Providers
           addProvider={addProvider}

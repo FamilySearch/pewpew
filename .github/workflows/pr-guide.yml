@@ -1,10 +1,12 @@
 on:
   pull_request:
     paths:
-      - 'guide/**.js*'
-      - 'guide/**.ts*'
-      - 'guide/**.html'
-      - 'guide/src/**/*.md'
+      - 'guide/**/*.js*'
+      - 'guide/**/*.ts*'
+      - 'guide/**/*.html'
+      - 'guide/**/*.css'
+      - 'guide/**/*.toml'
+      - 'guide/**/src/**/*.md'
       - 'guide/**/package.json'
       - 'guide/**/package-lock.json'
 
@@ -61,6 +63,9 @@ jobs:
           npm run linterror
           npm run build
 
-          # build the book
-          cd $GUIDE_DIR
+          # build both guide versions
+          cd $GUIDE_DIR/0.6.x
+          mdbook build
+
+          cd $GUIDE_DIR/0.5.x
           mdbook build

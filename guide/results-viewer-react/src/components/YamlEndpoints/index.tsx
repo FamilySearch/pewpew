@@ -1,6 +1,17 @@
 import { Button, Checkbox, Input, InputsDiv, Label, NonFlexSpan } from "../YamlStyles";
 import {
-  HIT_RATE_REGEX,
+  HarEndpoint,
+  HarHeader,
+  InputEvent,
+  PewPewAPI,
+  PewPewHeader,
+  PewPewVersion,
+  getHitRateRegex,
+  getVariableReference
+} from "../../util/yamlwriter";
+import { LogLevel, log } from "../../util/log";
+import React, { useEffect, useRef, useState } from "react";
+import {
   UrlProps,
   Urls,
   getAuthorizationHeader,
@@ -8,15 +19,6 @@ import {
   getHitRateStyle,
   getHitRateTitle
 } from "../YamlUrls";
-import {
-  HarEndpoint,
-  HarHeader,
-  InputEvent,
-  PewPewAPI,
-  PewPewHeader
-} from "../../util/yamlwriter";
-import { LogLevel, log } from "../../util/log";
-import React, { useEffect, useRef, useState } from "react";
 import { QuestionBubble } from "../YamlQuestionBubble";
 import styled from "styled-components";
 import { uniqueId } from "../../util/clientutil";
@@ -65,6 +67,7 @@ export interface EndpointsProps extends Pick<UrlProps, "deleteUrl" | "changeUrl"
   authenticated: boolean;
   urls: PewPewAPI[];
   peakLoad?: string | undefined;
+  version: PewPewVersion;
 }
 
 export interface EndpointsState {
@@ -72,7 +75,7 @@ export interface EndpointsState {
     defaultHeaders: boolean;
 }
 
-export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad?: string, point?: HarEndpoint): PewPewAPI => {
+export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad?: string, version?: PewPewVersion, point?: HarEndpoint): PewPewAPI => {
   const pointHeaders: PewPewHeader[] = point?.headers.map(({ name, value }: HarHeader): PewPewHeader => ({ id: uniqueId(), name, value })) || [];
   const pewpewHeaders: PewPewHeader[] = deaultHeaders
     ? getDefaultHeaders(authenticated)
@@ -80,16 +83,16 @@ export const newUrl = (deaultHeaders: boolean, authenticated: boolean, peakLoad?
   return {
     id: uniqueId(),
     url: point?.url || "",
-    hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
+    hitRate: (peakLoad && version) ? getVariableReference(peakLoad, version) : "1hpm",
     headers: [...pewpewHeaders, ...pointHeaders],
     method: point?.method || "GET",
     authorization: null
   };
 };
 
-export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
+export const Endpoints = ({ urls, peakLoad, version, ...props }: EndpointsProps) => {
   const defaultState: EndpointsState = {
-      hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm",
+      hitRate: peakLoad ? getVariableReference(peakLoad, version) : "1hpm",
       defaultHeaders: props.defaultYaml
   };
   /** Map to keep id's unique */
@@ -106,8 +109,8 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   }, [props.defaultYaml]);
 
   useEffect(() => {
-    updateState({ hitRate: peakLoad ? "${" + peakLoad + "}" : "1hpm" });
-  }, [peakLoad]);
+    updateState({ hitRate: peakLoad ? getVariableReference(peakLoad, version) : "1hpm" });
+  }, [peakLoad, version]);
 
   const handleClickDefault = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateState({ defaultHeaders: event.target.checked });
@@ -118,7 +121,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
   // Called from clicking add button, or when endpoints are sent from App.js through refs.child.updatePoints
   const addUrl = () => {
     initialDisplay.current = true;
-    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad ? peakLoad : "1hpm"));
+    props.addUrl(newUrl(state.defaultHeaders, props.authenticated, peakLoad, version));
     setTimeout(() => {
       initialDisplay.current = false;
     }, 3000);
@@ -147,7 +150,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
     }
   };
 
-  const invalidHitRate = !HIT_RATE_REGEX.test(state.hitRate);
+  const invalidHitRate = !getHitRateRegex(version).test(state.hitRate);
   const hitRateStyle: React.CSSProperties = getHitRateStyle(invalidHitRate);
   const hitRateTitle: string | undefined = state.hitRate === "" ? "Please enter a Hit Rate" : (getHitRateTitle(invalidHitRate) || "Update all hit rates");
   // https://github.com/reactjs/react-transition-group/issues/904
@@ -187,6 +190,7 @@ export const Endpoints = ({ urls, peakLoad, ...props }: EndpointsProps) => {
           authenticated={props.authenticated}
           defaultHeaders={state.defaultHeaders}
           initialDisplay={initialDisplay.current}
+          version={version}
         />
       ))}
     </InputsDiv>

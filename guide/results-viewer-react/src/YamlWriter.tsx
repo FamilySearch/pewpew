@@ -3,9 +3,9 @@
 * Edits and improvements by Conner Sabin (Summer 2021)
 */
 
-import React, { useState } from "react";
+import { HarEndpoint, PewPewVersion } from "./util/yamlwriter";
+import React, { useEffect, useState } from "react";
 import { GlobalStyle } from "./components/Global";
-import { HarEndpoint } from "./util/yamlwriter";
 // YamlWriterForm has all the editing of endpoints and load patterns
 import { YamlWriterForm } from "./components/YamlWriterForm";
 // YamlWriterUpload has all the loading of files
@@ -73,12 +73,73 @@ export interface YamlWriterState {
   endpoints: HarEndpoint[];
 }
 
+const VersionSelector = styled.div`
+  margin: 20px 0;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+
+  label {
+    font-weight: bold;
+    color: rgb(250, 250, 250);
+  }
+
+  select {
+    padding: 8px 12px;
+    font-size: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: hsl(210, 25%, 8%);
+    color: rgb(200, 200, 200);
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+  }
+
+  .version-info {
+    font-size: 13px;
+    color: rgb(180, 180, 180);
+    font-style: italic;
+  }
+`;
+
 export const YamlWriter = () => {
   const defaultState: YamlWriterState = {
       endpoints: []
   };
 
+  // Parse version from query parameter, default to 0.5.x
+  const getInitialVersion = (): PewPewVersion => {
+    const params = new URLSearchParams(window.location.search);
+    const versionParam = params.get("version");
+    // Validate it's a valid PewPewVersion
+    if (versionParam === "0.5.x" || versionParam === "0.6.x") {
+      return versionParam;
+    }
+    return "0.5.x"; // default
+  };
+
   const [state, setParentState] = useState(defaultState);
+  const [version, setVersion] = useState<PewPewVersion>(getInitialVersion());
+
+  // Update URL when version changes (optional - keeps URL in sync)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("version", version);
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, "", newUrl);
+  }, [version]);
 
   // Endpoints from header get sent here when file is loaded
   // Gets sent down to Content immediately
@@ -94,9 +155,29 @@ export const YamlWriter = () => {
   return (<>
     <GlobalStyle />
     <h1>Create a PewPew Test</h1>
+    <VersionSelector>
+      <label htmlFor="version-select">Target PewPew Version:</label>
+      <select
+        id="version-select"
+        value={version}
+        onChange={(e) => setVersion(e.target.value as PewPewVersion)}
+      >
+        <option value="0.5.x">0.5.x (Stable)</option>
+        <option value="0.6.x">0.6.x (Preview with Scripting)</option>
+      </select>
+      <span className="version-info">
+        {version === "0.6.x"
+          ? "Generates YAML with expression syntax: ${e:VARIABLE}"
+          : "Generates YAML with template syntax: ${VARIABLE}"}
+      </span>
+    </VersionSelector>
     <YamlDiv>
       <YamlWriterUpload sendEndpoints={updateEndpoints}/>
-      <YamlWriterForm clearParentEndpoints={clearEndpoints} parentEndpoints={state.endpoints}/>
+      <YamlWriterForm
+        clearParentEndpoints={clearEndpoints}
+        parentEndpoints={state.endpoints}
+        version={version}
+      />
     </YamlDiv>
   </>
   );

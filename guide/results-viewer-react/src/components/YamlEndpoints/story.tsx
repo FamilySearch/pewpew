@@ -39,7 +39,8 @@ const props: EndpointsProps = {
   defaultYaml: false,
   urls: [],
   authenticated: false,
-  peakLoad: "1hpm"
+  peakLoad: "peakLoad",
+  version: "0.5.x"
 };
 
 const propsLoaded: EndpointsProps = {

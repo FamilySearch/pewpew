@@ -14,7 +14,7 @@ const compat = new FlatCompat({
 });
 
 export default [{
-  ignores: ["lib/", "webpack.config.js", "eslint.config.mjs", ".storybook/"],
+  ignores: ["lib/", "webpack.config.js", "eslint.config.mjs", ".storybook/", "dist/"],
 }, ...compat.extends(
   "eslint:recommended",
   "plugin:@typescript-eslint/stylistic",

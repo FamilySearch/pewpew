@@ -86,7 +86,7 @@ jobs:
 
           # copy the shared results viewer (from merged viewer with version selector)
           mkdir -p gh-pages/viewer
-          cp -r $PROJECT_ROOT/guide/results-viewer-react/src/results-viewer-react/. gh-pages/viewer/
+          cp -r $PROJECT_ROOT/guide/results-viewer-react/dist/. gh-pages/viewer/
 
           # commit and push to github
           git remote add github "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"

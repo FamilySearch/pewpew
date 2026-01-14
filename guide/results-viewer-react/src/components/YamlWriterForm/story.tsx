@@ -14,8 +14,11 @@ const props: YamlWriterFormProps = {
     // eslint-disable-next-line no-console
     console.log("clearing parent endpoints");
   },
-  parentEndpoints: []
+  parentEndpoints: [],
+  version: "0.5.x"
 };
+
+const props06x: YamlWriterFormProps = { ...props, version: "0.6.x" };
 
 export default {
   title: "YamlWriterForm"
@@ -25,5 +28,12 @@ export const Default: StoryFn = () => (
   <React.Fragment>
     <GlobalStyle />
     <YamlWriterForm {...props}></YamlWriterForm>
+  </React.Fragment>
+);
+
+export const Version06x: StoryFn = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <YamlWriterForm {...props06x}></YamlWriterForm>
   </React.Fragment>
 );

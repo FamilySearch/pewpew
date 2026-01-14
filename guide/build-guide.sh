@@ -10,9 +10,9 @@ trap_ctrlc ()
     # cleanup
     rm -rf guide/0.5.x/book
     rm -rf guide/0.6.x/book
-    rm -rf guide/0.6.x/src/results-viewer-react
-    rm -rf guide/0.6.x/results-viewer-react/lib/hdr-histogram-wasm
-    rm -rf guide/0.6.x/results-viewer-react/lib/config-gen
+    rm -rf guide/results-viewer-react/dist
+    rm -rf guide/results-viewer-react/lib/hdr-histogram-wasm
+    rm -rf guide/results-viewer-react/lib/config-gen
     rm -rf guide/gh-pages-local
     exit 2
 }
@@ -72,7 +72,7 @@ cp -r 0.6.x/book/. gh-pages-local/preview/
 
 # copy the shared results viewer (from merged viewer with version selector)
 mkdir -p gh-pages-local/viewer
-cp -r results-viewer-react/src/results-viewer-react/. gh-pages-local/viewer/
+cp -r results-viewer-react/dist/. gh-pages-local/viewer/
 
 echo ""
 echo "✓ Build complete! The assembled site is in: guide/gh-pages-local/"

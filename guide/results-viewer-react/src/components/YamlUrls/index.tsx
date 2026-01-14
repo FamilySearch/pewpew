@@ -1,7 +1,7 @@
 import { Button, Div, Input, Label, Select, Span } from "../YamlStyles";
 import { LogLevel, log } from "../../util/log";
 import { Modal, ModalObject, useEffectModal } from "../Modal";
-import { PewPewAPI, PewPewHeader, PewPewQueryParam } from "../../util/yamlwriter";
+import { PewPewAPI, PewPewHeader, PewPewQueryParam, PewPewVersion, getHitRateRegex } from "../../util/yamlwriter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, Method } from "axios";
 import { DeleteIcon } from "../Icons/DeleteIcon";
@@ -42,13 +42,13 @@ export interface UrlProps {
   /** State of Default Headers checkbox */
   defaultHeaders: boolean,
   initialDisplay?: boolean;
+  version: PewPewVersion;
 }
 
 export interface UrlState {
   passed: boolean;
 }
 
-export const HIT_RATE_REGEX: RegExp = new RegExp("^(\\d+)hp(h|m|s)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");
 export const URLS = "urls";
 const EMPTY_HEADER = "emptyHeader";
 const DEFAULT_HEADERS = "defaultHeaders";
@@ -310,7 +310,7 @@ export function Urls ({ data: { headers, requestBody, ...data }, ...props }: Url
   const invalidUrl: boolean = !isValidUrl(url);
   const urlStyle: React.CSSProperties = getUrlStyle(invalidUrl);
   const urlTitle: string | undefined = getUrlTitle(invalidUrl);
-  const invalidHitRate = !HIT_RATE_REGEX.test(data.hitRate);
+  const invalidHitRate = !getHitRateRegex(props.version).test(data.hitRate);
   return (
     <Div>
       <Button onClick={() => modalRef.current?.openModal()} style={{marginRight: "5px"}}><EditIcon /></Button>

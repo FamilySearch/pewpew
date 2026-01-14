@@ -49,7 +49,7 @@ loggers:
 
 endpoints:
   - method: PUT
-    url: 'http://localhost:${v:port}'
+    url: 'http://localhost:${v:port}/?ts=${x:epoch("ms")}'
     headers:
       Content-Type: application/json
     declare:
@@ -64,6 +64,7 @@ endpoints:
         "name": "TEST-GROUP",
         "nextPageToken": ${x:${p:nextPageTokenGroup}.token + 1},
         "userIds": ${p:resultsIds},
+        "ts": ${x:epoch("ms")},
         "numberReturned":${x:${p:resultsIds}.length}
       }'
     peak_load: '${v:peakLoadSearch}'

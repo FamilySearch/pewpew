@@ -132,7 +132,7 @@ loggers:
 
 endpoints:
   - method: PUT
-    url: http://localhost:${v:port}
+    url: http://localhost:${v:port}/?ts=${x:epoch("ms")}
     tags:
       # Results will be bucketed based on these tags. All hasName: true will be grouped together
       type: random search
@@ -158,6 +158,7 @@ endpoints:
       hasGender: !x '${x:random(0,100,${p:null}) < ${v:percentageGender}}'
       includeProperties: !x '${x:random(0,100,${p:null}) < ${v:percentageIncludeProperties}}'
       goPage2: !x '${x:random(0,100,${p:null}) < 7}'
+      tsDeclare: !x '${x:epoch("ms",${p:null})}'
     headers:
       Content-Type: application/json
     body: !str >-
@@ -172,7 +173,9 @@ endpoints:
         "includeProperties": ${p:includeProperties},
         "pageNumber": ${x:${p:goPage2} ? 2 : 1},
         "results": 50,
-        "totalCount": ${x:random(0,1000,${p:null})}
+        "ts": ${x:epoch("ms")},
+        "tsDeclare": ${p:tsDeclare},
+        "totalCount": ${x:random(0,1000)}
       }
     peak_load: ${v:peakLoadSearch}hpm
     load_pattern: # Override the default load pattern for this endpoint

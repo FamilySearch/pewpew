@@ -683,25 +683,38 @@ impl<T: TemplateType<VarsAllowed = True, EnvsAllowed = False>> PropagateVars
                 Segment::Env(_, no) => no.no(),
                 Segment::Expr(v, True) => {
                     let mut has_prov = false;
+                    let mut has_nondeterministic = false;
                     let v = v
                         .into_iter()
-                        .map(|s| match s {
-                            Segment::Env(_, no) => no.no(),
-                            Segment::Expr(_, no) => no.no(),
-                            Segment::Var(v, True) => {
-                                log::debug!("searching for var value {v:?}");
-                                super::get_var_at_path(vars, &v)
-                                    .ok_or_else(|| super::VarsError::VarNotFound(v))
-                                    .map(|v| Segment::Raw(v.to_string()))
+                        .map(|s| {
+                            // Check Raw segments for non-deterministic functions
+                            // Only mark as non-deterministic if providers are allowed in this context
+                            if T::ProvAllowed::VALUE {
+                                if let Segment::Raw(ref raw_str) = s {
+                                    if raw_str.contains("epoch(") || raw_str.contains("random(") {
+                                        has_nondeterministic = true;
+                                    }
+                                }
                             }
-                            Segment::Prov(p, b) => {
-                                has_prov = true;
-                                Ok(Segment::Prov(p, b))
+
+                            match s {
+                                Segment::Env(_, no) => no.no(),
+                                Segment::Expr(_, no) => no.no(),
+                                Segment::Var(v, True) => {
+                                    log::debug!("searching for var value {v:?}");
+                                    super::get_var_at_path(vars, &v)
+                                        .ok_or_else(|| super::VarsError::VarNotFound(v))
+                                        .map(|v| Segment::Raw(v.to_string()))
+                                }
+                                Segment::Prov(p, b) => {
+                                    has_prov = true;
+                                    Ok(Segment::Prov(p, b))
+                                }
+                                other => Ok(other),
                             }
-                            other => Ok(other),
                         })
-                        .collect::<Result<_, _>>()?;
-                    if has_prov {
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if has_prov || has_nondeterministic {
                         Ok(Segment::Expr(v, True))
                     } else {
                         log::debug!("expr section {v:?} has no providers; evaluating statically");

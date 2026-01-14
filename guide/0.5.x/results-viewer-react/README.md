@@ -1,1 +1,0 @@
-From https://github.com/kaczor6418/web-assembly-rust-typescript-template and https://dev.to/krzysztofkaczy9/webassembly-rust-typescript-project-setup-4gio

@@ -1,6 +1,6 @@
 import { Button, Div, Input, InputsDiv, Label, Span} from "../YamlStyles";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { PewPewLoadPattern, PewPewVars } from "../../util/yamlwriter";
+import { PewPewLoadPattern, PewPewVars, PewPewVersion, getOverRegex, getVariableReference } from "../../util/yamlwriter";
 import React, { useEffect, useMemo, useRef } from "react";
 import { DeleteIcon } from "../Icons/DeleteIcon";
 import QuestionBubble from "../YamlQuestionBubble";
@@ -17,9 +17,9 @@ export interface LoadPatternProps {
   changePattern: (pewpewPattern: PewPewLoadPattern) => void;
   patterns: PewPewLoadPattern[];
   vars: PewPewVars[];
+  version: PewPewVersion;
 }
 
-export const OVER_REGEX = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");
 export const NUMBER_REGEX = new RegExp("^[+]?([0-9]+(?:[\\.][0-9]*)?|\\.[0-9]+)$");
 export const PATTERNS = "patterns";
 export const RAMP_PATTERN = "rampPattern";
@@ -31,7 +31,7 @@ export const newLoadLoadPattern = (): PewPewLoadPattern => ({ id: LOAD_PATTERN, 
 
 const errorColor: React.CSSProperties = { color: "red" };
 
-export function LoadPatterns ({ patterns, vars, ...props }: LoadPatternProps) {
+export function LoadPatterns ({ patterns, vars, version, ...props }: LoadPatternProps) {
   /** Map to keep id's unique */
   // const loadPatternsMap = new Map(patterns.map((pewpewPattern) => ([pewpewPattern.id, pewpewPattern])));
 
@@ -41,14 +41,14 @@ export function LoadPatterns ({ patterns, vars, ...props }: LoadPatternProps) {
   const switchDefault = (newChecked: boolean) => {
     if (newChecked && !patterns.find((p) => p.id === RAMP_PATTERN)) {
       // Add it (will update the map when it comes back in via props)
-      props.addPattern(rampTime ? {...newRampLoadPattern(), over: "${" + rampTime.name + "}"} : newRampLoadPattern());
+      props.addPattern(rampTime ? {...newRampLoadPattern(), over: getVariableReference(rampTime.name, version)} : newRampLoadPattern());
     } else if (!newChecked && patterns.find((p) => p.id === RAMP_PATTERN)) {
       // Remove it (will update the map when it comes back in via props)
       props.deletePattern(RAMP_PATTERN);
     }
     if (newChecked && !patterns.find((p) => p.id === LOAD_PATTERN)) {
       // Add it (will update the map when it comes back in via props)
-      props.addPattern(loadTime ? {...newLoadLoadPattern(), over: "${" + loadTime.name + "}"} : newLoadLoadPattern());
+      props.addPattern(loadTime ? {...newLoadLoadPattern(), over: getVariableReference(loadTime.name, version)} : newLoadLoadPattern());
     } else if (!newChecked && patterns.find((p) => p.id === LOAD_PATTERN)) {
       // Remove it (will update the map when it comes back in via props)
       props.deletePattern(LOAD_PATTERN);
@@ -58,21 +58,21 @@ export function LoadPatterns ({ patterns, vars, ...props }: LoadPatternProps) {
   useEffect(() => {
     handleRampTimeChange();
     handleLoadTimeChange();
-  }, [vars]);
+  }, [vars, version]);
 
   const handleRampTimeChange = () => {
     if (!patterns.find((p) => p.id === RAMP_PATTERN)) {
-      props.addPattern(rampTime ? {...newRampLoadPattern(), over: "${" + rampTime.name + "}"} : newRampLoadPattern());
+      props.addPattern(rampTime ? {...newRampLoadPattern(), over: getVariableReference(rampTime.name, version)} : newRampLoadPattern());
     } else {
-      changePattern(patterns.find((p) => p.id === RAMP_PATTERN) as PewPewLoadPattern, "over", rampTime ? "${" + rampTime.name + "}" : "15m");
+      changePattern(patterns.find((p) => p.id === RAMP_PATTERN) as PewPewLoadPattern, "over", rampTime ? getVariableReference(rampTime.name, version) : "15m");
     }
   };
 
   const handleLoadTimeChange = () => {
     if (!patterns.find((p) => p.id === LOAD_PATTERN)) {
-      props.addPattern(loadTime ? {...newLoadLoadPattern(), over: "${" + loadTime.name + "}"} : newLoadLoadPattern());
+      props.addPattern(loadTime ? {...newLoadLoadPattern(), over: getVariableReference(loadTime.name, version)} : newLoadLoadPattern());
     } else {
-      changePattern(patterns.find((p) => p.id === LOAD_PATTERN) as PewPewLoadPattern, "over", loadTime ? "${" + loadTime.name + "}" : "15m");
+      changePattern(patterns.find((p) => p.id === LOAD_PATTERN) as PewPewLoadPattern, "over", loadTime ? getVariableReference(loadTime.name, version) : "15m");
     }
   };
 
@@ -121,7 +121,7 @@ export function LoadPatterns ({ patterns, vars, ...props }: LoadPatternProps) {
         // TODO: Do we want to check if they're greater than 0?
         const validFrom: boolean = !pewpewPattern.from || NUMBER_REGEX.test(pewpewPattern.from);
         const validTo: boolean = NUMBER_REGEX.test(pewpewPattern.to);
-        const validOver: boolean = OVER_REGEX.test(pewpewPattern.over);
+        const validOver: boolean = getOverRegex(version).test(pewpewPattern.over);
         return <CSSTransition key={pewpewPattern.id} timeout={300} classNames="load" nodeRef={nodeRef}>
           <Div>
             <Span>

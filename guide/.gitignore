@@ -1,3 +1,14 @@
 book
 src/results-viewer
 src/results-viewer-react
+
+# Guide build artifacts
+0.5.x/book/
+0.6.x/book/
+0.5.x/results-viewer-react/lib/
+0.6.x/results-viewer-react/lib/
+results-viewer-react/lib/
+0.5.x/src/results-viewer-react/
+0.6.x/src/results-viewer-react/
+results-viewer-react/src/results-viewer-react/
+gh-pages-local/

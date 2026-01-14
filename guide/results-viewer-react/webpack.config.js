@@ -19,7 +19,7 @@ module.exports = {
   entry: entries,
   output: {
     filename: '[name].bundle.js',
-    path: path.resolve(__dirname, '../src/results-viewer-react/'),
+    path: path.resolve(__dirname, 'dist'),
     webassemblyModuleFilename: 'static/wasm/[modulehash].wasm',
   },
   experiments: {

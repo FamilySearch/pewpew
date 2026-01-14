@@ -3,11 +3,13 @@ import {
   PewPewLoadPattern,
   PewPewLogger,
   PewPewProvider,
-  PewPewVars
+  PewPewVars,
+  PewPewVersion
 } from "../../util/yamlwriter";
 import { load_test_yaml_from_js as loadTestYamlFromJs } from "@fs/config-gen";
 import { log } from "../../util/log";
 import { saveAs } from "file-saver";
+import yaml from "js-yaml";
 
 
 export interface PewPewYamlFile {
@@ -27,11 +29,14 @@ export interface WriteFileParam {
   providers: PewPewProvider[];
   loggers: PewPewLogger[];
   filename: string;
+  version: PewPewVersion;
 }
 
 // Writes endpoints to one object, and then uses js-yaml to write as a yaml
-export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omit<WriteFileParam, "filename">): PewPewYamlFile => {
+export const createYamlJson = ({ urls, patterns, vars, providers, loggers, version: _version }: Omit<WriteFileParam, "filename">): PewPewYamlFile => {
   const myYaml: PewPewYamlFile = {};
+  // Note: _version is used for logger structure (0.5.x vs 0.6.x have different formats)
+  // Variable values are already set with the correct syntax when created in YamlVars component
 
   // Vars that have been selected
   if (vars.length > 0) {
@@ -66,12 +71,23 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
     for (const logger of loggers) {
       const loggerName = logger.name.toString();
       myYaml.loggers[loggerName] = {};
-      myYaml.loggers[loggerName].query = {};
-      myYaml.loggers[loggerName].query.select = {};
-      for (const select of logger.select) {
-        myYaml.loggers[loggerName].query.select[select.name] = select.value;
+
+      // 0.5.x uses flat structure, 0.6.x uses query.select structure
+      if (_version === "0.5.x") {
+        myYaml.loggers[loggerName].select = {};
+        for (const select of logger.select) {
+          myYaml.loggers[loggerName].select[select.name] = select.value;
+        }
+        if (logger.where) { myYaml.loggers[loggerName].where = logger.where; }
+      } else {
+        myYaml.loggers[loggerName].query = {};
+        myYaml.loggers[loggerName].query.select = {};
+        for (const select of logger.select) {
+          myYaml.loggers[loggerName].query.select[select.name] = select.value;
+        }
+        if (logger.where) { myYaml.loggers[loggerName].query.where = logger.where; }
       }
-      if (logger.where) { myYaml.loggers[loggerName].query.where = logger.where; }
+
       if (logger.to) { myYaml.loggers[loggerName].to = logger.to; }
       if (logger.limit) { myYaml.loggers[loggerName].limit = logger.limit; }
       if (logger.pretty) { myYaml.loggers[loggerName].pretty = logger.pretty; }
@@ -146,17 +162,30 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
   return myYaml;
 };
 
-export function createYamlString ({ urls, patterns, vars, providers, loggers }: Omit<WriteFileParam, "filename">): string {
-  const myYaml: PewPewYamlFile = createYamlJson({ urls, patterns, vars, providers, loggers });
-  const myYamlString = JSON.stringify(myYaml);
+export function createYamlString ({ urls, patterns, vars, providers, loggers, version }: Omit<WriteFileParam, "filename">): string {
+  const myYaml: PewPewYamlFile = createYamlJson({ urls, patterns, vars, providers, loggers, version });
 
-  log(myYamlString);
-  return loadTestYamlFromJs(myYamlString);
+  // For 0.5.x, use js-yaml (template syntax only)
+  // For 0.6.x, use config-gen WASM (supports expression syntax)
+  if (version === "0.5.x") {
+    log("Using js-yaml for 0.5.x");
+    return yaml.dump(myYaml, {
+      indent: 2,
+      lineWidth: -1, // Don't wrap lines
+      noRefs: true,  // Don't use anchors/references
+      quotingType: "\"",
+      forceQuotes: false
+    });
+  } else {
+    const myYamlString = JSON.stringify(myYaml);
+    log("Using config-gen for 0.6.x: " + myYamlString);
+    return loadTestYamlFromJs(myYamlString);
+  }
 }
 
 // Writes endpoints to one object, and then uses js-yaml to write as a yaml
-export function writeFile ({ urls, patterns, vars, providers, loggers, filename }: WriteFileParam) {
-  const myYaml: string = createYamlString({ urls, patterns, vars, providers, loggers });
+export function writeFile ({ urls, patterns, vars, providers, loggers, filename, version }: WriteFileParam) {
+  const myYaml: string = createYamlString({ urls, patterns, vars, providers, loggers, version });
 
   // Here we add the name of test and the date to the top of file
   const today = new Date();

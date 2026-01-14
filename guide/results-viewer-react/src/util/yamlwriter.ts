@@ -98,7 +98,42 @@ export interface LoggerSelectEntry {
   value: string;
 }
 
-export const SESSION_ID_DEFAULT = "${e:SESSIONID}";
-export const RAMP_TIME_DEFAULT = "${e:RAMP_TIME}";
-export const LOAD_TIME_DEFAULT = "${e:LOAD_TIME}";
-export const PEAK_LOAD_DEFAULT = "${e:PEAK_LOAD}";
+// Version-specific expression syntax
+export type PewPewVersion = "0.5.x" | "0.6.x";
+
+export const getSessionIdDefault = (version: PewPewVersion) =>
+  version === "0.6.x" ? "${e:SESSIONID}" : "${SESSIONID}";
+export const getRampTimeDefault = (version: PewPewVersion) =>
+  version === "0.6.x" ? "${e:RAMP_TIME}" : "${RAMP_TIME}";
+export const getLoadTimeDefault = (version: PewPewVersion) =>
+  version === "0.6.x" ? "${e:LOAD_TIME}" : "${LOAD_TIME}";
+export const getPeakLoadDefault = (version: PewPewVersion) =>
+  version === "0.6.x" ? "${e:PEAK_LOAD}" : "${PEAK_LOAD}";
+
+// For backward compatibility (defaults to 0.5.x stable)
+export const SESSION_ID_DEFAULT = getSessionIdDefault("0.5.x");
+export const RAMP_TIME_DEFAULT = getRampTimeDefault("0.5.x");
+export const LOAD_TIME_DEFAULT = getLoadTimeDefault("0.5.x");
+export const PEAK_LOAD_DEFAULT = getPeakLoadDefault("0.5.x");
+
+// Helper to construct variable references in YAML (for peak_load, over, etc.)
+// 0.5.x uses template syntax: ${varName}
+// 0.6.x uses variable reference syntax: ${v:varName}
+export const getVariableReference = (varName: string, version: PewPewVersion): string =>
+  version === "0.6.x" ? `\${v:${varName}}` : `\${${varName}}`;
+
+// Version-aware regex patterns for validation
+// Hit rate validation: matches "10hpm" or variable references
+export const HIT_RATE_REGEX_05X = new RegExp("^(\\d+)hp(h|m|s)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");  // 0.5.x: ${varName}
+export const HIT_RATE_REGEX_06X = new RegExp("^(\\d+)hp(h|m|s)$|^\\$\\{v:[a-zA-Z][a-zA-Z0-9]*\\}$");  // 0.6.x: ${v:varName}
+
+// Time duration validation: matches "15m" or "1h 30m" or variable references
+export const OVER_REGEX_05X = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$|^\\$\\{[a-zA-Z][a-zA-Z0-9]*\\}$");  // 0.5.x: ${varName}
+export const OVER_REGEX_06X = new RegExp("^((((\\d+)\\s?(h|hr|hrs|hour|hours))\\s?)?(((\\d+)\\s?(m|min|mins|minute|minutes))\\s?)?(((\\d+)\\s?(s|sec|secs|second|seconds)))?)$|^\\$\\{v:[a-zA-Z][a-zA-Z0-9]*\\}$");  // 0.6.x: ${v:varName}
+
+// Helper functions to get the correct regex based on version
+export const getHitRateRegex = (version: PewPewVersion): RegExp =>
+  version === "0.6.x" ? HIT_RATE_REGEX_06X : HIT_RATE_REGEX_05X;
+
+export const getOverRegex = (version: PewPewVersion): RegExp =>
+  version === "0.6.x" ? OVER_REGEX_06X : OVER_REGEX_05X;

@@ -27,8 +27,11 @@ const props: VarsProps = {
     // eslint-disable-next-line no-console
     console.log("Setting authenticated to: " + authenticated);
   },
-  vars: []
+  vars: [],
+  version: "0.5.x"
 };
+
+const props06x: VarsProps = { ...props, version: "0.6.x" };
 
 const propsLoaded: VarsProps = { ...props,
   authenticated: true,
@@ -38,6 +41,17 @@ const propsLoaded: VarsProps = { ...props,
     { id: "rampTime", name: "rampTime", value: "${RAMP_TIME}" },
     { id: "loadTime", name: "loadTime", value: "${LOAD_TIME}" },
     { id: "peakLoad", name: "peakLoad", value: "${PEAK_LOAD}" }
+  ]
+};
+
+const propsLoaded06x: VarsProps = { ...props06x,
+  authenticated: true,
+  vars: [
+    { id: "0", name: "", value: "" },
+    { id: "sessionId", name: "sessionId", value: "${e:SESSIONID}" },
+    { id: "rampTime", name: "rampTime", value: "${e:RAMP_TIME}" },
+    { id: "loadTime", name: "loadTime", value: "${e:LOAD_TIME}" },
+    { id: "peakLoad", name: "peakLoad", value: "${e:PEAK_LOAD}" }
   ]
 };
 
@@ -62,6 +76,28 @@ export const Loaded: StoryFn = () => (
     <DisplayDivMain>
       <DisplayDivBody>
         <Vars {...propsLoaded} ></Vars>
+      </DisplayDivBody>
+    </DisplayDivMain>
+  </React.Fragment>
+);
+
+export const Version06x: StoryFn = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <DisplayDivMain>
+      <DisplayDivBody>
+        <Vars {...props06x} ></Vars>
+      </DisplayDivBody>
+    </DisplayDivMain>
+  </React.Fragment>
+);
+
+export const LoadedVersion06x: StoryFn = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <DisplayDivMain>
+      <DisplayDivBody>
+        <Vars {...propsLoaded06x} ></Vars>
       </DisplayDivBody>
     </DisplayDivMain>
   </React.Fragment>

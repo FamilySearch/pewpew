@@ -1,10 +1,11 @@
 import { Button, Div, InputsDiv, TipButton } from "../YamlStyles";
 import {
-  LOAD_TIME_DEFAULT,
-  PEAK_LOAD_DEFAULT,
   PewPewVars,
-  RAMP_TIME_DEFAULT,
-  SESSION_ID_DEFAULT
+  PewPewVersion,
+  getLoadTimeDefault,
+  getPeakLoadDefault,
+  getRampTimeDefault,
+  getSessionIdDefault
 } from "../../util/yamlwriter";
 import React, { useEffect } from "react";
 import QuestionBubble from "../YamlQuestionBubble";
@@ -39,6 +40,7 @@ export interface VarsProps {
   authenticated: boolean;
   setAuthenticated: (authenticated: boolean) => void;
   vars: PewPewVars[];
+  version: PewPewVersion;
 }
 
 export const VARS = "vars";
@@ -48,31 +50,31 @@ export const LOAD_TIME = "loadTime";
 export const PEAK_LOAD = "peakLoad";
 
 export const emptyVar = (varId: string = uniqueId()): PewPewVars => ({ id: varId, name: "", value: "" });
-export const rampTimeVar = (): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: RAMP_TIME_DEFAULT });
-export const loadTimeVar = (): PewPewVars => ({ id: LOAD_TIME, name: LOAD_TIME, value: LOAD_TIME_DEFAULT });
-export const peakLoadVar = (): PewPewVars => ({ id: PEAK_LOAD, name: PEAK_LOAD, value: PEAK_LOAD_DEFAULT });
-export const sessionIdVar = (): PewPewVars => ({ id: SESSION_ID, name: SESSION_ID, value: SESSION_ID_DEFAULT });
+export const rampTimeVar = (version: PewPewVersion): PewPewVars => ({ id: RAMP_TIME, name: RAMP_TIME, value: getRampTimeDefault(version) });
+export const loadTimeVar = (version: PewPewVersion): PewPewVars => ({ id: LOAD_TIME, name: LOAD_TIME, value: getLoadTimeDefault(version) });
+export const peakLoadVar = (version: PewPewVersion): PewPewVars => ({ id: PEAK_LOAD, name: PEAK_LOAD, value: getPeakLoadDefault(version) });
+export const sessionIdVar = (version: PewPewVersion): PewPewVars => ({ id: SESSION_ID, name: SESSION_ID, value: getSessionIdDefault(version) });
 
-function getDefaultVar (varName: DefaultVariablesType): PewPewVars {
+function getDefaultVar (varName: DefaultVariablesType, version: PewPewVersion): PewPewVars {
   switch (varName) {
     case SESSION_ID:
-      return sessionIdVar();
+      return sessionIdVar(version);
     case RAMP_TIME:
-      return rampTimeVar();
+      return rampTimeVar(version);
     case LOAD_TIME:
-      return loadTimeVar();
+      return loadTimeVar(version);
     case PEAK_LOAD:
-      return peakLoadVar();
+      return peakLoadVar(version);
     default:
       throw new Error("getDefaultVar Invalid varName: " + varName);
   }
 }
 
-export function getDefaultVars (defaultVars: DefaultVariables = defaultUI): PewPewVars[] {
+export function getDefaultVars (defaultVars: DefaultVariables = defaultUI, version: PewPewVersion = "0.5.x"): PewPewVars[] {
   const pewpewVars: PewPewVars[] = [];
   for (const [varName, isEnabled] of Object.entries(defaultVars)) {
     if (isEnabled) {
-      pewpewVars.push(getDefaultVar(varName as DefaultVariablesType));
+      pewpewVars.push(getDefaultVar(varName as DefaultVariablesType, version));
     }
   }
 
@@ -108,7 +110,7 @@ export function Vars ({ authenticated, ...props }: VarsProps) {
     // Add/delete from varsMap/vars
     if (newChecked && !varsMap.has(varsType)) {
       // Add it (will update the map when it comes back in via props)
-      const defaultVar = getDefaultVar(varsType);
+      const defaultVar = getDefaultVar(varsType, props.version);
       props.addVar(defaultVar);
     } else if (!newChecked && varsMap.has(varsType)) {
       // Remove it (will update the map when it comes back in via props)

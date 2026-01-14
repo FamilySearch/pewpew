@@ -1,9 +1,0 @@
-[book]
-authors = []
-multilingual = false
-src = "src"
-
-[output.html]
-no-section-label = true
-preferred-dark-theme = "ayu"
-additional-css = ["src/custom.css"]

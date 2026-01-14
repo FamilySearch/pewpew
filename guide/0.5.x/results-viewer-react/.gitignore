@@ -1,0 +1,5 @@
+# Web project
+node_modules
+dist
+
+hdr-histogram-wasm

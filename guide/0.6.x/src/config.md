@@ -48,6 +48,6 @@ endpoints:
 
 ## Har to Yaml Converter
 If you are attempting to load test a specific web page or the resources on a web page, you can
-use the [Har to Yaml Converter](../viewer/yaml.html). First you need to create a
+use the [Har to Yaml Converter](../viewer/yaml.html?version=0.6.x). First you need to create a
 [Har File](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the
-page load, then use the [Converter](../viewer/yaml.html) to generate a Yaml Config file.
+page load, then use the [Converter](../viewer/yaml.html?version=0.6.x) to generate a Yaml Config file.

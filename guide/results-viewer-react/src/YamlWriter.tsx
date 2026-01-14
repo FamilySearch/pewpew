@@ -4,7 +4,7 @@
 */
 
 import { HarEndpoint, PewPewVersion } from "./util/yamlwriter";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { GlobalStyle } from "./components/Global";
 // YamlWriterForm has all the editing of endpoints and load patterns
 import { YamlWriterForm } from "./components/YamlWriterForm";
@@ -117,8 +117,27 @@ export const YamlWriter = () => {
       endpoints: []
   };
 
+  // Parse version from query parameter, default to 0.5.x
+  const getInitialVersion = (): PewPewVersion => {
+    const params = new URLSearchParams(window.location.search);
+    const versionParam = params.get("version");
+    // Validate it's a valid PewPewVersion
+    if (versionParam === "0.5.x" || versionParam === "0.6.x") {
+      return versionParam;
+    }
+    return "0.5.x"; // default
+  };
+
   const [state, setParentState] = useState(defaultState);
-  const [version, setVersion] = useState<PewPewVersion>("0.5.x");
+  const [version, setVersion] = useState<PewPewVersion>(getInitialVersion());
+
+  // Update URL when version changes (optional - keeps URL in sync)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("version", version);
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, "", newUrl);
+  }, [version]);
 
   // Endpoints from header get sent here when file is loaded
   // Gets sent down to Content immediately

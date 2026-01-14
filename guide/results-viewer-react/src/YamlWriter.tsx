@@ -76,7 +76,8 @@ export interface YamlWriterState {
 const VersionSelector = styled.div`
   margin: 20px 0;
   padding: 15px;
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -84,19 +85,20 @@ const VersionSelector = styled.div`
 
   label {
     font-weight: bold;
-    color: #333;
+    color: rgb(250, 250, 250);
   }
 
   select {
     padding: 8px 12px;
     font-size: 14px;
-    border: 2px solid #ddd;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    background: white;
+    background: hsl(210, 25%, 8%);
+    color: rgb(200, 200, 200);
     cursor: pointer;
 
     &:hover {
-      border-color: #999;
+      border-color: rgba(255, 255, 255, 0.3);
     }
 
     &:focus {
@@ -107,7 +109,7 @@ const VersionSelector = styled.div`
 
   .version-info {
     font-size: 13px;
-    color: #666;
+    color: rgb(180, 180, 180);
     font-style: italic;
   }
 `;

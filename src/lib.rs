@@ -219,13 +219,17 @@ impl Endpoints {
                     }
                     // All non-on_demand endpoints need a start stream to actually run in try mode
                     // Endpoints that feed collectors need multiple iterations (use 20 as a reasonable limit)
+                    // However, if the endpoint was directly selected by the user's filter (not a dependency),
+                    // only run it once regardless of collector needs
                     if !is_on_demand {
-                        if feeds_collector {
+                        if feeds_collector && provides_needed {
                             // Add a start stream with 20 yields for endpoints that feed collectors
+                            // and are needed by other endpoints
                             ep.add_start_stream(futures::stream::iter(
                                 (0..20).map(|_| Ok(request::StreamItem::None)),
                             ));
                         } else {
+                            // For directly selected endpoints or non-collector endpoints, run once
                             ep.add_start_stream(
                                 future::ready(Ok(request::StreamItem::None)).into_stream(),
                             );

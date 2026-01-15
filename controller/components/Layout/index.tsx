@@ -124,7 +124,6 @@ export const Layout = ({
 
     return (
     <React.Fragment>
-      <GlobalStyle />
       <Head>
         <title>{title}</title>
         <link rel="apple-touch-icon" sizes="180x180" href={formatAssetHref("/img/apple-touch-icon.png")}/>

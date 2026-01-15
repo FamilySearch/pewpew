@@ -2,6 +2,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import "./styles.css";
 import { LogLevel, log } from "../src/log";
 import { AppProps } from "next/app";
+import { GlobalStyle } from "../components/Layout";
 import { Router } from "next/router";
 import { getBasePath } from "../src/clientutil";
 import { useEffect } from "react";
@@ -47,5 +48,8 @@ export default function MyApp ({ Component, pageProps, router }: AppProps) {
       namespace: getBasePath()
     });
   }
-  return <Component {...pageProps} />;
+  return <>
+    <GlobalStyle />
+    <Component {...pageProps} />
+  </>;
 }

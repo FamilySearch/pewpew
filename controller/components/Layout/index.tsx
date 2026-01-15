@@ -16,7 +16,7 @@ import { logout as authLogout } from "../../src/authclient";
 
 const HIDE_ENVIRONMENT: unknown = process.env.HIDE_ENVIRONMENT;
 
-export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/results-viewer-react/yaml.html";
+export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/viewer/yaml.html";
 
 export type OtherControllers = Record<string, {
     url: string;
@@ -124,7 +124,6 @@ export const Layout = ({
 
     return (
     <React.Fragment>
-      <GlobalStyle />
       <Head>
         <title>{title}</title>
         <link rel="apple-touch-icon" sizes="180x180" href={formatAssetHref("/img/apple-touch-icon.png")}/>

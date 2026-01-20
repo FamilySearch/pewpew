@@ -515,8 +515,11 @@ fn test_random_values_change() {
     // Verify that we got multiple different values for random() calls
     // Note: random() might occasionally generate the same value with a range of 0-1000,
     // but across multiple calls in 6 locations we should see significant variation
-    let total_random_unique = random_config_headers.len() + random_endpoint_headers.len()
-        + random_url_params.len() + random_body.len() + random_declares.len()
+    let total_random_unique = random_config_headers.len()
+        + random_endpoint_headers.len()
+        + random_url_params.len()
+        + random_body.len()
+        + random_declares.len()
         + random_logger_selects.len();
     assert!(
         total_random_unique >= logs.len() * 3,

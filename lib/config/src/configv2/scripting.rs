@@ -276,7 +276,7 @@ impl EvalExpr {
             // more of a developer warning in case a previous check broke
             // any expression that doesn't rely on providers should have been evaluated statically
             // by this point
-            log::warn!("R-Template expression ({script:?}) does not read from any providers.")
+            log::info!("R-Template expression ({script:?}) does not read from any providers.")
         }
         Self::from_parts(script, Arc::from(needed))
     }

@@ -1,0 +1,38 @@
+load_pattern:
+  - !linear
+      to: 100%
+      over: 2s
+config:
+  client:
+    headers:
+      X-Epoch-Header: ${x:epoch("ms")}
+loggers:
+  epoch_logger:
+    limit: 10
+    to: !stderr
+    pretty: false
+vars:
+  port: "${e:PORT}"
+endpoints:
+  - method: POST
+    declare:
+      epochDeclare: !x ${x:epoch("ms")}
+    url: http://localhost:${v:port}/?epoch=${x:epoch("ms")}
+    body: !str >-
+      {
+        "epochBody": "${x:epoch("ms")}",
+        "epochDeclare": ${p:epochDeclare}
+      }
+    peak_load: 5hps
+    headers:
+      Content-Type: application/json
+      X-Endpoint-Epoch: ${x:epoch("ms")}
+    logs:
+      epoch_logger:
+        select:
+          requestConfigEpochHeader: request.headers["x-epoch-header"]
+          requestEndpointEpochHeader: request.headers["x-endpoint-epoch"]
+          requestEpochUrl: request.url.searchParams.epoch
+          responseEpochBody: response.body.epochBody
+          responseEpochDeclare: response.body.epochDeclare
+          loggerEpochSelect: epoch("ms")

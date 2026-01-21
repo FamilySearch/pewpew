@@ -1,0 +1,38 @@
+load_pattern:
+  - !linear
+      to: 100%
+      over: 3s
+config:
+  client:
+    headers:
+      X-Random-Header: ${x:random(0,1000000)}
+loggers:
+  random_logger:
+    limit: 10
+    to: !stderr
+    pretty: false
+vars:
+  port: "${e:PORT}"
+endpoints:
+  - method: POST
+    declare:
+      randomDeclare: !x ${x:random(0,1000000)}
+    url: http://localhost:${v:port}/?random=${x:random(0,1000000)}
+    body: !str >-
+      {
+        "randomBody": ${x:random(0,1000000)},
+        "randomDeclare": ${p:randomDeclare}
+      }
+    peak_load: 5hps
+    headers:
+      Content-Type: application/json
+      X-Endpoint-Random: ${x:random(0,1000000)}
+    logs:
+      random_logger:
+        select:
+          requestConfigRandomHeader: request.headers["x-random-header"]
+          requestEndpointRandomHeader: request.headers["x-endpoint-random"]
+          requestRandomUrl: request.url.searchParams.random
+          responseRandomBody: response.body.randomBody
+          responseRandomDeclare: response.body.randomDeclare
+          loggerRandomSelect: random(0,1000000)

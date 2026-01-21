@@ -134,6 +134,7 @@ where
 {
     elems: BTreeMap<K, (T, Option<T::Ok>)>,
     require_all: bool,
+    started_empty: bool,
 }
 
 impl<K, T> Stream for ZipAllMap<K, T>
@@ -178,6 +179,14 @@ where
             }
         }
         if this.elems.is_empty() {
+            // If we started with no providers, yield empty BTreeMaps indefinitely
+            // This handles the case where there are no providers but we still need
+            // to evaluate expressions like epoch() or random() that don't reference providers
+            // The stream will continue yielding empty maps for each request in the load test
+            if this.started_empty {
+                return Poll::Ready(Some(Ok(BTreeMap::new())));
+            }
+            // If we started with providers but they're all exhausted, end the stream
             return Poll::Ready(None);
         }
 
@@ -253,8 +262,13 @@ where
     T::Error: Unpin,
     K: Ord + Clone,
 {
-    let elems = elems.into_iter().map(|(k, s)| (k, (s, None))).collect();
-    ZipAllMap { elems, require_all }
+    let elems: BTreeMap<_, _> = elems.into_iter().map(|(k, s)| (k, (s, None))).collect();
+    let started_empty = elems.is_empty();
+    ZipAllMap {
+        elems,
+        require_all,
+        started_empty,
+    }
 }
 
 #[cfg(test)]

@@ -39,8 +39,19 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
     - **Object type preservation**: Objects from CSV providers with headers are now correctly preserved as objects in JavaScript expressions and collect operations. Previously they were incorrectly serialized as JSON strings requiring `JSON.parse()` to convert back to objects. Remove any `.map((element) => JSON.parse(element))` workarounds.
     - **Improved error messages**: JavaScript execution errors now include the actual code that failed, making debugging much easier
   - Removed explicit getrandom dependency from lib/config (boa_engine 0.21 handles getrandom 0.3 correctly, eliminating duplicate 0.2 dependency)
-- **Non-deterministic function improvements**: `epoch()` and `random()` are now automatically evaluated per-request in URLs, headers, body, and logger queries without requiring `${p:null}`. The `${p:null}` parameter is still required in `declare` blocks.
-- **Try mode filter fix**: Fixed bug where `pewpew try -i _id=0` would run endpoints with collectors 20 times instead of once when filtering to a specific endpoint.
+- [Fix epoch Scripting](https://github.com/FamilySearch/pewpew/pull/355)
+  - **Non-deterministic function improvements**: `epoch()` and `random()` are now automatically evaluated per-request in URLs, headers, body, and logger queries without requiring `${p:null}`. The `${p:null}` parameter is still required in `declare` blocks.
+  - **Try mode filter fix**: Fixed bug where `pewpew try -i _id=0` would run endpoints with collectors 20 times instead of once when filtering to a specific endpoint.
+- [Fix epoch/random in declare blocks](https://github.com/FamilySearch/pewpew/pull/358)
+  - **Complete fix for non-deterministic functions**: `epoch()` and `random()` now work correctly in **all locations** without requiring `${p:null}` workaround, including:
+    - Config-level headers
+    - Endpoint-level headers
+    - URL query parameters
+    - Request body
+    - **Declare blocks** (previously required `${p:null}`)
+    - Logger select expressions
+  - Fixed regression from PR #355 where endpoints with `epoch()` or `random()` in declare blocks would fail to execute
+  - Added comprehensive integration tests covering all 6 locations where these functions can be used
 
 ### v0.6.0
 Changes:

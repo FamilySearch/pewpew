@@ -369,3 +369,168 @@ fn try_mode_delete_search_collect() {
         Err(e) => panic!("Test failed with error: {:?}. stderr: {}", e, stderr),
     }
 }
+
+/// Test that epoch() generates different values on each request
+/// This verifies the fix for the regression where endpoints with epoch() in declare
+/// blocks would not execute at all
+#[test]
+fn test_epoch_values_change() {
+    let (result, _stdout, stderr) = run_test("tests/test_epoch.yaml");
+
+    assert!(result.is_ok(), "test run failed. {}", stderr);
+
+    // Parse the JSON logs from stderr
+    let logs: Vec<serde_json::Value> = stderr
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    assert!(
+        logs.len() >= 2,
+        "Expected at least 2 log entries to verify values change. Got {}. stderr: {}",
+        logs.len(),
+        stderr
+    );
+
+    // Extract values from each log entry
+    let mut epoch_config_headers = std::collections::HashSet::new();
+    let mut epoch_endpoint_headers = std::collections::HashSet::new();
+    let mut epoch_url_params = std::collections::HashSet::new();
+    let mut epoch_body = std::collections::HashSet::new();
+    let mut epoch_declares = std::collections::HashSet::new();
+    let mut epoch_logger_selects = std::collections::HashSet::new();
+
+    for log in &logs {
+        if let Some(epoch) = log.get("requestConfigEpochHeader") {
+            epoch_config_headers.insert(epoch.to_string());
+        }
+        if let Some(epoch) = log.get("requestEndpointEpochHeader") {
+            epoch_endpoint_headers.insert(epoch.to_string());
+        }
+        if let Some(epoch) = log.get("requestEpochUrl") {
+            epoch_url_params.insert(epoch.to_string());
+        }
+        if let Some(epoch) = log.get("responseEpochBody") {
+            epoch_body.insert(epoch.to_string());
+        }
+        if let Some(epoch) = log.get("responseEpochDeclare") {
+            epoch_declares.insert(epoch.to_string());
+        }
+        if let Some(epoch) = log.get("loggerEpochSelect") {
+            epoch_logger_selects.insert(epoch.to_string());
+        }
+    }
+
+    // Verify that we got multiple different values for epoch() calls
+    // Epoch should ALWAYS generate different values since it's based on current time
+    assert!(
+        epoch_config_headers.len() >= 2,
+        "Expected epoch() in config header to generate different values across requests. Got {} unique values: {:?}",
+        epoch_config_headers.len(),
+        epoch_config_headers
+    );
+    assert!(
+        epoch_endpoint_headers.len() >= 2,
+        "Expected epoch() in endpoint header to generate different values across requests. Got {} unique values: {:?}",
+        epoch_endpoint_headers.len(),
+        epoch_endpoint_headers
+    );
+    assert!(
+        epoch_url_params.len() >= 2,
+        "Expected epoch() in URL param to generate different values across requests. Got {} unique values: {:?}",
+        epoch_url_params.len(),
+        epoch_url_params
+    );
+    assert!(
+        epoch_body.len() >= 2,
+        "Expected epoch() in body to generate different values across requests. Got {} unique values: {:?}",
+        epoch_body.len(),
+        epoch_body
+    );
+    assert!(
+        epoch_declares.len() >= 2,
+        "Expected epoch() in declare to generate different values across requests. Got {} unique values: {:?}",
+        epoch_declares.len(),
+        epoch_declares
+    );
+    assert!(
+        epoch_logger_selects.len() >= 2,
+        "Expected epoch() in logger select to generate different values across requests. Got {} unique values: {:?}",
+        epoch_logger_selects.len(),
+        epoch_logger_selects
+    );
+}
+
+/// Test that random() generates different values on each request
+/// This verifies the fix for the regression where endpoints with random() in declare
+/// blocks would not execute at all
+#[test]
+fn test_random_values_change() {
+    let (result, _stdout, stderr) = run_test("tests/test_random.yaml");
+
+    assert!(result.is_ok(), "test run failed. {}", stderr);
+
+    // Parse the JSON logs from stderr
+    let logs: Vec<serde_json::Value> = stderr
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    assert!(
+        logs.len() >= 2,
+        "Expected at least 2 log entries to verify values change. Got {}. stderr: {}",
+        logs.len(),
+        stderr
+    );
+
+    // Extract values from each log entry
+    let mut random_config_headers = std::collections::HashSet::new();
+    let mut random_endpoint_headers = std::collections::HashSet::new();
+    let mut random_url_params = std::collections::HashSet::new();
+    let mut random_body = std::collections::HashSet::new();
+    let mut random_declares = std::collections::HashSet::new();
+    let mut random_logger_selects = std::collections::HashSet::new();
+
+    for log in &logs {
+        if let Some(random) = log.get("requestConfigRandomHeader") {
+            random_config_headers.insert(random.to_string());
+        }
+        if let Some(random) = log.get("requestEndpointRandomHeader") {
+            random_endpoint_headers.insert(random.to_string());
+        }
+        if let Some(random) = log.get("requestRandomUrl") {
+            random_url_params.insert(random.to_string());
+        }
+        if let Some(random) = log.get("responseRandomBody") {
+            random_body.insert(random.to_string());
+        }
+        if let Some(random) = log.get("responseRandomDeclare") {
+            random_declares.insert(random.to_string());
+        }
+        if let Some(random) = log.get("loggerRandomSelect") {
+            random_logger_selects.insert(random.to_string());
+        }
+    }
+
+    // Verify that we got multiple different values for random() calls
+    // Note: random() might occasionally generate the same value with a range of 0-1000,
+    // but across multiple calls in 6 locations we should see significant variation
+    let total_random_unique = random_config_headers.len()
+        + random_endpoint_headers.len()
+        + random_url_params.len()
+        + random_body.len()
+        + random_declares.len()
+        + random_logger_selects.len();
+    assert!(
+        total_random_unique >= logs.len() * 3,
+        "Expected random() to generate different values across {} requests. Got {} total unique values (config header: {}, endpoint header: {}, url: {}, body: {}, declare: {}, logger: {})",
+        logs.len(),
+        total_random_unique,
+        random_config_headers.len(),
+        random_endpoint_headers.len(),
+        random_url_params.len(),
+        random_body.len(),
+        random_declares.len(),
+        random_logger_selects.len()
+    );
+}

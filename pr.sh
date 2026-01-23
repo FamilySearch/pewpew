@@ -10,6 +10,7 @@ mkdir -p "$WASM_OUTPUT_CONTROLLER_DIR"
 
 cargo build
 # cargo install cross
+# sudo apt install musl-dev musl-tools
 # cargo build --target x86_64-unknown-linux-musl
 # cross build --target aarch64-unknown-linux-musl
 # cross build --target armv7-unknown-linux-musleabihf

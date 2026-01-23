@@ -251,6 +251,7 @@ impl<I: Iterator<Item = char>> YamlDecoder<I> {
 
     pub fn peek(&mut self) -> Result<&(YamlEvent, Marker), Error> {
         use YamlParseEvent::*;
+        #[allow(clippy::unnecessary_unwrap)]
         if self.peek.is_some() {
             return Ok(self.peek.as_ref().unwrap());
         }

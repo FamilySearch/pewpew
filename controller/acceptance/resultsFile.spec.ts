@@ -162,7 +162,7 @@ describe("ResultsFile API Integration", function () {
       } catch (error) {
         const errorString = "Each line should JSON parsable: ";
         log(errorString, LogLevel.ERROR, error, { line });
-        throw new Error(errorString + error);
+        throw new Error(errorString + error, { cause: error });
       }
       expect(json, `json from [${line}]`).to.not.equal(undefined);
       expect(json, `json from [${line}]`).to.not.equal(null);

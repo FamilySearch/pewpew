@@ -13,8 +13,7 @@ import styled, { createGlobalStyle } from "styled-components";
 import Div from "../Div";
 import Head from "next/head";
 import { logout as authLogout } from "../../src/authclient";
-
-const HIDE_ENVIRONMENT: unknown = process.env.HIDE_ENVIRONMENT;
+import { useRuntimeConfig } from "../../src/runtimeConfig";
 
 export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/viewer/yaml.html";
 
@@ -26,15 +25,6 @@ export type OtherControllers = Record<string, {
 export const OTHER_CONTROLLERS_DEFAULT: OtherControllers = {
   // This can be populated if you have multiple controllers to link to them
 };
-export const OTHER_CONTROLLERS: OtherControllers = {};
-if (Object.keys(OTHER_CONTROLLERS).length === 0) {
-  for (const [name, data] of Object.entries(OTHER_CONTROLLERS_DEFAULT)) {
-    if (!data || typeof HIDE_ENVIRONMENT === "string" && HIDE_ENVIRONMENT.toLowerCase().includes(name.toLowerCase())) {
-      continue;
-    }
-    OTHER_CONTROLLERS[name] = { ...data };
-  }
-}
 
 export const GlobalStyle = createGlobalStyle`
   body {
@@ -101,8 +91,16 @@ export const Layout = ({
     title = "PewPew as a Service - Run your load tests!",
     children,
     authPermission,
-    otherControllers = OTHER_CONTROLLERS
+    otherControllers = OTHER_CONTROLLERS_DEFAULT
   }: LayoutProps) => {
+    const { HIDE_ENVIRONMENT } = useRuntimeConfig();
+    const visibleControllers: OtherControllers = {};
+    for (const [name, data] of Object.entries(otherControllers)) {
+      if (data && !HIDE_ENVIRONMENT?.toLowerCase().includes(name.toLowerCase())) {
+        visibleControllers[name] = data;
+      }
+    }
+
     // There seems to be a bug when using our LinkButton that when the button goes
     // to "/" it removes the "/" from the url and refresh breaks if there is a query param
     // Ctrl-click keeps the trailing slash, but the click routing removes it.
@@ -160,7 +158,7 @@ export const Layout = ({
               <LinkButton href={PAGE_ADMIN} title="Manage the pewpew versions">Admin</LinkButton>
             </LinkDiv>
           }
-          {Object.entries(otherControllers).map(([name, data]) =>
+          {Object.entries(visibleControllers).map(([name, data]) =>
             <LinkDiv key={name}>
               <a href={data.url} title={data.hover} ><Button name={name} theme={{...defaultButtonTheme}}>{name} Controller</Button></a>
             </LinkDiv>)}

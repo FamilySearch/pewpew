@@ -135,14 +135,14 @@ export class PpaasTestMessage implements TestMessage {
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.DEBUG, temp);
         } catch (error: unknown) {
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.WARN, error);
-          throw new Error(`New Test Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`);
+          throw new Error(`New Test Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, { cause: error });
         }
         switch (key) {
           case "TestMessage":
             try {
               parsedTestMessage = temp as TestMessage;
-            } catch (error: unknown) { // eslint-disable-line  @typescript-eslint/no-unused-vars
-              throw new Error(`messageAttributes[${key}] was not an TestMessage = ${JSON.stringify(temp)}`);
+            } catch (error: unknown) {
+              throw new Error(`messageAttributes[${key}] was not an TestMessage = ${JSON.stringify(temp)}`, { cause: error });
             }
             break;
           default:

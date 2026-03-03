@@ -9,6 +9,7 @@
     "moduleResolution": "node",
     "isolatedModules": true,
     "jsx": "react",
+    "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "noImplicitAny": true,

@@ -119,8 +119,9 @@ const nextConfig: NextConfig = {
     FS_SITE: process.env.FS_SITE, // Used by auth client/Layout
     BASE_PATH: process.env.BASE_PATH, // client utils/Layout
     ASSET_PREFIX: process.env.ASSET_PREFIX, // client utils/Layout
-    HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT, // Used by Layout
-    AUTH_MODE: process.env.AUTH_MODE, // Used by auth client/Layout
+    // HIDE_ENVIRONMENT moved to RuntimeConfig (src/runtimeConfig.tsx) — runtime value read
+    // via App.getInitialProps so it can differ per deployment without a rebuild.
+    // AUTH_MODE is server-side only (API routes/authserver); no client-side usage.
     AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME, // Used by auth client/Layout
     AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME, // Used by auth client/Layout
     // Client-side test configuration

@@ -2,6 +2,7 @@ import {
   LogLevel,
   PEWPEW_BINARY_FOLDER,
   PEWPEW_VERSION_LATEST,
+  PpaasS3File,
   PpaasTestId,
   PpaasTestMessage,
   PpaasTestStatus,
@@ -9,6 +10,7 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  logger,
   ppaass3message,
   ppaasteststatus,
   s3,
@@ -17,11 +19,14 @@ import {
 } from "@fs/ppaas-common";
 import {
   PewPewTest,
+  SPLUNK_FORWARDER_EXTRA_TIME,
+  SPLUNK_LOGS_CLEANUP,
   copyTestStatus,
   findYamlCreatedFiles,
   getEndTime,
   versionGreaterThan
 } from "../src/pewpewtest.js";
+import { access, mkdir, readFile, readdir, writeFile } from "fs/promises";
 import {
   mockCopyObject,
   mockGetObject,
@@ -37,7 +42,6 @@ import {
   resetMockS3,
   resetMockSqs
 } from "./mock.js";
-import { readFile, readdir } from "fs/promises";
 import { PEWPEW_PATH } from "../src/tests.js";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util.js";
@@ -46,6 +50,24 @@ import { join } from "path";
 export const UNIT_TEST_FILENAME: string = process.env.UNIT_TEST_FILENAME || "s3test.txt";
 export const UNIT_TEST_FILEDIR: string = process.env.UNIT_TEST_FILEDIR || "test/";
 const BASIC_TEST_FILENAME: string = process.env.BASIC_TEST_FILENAME || "basic.yaml";
+const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
+
+// Helper function to check if a file/directory exists
+async function fileExists (path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Test subclass to expose protected cleanup() method for unit testing
+class PewPewTestPublicCleanup extends PewPewTest {
+  public cleanup (splunkForwarderExtraTime?: number): Promise<void> {
+    return super.cleanup(splunkForwarderExtraTime);
+  }
+}
 
 describe("PewPewTest", () => {
   before(() => {
@@ -449,6 +471,33 @@ describe("PewPewTest", () => {
       });
     });
 
+    afterEach(async function () {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (cleanup uses SPLUNK_FORWARDER_EXTRA_TIME * 3)
+          await util.sleep((SPLUNK_FORWARDER_EXTRA_TIME * 3) + 500);
+        }
+
+        log(`Checking cleanup for unit test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+        }
+      }
+    });
+
     it("Retrieve Test and launch should succeed", (done: Mocha.Done) => {
       PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
         log("PewPewTest.retrieve Success: " + test?.toString(), LogLevel.DEBUG);
@@ -497,5 +546,173 @@ describe("PewPewTest", () => {
       });
     });
 
+  });
+
+  describe("Cleanup Method Unit Tests", () => {
+    let ppaasTestId: PpaasTestId;
+    let testMessage: PpaasTestMessage;
+    let test: PewPewTestPublicCleanup;
+    let testDirectory: string;
+    let stdoutLogFile: string;
+    let stderrLogFile: string;
+
+    beforeEach(async () => {
+      mockS3();
+      mockSqs();
+      mockSendMessage();
+      mockUploadObject();
+      mockCopyObject();
+      mockGetObjectTagging();
+
+      ppaasTestId = PpaasTestId.makeTestId("cleanup-test.yaml");
+      const s3Folder = ppaasTestId.s3Folder;
+
+      // Mock PpaasTestStatus S3 operations (constructor tries to read existing status)
+      const testStatusKey = s3.KEYSPACE_PREFIX + ppaasteststatus.getKey(ppaasTestId);
+      mockListObject({
+        filename: ppaasteststatus.createS3Filename(ppaasTestId),
+        folder: s3Folder,
+        keyMatch: testStatusKey
+      });
+      const now = Date.now();
+      const basicTestStatusMessage: TestStatusMessage = {
+        startTime: now + 1,
+        endTime: now + 2,
+        resultsFilename: [],
+        status: TestStatus.Created
+      };
+      const ppaasTestStatus = new PpaasTestStatus(ppaasTestId, basicTestStatusMessage);
+      mockGetObject({
+        body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()),
+        contentType: "application/json",
+        keyMatch: testStatusKey
+      });
+
+      const testMessageData: TestMessage = {
+        testId: ppaasTestId.testId,
+        s3Folder,
+        yamlFile: "cleanup-test.yaml",
+        testRunTimeMn: 1,
+        version: PEWPEW_VERSION_LATEST,
+        envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
+        restartOnFailure: false,
+        additionalFiles: [],
+        bucketSizeMs: 5000,
+        bypassParser: false,
+        userId: "cleanuptest"
+      };
+
+      testMessage = new PpaasTestMessage(testMessageData);
+      test = new PewPewTestPublicCleanup(testMessage);
+
+      // Create test directory and files to be cleaned up
+      testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+      stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+      stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+      // Initialize the log file S3File objects so cleanup knows about them
+      // Normally these are set in launch(), but we're testing cleanup directly
+      test["pewpewStdOutS3File"] = new PpaasS3File({
+        filename: logger.pewpewStdOutFilename(ppaasTestId.testId),
+        s3Folder: ppaasTestId.s3Folder,
+        localDirectory: logger.config.LogFileLocation,
+        tags: s3.defaultTestExtraFileTags()
+      });
+      test["pewpewStdErrS3File"] = new PpaasS3File({
+        filename: logger.pewpewStdErrFilename(ppaasTestId.testId),
+        s3Folder: ppaasTestId.s3Folder,
+        localDirectory: logger.config.LogFileLocation,
+        tags: s3.defaultTestExtraFileTags()
+      });
+
+      // Create test directory with a dummy file
+      await mkdir(testDirectory, { recursive: true });
+      await writeFile(join(testDirectory, "test-file.txt"), "test content");
+
+      // Create log files
+      await writeFile(stdoutLogFile, JSON.stringify({ message: "stdout test" }));
+      await writeFile(stderrLogFile, JSON.stringify({ message: "stderr test" }));
+
+      log(`Created test files for cleanup test: ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+    });
+
+    it("Should cleanup with splunkForwarderExtraTime=0 (immediate)", async () => {
+      // Verify files exist before cleanup
+      expect(await fileExists(testDirectory), "Test directory should exist before cleanup").to.equal(true);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should exist before cleanup").to.equal(true);
+      expect(await fileExists(stderrLogFile), "Stderr log file should exist before cleanup").to.equal(true);
+
+      // Call cleanup with 0 to test immediate deletion
+      await test.cleanup(0);
+
+      // Give a brief moment for fire-and-forget to complete
+      await util.sleep(1500);
+
+      // Verify files are deleted
+      expect(await fileExists(testDirectory), "Test directory should be deleted").to.equal(false);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+
+      log("Cleanup with splunkForwarderExtraTime=0 completed and verified", LogLevel.DEBUG);
+    });
+
+    it("Should cleanup with splunkForwarderExtraTime=-1 (immediate)", async () => {
+      // Verify files exist before cleanup
+      expect(await fileExists(testDirectory), "Test directory should exist before cleanup").to.equal(true);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should exist before cleanup").to.equal(true);
+      expect(await fileExists(stderrLogFile), "Stderr log file should exist before cleanup").to.equal(true);
+
+      // Call cleanup with -1 to test immediate deletion
+      await test.cleanup(-1);
+
+      // Give a brief moment for fire-and-forget to complete
+      await util.sleep(1500);
+
+      // Verify files are deleted
+      expect(await fileExists(testDirectory), "Test directory should be deleted").to.equal(false);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted").to.equal(!SPLUNK_LOGS_CLEANUP);
+
+      log("Cleanup with splunkForwarderExtraTime=-1 completed and verified", LogLevel.DEBUG);
+    });
+
+    it("Should cleanup with default SPLUNK_FORWARDER_EXTRA_TIME", async () => {
+      // Verify files exist before cleanup
+      expect(await fileExists(testDirectory), "Test directory should exist before cleanup").to.equal(true);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should exist before cleanup").to.equal(true);
+      expect(await fileExists(stderrLogFile), "Stderr log file should exist before cleanup").to.equal(true);
+
+      // Call cleanup with no parameter to use default
+      await test.cleanup();
+
+      // Test directory should be deleted immediately
+      expect(await fileExists(testDirectory), "Test directory should be deleted immediately").to.equal(false);
+
+      // Log files won't be deleted yet (would take 90s by default)
+      // Just verify the method completed successfully
+      log(`Cleanup with default SPLUNK_FORWARDER_EXTRA_TIME (${SPLUNK_FORWARDER_EXTRA_TIME}ms) initiated`, LogLevel.DEBUG);
+    });
+
+    it("Should cleanup with custom time (2000ms)", async () => {
+      // Verify files exist before cleanup
+      expect(await fileExists(testDirectory), "Test directory should exist before cleanup").to.equal(true);
+      expect(await fileExists(stdoutLogFile), "Stdout log file should exist before cleanup").to.equal(true);
+      expect(await fileExists(stderrLogFile), "Stderr log file should exist before cleanup").to.equal(true);
+
+      // Call cleanup with custom time
+      await test.cleanup(2000);
+
+      // Test directory should be deleted immediately
+      expect(await fileExists(testDirectory), "Test directory should be deleted immediately").to.equal(false);
+
+      // Wait for log files to be deleted (2000ms + buffer)
+      await util.sleep(3000);
+
+      // Verify log files are deleted
+      expect(await fileExists(stdoutLogFile), "Stdout log file should be deleted after wait").to.equal(!SPLUNK_LOGS_CLEANUP);
+      expect(await fileExists(stderrLogFile), "Stderr log file should be deleted after wait").to.equal(!SPLUNK_LOGS_CLEANUP);
+
+      log("Cleanup with splunkForwarderExtraTime=2000 completed and verified", LogLevel.DEBUG);
+    });
   });
 });

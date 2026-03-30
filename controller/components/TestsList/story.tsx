@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
 import TestsList, { TestListProps } from ".";
 import { GlobalStyle } from "../Layout";
@@ -57,5 +58,12 @@ export const Loaded = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestsList {...propsLoaded} />
+  </React.Fragment>
+);
+
+export const OnClick = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestsList {...propsLoaded} onClick={(_event, testData) => console.log("Clicked test:", testData.testId)} />
   </React.Fragment>
 );

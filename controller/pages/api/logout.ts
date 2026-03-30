@@ -1,7 +1,7 @@
 import { LogLevel, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
-import { createErrorResponse } from "./util/util";
-import { getLogoutUrl } from "./util/authserver";
+import { createErrorResponse } from "../../src/util";
+import { getLogoutUrl } from "../../src/authserver";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { accessS3Pass } from "../util/healthcheck";
+import { accessS3Pass } from "../../../src/healthcheck";
 import { s3 } from "@fs/ppaas-common";
 
 export default async (_req: NextApiRequest, res: NextApiResponse) => {

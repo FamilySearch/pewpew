@@ -17,7 +17,7 @@ import { expect } from "chai";
 import { getPewPewVersions } from "./pewpew.spec";
 import { getQueueNames } from "./queues.spec";
 import { integrationUrl } from "./util";
-import { latestPewPewVersion } from "../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../src/clientutil";
 import path from "path";
 
 async function fetch (

@@ -1,6 +1,6 @@
 import { LogLevel, PpaasTestId, log, s3, util } from "@fs/ppaas-common";
-import { PpaasEncryptS3File, PpaasEncryptS3FileParams } from "../pages/api/util/ppaasencrypts3file";
-import { decrypt, waitForSecrets } from "../pages/api/util/secrets";
+import { PpaasEncryptS3File, PpaasEncryptS3FileParams } from "../src/ppaasencrypts3file";
+import { decrypt, waitForSecrets } from "../src/secrets";
 import { _Object as S3Object } from "@aws-sdk/client-s3";
 import { expect } from "chai";
 

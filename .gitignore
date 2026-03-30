@@ -16,9 +16,12 @@ coverage/
 mutants.out/
 /controller/aws*.sh
 testmerge.json
+.eslintcache
 .env.local*
 .env.development.local*
 .env.test.local*
 .env.production.local*
 .DS_Store
 package-lock.json.scripting
+Cargo.lock.scripting
+CLAUDE.md

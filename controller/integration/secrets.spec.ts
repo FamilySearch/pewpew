@@ -13,7 +13,7 @@ import {
   init as initSecrets,
   internalConfig as secretsConfig,
   waitForSecrets
-} from "../pages/api/util/secrets";
+} from "../src/secrets";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import crypto from "crypto";
 import { expect } from "chai";

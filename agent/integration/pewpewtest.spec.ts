@@ -18,15 +18,27 @@ import {
   sqs,
   util
 } from "@fs/ppaas-common";
-import { PewPewTest, getEndTime } from "../src/pewpewtest.js";
+import { PewPewTest, SPLUNK_FORWARDER_EXTRA_TIME, SPLUNK_LOGS_CLEANUP, getEndTime } from "../src/pewpewtest.js";
+import { basename, join } from "path";
 import { PEWPEW_PATH } from "../src/tests.js";
-import { basename } from "path";
+import { access } from "fs/promises";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util.js";
 
 const CREATE_TEST_FILENAME: string = process.env.CREATE_TEST_FILENAME || "createtest.yaml";
 const CREATE_TEST_FILEDIR: string = process.env.CREATE_TEST_FILEDIR || "createtest";
 const CREATE_TEST_SHORTERDIR: string = process.env.CREATE_TEST_SHORTERDIR || "createtest/shorter";
+const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
+
+// Helper function to check if a file/directory exists
+async function fileExists (path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("PewPewTest Integration Test", () => {
   let ppaasTestId: PpaasTestId | undefined;
@@ -120,6 +132,33 @@ describe("PewPewTest Integration Test", () => {
         const errorMessage: string = `Found test message after test complete: ${messagesFound}`;
         log(errorMessage, LogLevel.ERROR);
         throw new Error(errorMessage);
+      }
+
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete (log files are deleted after SPLUNK_FORWARDER_EXTRA_TIME)
+        // For tests, we set SPLUNK_FORWARDER_EXTRA_TIME=1000 in .env.test
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME * 3 + 500);
+        }
+
+        log(`Checking cleanup for integration test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        // Log files might still exist if SPLUNK_FORWARDER_EXTRA_TIME is long, so only check if we waited
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+        }
       }
     });
 

@@ -7,7 +7,7 @@ import {
   GetServerSidePropsResult
 } from "next";
 import { H1, H3 } from "../components/Headers";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import { PewPewVersions, VersionInitalProps } from "../components/PewPewVersions";
 import React, { useState } from "react";
@@ -17,14 +17,14 @@ import {
   formatPageHref,
   isTestManagerError,
   latestPewPewVersion
-} from "./api/util/clientutil";
+} from "../src/clientutil";
 import { CheckboxButton } from "../components/CheckboxButton";
 import DropFile from "../components/DropFile";
 import FilesList from "../components/FilesList";
 import Layout from "../components/Layout";
 import { Line } from "rc-progress";
 import { PEWPEW_BINARY_EXECUTABLE_NAMES } from "@fs/ppaas-common/dist/src/util/util";
-import { authPage } from "./api/util/authserver";
+import { authPage } from "../src/authserver";
 import { getServerSideProps as getPropsPewPewVersions } from "../components/PewPewVersions/initialProps";
 import styled from "styled-components";
 

@@ -14,7 +14,6 @@ import {
   util
 } from "@fs/ppaas-common";
 import { NextFunction, Request, Response, Router } from "express";
-import ExpiryMap from "expiry-map";
 import { PewPewTest } from "./pewpewtest.js";
 import { config as healthcheckConfig } from "./healthcheck.js";
 import { join as pathJoin } from "path";
@@ -54,7 +53,7 @@ endpoints:
 `;
 
 /** key is an id/timestamp, result is either boolean (finished/not finished) or error */
-const buildTestMap = new ExpiryMap<string, boolean | unknown>(600_000); // 10 minutes
+const buildTestMap = new Map<string, boolean | Error | undefined>();
 
 async function pollTestStatusForFinished (ppaasTestStatus: PpaasTestStatus): Promise<TestStatus> {
   let previousDate: Date = await ppaasTestStatus.readStatus();
@@ -203,7 +202,11 @@ export function init (): Router {
         buildTestMap.set(newJobId, false);
         buildTest({ unitTest: true, ppaasTestId, sendToQueue: sendToQueue !== undefined })
         .then(() => buildTestMap.set(newJobId, true))
-        .catch((error: unknown) => buildTestMap.set(newJobId, error));
+        .catch((error: unknown) => {
+          // It's either an Error or a promise reject string
+          const err: Error = error instanceof Error ? error : new Error(`${error}`);
+          buildTestMap.set(newJobId, err);
+        });
         res.status(200).json({ jobId: newJobId });
       } catch (error: unknown) {
         res.status(500).json({ build: false, error });

@@ -1,9 +1,9 @@
 import { AuthPermission, AuthPermissions, TestManagerResponse } from "../../types";
 import { NextApiRequest, NextApiResponse } from "next";
 import { LogLevel } from "@fs/ppaas-common";
-import { TestManager } from "./util/testmanager";
-import { authApi } from "./util/authserver";
-import { createErrorResponse } from "./util/util";
+import { TestManager } from "../../src/testmanager";
+import { authApi } from "../../src/authserver";
+import { createErrorResponse } from "../../src/util";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Allow Read-Only to view

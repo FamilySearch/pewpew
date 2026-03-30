@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { accessSqsPass } from "../util/healthcheck";
+import { accessSqsPass } from "../../../src/healthcheck";
 import { sqs } from "@fs/ppaas-common";
 
 export default async (_req: NextApiRequest, res: NextApiResponse) => {

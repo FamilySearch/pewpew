@@ -51,6 +51,7 @@ const tomorrowEvent: EventInput = {
   ...event,
   id: "" + idCounter++,
   start: start + 23.5 * ONE_HOUR,
+  end: start + 24.5 * ONE_HOUR,
   title: "Future Test"
 };
 const startRecur: number = start + 2 * ONE_HOUR;
@@ -59,6 +60,7 @@ const recurringEventLocal: EventInput = {
   id: "" + idCounter++,
   start: undefined,
   startRecur,
+  testRunTimeMn: 60, // 60 minute duration
   startTime: new Date(startRecur).toTimeString().split(" ")[0],
   daysOfWeek: [1, 3, 5]
 };
@@ -67,8 +69,29 @@ const recurringEventServer: EventInput = {
   id: "" + idCounter++,
   start: undefined,
   startRecur: startRecur + ONE_HOUR,
+  testRunTimeMn: 60, // 60 minute duration
   startTime: new Date(startRecur + 6 * ONE_HOUR).toTimeString().split(" ")[0],
   daysOfWeek: [1, 3, 5]
+};
+
+// Test case for event that crosses midnight (like 23:30 to 00:30)
+// Simulates what the server sends: startRecur timestamp + testRunTimeMn
+const midnightCrossingStartTime = new Date();
+midnightCrossingStartTime.setHours(23, 0, 0, 0);
+const crossesMidnightEvent: EventInput = {
+  ...event,
+  id: "" + idCounter++,
+  start: midnightCrossingStartTime.getTime(),
+  end: midnightCrossingStartTime.getTime() + (2 * ONE_HOUR),
+  title: "Crosses Midnight"
+};
+const recurringEventCrossesMidnight: EventInput = {
+  title: "Midnight Recurring",
+  id: "" + idCounter++,
+  start: undefined,
+  startRecur: midnightCrossingStartTime.getTime() + (24 * ONE_HOUR),
+  testRunTimeMn: 120, // 120 minute duration
+  daysOfWeek: [0, 1, 2, 3, 4, 5, 6] // Every day
 };
 
 const propsLoaded: CalendarProps = {
@@ -79,7 +102,9 @@ const propsLoaded: CalendarProps = {
     yesterdayFailedEvent,
     tomorrowEvent,
     recurringEventLocal,
-    recurringEventServer
+    recurringEventServer,
+    crossesMidnightEvent,
+    recurringEventCrossesMidnight
   ]
 };
 

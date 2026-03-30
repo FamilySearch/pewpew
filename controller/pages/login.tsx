@@ -3,7 +3,7 @@ import {
   NOT_AUTHORIZED_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
   logout as authLogout
-} from "./api/util/authclient";
+} from "../src/authclient";
 import { Alert, Danger, Info } from "../components/Alert";
 import type {
   GetServerSideProps,
@@ -11,10 +11,10 @@ import type {
   GetServerSidePropsResult,
   NextApiRequest
 } from "next";
-import { LogLevel, log } from "./api/util/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { JSX } from "react";
-import { formatError, formatPageHref, getHostUrl } from "./api/util/clientutil";
+import { formatError, formatPageHref, getHostUrl } from "../src/clientutil";
 import {
   getLoginApiUrl,
   getRefreshTokenFromCookie,
@@ -22,7 +22,7 @@ import {
   getTokenFromRefreshToken,
   setCookies,
   validateUrlDomain
-} from "./api/util/authserver";
+} from "../src/authserver";
 import Div from "../components/Div";
 import { H1 } from "../components/Headers";
 import Router from "next/router";

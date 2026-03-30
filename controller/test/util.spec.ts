@@ -1,6 +1,6 @@
 import type { File, Files } from "formidable";
 import { LogLevel, log } from "@fs/ppaas-common";
-import { createFormidableFile, parseZip, unzipFile } from "../pages/api/util/util";
+import { createFormidableFile, parseZip, unzipFile } from "../src/util";
 import { expect } from "chai";
 import fs from "fs/promises";
 import path from "path";

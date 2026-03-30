@@ -16,7 +16,7 @@ import {
   Title,
   Tooltip
 } from "chart.js";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import { DataPoint } from "./model";
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc

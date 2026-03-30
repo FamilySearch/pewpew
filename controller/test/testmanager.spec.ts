@@ -19,7 +19,7 @@ import {
   getRunningTests,
   removeOldest,
   validateYamlfile
-} from "../pages/api/util/testmanager";
+} from "../src/testmanager";
 import {
   EnvironmentVariables,
   LogLevel,
@@ -32,7 +32,7 @@ import {
   log
 } from "@fs/ppaas-common";
 import type { File, FileJSON } from "formidable";
-import { PpaasEncryptS3File } from "../pages/api/util/ppaasencrypts3file";
+import { PpaasEncryptS3File } from "../src/ppaasencrypts3file";
 import { TestSchedulerIntegration } from "./testscheduler.spec";
 import { expect } from "chai";
 import path from "path";
@@ -1073,6 +1073,75 @@ describe("TestManager", () => {
         expect((found as any).cacheLocation, "cacheLocation").to.equal(undefined);
         done();
       }).catch((error) => done(error));
+    });
+  });
+
+  describe("addRecentTests", () => {
+    beforeEach(() => {
+      TestManagerIntegration.clearAllMaps();
+      PpaasTestStatusIntegration.getStatusResult = false;
+    });
+
+    it("should add nothing if empty array", async () => {
+      await TestManager.addRecentTests([]);
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(0);
+    });
+
+    it("should add a single test to recent", async () => {
+      const test = createStoredTestData("addRecentTests");
+      await TestManager.addRecentTests([test]);
+      expect(TestManagerIntegration.recentTestsInt.has(test.testId), "recentTestsInt.has").to.equal(true);
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(1);
+    });
+
+    it("should add multiple tests to recent", async () => {
+      const test1 = createStoredTestData("addRecentTests", 1);
+      const test2 = createStoredTestData("addRecentTests", 2);
+      const test3 = createStoredTestData("addRecentTests", 3);
+      await TestManager.addRecentTests([test1, test2, test3]);
+      expect(TestManagerIntegration.recentTestsInt.has(test1.testId), "has test1").to.equal(true);
+      expect(TestManagerIntegration.recentTestsInt.has(test2.testId), "has test2").to.equal(true);
+      expect(TestManagerIntegration.recentTestsInt.has(test3.testId), "has test3").to.equal(true);
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(3);
+    });
+
+    it("should evict oldest when adding past MAX_SAVED_TESTS_RECENT", async () => {
+      const tests: StoredTestData[] = [];
+      for (let i = 0; i < MAX_SAVED_TESTS_RECENT + 1; i++) {
+        tests.push(createStoredTestData("addRecentTests", i));
+      }
+      await TestManager.addRecentTests(tests);
+      // Size should be capped
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(MAX_SAVED_TESTS_RECENT);
+      // Last test (newest) should be present
+      expect(TestManagerIntegration.recentTestsInt.has(tests[MAX_SAVED_TESTS_RECENT].testId), "newest present").to.equal(true);
+      // First test (oldest inserted) should have been evicted
+      expect(TestManagerIntegration.recentTestsInt.has(tests[0].testId), "oldest evicted").to.equal(false);
+    });
+
+    it("should preserve newest tests when adding many more than MAX_SAVED_TESTS_RECENT", async () => {
+      const extra = 3;
+      const tests: StoredTestData[] = [];
+      for (let i = 0; i < MAX_SAVED_TESTS_RECENT + extra; i++) {
+        tests.push(createStoredTestData("addRecentTests", i));
+      }
+      await TestManager.addRecentTests(tests);
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(MAX_SAVED_TESTS_RECENT);
+      // Newest tests should be present
+      for (let i = extra; i < MAX_SAVED_TESTS_RECENT + extra; i++) {
+        expect(TestManagerIntegration.recentTestsInt.has(tests[i].testId), `tests[${i}] present`).to.equal(true);
+      }
+      // Oldest (first `extra`) should be evicted
+      for (let i = 0; i < extra; i++) {
+        expect(TestManagerIntegration.recentTestsInt.has(tests[i].testId), `tests[${i}] evicted`).to.equal(false);
+      }
+    });
+
+    it("should not duplicate a test already in recent", async () => {
+      const test = createStoredTestData("addRecentTests");
+      await TestManager.addRecentTests([test]);
+      await TestManager.addRecentTests([test]);
+      expect(TestManagerIntegration.recentTestsInt.size, "recentTestsInt.size").to.equal(1);
     });
   });
 

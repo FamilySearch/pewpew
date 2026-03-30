@@ -7,8 +7,8 @@ import {
   accessSqsPass,
   getGlobalHealthcheckConfig,
   waitForSecrets
-} from "../util/healthcheck";
-import { start as startCommuncations } from "../util/communications";
+} from "../../../src/healthcheck";
+import { start as startCommuncations } from "../../../src/communications";
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
   // We have to start the communications loop somewhere, and the healthcheck should be the first thing called

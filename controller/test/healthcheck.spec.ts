@@ -4,7 +4,7 @@ import {
   accessS3Pass,
   accessSqsPass,
   getGlobalHealthcheckConfig
-} from "../pages/api/util/healthcheck";
+} from "../src/healthcheck";
 import { mockListObjects, mockS3, resetMockS3 } from "./mock";
 import { expect } from "chai";
 import { s3 } from "@fs/ppaas-common";

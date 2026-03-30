@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-common",
-  "version": "4.0.0",
+  "version": "4.0.5",
   "description": "Common Code for the PewPewController and PewPewAgent",
   "type": "module",
   "main": "dist/src/index.js",
@@ -12,10 +12,10 @@
   "scripts": {
     "build": "npm run buildonly",
     "buildonly": "tsc",
-    "test": "npm run buildonly && mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "testonly": "mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
-    "integration": "npm run build && mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
-    "coverage": "npm run build && mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "test": "npm run buildonly && c8 mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "testonly": "c8 mocha ./dist/test --timeout 30000 -r dotenv-flow/config",
+    "integration": "npm run build && c8 mocha ./dist/integration --timeout 300000 -r dotenv-flow/config",
+    "coverage": "npm run build && c8 mocha ./dist/test ./dist/integration --timeout 300000 -r dotenv-flow/config",
     "prepare": "tsc --project tsconfig.lib.json",
     "clean": "rimraf dist/"
   },
@@ -24,7 +24,7 @@
     "url": "git+https://github.com/FamilySearch/pewpew.git"
   },
   "engines": {
-    "node": ">=20.0.0 <23.0.0"
+    "node": ">=20.0.0"
   },
   "peerDependencies": {
     "@fs/config-wasm": "*"
@@ -39,21 +39,23 @@
     "rimraf": "^6.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/types": "^3.363.0",
     "@eslint/eslintrc": "^3.1.0",
-    "@eslint/js": "^9.8.0",
+    "@eslint/js": "^10.0.0",
     "@fs/config-wasm": "*",
     "@smithy/util-stream": "^4.0.0",
     "@types/bunyan": "~1.8.8",
     "@types/chai": "^5.0.0",
     "@types/mocha": "^10.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "aws-sdk-client-mock": "^4.0.0",
-    "chai": "^5.0.0",
-    "dotenv": "^16.0.0",
+    "c8": "^11.0.0",
+    "chai": "^6.0.0",
+    "dotenv": "^17.0.0",
     "dotenv-flow": "^4.0.1",
-    "eslint": "^9.15.0",
+    "eslint": "^10.0.0",
     "mocha": "^11.0.0",
     "typescript": "^5.3.0"
   }

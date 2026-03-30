@@ -24,6 +24,7 @@ import fs from "fs/promises";
 import { getHostname } from "./util/util.js";
 import { join as pathJoin } from "path";
 import { platform } from "os";
+import { rimraf } from "rimraf";
 import semver from "semver";
 
 const logConfig = logger.config;
@@ -38,12 +39,13 @@ const DEFAULT_PEWPEW_PARAMS = [
 ];
 
 const PEWPEW_PATH: string = process.env.PEWPEW_PATH || util.PEWPEW_BINARY_EXECUTABLE;
-const DOWNLOAD_PEWPEW: boolean = (process.env.DOWNLOAD_PEWPEW || "false") === "true";
+const DOWNLOAD_PEWPEW: boolean = process.env.DOWNLOAD_PEWPEW?.toLowerCase() === "true";
 const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
 const RESULTS_FILE_MAX_WAIT: number = parseInt(process.env.RESULTS_FILE_MAX_WAIT || "0", 10) || 5000; // S3_UPLOAD_INTERVAL + this Could take up to a minute
 const KILL_MAX_WAIT: number = parseInt(process.env.KILL_MAX_WAIT || "0", 10) || 180000; // How long to wait between SIGINT (Ctrl-C) and SIGKILL
 const ALLOW_TEST_OVERAGE: number = parseInt(process.env.ALLOW_TEST_OVERAGE || "0", 10) || 300000;
-const SPLUNK_FORWARDER_EXTRA_TIME: number = parseInt(process.env.SPLUNK_FORWARDER_EXTRA_TIME || "0", 10) || 10000;
+export const SPLUNK_FORWARDER_EXTRA_TIME: number = parseInt(process.env.SPLUNK_FORWARDER_EXTRA_TIME || "0", 10) || 10000;
+export const SPLUNK_LOGS_CLEANUP: boolean = process.env.SPLUNK_LOGS_CLEANUP?.toLowerCase() === "true";
 /** Have to run for at least 5 minutes for us to restart */
 const MIN_RUNTIME_FOR_RETRY: number = parseInt(process.env.MIN_RUNTIME_FOR_RETRY || "0", 10) || 300000;
 export const IS_RUNNING_IN_AWS: boolean = process.env.APPLICATION_NAME !== undefined && process.env.SYSTEM_NAME !== undefined;
@@ -493,18 +495,58 @@ export class PewPewTest {
           .on("exit", (code: number, signal: string) => {
             this.pewpewRunning = false;
             this.pewpewEnd = Date.now();
-            const message = `pewpew exited with code ${code} and signal ${signal}`;
-            if (code !== 0) {
-              this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), message];
+
+            // Determine the exit reason and appropriate message
+            let message: string;
+            let logLevel: LogLevel;
+            let shouldResolve = false;
+            let statusError: string | undefined;
+
+            if (code === 0) {
+              // Normal completion
+              message = "pewpew completed successfully";
+              logLevel = LogLevel.DEBUG;
+              shouldResolve = true;
+            } else if (code === 2) {
+              // Provider ended early
+              statusError = message = "Test ended early - a provider exhausted before expected duration";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // Not a fatal error, test ran but provider exhausted early
+            } else if (code === 3) {
+              // Logger killed the test
+              statusError = message = "Test killed early by logger - a logger reached its limit";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // Not a fatal error, test ran but was stopped by logger
+            } else if (code === 130 || signal === "SIGINT") {
+              // User interrupted with Ctrl-C
+              statusError = message = "Test interrupted by user (Ctrl-C)";
+              logLevel = LogLevel.WARN;
+              shouldResolve = true; // User-initiated stop, not an error
+            } else if (code !== null && code !== 0) {
+              // Other error codes
+              statusError = message = `pewpew exited with error code ${code}`;
+              logLevel = LogLevel.ERROR;
+              shouldResolve = false;
+            } else {
+              // Unknown exit condition
+              statusError = message = `pewpew exited with code ${code} and signal ${signal}`;
+              logLevel = LogLevel.ERROR;
+              shouldResolve = false;
             }
-            if (code === 0 || signal === "SIGINT") {
-              this.log(message, signal === "SIGINT" ? LogLevel.WARN : LogLevel.DEBUG);
-              // We still want to resolve on SIGINT (stop called) so we don't get errors down the line. Just log one warning here
+
+            // Add error to status if needed
+            if (statusError) {
+              this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), statusError];
+            }
+
+            this.log(message, logLevel);
+
+            if (shouldResolve) {
               resolve();
             } else {
-              this.log(message, LogLevel.ERROR);
               reject(message);
             }
+
             this.pewpewProcess = undefined;
             try { // Close the streams
               pewpewOutStream.end();
@@ -609,6 +651,8 @@ export class PewPewTest {
     } finally {
       // Let us scale back in
       await this.deleteTestScalingMessage();
+      // Clean up local files
+      await this.cleanup().catch((error) => this.log("Could not cleanup local files", LogLevel.WARN, error));
     }
   }
 
@@ -669,6 +713,69 @@ export class PewPewTest {
     this.stopCalled = true;
     this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), `Received ${killTest ? "KillTest" : "StopTest"} message from controller`];
     return killTest ? this.internalKill() : this.internalStop();
+  }
+
+  /**
+   * Cleans up all local files created during the test run
+   * Removes the test directory immediately (await)
+   * Schedules log file deletion after splunkForwarderExtraTime (fire-and-forget)
+   * Set splunkForwarderExtraTime to 0 or negative to delete log files immediately
+   * @param splunkForwarderExtraTime Optional override for SPLUNK_FORWARDER_EXTRA_TIME (milliseconds)
+   * @returns {Promise<void>}
+   */
+  protected async cleanup (splunkForwarderExtraTime: number = SPLUNK_FORWARDER_EXTRA_TIME * 3): Promise<void> {
+    // Clean up test directory immediately - we need this space back now
+    if (this.localPath) {
+      try {
+        await rimraf(this.localPath);
+        this.log(`Successfully cleaned up test directory: ${this.localPath}`, LogLevel.DEBUG);
+      } catch (error) {
+        // Log but don't throw - cleanup failures shouldn't fail the test
+        this.log(`Failed to clean up test directory: ${this.localPath}`, LogLevel.WARN, error);
+      }
+    }
+
+    if (SPLUNK_LOGS_CLEANUP) {
+      // Schedule log file cleanup after Splunk has time to ingest (fire-and-forget)
+      // Don't await - we don't want to block the agent from picking up the next test
+      const logFilesToClean: string[] = [];
+      if (this.pewpewStdOutS3File?.localFilePath) {
+        logFilesToClean.push(this.pewpewStdOutS3File.localFilePath);
+      }
+      if (this.pewpewStdErrS3File?.localFilePath) {
+        logFilesToClean.push(this.pewpewStdErrS3File.localFilePath);
+      }
+
+      if (logFilesToClean.length > 0) {
+        const deleteLogFiles = async () => {
+          await Promise.all(logFilesToClean.map(async (logFile) => {
+            try {
+              await rimraf(logFile);
+              this.log(`Successfully cleaned up log file: ${logFile}`, LogLevel.DEBUG);
+            } catch (error) {
+              this.log(`Failed to clean up log file: ${logFile}`, LogLevel.WARN, error);
+            }
+          }));
+          this.log("Log file cleanup complete", LogLevel.DEBUG);
+        };
+
+        if (splunkForwarderExtraTime > 0) {
+          // Sleep first, then delete (fire-and-forget)
+          this.log(`Scheduling log file cleanup in ${splunkForwarderExtraTime}ms for Splunk ingestion`, LogLevel.DEBUG, { logFilesToClean });
+          sleep(splunkForwarderExtraTime).then(deleteLogFiles).catch((error) => {
+            this.log("Error during scheduled log file cleanup", LogLevel.WARN, error);
+          });
+        } else {
+          // Delete immediately (fire-and-forget)
+          this.log(`Deleting log files immediately (splunkForwarderExtraTime <= 0: ${splunkForwarderExtraTime})`, LogLevel.DEBUG, { logFilesToClean });
+          deleteLogFiles().catch((error) => {
+            this.log("Error during immediate log file cleanup", LogLevel.WARN, error);
+          });
+        }
+      }
+    }
+
+    this.log("Cleanup initiated", LogLevel.DEBUG);
   }
 
   /** * Polls for the results file then uploads it every minute ** */

@@ -8,7 +8,7 @@ import {
   getGlobalSecretsConfig,
   getKey,
   getOverrideName
-} from "../pages/api/util/secrets";
+} from "../src/secrets";
 import { mockGetSecretValue, mockSecrets, resetMockSecrets } from "./mock";
 import crypto from "crypto";
 import { expect } from "chai";

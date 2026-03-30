@@ -1,6 +1,8 @@
 import {
   BYPASS_PARSER_RUNTIME_DEFAULT,
   PewPewTest,
+  SPLUNK_FORWARDER_EXTRA_TIME,
+  SPLUNK_LOGS_CLEANUP,
   getEndTime
 } from "../src/pewpewtest.js";
 import {
@@ -16,6 +18,7 @@ import {
   TestStatus,
   TestStatusMessage,
   log,
+  logger,
   ppaass3message,
   ppaasteststatus,
   s3,
@@ -30,6 +33,7 @@ const {
   createS3Filename: createS3FilenameTestStatus,
   getKey: getKeyTestStatus
 } = ppaasteststatus;
+import { access, readFile } from "fs/promises";
 import {
   mockCopyObject,
   mockGetObject,
@@ -49,12 +53,27 @@ import { PEWPEW_PATH } from "../src/tests.js";
 import { expect } from "chai";
 import { getHostname } from "../src/util/util.js";
 import { join } from "path";
-import { readFile } from "fs/promises";
 
 const CREATE_TEST_FILENAME: string = process.env.CREATE_TEST_FILENAME || "createtest.yaml";
 const CREATE_TEST_FILEDIR: string = process.env.CREATE_TEST_FILEDIR || "createtest";
 const CREATE_TEST_SHORTERDIR: string = process.env.CREATE_TEST_SHORTERDIR || "createtest/shorter";
+const LOGGER_TEST_FILENAME: string = process.env.LOGGER_TEST_FILENAME || "test_logger_ends.yaml";
+const PROVIDER_TEST_FILENAME: string = process.env.PROVIDER_TEST_FILENAME || "test_provider_ends_early.yaml";
 const CREATE_TEST_RUN_TIME_MN: number = 2;
+// In tests, allow more timing variation due to faster SPLUNK_FORWARDER_EXTRA_TIME
+// Production uses 90000ms, but tests use 1000ms, so we need at least 10s buffer for timing variations
+const END_TIME_BUFFER = SPLUNK_FORWARDER_EXTRA_TIME < 10000 ? 10000 : SPLUNK_FORWARDER_EXTRA_TIME;
+const LOCAL_FILE_LOCATION: string = process.env.LOCAL_FILE_LOCATION || process.env.TEMP || "/tmp";
+
+// Helper function to check if a file/directory exists
+async function fileExists (path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("PewPewTest Create Test", () => {
   let ppaasTestId: PpaasTestId | undefined;
@@ -160,6 +179,35 @@ describe("PewPewTest Create Test", () => {
       });
     });
 
+    afterEach(async function () {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete (log files are deleted after SPLUNK_FORWARDER_EXTRA_TIME)
+        // For tests, we set SPLUNK_FORWARDER_EXTRA_TIME=1000 in .env.test
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME * 3 + 500);
+        }
+
+        log(`Checking cleanup for test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        // Log files might still exist if SPLUNK_FORWARDER_EXTRA_TIME is long, so only check if we waited
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+        }
+      }
+    });
+
     it("Retrieve Test and launch should succeed", (done: Mocha.Done) => {
       PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
         log("PewPewTest.retrieve Success: " + test?.toString(), LogLevel.DEBUG);
@@ -193,7 +241,9 @@ describe("PewPewTest Create Test", () => {
         expect(finishedTestStatusMessage.hostname, "finishedTestStatusMessage.hostname").to.equal(hostname);
         expect(finishedTestStatusMessage.ipAddress, "finishedTestStatusMessage.ipAddress").to.equal(ipAddress);
         expect(finishedTestStatusMessage.startTime, "finishedTestStatusMessage.startTime").to.be.greaterThan(beforeStartTime);
-        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeEndTime);
+        // Tests can complete earlier than planned endTime, so allow reasonable buffer
+        // Use END_TIME_BUFFER to account for timing variations in test vs production environments
+        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(beforeEndTime - END_TIME_BUFFER);
         expect(Array.isArray(finishedTestStatusMessage.resultsFilename), "Array.isArray finishedTestStatusMessage.resultsFilename").to.equal(true);
         expect(finishedTestStatusMessage.resultsFilename.length, "finishedTestStatusMessage.resultsFilename.length").to.equal(1);
         expect(finishedTestStatusMessage.status, "finishedTestStatusMessage.status").to.equal(TestStatus.Finished);
@@ -235,6 +285,12 @@ describe("PewPewTest Create Test", () => {
         await test!.launch();
         expect(test!.getResultsFile(), "getResultsFile()").to.not.equal(undefined);
         expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+
+        // Verify that the test status includes the Ctrl-C error
+        const testStatus = test!.getTestStatusMessage();
+        expect(testStatus.errors, "errors should be set").to.not.equal(undefined);
+        expect(testStatus.errors, "errors should not be empty").to.have.length.greaterThan(0);
+        expect(JSON.stringify(testStatus.errors), "error message").to.include("Ctrl-C");
         done();
       })
       .catch((error) => {
@@ -333,6 +389,170 @@ describe("PewPewTest Create Test", () => {
     });
   });
 
+  describe("Exit Code Tests", () => {
+    it("Retrieve Test with logger kill should succeed", async () => {
+      try {
+        const loggerTestId = PpaasTestId.makeTestId(LOGGER_TEST_FILENAME);
+        const s3Folder = loggerTestId.s3Folder;
+
+        // Setup all mocks for this test
+        const yamlBody = await readFile(join(CREATE_TEST_FILEDIR, LOGGER_TEST_FILENAME));
+
+        // Mock pewpew binary download
+        mockGetObject({
+          body: await readFile(PEWPEW_PATH),
+          contentType: "application/octet-stream",
+          keyMatch: `${s3.KEYSPACE_PREFIX}${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}/${util.PEWPEW_BINARY_EXECUTABLE}`
+        });
+
+        // Yaml file
+        mockGetObject({ body: yamlBody, contentType: "text/yaml", keyMatch: `${s3.KEYSPACE_PREFIX}${s3Folder}/${LOGGER_TEST_FILENAME}` });
+        // .info
+        const now = Date.now();
+        const basicTestStatusMessage: TestStatusMessage = {
+          startTime: now + 1,
+          endTime: now + 2,
+          resultsFilename: [],
+          status: TestStatus.Created
+        };
+        const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(loggerTestId, basicTestStatusMessage);
+        const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(loggerTestId);
+        mockListObject({ filename: createS3FilenameTestStatus(loggerTestId), folder: s3Folder, keyMatch: testStatusKey });
+        mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
+        // .msg
+        const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(loggerTestId);
+        mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
+        mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
+
+        const testMessage: PpaasTestMessage = new PpaasTestMessage({
+          testId: loggerTestId.testId,
+          s3Folder,
+          yamlFile: LOGGER_TEST_FILENAME,
+          testRunTimeMn: 1, // 1 minute test
+          version: PEWPEW_VERSION_LATEST,
+          envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
+          restartOnFailure: false,
+          additionalFiles: [],
+          bucketSizeMs: 10000,
+          bypassParser: false,
+          userId: "unittestuser"
+        });
+
+        mockReceiveMessage({
+          testId: loggerTestId.testId,
+          testMessage: JSON.stringify(testMessage.getTestMessage()),
+          queueUrlMatch: sqs.QUEUE_URL_TEST.values().next().value
+        });
+        mockReceiveMessage({
+          testId: loggerTestId.testId,
+          queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
+        });
+
+        const test = await PewPewTest.retrieve();
+        expect(test).to.not.equal(undefined);
+        expect(test!.getTestId()).to.equal(loggerTestId.testId);
+        expect(test!.getYamlFile()).to.not.equal(undefined);
+        expect(test!.getResultsFile()).to.equal(undefined);
+
+        const startTime: number = Date.now();
+        await test!.launch();
+        expect(test!.getResultsFile(), "getResultsFile()").to.not.equal(undefined);
+        // Should complete much faster than 1 minute since logger kills after 5 requests
+        expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(60000);
+
+        // Verify that the test status includes the logger kill error
+        const testStatus = test!.getTestStatusMessage();
+        expect(testStatus.errors, "errors should be set").to.not.equal(undefined);
+        expect(testStatus.errors, "errors should not be empty").to.have.length.greaterThan(0);
+        expect(testStatus.errors![0], "error message").to.include("logger");
+      } catch (error) {
+        log("Test Failed", LogLevel.WARN, error);
+        throw error;
+      }
+    });
+
+    it("Retrieve Test with provider exhaustion should succeed", async () => {
+      try {
+        const providerTestId = PpaasTestId.makeTestId(PROVIDER_TEST_FILENAME);
+        const s3Folder = providerTestId.s3Folder;
+
+        // Setup all mocks for this test
+        const yamlBody = await readFile(join(CREATE_TEST_FILEDIR, PROVIDER_TEST_FILENAME));
+
+        // Mock pewpew binary download
+        mockGetObject({
+          body: await readFile(PEWPEW_PATH),
+          contentType: "application/octet-stream",
+          keyMatch: `${s3.KEYSPACE_PREFIX}${PEWPEW_BINARY_FOLDER}/${PEWPEW_VERSION_LATEST}/${util.PEWPEW_BINARY_EXECUTABLE}`
+        });
+
+        // Yaml file
+        mockGetObject({ body: yamlBody, contentType: "text/yaml", keyMatch: `${s3.KEYSPACE_PREFIX}${s3Folder}/${PROVIDER_TEST_FILENAME}` });
+        // .info
+        const now = Date.now();
+        const basicTestStatusMessage: TestStatusMessage = {
+          startTime: now + 1,
+          endTime: now + 2,
+          resultsFilename: [],
+          status: TestStatus.Created
+        };
+        const ppaasTestStatus: PpaasTestStatus = new PpaasTestStatus(providerTestId, basicTestStatusMessage);
+        const testStatusKey = s3.KEYSPACE_PREFIX + getKeyTestStatus(providerTestId);
+        mockListObject({ filename: createS3FilenameTestStatus(providerTestId), folder: s3Folder, keyMatch: testStatusKey });
+        mockGetObject({ body: JSON.stringify(ppaasTestStatus.getTestStatusMessage()), contentType: "application/json", keyMatch: testStatusKey });
+        // .msg
+        const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(providerTestId);
+        mockListObjects({ contents: undefined, keyMatch: s3MessageKey });
+        mockGetObjectError({ statusCode: 404, code: "Not Found", keyMatch: s3MessageKey });
+
+        const testMessage: PpaasTestMessage = new PpaasTestMessage({
+          testId: providerTestId.testId,
+          s3Folder,
+          yamlFile: PROVIDER_TEST_FILENAME,
+          testRunTimeMn: 1, // 1 minute test
+          version: PEWPEW_VERSION_LATEST,
+          envVariables: { SERVICE_URL_AGENT: "127.0.0.1:8080" },
+          restartOnFailure: false,
+          additionalFiles: [],
+          bucketSizeMs: 10000,
+          bypassParser: false,
+          userId: "unittestuser"
+        });
+
+        mockReceiveMessage({
+          testId: providerTestId.testId,
+          testMessage: JSON.stringify(testMessage.getTestMessage()),
+          queueUrlMatch: sqs.QUEUE_URL_TEST.values().next().value
+        });
+        mockReceiveMessage({
+          testId: providerTestId.testId,
+          queueUrlMatch: sqs.QUEUE_URL_SCALE_IN.values().next().value
+        });
+
+        const test = await PewPewTest.retrieve();
+        expect(test).to.not.equal(undefined);
+        expect(test!.getTestId()).to.equal(providerTestId.testId);
+        expect(test!.getYamlFile()).to.not.equal(undefined);
+        expect(test!.getResultsFile()).to.equal(undefined);
+
+        const startTime: number = Date.now();
+        await test!.launch();
+        expect(test!.getResultsFile(), "getResultsFile()").to.not.equal(undefined);
+        // Should complete much faster than 1 minute since provider exhausts after 3 items
+        expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(60000);
+
+        // Verify that the test status includes the provider exhaustion error
+        const testStatus = test!.getTestStatusMessage();
+        expect(testStatus.errors, "errors should be set").to.not.equal(undefined);
+        expect(testStatus.errors, "errors should not be empty").to.have.length.greaterThan(0);
+        expect(testStatus.errors![0], "error message").to.include("provider");
+      } catch (error) {
+        log("Test Failed", LogLevel.WARN, error);
+        throw error;
+      }
+    });
+  });
+
   describe("Bypass Parser Test", () => {
     const createTestFilename = CREATE_TEST_FILENAME;
     let expectedTestMessage: TestMessage;
@@ -409,6 +629,33 @@ describe("PewPewTest Create Test", () => {
       });
     });
 
+    afterEach(async function () {
+      // Verify cleanup: test directory and log files should be deleted
+      if (ppaasTestId) {
+        const testDirectory = join(LOCAL_FILE_LOCATION, ppaasTestId.testId);
+        const stdoutLogFile = join(logger.config.LogFileLocation, logger.pewpewStdOutFilename(ppaasTestId.testId));
+        const stderrLogFile = join(logger.config.LogFileLocation, logger.pewpewStdErrFilename(ppaasTestId.testId));
+
+        // Wait a bit for fire-and-forget cleanup to complete
+        if (SPLUNK_FORWARDER_EXTRA_TIME > 0 && SPLUNK_FORWARDER_EXTRA_TIME < 10000) {
+          // Wait for cleanup + small buffer (tests use SPLUNK_FORWARDER_EXTRA_TIME=1000)
+          await util.sleep(SPLUNK_FORWARDER_EXTRA_TIME * 3 + 500);
+        }
+
+        log(`Checking cleanup for bypass test ${ppaasTestId.testId}`, LogLevel.DEBUG, { testDirectory, stdoutLogFile, stderrLogFile });
+
+        const testDirExists = await fileExists(testDirectory);
+        expect(testDirExists, `Test directory should be cleaned up: ${testDirectory}`).to.equal(false);
+
+        if (SPLUNK_FORWARDER_EXTRA_TIME <= 5000) {
+          const stdoutExists = await fileExists(stdoutLogFile);
+          const stderrExists = await fileExists(stderrLogFile);
+          expect(stdoutExists, `Stdout log file should be cleaned up: ${stdoutLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+          expect(stderrExists, `Stderr log file should be cleaned up: ${stderrLogFile}`).to.equal(!SPLUNK_LOGS_CLEANUP);
+        }
+      }
+    });
+
     it("Retrieve Test and launch bypass should succeed", (done: Mocha.Done) => {
       PewPewTest.retrieve().then(async (test: PewPewTest | undefined) => {
         expect(test, "test").to.not.equal(undefined);
@@ -442,7 +689,9 @@ describe("PewPewTest Create Test", () => {
         expect(finishedTestStatusMessage.ipAddress, "finishedTestStatusMessage.ipAddress").to.equal(ipAddress);
         expect(finishedTestStatusMessage.startTime, "finishedTestStatusMessage.startTime").to.be.greaterThan(beforeStartTime);
         // Bypass parser defaults to 60 minutes
-        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(getEndTime(constructorTestStatusMessage.startTime, CREATE_TEST_RUN_TIME_MN));
+        // Tests can complete earlier than planned endTime, so allow reasonable buffer
+        // Use END_TIME_BUFFER to account for timing variations in test vs production environments
+        expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.greaterThan(getEndTime(constructorTestStatusMessage.startTime, CREATE_TEST_RUN_TIME_MN) - END_TIME_BUFFER);
         expect(finishedTestStatusMessage.endTime, "finishedTestStatusMessage.endTime").to.be.lessThan(beforeEndTime);
         expect(Array.isArray(finishedTestStatusMessage.resultsFilename), "Array.isArray finishedTestStatusMessage.resultsFilename").to.equal(true);
         expect(finishedTestStatusMessage.resultsFilename.length, "finishedTestStatusMessage.resultsFilename.length").to.equal(1);

@@ -2,7 +2,7 @@ import {
   ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME,
   PpaasEncryptEnvironmentFile,
   PpaasEncryptEnvironmentFileParams
-} from "../pages/api/util/ppaasencryptenvfile";
+} from "../src/ppaasencryptenvfile";
 import {
   EnvironmentVariableState,
   EnvironmentVariablesFile,
@@ -16,7 +16,7 @@ import {
   s3,
   util
 } from "@fs/ppaas-common";
-import { encrypt, getEncryptionKey } from "../pages/api/util/secrets";
+import { encrypt, getEncryptionKey } from "../src/secrets";
 import {
   mockGetObject,
   mockGetObjectError,

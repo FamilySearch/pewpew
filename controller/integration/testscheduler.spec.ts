@@ -21,11 +21,12 @@ import {
   s3,
   util
 } from "@fs/ppaas-common";
-import { TestScheduler, TestSchedulerItem } from "../pages/api/util/testscheduler";
+import { TestScheduler, TestSchedulerItem } from "../src/testscheduler";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
-import { getHourMinuteFromTimestamp } from "../pages/api/util/clientutil";
-import { getPewPewVersionsInS3 } from "../pages/api/util/pewpew";
+import { getHourMinuteFromTimestamp } from "../src/clientutil";
+import { getPewPewVersionsInS3 } from "../src/pewpew";
+import { getRecentTests } from "../src/testmanager";
 
 const sleep = util.sleep;
 
@@ -113,6 +114,10 @@ class TestSchedulerIntegration extends TestScheduler {
 
   public static async saveHistoricalToS3 (): Promise<void> {
     return await TestScheduler.saveHistoricalToS3();
+  }
+
+  public static async populateCacheFromHistorical (days: number): Promise<void> {
+    return await TestScheduler.populateCacheFromHistorical(days);
   }
 }
 
@@ -681,6 +686,31 @@ describe("TestScheduler Integration", () => {
       done();
     })
     .catch((error) => done(error));
+  });
+
+  describe("populateCacheFromHistorical", () => {
+    before(async () => {
+      const historicalTests: Map<string, EventInput> = new Map<string, EventInput>();
+      historicalTests.set(historicalEvent.id as string, historicalEvent);
+      TestSchedulerIntegration.setHistoricalTests(historicalTests);
+      await TestSchedulerIntegration.saveHistoricalToS3();
+    });
+
+    afterEach(() => {
+      getRecentTests().clear();
+    });
+
+    it("should populate recent cache from historical data with real S3 status", async () => {
+      getRecentTests().clear();
+      await TestSchedulerIntegration.populateCacheFromHistorical(7);
+      const recentTests = getRecentTests();
+      expect(recentTests.has(historicalTestId.testId), "recentTests.has(historicalTestId)").to.equal(true);
+      const storedTest = recentTests.get(historicalTestId.testId)!;
+      expect(storedTest.testId, "storedTest.testId").to.equal(historicalTestId.testId);
+      expect(storedTest.startTime, "storedTest.startTime").to.be.greaterThan(0);
+      // Status should be loaded from PpaasTestStatus written in before()
+      expect(storedTest.status, "storedTest.status").to.equal(TestStatus.Finished);
+    });
   });
 
   // Must be run last since we'll delete the files

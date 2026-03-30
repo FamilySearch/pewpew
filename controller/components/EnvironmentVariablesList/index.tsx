@@ -4,7 +4,7 @@ import {
   Row,
   Cell as TextCell
 } from "../Table";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import Div from "../Div";
 import { EnvironmentVariableItem } from "../EnvironmentVariableItem";
 import React from "react";

@@ -1,5 +1,5 @@
 import { LogLevel, log } from "../../util/log";
-import React from "react";
+import React, { type JSX } from "react";
 
 export interface RequestBodyViewProps {
     requestBody: object | undefined;

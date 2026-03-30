@@ -29,6 +29,7 @@ import {
   ListObjectsV2CommandOutput,
   PutObjectTaggingCommandOutput,
   _Object as S3Object,
+  S3ServiceException,
   Tag as S3Tag
 } from "@aws-sdk/client-s3";
 import { LogLevel, S3File, log, util } from "../src/index.js";
@@ -438,11 +439,16 @@ describe("S3Util Integration", () => {
         getObject(s3FileKey, testModified).then((result: GetObjectCommandOutput | undefined) => {
           log("Should not succeed. We should get a Not Modified", LogLevel.WARN, { ...result, Body: undefined });
           done(new Error("Should not succeed. We should get a Not Modified"));
-        }).catch((error) => {
+        }).catch((error: unknown) => {
           log(`getObject(${s3FileKey}) error = ${error}`, LogLevel.DEBUG, error);
           try {
             expect(error, "error").to.not.equal(undefined);
-            expect(error?.name, "error?.name").to.equal("304");
+            expect(error, "error").instanceOf(S3ServiceException);
+            const s3ServiceException = error as S3ServiceException;
+            expect(
+              s3ServiceException.name === "304" || s3ServiceException["$metadata"]?.httpStatusCode === 304,
+              `"${s3ServiceException.name}" === "304" || ${s3ServiceException!["$metadata"].httpStatusCode} === 304)`
+            ).to.equal(true);
             done();
           } catch (error2) {
             done(error2);

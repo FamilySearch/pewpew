@@ -1,4 +1,4 @@
-import React from "react";
+import React, { type JSX } from "react";
 
 export const AddIcon = (props: React.SVGProps<SVGSVGElement>): JSX.Element => {
     return <svg

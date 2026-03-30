@@ -513,7 +513,7 @@ impl<T: Serialize> ChannelStatsReader<T> {
         }
     }
 
-    pub fn get_stats(&self, timestamp: u64) -> ChannelStats {
+    pub fn get_stats(&self, timestamp: u64) -> ChannelStats<'_> {
         ChannelStats {
             provider: &self.provider,
             timestamp,
@@ -700,48 +700,50 @@ impl<T: Serialize + Send + 'static> Stream for OnDemandReceiver<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         debug!("OnDemandReceiver::poll_next {}", self.channel.name);
-        loop {
-            // end the stream if there are no more receivers
-            if self.channel.receiver_count() == 0 {
-                info!(
-                    "OnDemandReceiver::poll_next {} receiver_count: 0, length: {}",
-                    self.channel.name,
-                    self.channel.len()
-                );
-                self.listener = None;
-                debug!(
-                    "OnDemandReceiver::poll_next {} listener: None",
-                    self.channel.name
-                );
-                return Poll::Ready(None);
-            }
-
-            // See the `poll_next` in `Stream for Receiver`
-            if let Some(listener) = self.listener.as_mut() {
-                let ret = Pin::new(listener).poll(cx).map(Some);
-                debug!(
-                    "OnDemandReceiver::poll_next {} ret: {:?}",
-                    self.channel.name, ret
-                );
-                if ret.is_ready() {
-                    // Create a new listener to wait for the next "need"
-                    info!(
-                        "OnDemandReceiver::poll_next {} on_demand_listen() ret.is_ready()",
-                        self.channel.name
-                    );
-                    self.listener = Some(self.channel.on_demand_listen());
-                };
-                return ret;
-            } else if self.listener.is_none() {
-                // The first time we poll and don't have a listener add one
-                // The --watch clone won't every call poll_next
-                info!(
-                    "OnDemandReceiver::poll_next {} on_demand_listen()",
-                    self.channel.name
-                );
-                self.listener = Some(self.channel.on_demand_listen());
-            }
+        // end the stream if there are no more receivers
+        if self.channel.receiver_count() == 0 {
+            info!(
+                "OnDemandReceiver::poll_next {} receiver_count: 0, length: {}",
+                self.channel.name,
+                self.channel.len()
+            );
+            self.listener = None;
+            debug!(
+                "OnDemandReceiver::poll_next {} listener: None",
+                self.channel.name
+            );
+            return Poll::Ready(None);
         }
+
+        // If there's no listener (happens for cloned instances like with --watch),
+        // create one now. Don't return yet - we'll poll it below
+        if self.listener.is_none() {
+            info!(
+                "OnDemandReceiver::poll_next {} creating listener (cloned instance)",
+                self.channel.name
+            );
+            self.listener = Some(self.channel.on_demand_listen());
+        }
+
+        // Poll the listener
+        let listener = self
+            .listener
+            .as_mut()
+            .expect("listener should exist after None check");
+        let ret = Pin::new(listener).poll(cx).map(Some);
+        debug!(
+            "OnDemandReceiver::poll_next {} ret: {:?}",
+            self.channel.name, ret
+        );
+        if ret.is_ready() {
+            // Create a new listener to wait for the next "need"
+            info!(
+                "OnDemandReceiver::poll_next {} on_demand_listen() ret.is_ready()",
+                self.channel.name
+            );
+            self.listener = Some(self.channel.on_demand_listen());
+        }
+        ret
     }
 }
 

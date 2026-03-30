@@ -51,6 +51,14 @@ const permissionsResult: TestData = {
   status: TestStatus.Finished
 };
 
+const deepzoomResult: TestData = {
+  testId: "deepzoomcloudtest20250630T180711861",
+  s3Folder: "deepzoomcloudtest/20250630T180711861",
+  resultsFileLocation: ["test-results/stats-deepzoomcloudtest20250630T180711861.json"],
+  startTime: 1688139071861,
+  status: TestStatus.Finished
+};
+
 const largeResult: TestData = {
   testId: "rmsallstage20220603T012101115",
   s3Folder: "rmsallstage/20220603T012101115",
@@ -88,6 +96,13 @@ export const PermissionsResult = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults testData={permissionsResult} />
+  </React.Fragment>
+);
+
+export const DeepZoomResult = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults testData={deepzoomResult} />
   </React.Fragment>
 );
 

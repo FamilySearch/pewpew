@@ -1,6 +1,6 @@
 import { Column, Row } from "../Div";
 import { Danger, Warning } from "../Alert";
-import React, { useEffect, useState } from "react";
+import React, { type JSX, useEffect, useState } from "react";
 
 // What this returns or calls from the parents
 export interface YamlViewerProps {

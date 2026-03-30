@@ -6,7 +6,7 @@ import {
   AuthPermissions,
   EnvironmentVariablesFile,
   PAGE_CALENDAR,
-  PAGE_TEST_HISTORY,
+  PAGE_TEST_HISTORY_FORMAT,
   PreviousTestData,
   TestData
 } from "../../types";
@@ -18,7 +18,7 @@ import {
   EnvironmentVariablesUpdate
 } from "../EnvironmentVariablesList";
 import { H1, H3 } from "../Headers";
-import { LogLevel, log } from "../../pages/api/util/log";
+import { LogLevel, log } from "../../src/log";
 import { PewPewVersions, VersionInitalProps } from "../PewPewVersions";
 import { QueueInitialProps, TestQueues } from "../TestQueues";
 import React, { JSX, useState } from "react";
@@ -30,7 +30,7 @@ import {
   isTestData,
   isYamlFile,
   latestPewPewVersion
-} from "../../pages/api/util/clientutil";
+} from "../../src/clientutil";
 import { CheckboxButton } from "../CheckboxButton";
 import DatePicker from "react-datepicker";
 import { DropFile } from "../DropFile";
@@ -501,7 +501,7 @@ export const StartTestForm = ({
         const calendarUrl = PAGE_CALENDAR + "?defaultDate=" + responseData.startTime;
         await router.push(calendarUrl, formatPageHref(calendarUrl));
       } else {
-        const statusUrl = PAGE_TEST_HISTORY + "?testId=" + responseData.testId;
+        const statusUrl = PAGE_TEST_HISTORY_FORMAT(responseData.testId);
         await router.push(statusUrl, formatPageHref(statusUrl));
       }
     } catch (error) {
@@ -697,7 +697,7 @@ export const StartTestForm = ({
             lastUpdated: previousTestData?.lastUpdated
           } } />
           <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
-                      href={PAGE_TEST_HISTORY + "?testId=" + state.testId}>Test Status</LinkButton>
+                      href={PAGE_TEST_HISTORY_FORMAT(state.testId)}>Test Status</LinkButton>
         </Column>}
       </Row>
       {previousTestData && <Row>

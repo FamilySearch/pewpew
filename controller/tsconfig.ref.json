@@ -3,6 +3,15 @@
   "compilerOptions": {
     "composite": true,
   },
-  "include": ["test/**/*", "types/**/*", "pages/**/*", "components/**/*", "acceptance/**/*", "integration/**/*", "testcleanup/**/*"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "types/**/*",
+    "pages/**/*",
+    "components/**/*",
+    "acceptance/**/*",
+    "integration/**/*",
+    "testcleanup/**/*"
+  ],
   "exclude": ["node_modules"],
 }

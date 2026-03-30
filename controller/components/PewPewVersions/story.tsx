@@ -1,7 +1,7 @@
 import PewPewVersions, { VersionProps } from ".";
 import { GlobalStyle } from "../Layout";
 import React from "react";
-import { latestPewPewVersion } from "../../pages/api/util/clientutil";
+import { latestPewPewVersion } from "../../src/clientutil";
 
 /**
  * Developing and visually testing components in isolation before composing them in your app is useful.

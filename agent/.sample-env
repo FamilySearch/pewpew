@@ -16,4 +16,7 @@ PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL="https://sqs.us-east-1.amazonaws.c
 PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewagent-unittests-sqs-scale-in"
 PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/my-account/pewpewcontroller-unittests-sqs-communication"
 
+# Set low value for tests so cleanup verification is fast
+SPLUNK_FORWARDER_EXTRA_TIME=500 # Test waits 3x this time for splunk forwarder to flush before deleting files
+
 LOG_FILE_NAME="ppaas-agent"

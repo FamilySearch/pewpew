@@ -8,18 +8,14 @@ import {
 } from "../../types";
 import { Button, LinkButton, defaultButtonTheme } from "../LinkButton";
 import React, { useEffect } from "react";
-import { formatAssetHref, getBasePath } from "../../pages/api/util/clientutil";
+import { formatAssetHref, getBasePath } from "../../src/clientutil";
 import styled, { createGlobalStyle } from "styled-components";
 import Div from "../Div";
 import Head from "next/head";
-import { logout as authLogout } from "../../pages/api/util/authclient";
-import getConfig from "next/config";
+import { logout as authLogout } from "../../src/authclient";
+import { useRuntimeConfig } from "../../src/runtimeConfig";
 
-// Have to check for null on this since the tsc test compile it will be, but nextjs will have a publicRuntimeConfig
-const publicRuntimeConfig: NodeJS.ProcessEnv = typeof getConfig === "function" && getConfig()?.publicRuntimeConfig ? getConfig().publicRuntimeConfig : process.env;
-const HIDE_ENVIRONMENT: unknown = publicRuntimeConfig.HIDE_ENVIRONMENT;
-
-export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/results-viewer-react/yaml.html";
+export const PAGE_YAML_WRITER: string = "https://familysearch.github.io/pewpew/viewer/yaml.html";
 
 export type OtherControllers = Record<string, {
     url: string;
@@ -29,15 +25,6 @@ export type OtherControllers = Record<string, {
 export const OTHER_CONTROLLERS_DEFAULT: OtherControllers = {
   // This can be populated if you have multiple controllers to link to them
 };
-export const OTHER_CONTROLLERS: OtherControllers = {};
-if (Object.keys(OTHER_CONTROLLERS).length === 0) {
-  for (const [name, data] of Object.entries(OTHER_CONTROLLERS_DEFAULT)) {
-    if (!data || typeof HIDE_ENVIRONMENT === "string" && HIDE_ENVIRONMENT.toLowerCase().includes(name.toLowerCase())) {
-      continue;
-    }
-    OTHER_CONTROLLERS[name] = { ...data };
-  }
-}
 
 export const GlobalStyle = createGlobalStyle`
   body {
@@ -104,8 +91,16 @@ export const Layout = ({
     title = "PewPew as a Service - Run your load tests!",
     children,
     authPermission,
-    otherControllers = OTHER_CONTROLLERS
+    otherControllers = OTHER_CONTROLLERS_DEFAULT
   }: LayoutProps) => {
+    const { HIDE_ENVIRONMENT } = useRuntimeConfig();
+    const visibleControllers: OtherControllers = {};
+    for (const [name, data] of Object.entries(otherControllers)) {
+      if (data && !HIDE_ENVIRONMENT?.toLowerCase().includes(name.toLowerCase())) {
+        visibleControllers[name] = data;
+      }
+    }
+
     // There seems to be a bug when using our LinkButton that when the button goes
     // to "/" it removes the "/" from the url and refresh breaks if there is a query param
     // Ctrl-click keeps the trailing slash, but the click routing removes it.
@@ -127,7 +122,6 @@ export const Layout = ({
 
     return (
     <React.Fragment>
-      <GlobalStyle />
       <Head>
         <title>{title}</title>
         <link rel="apple-touch-icon" sizes="180x180" href={formatAssetHref("/img/apple-touch-icon.png")}/>
@@ -155,14 +149,16 @@ export const Layout = ({
             <LinkButton href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">Yaml Writer</LinkButton>
+            <a href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">
+              <Button theme={{...defaultButtonTheme}}>Yaml Writer</Button>
+            </a>
           </LinkDiv>
           {authPermission === AuthPermission.Admin &&
             <LinkDiv>
               <LinkButton href={PAGE_ADMIN} title="Manage the pewpew versions">Admin</LinkButton>
             </LinkDiv>
           }
-          {Object.entries(otherControllers).map(([name, data]) =>
+          {Object.entries(visibleControllers).map(([name, data]) =>
             <LinkDiv key={name}>
               <a href={data.url} title={data.hover} ><Button name={name} theme={{...defaultButtonTheme}}>{name} Controller</Button></a>
             </LinkDiv>)}

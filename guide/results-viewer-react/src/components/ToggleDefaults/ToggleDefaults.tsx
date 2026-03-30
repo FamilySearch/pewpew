@@ -1,7 +1,7 @@
 import { Label, TipButton } from "../YamlStyles";
+import React, { type JSX } from "react";
 import { AddIcon } from "../Icons/AddIcon";
 import { DeleteIcon } from "../Icons/DeleteIcon";
-import React from "react";
 import { Row } from "../Div";
 
 interface ToggleDefaultsProps {

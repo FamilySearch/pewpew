@@ -1,5 +1,5 @@
+import React, { type JSX } from "react";
 import { AxiosResponse } from "axios";
-import React from "react";
 
 export interface ResponseViewProps {
     response: AxiosResponse | undefined;

@@ -42,7 +42,6 @@ module.exports = {
       fs: false,
       http: false,
       path: false,
-      // process: require.resolve("process/browser.js"),
     },
   },
   plugins: [

@@ -202,7 +202,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const handleFileUpload = async (
     file: Har | Document | OpenAPIV3.Document | OpenAPIV2.Document,
     type: "HAR" | "HTML" | "Swagger",
-    modalRef: React.RefObject<ModalObject>
+    modalRef: React.RefObject<ModalObject | null>
   ) => {
     try {
       // Switch case to handle different types of files

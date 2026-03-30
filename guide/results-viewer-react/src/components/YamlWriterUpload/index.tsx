@@ -142,9 +142,11 @@ export interface YamlWriterUploadProps {
   sendEndpoints: (endpoints: HarEndpoint[]) => void;
 }
 
+type SelectionState = "yes" | "no" | "partial";
+
 interface OutputRecord {
   index: { iter: number, id: string }[];
-  selected: string;
+  selected: SelectionState;
 }
 interface Output {
   types: Record<string, OutputRecord | undefined>;
@@ -154,7 +156,6 @@ interface Output {
 
 interface YamlWriterUploadState {
   file: File | undefined,
-  htmlFile: File | undefined,
   swaggerUrl: string,
   serverUrl: string,
   output: Record<string, Output | undefined>
@@ -171,10 +172,9 @@ interface IndexType {
 
 export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const defaultState: YamlWriterUploadState = {
-    file: undefined,  // To track the Har file
-    htmlFile: undefined,  // To track the HTML file
-    swaggerUrl: "", // To track the url of the json file of the swagger page
-    serverUrl: "",  // To track the inputted server url on a swagger page that doesn't have one.
+    file: undefined,
+    swaggerUrl: "",
+    serverUrl: "",
     output: {}
   };
 
@@ -233,11 +233,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   };
 
   const handleHTMLfile = async (doc: Document) => {
-    // Attempt to extract server URL from the doc
     const serverOption = doc.querySelector("div.servers option") as HTMLOptionElement;
     let serverUrl = serverOption ? serverOption.value : "";
 
-    // IF server URL is blank then we need user input to fill it out
     if (serverUrl === "/") {
       serverUrl = await promptForServerUrl();
     }
@@ -249,7 +247,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const handleSwaggerfile = async (swaggerData: SwaggerDoc3) => {
     let serverUrl = swaggerData.servers?.[0]?.url || "";
 
-    // If empty we need the user input
     if (serverUrl === "/") {
       serverUrl = await promptForServerUrl();
     }
@@ -292,8 +289,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     }
   };
 
-  // Called when upload modal is closed
-  // Passed to modal
   const submitEvent = async (): Promise<void> => {
     log("state.files", LogLevel.DEBUG, state.file);
     if (!state.file) { return Promise.resolve(); }
@@ -302,7 +297,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
     const reader = new FileReader();
 
-    // When reader loads, parse file, and toggle customize modal
     try {
       const returnPromise = new Promise<void>((resolve, reject) => {
         reader.onload = async (event: ProgressEvent<FileReader>) => {
@@ -310,17 +304,14 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
           try {
             const output = JSON.parse(text);
             if (output.log && output.log.entries) {
-              // Must be HAR file
               toggleCustomizeModal(output);
             } else {
-              // Not a har file
               throw new Error("Not a HAR file");
             }
             resolve();
           } catch (jsonError) {
             log("submitEvent error", LogLevel.WARN, jsonError);
             try {
-              // Check if it's a valid file and is allowed to continue
               const parser = new DOMParser();
               const doc = parser.parseFromString(text, "text/html");
               if (isValidHTMLDocument(doc)) {
@@ -359,7 +350,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       return false;
     }
     const swaggerData: SwaggerDoc = unknownData as SwaggerDoc;
-    const versionRegex = /^(\d+\.\d+\.\d+|3\.\d+\.\d+|2\.\d+\.\d+)$/;
+    const versionRegex = /^\d+\.\d+\.\d+$/;
     let hasValidServers: boolean = false;
     let hasValidVersion: boolean = false;
     let hasValidHost: boolean = false;
@@ -373,7 +364,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       return false;
     }
     const hasValidPaths = swaggerData.paths && Object.keys(swaggerData.paths).length > 0;
-    const hasvalidEndpoints = hasValidPaths && Object.values(swaggerData.paths).some(
+    const hasValidEndpoints = hasValidPaths && Object.values(swaggerData.paths).some(
       (path: OpenAPIV2.PathItemObject | OpenAPIV3.PathItemObject) =>
       ["get", "post", "put", "delete"].some((method) => method in path)
     );
@@ -382,7 +373,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
     return (
       hasValidVersion &&
-      hasValidPaths && hasvalidEndpoints &&
+      hasValidPaths && hasValidEndpoints &&
       hasValidInfo && (hasValidServers || hasValidHost)
     );
   };
@@ -414,7 +405,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const finalizeEndpoints = () => {
     props.sendEndpoints(
       (state.output[filename]?.endpoints || [])
-      // Convert a ParsedEndpoint to a HarEndpoint
       .map(({ url, ...parsedEndpoint }: ParsedEndpoint): HarEndpoint => ({ ...parsedEndpoint, url: url.href }))
     );
     return Promise.resolve();
@@ -423,9 +413,9 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
   const clearStateValue = (key: keyof YamlWriterUploadState) => {
     setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({
       ...prevState,
-      [key]: key === "file" || key === "htmlFile" ? undefined : ""
+      [key]: key === "file" ? undefined : ""
     }));
-    if (key === "file" || key === "htmlFile") {
+    if (key === "file") {
       setFilename("");
     }
   };
@@ -464,10 +454,54 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     });
   };
 
+  const addToRecord = (
+    record: Record<string, OutputRecord | undefined>,
+    key: string, iter: number, id: string,
+    defaultSelected: SelectionState
+  ) => {
+    if (record[key]) {
+      record[key]!.index.push({ iter, id });
+    } else {
+      record[key] = { index: [{ iter, id }], selected: defaultSelected };
+    }
+  };
+
+  const collectVariables = (path: string, variables: Set<string>) => {
+    const matches = path.match(/\{([^}]+)\}/g);
+    if (matches) {
+      matches.forEach((v) => variables.add(v.replace(/[{}]/g, "")));
+    }
+  };
+
+  const recalcTypeSelections = (types: Record<string, OutputRecord | undefined>, endpoints: ParsedEndpoint[]) => {
+    for (const key of Object.keys(types)) {
+      const type = types[key]!;
+      const selectedCount = type.index.filter((t) => endpoints[t.iter].selected === "yes").length;
+      if (selectedCount === type.index.length) { type.selected = "yes"; }
+      else if (selectedCount === 0) { type.selected = "no"; }
+      else { type.selected = "partial"; }
+    }
+  };
+
+  const setOutputState = (
+    types: Record<string, OutputRecord | undefined>,
+    urls: Record<string, OutputRecord | undefined>,
+    endpoints: ParsedEndpoint[],
+    variables?: Set<string>
+  ) => {
+    if (variables && variables.size > 0) {
+      setFoundVariables(Array.from(variables));
+      variableModalRef.current?.openModal();
+    }
+    const output: Record<string, Output | undefined> = {
+      [filename]: { types, urls, endpoints }
+    };
+    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, output }));
+  };
 
   const createFileArray = (jsonFile: Har) => {
-    const types: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
-    const urls: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const types: Record<string, OutputRecord | undefined> = {};
+    const urls: Record<string, OutputRecord | undefined> = {};
     const endpoints: ParsedEndpoint[] = [];
     for (let i = 0; i < jsonFile.log.entries.length; i++) {
       const id = uniqueId();
@@ -478,52 +512,18 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       const url: URL = new URL(entry.request.url);
       const hostUrl = url.hostname;
 
-      // Adds a reference to an endpoint with given url
-      // If the url is already in the url object, add a reference under that object
-      // If url does not exist in object, create a new object in url, with the key being the url
-      if (types[mimeType] !== undefined) {
-        types[mimeType]!.index.push({ iter: i, id });
-      } else {
-        types[mimeType] = { index: [{ iter: i, id }], selected: "partial"};
-      }
-
-      // Adds a reference to an endpoint with given response type
-      // If the response type is already in type object, add a reference under that object
-      // If response type does not exist in object, create a new object in type, with the key being the response type
-      if (urls[hostUrl] !== undefined) {
-        urls[hostUrl]!.index.push({ iter: i, id });
-      } else {
-        urls[hostUrl] = { index: [{ iter: i, id }], selected: "yes"};
-      }
+      addToRecord(types, mimeType, i, id, "partial");
+      addToRecord(urls, hostUrl, i, id, "yes");
       endpoints.push({ selected: "yes", url, type: mimeType, id, method: entry.request.method, headers: [...entry.request.headers] });
     }
 
-    const typesTemp = types;
-    const typeKeys = Object.keys(typesTemp);
-    const indices: ParsedEndpoint[] = [...endpoints];
-
-    for (const key of typeKeys) {
-      let typeCheck = 0;
-      const type = types[key]!;
-      for (const typeIndex of type.index) {
-        if (indices[typeIndex.iter].selected === "yes") { typeCheck++; }
-      }
-      if (typeCheck === type.index.length) { typesTemp[key]!.selected = "yes"; }
-      else if (typeCheck === 0) { typesTemp[key]!.selected = "no"; }
-      else { typesTemp[key]!.selected = "partial"; }
-    }
-    const output: Record<string, Output | undefined> = {
-      [filename]: {
-        types,
-        urls,
-        endpoints
-    }};
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({...prevState, output }));
+    recalcTypeSelections(types, endpoints);
+    setOutputState(types, urls, endpoints);
   };
 
   const createHTMLFileArray = (doc: Document) => {
-    const types: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
-    const urls: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const types: Record<string, OutputRecord | undefined> = {};
+    const urls: Record<string, OutputRecord | undefined> = {};
     const parsedEndpoints: ParsedEndpoint[] = [];
     const uniqueVariables = new Set<string>();
     const baseUrl = state.serverUrl || "http://changeme.com";
@@ -536,15 +536,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       if (!urlElement || !methodElement) { return; }
 
       let url = urlElement.innerText.trim();
-
-      const matches = url.match(/\{([^}]+)\}/g);
-      if (matches) {
-        matches.forEach(variable => {
-          const cleanedVariable = variable.replace(/[{}]/g, "");
-          uniqueVariables.add(cleanedVariable);
-        });
-      }
-
+      collectVariables(url, uniqueVariables);
       url = url.replace(/\{([^}]+)\}/g, "${$1}");
 
       const method = methodElement.innerText.trim();
@@ -562,17 +554,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         toString: () => fullPath
       };
 
-      if (types[mimeType] !== undefined) {
-        types[mimeType]!.index.push({ iter: index, id });
-      } else {
-        types[mimeType] = { index: [{ iter: index, id }], selected: "partial"};
-      }
-
-      if (urls[hostUrl] !== undefined) {
-        urls[hostUrl]!.index.push({ iter: index, id });
-      } else {
-        urls[hostUrl] = { index: [{ iter: index, id }], selected: "yes"};
-      }
+      addToRecord(types, mimeType, index, id, "partial");
+      addToRecord(urls, hostUrl, index, id, "yes");
 
       parsedEndpoints.push({
         selected: "yes",
@@ -584,24 +567,12 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       });
     });
 
-    if (uniqueVariables.size > 0) {
-      setFoundVariables(Array.from(uniqueVariables));
-      variableModalRef.current?.openModal();
-    }
-
-    const output: Record<string, Output | undefined> = {
-      [filename]: {
-        types,
-        urls,
-        endpoints: parsedEndpoints
-      }
-    };
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({...prevState, output }));
+    setOutputState(types, urls, parsedEndpoints, uniqueVariables);
   };
 
   const createSwaggerUrlFileArray = (swaggerData: SwaggerDoc3, serverUrl: string) => {
-    const types: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
-    const urls: Record<string, { index: { iter: number, id: string }[], selected: string } | undefined> = {};
+    const types: Record<string, OutputRecord | undefined> = {};
+    const urls: Record<string, OutputRecord | undefined> = {};
     const parsedEndpoints: ParsedEndpoint[] = [];
     const uniqueVariables = new Set<string>();
     const serverHost = new URL(serverUrl).hostname;
@@ -610,13 +581,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       const pathItem = swaggerData.paths[pathKey];
 
       if (pathItem !== undefined) {
-        const matches = pathKey.match(/\{([^}]+)\}/g);
-        if (matches) {
-          matches.forEach(variable => {
-            const cleanedVariable = variable.replace(/[{}]/g, "");
-            uniqueVariables.add(cleanedVariable);
-          });
-        }
+        collectVariables(pathKey, uniqueVariables);
 
         const formattedPathKey = pathKey.replace(/\{([^}]+)\}/g, "${$1}");
         const fullPath = serverUrl.endsWith("/") || formattedPathKey.startsWith("/")
@@ -648,17 +613,8 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
               toString: () => fullPath
             } as unknown as URL;
 
-            if (types[mimeType]) {
-              types[mimeType]!.index.push({ iter: index, id });
-            } else {
-              types[mimeType] = { index: [{ iter: index, id }], selected: "partial"};
-            }
-
-            if (urls[serverHost]) {
-              urls[serverHost]!.index.push({ iter: index, id });
-            } else {
-              urls[serverHost] = { index: [{ iter: index, id }], selected: "yes"};
-            }
+            addToRecord(types, mimeType, index, id, "partial");
+            addToRecord(urls, serverHost, index, id, "yes");
 
             parsedEndpoints.push({
               selected: "yes",
@@ -673,19 +629,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
       }
     });
 
-    if (uniqueVariables.size > 0) {
-      setFoundVariables(Array.from(uniqueVariables));
-      variableModalRef.current?.openModal();
-    }
-
-    const output: Record<string, Output | undefined> = {
-      [filename]: {
-        types,
-        urls,
-        endpoints: parsedEndpoints
-      }
-    };
-    setState((prevState: YamlWriterUploadState): YamlWriterUploadState => ({ ...prevState, output }));
+    setOutputState(types, urls, parsedEndpoints, uniqueVariables);
   };
 
   const handleChange = (type: string, ident: string | ParsedEndpoint) => {
@@ -854,10 +798,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
         submitText="Load"
         closeText="Cancel"
         onSubmit={submitEvent}
-        onClose={() => {
-          clearStateValue("file");
-          clearStateValue("htmlFile");
-        }}
+        onClose={() => clearStateValue("file")}
         isReady={state.file !== undefined}
       >
         <div style={{color: "rgb(242, 241, 239)"}}>
@@ -872,14 +813,6 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
             <div style={{paddingTop: "13px"}}>
               <Button style={{marginRight: "5px"}} onClick={() => clearStateValue("file")}><DeleteIcon /></Button>
               {state.file.name}
-            </div>
-          )}
-          {state.htmlFile && (
-            <div style={{paddingTop: "13px"}}>
-              <button style={{marginRight: "5px"}} onClick={() => {
-                clearStateValue("htmlFile");
-                }}>X</button>
-              {state.htmlFile.name}
             </div>
           )}
         </div>

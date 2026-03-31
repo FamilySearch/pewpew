@@ -83,9 +83,9 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       borderColor,
       backgroundColor,
       data,
-      fill: "origin",
+      fill: i === 0 ? "origin" : "-1", // first fills from origin, rest from previous
       tension: 0.4,
-      borderWidth: 2,
+      borderWidth: 1,
       pointRadius: 0
     };
   });
@@ -219,19 +219,29 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
       const x = dp.time;
       const count = Number(dp.rttHistogram.getTotalCount());
       chartDataSets.setPoint(endpointLabel, x, count, {
-        fill: "origin",
+        fill: true, // fill to previous dataset for proper stacking
         tension: 0.4,
-        borderWidth: 2,
+        borderWidth: 1,
         pointRadius: 0
       });
     }
   }
 
   const datasets = chartDataSets.getDataSets();
+
+  // For proper stacking: first dataset fills from origin, rest fill from previous
+  if (datasets.length > 0) {
+    (datasets[0] as any).fill = "origin";
+    for (let i = 1; i < datasets.length; i++) {
+      (datasets[i] as any).fill = "-1"; // fill to previous dataset
+    }
+  }
+
   log("Final datasets for overview chart", LogLevel.DEBUG, {
     count: datasets.length,
     datasets: datasets.map(ds => ({
       label: ds.label,
+      fill: (ds as any).fill,
       dataPoints: (ds.data as any[]).length,
       firstPoint: (ds.data as any[])[0],
       lastPoint: (ds.data as any[])[(ds.data as any[]).length - 1]
@@ -302,9 +312,9 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {
       chartDataSets.setPoint(key, x, count, {
-        fill: "origin",
+        fill: true,
         tension: 0.4,
-        borderWidth: 2,
+        borderWidth: 1,
         pointRadius: 0
       });
     }
@@ -313,14 +323,22 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
       x,
       Number(dp.rttHistogram.getTotalCount()),
       {
-        fill: "origin",
+        fill: true,
         tension: 0.4,
-        borderWidth: 2,
+        borderWidth: 1,
         pointRadius: 0
       }
     );
   }
   const datasets = chartDataSets.getDataSets();
+
+  // Set proper fill mode for stacking
+  if (datasets.length > 0) {
+    (datasets[0] as any).fill = "origin";
+    for (let i = 1; i < datasets.length; i++) {
+      (datasets[i] as any).fill = "-1";
+    }
+  }
   // https://www.chartjs.org/docs/latest/getting-started/v3-migration.html
   const totalChart = new Chart(el, {
     type: "line",

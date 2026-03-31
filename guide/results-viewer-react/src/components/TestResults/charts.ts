@@ -34,27 +34,28 @@ Chart.register(
   Tooltip
 );
 
+// Splunk-style color palette (matching your dashboard theme)
 const colors = [
-  "#3366cc",
-  "#dc3912",
-  "#ff9900",
-  "#109618",
-  "#990099",
-  "#0099c6",
-  "#dd4477",
-  "#66aa00",
-  "#b82e2e",
-  "#316395",
-  "#994499",
-  "#22aa99",
-  "#aaaa11",
-  "#6633cc",
-  "#e67300",
-  "#8b0707",
-  "#651067",
-  "#329262",
-  "#5574a6",
-  "#3b3eac"
+  "#6a7bb4", // Purple/Blue (like Splunk GET)
+  "#c94277", // Pink/Magenta (like Splunk POST)
+  "#d9915b", // Orange/Gold (like Splunk Agent)
+  "#4d9f9a", // Teal/Cyan (like Splunk Host)
+  "#b8904b", // Brown/Gold
+  "#7e5ba3", // Deep Purple
+  "#d16881", // Coral Pink
+  "#8fbc8f", // Green
+  "#6495ed", // Cornflower Blue
+  "#cd853f", // Peru
+  "#ba55d3", // Medium Orchid
+  "#20b2aa", // Light Sea Green
+  "#ff7f50", // Coral
+  "#9370db", // Medium Purple
+  "#3cb371", // Medium Sea Green
+  "#ff6347", // Tomato
+  "#4682b4", // Steel Blue
+  "#daa520", // Goldenrod
+  "#dc143c", // Crimson
+  "#008b8b"  // Dark Cyan
 ];
 
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {

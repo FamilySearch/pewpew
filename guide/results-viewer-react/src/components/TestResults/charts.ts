@@ -62,7 +62,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     95
   ].map((type, i) => {
     const borderColor = colors[i % colors.length];
-    const backgroundColor = borderColor + "80"; // More opaque for area chart
+    const backgroundColor = borderColor + "CC"; // More opaque for area chart
     let label: string;
     // It's a ScatterDataPoint but thanks to chartjs-adapter-date-fns it will date Dates as well as numbers
     let data: (Omit<ScatterDataPoint, "x"> & { x: Date | number })[];
@@ -83,8 +83,10 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       borderColor,
       backgroundColor,
       data,
-      fill: true,
-      tension: 0.4
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0
     };
   });
 
@@ -104,9 +106,14 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     type: "line",
     data: { datasets },
     options: {
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: chartType,
+          beginAtZero: true,
           title: {
             display: false
           },
@@ -133,6 +140,8 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           position: "bottom"
         },
         tooltip: {
+          mode: "index",
+          intersect: false,
           callbacks: {
             label: ({ formattedValue }) => formattedValue + "ms"
           }
@@ -192,7 +201,7 @@ class ChartDataSets {
         data.push({ x, y });
       }
       const borderColor = colors[ret.length % colors.length];
-      const backgroundColor = borderColor + "46";
+      const backgroundColor = borderColor + "CC"; // More opaque shading
       const dataset = { label, data, borderColor, backgroundColor };
       ret.push(Object.assign(datasetParams, dataset));
     }
@@ -208,20 +217,38 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
     for (const dp of dataPoints) {
       const x = dp.time;
       const count = Number(dp.rttHistogram.getTotalCount());
-      chartDataSets.setPoint(endpointLabel, x, count, { fill: true, tension: 0.4 });
+      chartDataSets.setPoint(endpointLabel, x, count, {
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0
+      });
     }
   }
 
-  const datasets = chartDataSets.getDataSets();
+  const datasets = chartDataSets.getDataSets().map((ds, i) => {
+    const borderColor = colors[i % colors.length];
+    const backgroundColor = borderColor + "CC"; // More opaque for better shading
+    return {
+      ...ds,
+      borderColor,
+      backgroundColor
+    };
+  });
 
   const totalChart = new Chart(el, {
     type: "line",
     data: { datasets },
     options: {
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
           stacked: true,
+          beginAtZero: true,
           ticks: {
             precision: 0,
             autoSkip: true
@@ -232,6 +259,7 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
         },
         x: {
           type: "time",
+          stacked: true,
           time: {
             unit: "minute"
           },
@@ -249,6 +277,7 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
         },
         tooltip: {
           mode: "index",
+          intersect: false,
           callbacks: {
             label: ({ dataset, formattedValue: yLabel }) => {
               return `${dataset.label}: ${yLabel}`;
@@ -270,13 +299,23 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     );
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {
-      chartDataSets.setPoint(key, x, count, { fill: true, tension: 0.4 });
+      chartDataSets.setPoint(key, x, count, {
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0
+      });
     }
     chartDataSets.setPoint(
       "total calls",
       x,
       Number(dp.rttHistogram.getTotalCount()),
-      { fill: true, tension: 0.4 }
+      {
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0
+      }
     );
   }
   const datasets = chartDataSets.getDataSets();
@@ -285,10 +324,15 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     type: "line",
     data: { datasets },
     options: {
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
           stacked: true,
+          beginAtZero: true,
           ticks: {
             precision: 0,
             autoSkip: true
@@ -299,6 +343,7 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
         },
         x: {
           type: "time",
+          stacked: true,
           time: {
             unit: "second"
           },
@@ -316,6 +361,7 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
         },
         tooltip: {
           mode: "index",
+          intersect: false,
           callbacks: {
             label: ({ datasetIndex, formattedValue: yLabel }) => {
               const { label } = datasets[datasetIndex || 0];

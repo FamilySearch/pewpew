@@ -28,11 +28,16 @@ import {
   PpaasTestStatus,
   TestMessage,
   TestStatus,
+  TestStatusMessage,
   log,
   s3,
   util
 } from "@fs/ppaas-common";
-import { TestManager, defaultRecurringFileTags } from "./testmanager";
+import {
+  MAX_SAVED_TESTS_RECENT,
+  TestManager,
+  defaultRecurringFileTags
+} from "./testmanager";
 import { formatError, getHourMinuteFromTimestamp } from "./clientutil";
 import type { EventInput } from "@fullcalendar/core";
 import { IS_RUNNING_IN_AWS } from "./authclient";
@@ -44,6 +49,7 @@ const RUN_HISTORICAL_SEARCH: boolean = process.env.RUN_HISTORICAL_SEARCH?.toLowe
 const HISTORICAL_SEARCH_START_DELAY_MINUTES: number = parseInt(process.env.HISTORICAL_SEARCH_START_DELAY_MINUTES || "0", 10) || 30;
 const HISTORICAL_SEARCH_MAX_FILES: number = parseInt(process.env.HISTORICAL_SEARCH_MAX_FILES || "0", 10) || 100000;
 const RUN_HISTORICAL_DELETE: boolean = process.env.RUN_HISTORICAL_DELETE?.toLowerCase() === "true";
+const POPULATE_CACHE_FROM_HISTORICAL: number | undefined = parseInt(process.env.POPULATE_CACHE_FROM_HISTORICAL || "0", 10) || undefined;
 const DELETE_OLD_FILES_DAYS: number = parseInt(process.env.DELETE_OLD_FILES_DAYS || "0") || 365;
 const ONE_DAY: number = 24 * 60 * 60000;
 export const AUTH_PERMISSIONS_SCHEDULER: AuthPermissions = { authPermission: AuthPermission.Admin, token: "startTestSchedulerLoop", userId: "controller" };
@@ -381,6 +387,9 @@ export class TestScheduler implements TestSchedulerItem {
     log("Starting Test Scheduler Loop", LogLevel.DEBUG);
     if (RUN_HISTORICAL_SEARCH) {
       TestScheduler.runHistoricalSearch().catch(() => { /* already logs error, swallow */ });
+    }
+    if (POPULATE_CACHE_FROM_HISTORICAL) {
+      TestScheduler.populateCacheFromHistorical(POPULATE_CACHE_FROM_HISTORICAL).catch(() => { /* already logs error, swallow */ });
     }
     if (RUN_HISTORICAL_DELETE) {
       // Start background task to delete old files
@@ -895,6 +904,66 @@ export class TestScheduler implements TestSchedulerItem {
       log("Error running Historical Delete", LogLevel.WARN, error, { deletedCount });
       throw error; // Throw for testing, but the loop will catch and noop
     }
+  }
+
+  protected static async populateCacheFromHistorical (days: number): Promise<void> {
+    log("TestScheduler: populateCacheFromHistorical", LogLevel.INFO, { days });
+    try {
+      await TestScheduler.loadHistoricalFromS3();
+    } catch (error) {
+      log("TestScheduler: populateCacheFromHistorical could not load historical from S3", LogLevel.WARN, error);
+      return;
+    }
+    if (!TestScheduler.historicalTests) {
+      return;
+    }
+    const cutoff = Date.now() - (days * ONE_DAY);
+    const filteredItems = Array.from(TestScheduler.historicalTests.entries())
+      .filter(([, eventInput]) => typeof eventInput.start === "number" && eventInput.start >= cutoff)
+      .sort(([, a], [, b]) => (a.start as number) - (b.start as number))
+      .slice(-MAX_SAVED_TESTS_RECENT);
+    log("TestScheduler: populateCacheFromHistorical filtered items", LogLevel.INFO, { count: filteredItems.length, days });
+    log("TestScheduler: populateCacheFromHistorical filtered items", LogLevel.DEBUG, { days, filteredItems });
+    const storedTests: StoredTestData[] = [];
+    for (const [testId, eventInput] of filteredItems) {
+      try {
+        const ppaasTestId = PpaasTestId.getFromTestId(testId);
+        const status: TestStatus = eventInput.color === "red" ? TestStatus.Failed
+          : (eventInput.color === "green" ? TestStatus.Finished : TestStatus.Unknown);
+        const startTime = eventInput.start as number;
+        const storedTest: StoredTestData = {
+          testId,
+          s3Folder: ppaasTestId.s3Folder,
+          startTime,
+          endTime: eventInput.end as number,
+          status,
+          lastUpdated: new Date(startTime)
+        };
+        if (status === TestStatus.Unknown) {
+          try {
+            const ppaasTestStatus: PpaasTestStatus | undefined = await PpaasTestStatus.getStatus(ppaasTestId);
+            if (ppaasTestStatus) {
+              const { resultsFilename, ...testStatusParts }: TestStatusMessage = ppaasTestStatus.getTestStatusMessage();
+              Object.assign(storedTest, testStatusParts);
+              storedTest.ppaasTestStatus = ppaasTestStatus;
+              storedTest.lastUpdated = ppaasTestStatus.getLastModifiedRemote();
+              storedTest.lastChecked = new Date();
+              storedTest.resultsFileLocation = resultsFilename.map((resultsFile: string) =>
+                new PpaasS3File({ filename: resultsFile, s3Folder: ppaasTestId.s3Folder, localDirectory }).remoteUrl
+              );
+            }
+          } catch (error) {
+            log(`TestScheduler: populateCacheFromHistorical could not load PpaasTestStatus for ${testId}`, LogLevel.WARN, error);
+          }
+        }
+        if (storedTest.status === TestStatus.Finished || storedTest.status === TestStatus.Failed) {
+          storedTests.push(storedTest);
+        }
+      } catch (error) {
+        log(`TestScheduler: populateCacheFromHistorical error adding testId ${testId}`, LogLevel.WARN, error);
+      }
+    }
+    await TestManager.addRecentTests(storedTests);
   }
 
   protected static async loadHistoricalFromS3 (force?: boolean): Promise<void> {

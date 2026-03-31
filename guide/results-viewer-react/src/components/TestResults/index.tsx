@@ -448,12 +448,17 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
       // Create label + dataPoints pairs
       const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
         const label = `${bucketId.method} ${bucketId.url}`;
+        log(`Endpoint found: ${label}`, LogLevel.DEBUG, {
+          bucketId,
+          dataPointCount: dataPoints.length
+        });
         return [label, dataPoints];
       });
 
       log("Overview chart endpoints", LogLevel.DEBUG, {
         count: endpointData.length,
-        labels: endpointData.map(([label]) => label)
+        labels: endpointData.map(([label]) => label),
+        uniqueLabels: [...new Set(endpointData.map(([label]) => label))]
       });
 
       import("./charts").then(({ requestCountByEndpoint }) => {

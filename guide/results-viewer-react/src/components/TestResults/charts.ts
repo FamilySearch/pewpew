@@ -62,7 +62,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     95
   ].map((type, i) => {
     const borderColor = colors[i % colors.length];
-    const backgroundColor = borderColor + "CC"; // More opaque for area chart
+    const backgroundColor = borderColor + "DD"; // High opacity for visible shading
     let label: string;
     // It's a ScatterDataPoint but thanks to chartjs-adapter-date-fns it will date Dates as well as numbers
     let data: (Omit<ScatterDataPoint, "x"> & { x: Date | number })[];
@@ -83,10 +83,11 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       borderColor,
       backgroundColor,
       data,
-      fill: i === 0 ? "origin" : "-1", // first fills from origin, rest from previous
+      fill: "origin", // Each fills from origin (overlapping, not stacked)
       tension: 0.4,
-      borderWidth: 1,
-      pointRadius: 0
+      borderWidth: 2,
+      pointRadius: 0,
+      order: i
     };
   });
 
@@ -107,13 +108,15 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     data: { datasets },
     options: {
       interaction: {
-        mode: "index",
-        intersect: false
+        mode: "nearest",
+        intersect: false,
+        axis: "x"
       },
       scales: {
         y: {
           type: chartType,
           beginAtZero: true,
+          stacked: false,
           title: {
             display: false
           },
@@ -140,10 +143,10 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           position: "bottom"
         },
         tooltip: {
-          mode: "index",
+          mode: "nearest",
           intersect: false,
           callbacks: {
-            label: ({ formattedValue }) => formattedValue + "ms"
+            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
           }
         }
       }
@@ -210,42 +213,42 @@ class ChartDataSets {
 }
 
 export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
-  const chartDataSets = new ChartDataSets();
-
-  // For each endpoint, add request counts at each timestamp
-  for (const [endpointLabel, dataPoints] of allEndpoints) {
+  // Build datasets - each endpoint gets its own area chart (NOT stacked)
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
-    for (const dp of dataPoints) {
-      const x = dp.time;
+
+    const data = dataPoints.map(dp => {
       const count = Number(dp.rttHistogram.getTotalCount());
-      log(`  ${endpointLabel} at ${x.toISOString()}: ${count} requests`, LogLevel.DEBUG);
-      chartDataSets.setPoint(endpointLabel, x, count, {
-        fill: true, // fill to previous dataset for proper stacking
-        tension: 0.4,
-        borderWidth: 1,
-        pointRadius: 0
-      });
-    }
-  }
+      log(`  ${endpointLabel} at ${dp.time.toISOString()}: ${count} requests`, LogLevel.DEBUG);
+      return {
+        x: dp.time,
+        y: count
+      };
+    });
 
-  const datasets = chartDataSets.getDataSets();
+    const borderColor = colors[index % colors.length];
+    const backgroundColor = borderColor + "DD"; // High opacity for visible shading
 
-  // For proper stacking: first dataset fills from origin, rest fill from previous
-  if (datasets.length > 0) {
-    (datasets[0] as any).fill = "origin";
-    for (let i = 1; i < datasets.length; i++) {
-      (datasets[i] as any).fill = "-1"; // fill to previous dataset
-    }
-  }
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor,
+      fill: "origin", // Each area fills from y=0 to its own value
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: index // Draw order: lower index = drawn on top
+    };
+  });
 
   log("Final datasets for overview chart", LogLevel.DEBUG, {
     count: datasets.length,
     datasets: datasets.map(ds => ({
       label: ds.label,
-      fill: (ds as any).fill,
-      dataPoints: (ds.data as any[]).length,
-      firstPoint: (ds.data as any[])[0],
-      lastPoint: (ds.data as any[])[(ds.data as any[]).length - 1]
+      dataPoints: ds.data.length,
+      firstPoint: ds.data[0],
+      lastPoint: ds.data[ds.data.length - 1]
     }))
   });
 
@@ -254,13 +257,14 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
     data: { datasets },
     options: {
       interaction: {
-        mode: "index",
-        intersect: false
+        mode: "nearest",
+        intersect: false,
+        axis: "x"
       },
       scales: {
         y: {
           type: "linear",
-          stacked: true,
+          stacked: false, // NOT stacked - overlapping areas
           beginAtZero: true,
           ticks: {
             precision: 0,
@@ -272,7 +276,6 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
         },
         x: {
           type: "time",
-          stacked: true,
           time: {
             unit: "minute"
           },
@@ -289,18 +292,18 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
           position: "bottom"
         },
         tooltip: {
-          mode: "index",
+          mode: "nearest",
           intersect: false,
           callbacks: {
-            label: ({ dataset, formattedValue: yLabel }) => {
-              return `${dataset.label}: ${yLabel}`;
+            label: (context) => {
+              return `${context.dataset.label}: ${context.formattedValue}`;
             }
           }
         }
       }
     }
   });
-  return totalChart;
+  return totalChart as any as Chart;
 }
 
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
@@ -313,9 +316,9 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {
       chartDataSets.setPoint(key, x, count, {
-        fill: true,
+        fill: "origin", // Each fills from origin (overlapping)
         tension: 0.4,
-        borderWidth: 1,
+        borderWidth: 2,
         pointRadius: 0
       });
     }
@@ -324,35 +327,28 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
       x,
       Number(dp.rttHistogram.getTotalCount()),
       {
-        fill: true,
+        fill: "origin",
         tension: 0.4,
-        borderWidth: 1,
+        borderWidth: 2,
         pointRadius: 0
       }
     );
   }
   const datasets = chartDataSets.getDataSets();
-
-  // Set proper fill mode for stacking
-  if (datasets.length > 0) {
-    (datasets[0] as any).fill = "origin";
-    for (let i = 1; i < datasets.length; i++) {
-      (datasets[i] as any).fill = "-1";
-    }
-  }
   // https://www.chartjs.org/docs/latest/getting-started/v3-migration.html
   const totalChart = new Chart(el, {
     type: "line",
     data: { datasets },
     options: {
       interaction: {
-        mode: "index",
-        intersect: false
+        mode: "nearest",
+        intersect: false,
+        axis: "x"
       },
       scales: {
         y: {
           type: "linear",
-          stacked: true,
+          stacked: false, // Overlapping, not stacked
           beginAtZero: true,
           ticks: {
             precision: 0,
@@ -364,7 +360,6 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
         },
         x: {
           type: "time",
-          stacked: true,
           time: {
             unit: "second"
           },
@@ -381,18 +376,18 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
           position: "bottom"
         },
         tooltip: {
-          mode: "index",
+          mode: "nearest",
           intersect: false,
           callbacks: {
-            label: ({ datasetIndex, formattedValue: yLabel }) => {
-              const { label } = datasets[datasetIndex || 0];
+            label: (context) => {
+              const { label } = context.dataset;
               const status = label ? parseInt(label.slice(0, 3), 10) : NaN;
               if (!isNaN(status)) {
-                return `${yLabel} HTTP ${status}s`;
+                return `${label}: ${context.formattedValue} HTTP ${status}s`;
               } else if (label && label.startsWith("total")) {
-                return `${yLabel} ${label.toLowerCase()}`;
+                return `${context.formattedValue} ${label.toLowerCase()}`;
               } else {
-                return `${yLabel} ${label}`;
+                return `${label}: ${context.formattedValue}`;
               }
             }
           }

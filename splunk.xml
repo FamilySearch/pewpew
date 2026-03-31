@@ -1,0 +1,64 @@
+    <panel>
+      <title>Application Stats</title>
+      <chart>
+        <title>Request Count by Path</title>
+        <search base="Base_Search_By_Path">
+          <query>timechart limit=15 span=1m sum(callCount) as count by method_path</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+      <chart>
+        <title>Request Count by Host</title>
+        <search>
+          <query>(index=production OR index=development) (host="systemtest-*" OR (host="pewpewagent*" source="*app-*pewpew*")) source="*$envSelector$*" sourcetype=fs_json summaryType=bucket method="$methodFilter$" $includeOAuth$
+| rex field=url "^https?:\/\/(?&lt;hostname&gt;[^/]+)(?&lt;path&gt;/[^?]+)(\?(?&lt;queryString&gt;.+))?$"
+| eval hostname=if(hostname="null" OR isnull(hostname),url,hostname)
+| eval path=if(path="null" OR isnull(path),url,path)
+| search path="$pathFilter$"
+| rex field=_raw "\"timestamp\":(?&lt;timestamp&gt;\d+),"
+| eval _time=timestamp
+| eval serviceName=replace(hostname,"\.service\.\w+\.us-east-1\.\w+\.fslocal\.org","")
+| eval serviceName=replace(serviceName,"\.familysearch\.org","")
+| timechart limit=15 span=1m sum(callCount) as count by serviceName</query>
+          <earliest>$timeSelector.earliest$</earliest>
+          <latest>$timeSelector.latest$</latest>
+          <refresh>$autoRefresh$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.axisY.minimumNumber">1</option>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+      <chart>
+        <title>Request Count by Agent</title>
+        <search>
+          <query>(index=production OR index=development) (host="systemtest-*" OR (host="pewpewagent*" source="*app-*pewpew*")) source="*$envSelector$*" sourcetype=fs_json summaryType=bucket method="$methodFilter$" $includeOAuth$
+| rex field=url "^https?:\/\/(?&lt;hostname&gt;[^/]+)(?&lt;path&gt;/[^?]+)(\?(?&lt;queryString&gt;.+))?$"
+| eval path=if(path="null" OR isnull(path),url,path)
+| search path="$pathFilter$"
+| rex field=_raw "\"timestamp\":(?&lt;timestamp&gt;\d+),"
+| eval _time=timestamp
+| timechart limit=15 span=1m sum(callCount) as count by host</query>
+          <earliest>$timeSelector.earliest$</earliest>
+          <latest>$timeSelector.latest$</latest>
+          <refresh>$autoRefresh$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.axisY.minimumNumber">1</option>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>

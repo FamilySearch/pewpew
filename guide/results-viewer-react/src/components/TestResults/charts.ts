@@ -3,6 +3,7 @@ import {
   ChartDataset,
   ChartEvent,
   ChartTypeRegistry,
+  Filler,
   Legend,
   LegendElement,
   LegendItem,
@@ -21,6 +22,7 @@ import { DataPoint } from "./model";
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc
 Chart.register(
+  Filler,
   LineElement,
   PointElement,
   LineController,

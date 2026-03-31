@@ -345,6 +345,8 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
           <h1>Request Count by Endpoint</h1>
           <OverviewChart displayData={displayData} />
+          <h1>Request Count by Host</h1>
+          <HostChart displayData={displayData} />
           <h1>Endpoint Data</h1>
           {displayData.map(([bucketId, dataPoints]) => {
             return (
@@ -485,6 +487,66 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
   return (
     <OVERVIEWCANVAS>
       <canvas ref={overviewCanvas} />
+    </OVERVIEWCANVAS>
+  );
+};
+
+const HostChart = ({ displayData }: OverviewChartProps) => {
+  const [hostChart, setHostChart] = useState<Chart>();
+
+  const hostCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (hostChart) {
+        hostChart.destroy();
+      }
+
+      // Group endpoints by hostname extracted from URL
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        // Extract hostname from URL
+        let hostname = bucketId.url;
+        try {
+          const urlObj = new URL(bucketId.url);
+          hostname = urlObj.hostname;
+        } catch (e) {
+          // If URL parsing fails, use the URL as-is
+        }
+
+        log(`Host found: ${hostname}`, LogLevel.DEBUG, {
+          originalUrl: bucketId.url,
+          dataPointCount: dataPoints.length
+        });
+
+        if (groupedMap.has(hostname)) {
+          // Merge data points with existing entry
+          const existing = groupedMap.get(hostname)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(hostname, merged);
+          log(`  -> Merged with existing ${hostname}`, LogLevel.DEBUG);
+        } else {
+          groupedMap.set(hostname, dataPoints);
+        }
+      }
+
+      const hostData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      log("Host chart (after grouping)", LogLevel.DEBUG, {
+        originalCount: displayData.length,
+        groupedCount: hostData.length,
+        hosts: hostData.map(([label]) => label)
+      });
+
+      import("./charts").then(({ requestCountByEndpoint }) => {
+        const currentChart = requestCountByEndpoint(node, hostData);
+        setHostChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return (
+    <OVERVIEWCANVAS>
+      <canvas ref={hostCanvas} />
     </OVERVIEWCANVAS>
   );
 };

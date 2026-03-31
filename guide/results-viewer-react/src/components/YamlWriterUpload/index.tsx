@@ -234,10 +234,10 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
 
   const handleHTMLfile = async (doc: Document) => {
     const serverOption = doc.querySelector("div.servers option") as HTMLOptionElement;
-    let serverUrl = serverOption ? serverOption.value : "";
+    const serverUrl = serverOption ? serverOption.value : "";
 
     if (serverUrl === "/") {
-      serverUrl = await promptForServerUrl();
+      await promptForServerUrl();
     }
     log("Creating HTML file array", LogLevel.DEBUG);
     createHTMLFileArray(doc);
@@ -318,7 +318,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
                 await toggleHTMLModal(doc);
                 resolve();
               } else {
-                throw new Error("Invalid HTML Swagger UI document");
+                throw new Error("Invalid HTML Swagger UI document", { cause: jsonError });
               }
             } catch (htmlError) {
               log("Error parsing file: Unsupported file type. Accepting HAR files and Swagger UI HTML");
@@ -352,7 +352,7 @@ export const YamlWriterUpload = (props: YamlWriterUploadProps) => {
     const swaggerData: SwaggerDoc = unknownData as SwaggerDoc;
     const versionRegex = /^\d+\.\d+\.\d+$/;
     let hasValidServers: boolean = false;
-    let hasValidVersion: boolean = false;
+    let hasValidVersion: boolean;
     let hasValidHost: boolean = false;
     if ("openapi" in swaggerData) {
       hasValidServers = Array.isArray(swaggerData.servers) && swaggerData.servers.length > 0;

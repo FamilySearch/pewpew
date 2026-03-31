@@ -120,7 +120,7 @@ export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]>
     // Sort once during parsing for better performance
     return comprehensiveSort(parsedData);
   } catch (error) {
-    throw new Error(`Failed to parse results: ${error}`);
+    throw new Error(`Failed to parse results: ${error}`, { cause: error });
   }
 };
 

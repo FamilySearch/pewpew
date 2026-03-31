@@ -451,6 +451,11 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
         return [label, dataPoints];
       });
 
+      log("Overview chart endpoints", LogLevel.DEBUG, {
+        count: endpointData.length,
+        labels: endpointData.map(([label]) => label)
+      });
+
       import("./charts").then(({ requestCountByEndpoint }) => {
         const currentChart = requestCountByEndpoint(node, endpointData);
         setOverviewChart(currentChart);

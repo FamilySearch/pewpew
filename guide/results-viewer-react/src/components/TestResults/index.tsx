@@ -268,46 +268,47 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
     }
   };
 
-  const onSummaryTagFilterChange = (event: React.ChangeEvent<HTMLInputElement>, stateName: "summaryTagFilter" | "summaryTagValueFilter") => {
-    const newValue = event.target.value;
-    const summaryTagFilter = stateName === "summaryTagFilter" ? newValue : state.summaryTagFilter;
-    const summaryTagValueFilter = stateName === "summaryTagValueFilter" ? newValue : state.summaryTagValueFilter;
-    const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
+  // Commented out for Splunk-style view - can be restored if filtering is needed
+  // const onSummaryTagFilterChange = (event: React.ChangeEvent<HTMLInputElement>, stateName: "summaryTagFilter" | "summaryTagValueFilter") => {
+  //   const newValue = event.target.value;
+  //   const summaryTagFilter = stateName === "summaryTagFilter" ? newValue : state.summaryTagFilter;
+  //   const summaryTagValueFilter = stateName === "summaryTagValueFilter" ? newValue : state.summaryTagValueFilter;
+  //   const filteredData = getFilteredEndpoints({ resultsData: state.resultsData, summaryTagFilter, summaryTagValueFilter });
 
-    const oldFilteredData = state.filteredData;
-    log("onSummaryTagFilterChange filteredData", LogLevel.DEBUG, { filteredData: filteredData?.length || -1, oldFilteredData: oldFilteredData?.length || -1 });
-    // Check if it changed
-    if ((filteredData === undefined && oldFilteredData === undefined)
-      || ((filteredData !== undefined && oldFilteredData !== undefined)
-      && filteredData.length === oldFilteredData.length
-      && filteredData.every(([tags]: ParsedFileEntry, index: number) =>
-        JSON.stringify(tags) === JSON.stringify(oldFilteredData[index][0])))
-    ) {
-      // It hasn't changed
-      // Update the summary filter display
-      const { summaryData } = state;
-      const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
-      if (summaryData && summaryData[0].method !== summary) {
-        summaryData[0] = { ...(summaryData[0]), method: summary };
-      }
-      updateState({ [stateName]: newValue });
-      log("filteredData hasn't changed", LogLevel.DEBUG);
-      return;
-    }
-    log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
+  //   const oldFilteredData = state.filteredData;
+  //   log("onSummaryTagFilterChange filteredData", LogLevel.DEBUG, { filteredData: filteredData?.length || -1, oldFilteredData: oldFilteredData?.length || -1 });
+  //   // Check if it changed
+  //   if ((filteredData === undefined && oldFilteredData === undefined)
+  //     || ((filteredData !== undefined && oldFilteredData !== undefined)
+  //     && filteredData.length === oldFilteredData.length
+  //     && filteredData.every(([tags]: ParsedFileEntry, index: number) =>
+  //       JSON.stringify(tags) === JSON.stringify(oldFilteredData[index][0])))
+  //   ) {
+  //     // It hasn't changed
+  //     // Update the summary filter display
+  //     const { summaryData } = state;
+  //     const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+  //     if (summaryData && summaryData[0].method !== summary) {
+  //       summaryData[0] = { ...(summaryData[0]), method: summary };
+  //     }
+  //     updateState({ [stateName]: newValue });
+  //     log("filteredData hasn't changed", LogLevel.DEBUG);
+  //     return;
+  //   }
+  //   log("filteredData changed", LogLevel.DEBUG, { oldFilteredData, filteredData });
 
-    setState((oldState: TestResultState) => {
-      // Free the old data (only the summary)
-      freeHistograms(undefined, oldState.summaryData);
-      const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
-      return {
-        ...oldState,
-        [stateName]: newValue,
-        filteredData,
-        summaryData
-      };
-    });
-  };
+  //   setState((oldState: TestResultState) => {
+  //     // Free the old data (only the summary)
+  //     freeHistograms(undefined, oldState.summaryData);
+  //     const summaryData = getSummaryData({ filteredData: filteredData || oldState.resultsData, summaryTagFilter, summaryTagValueFilter });
+  //     return {
+  //       ...oldState,
+  //       [stateName]: newValue,
+  //       filteredData,
+  //       summaryData
+  //     };
+  //   });
+  // };
 
   useEffect(() => {
     import("chartjs-adapter-date-fns")
@@ -323,12 +324,13 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
     return state.filteredData || state.resultsData;
   }, [state.filteredData, state.resultsData]);
 
+  // Commented out for Splunk-style view
   // Memoized summary tags calculation
-  const summaryTags: BucketId = useMemo(() => {
-    return state.summaryData && state.filteredData
-      ? state.summaryData[0]
-      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
-  }, [state.summaryData, state.filteredData]);
+  // const summaryTags: BucketId = useMemo(() => {
+  //   return state.summaryData && state.filteredData
+  //     ? state.summaryData[0]
+  //     : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
+  // }, [state.summaryData, state.filteredData]);
 
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
@@ -341,24 +343,8 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
-          <h1>Overview charts</h1>
-          <p>Filter which endpoints are included in the summary:</p>
-          <label htmlFor="summaryTagFilter">
-            <span>Tag name</span>
-            <input id="summaryTagFilter" type="text" value={state.summaryTagFilter} placeholder="url"
-              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagFilter")}
-            />
-          </label>
-          <label htmlFor="summaryTagValueFilter">
-            <span>contains</span>
-            <input id="summaryTagValueFilter" type="text" value={state.summaryTagValueFilter} placeholder="familysearch"
-              onChange={(e) => onSummaryTagFilterChange(e, "summaryTagValueFilter")}
-            />
-          </label>
-          {state.summaryData
-            ? <Endpoint key={"summary"} bucketId={summaryTags} dataPoints={state.summaryData[1]} />
-            : <p>No summary data to display</p>
-          }
+          <h1>Request Count by Endpoint</h1>
+          <OverviewChart displayData={displayData} />
           <h1>Endpoint Data</h1>
           {displayData.map(([bucketId, dataPoints]) => {
             return (
@@ -416,6 +402,8 @@ const total = (dataPoints: DataPoint[]) => {
   return {
     otherErrors: otherErrorsArray,
     stats: [
+      ["p50", Number(totalRTT.getValueAtPercentile(50)) / MICROS_TO_MS],
+      ["p95", Number(totalRTT.getValueAtPercentile(95)) / MICROS_TO_MS],
       ["Avg", Math.round(totalRTT.getMean()) / MICROS_TO_MS],
       [
         "Min",
@@ -425,10 +413,8 @@ const total = (dataPoints: DataPoint[]) => {
         )
       ],
       ["Max", Number(totalRTT.getMaxValue()) / MICROS_TO_MS],
-      ["Std Dev", totalRTT.getStdDeviation() / MICROS_TO_MS],
-      ["90th PCTL", Number(totalRTT.getValueAtPercentile(90)) / MICROS_TO_MS],
-      ["95th PCTL", Number(totalRTT.getValueAtPercentile(95)) / MICROS_TO_MS],
-      ["99th PCTL", Number(totalRTT.getValueAtPercentile(99)) / MICROS_TO_MS]
+      ["p90", Number(totalRTT.getValueAtPercentile(90)) / MICROS_TO_MS],
+      ["p99", Number(totalRTT.getValueAtPercentile(99)) / MICROS_TO_MS]
     ],
     statusCounts: statusAmount
   };
@@ -438,6 +424,45 @@ const total = (dataPoints: DataPoint[]) => {
       totalRTT.free();
     }
   }
+};
+
+const OVERVIEWCANVAS = styled.div`
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 2em auto;
+`;
+
+interface OverviewChartProps {
+  displayData: ParsedFileEntry[];
+}
+
+const OverviewChart = ({ displayData }: OverviewChartProps) => {
+  const [overviewChart, setOverviewChart] = useState<Chart>();
+
+  const overviewCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (overviewChart) {
+        overviewChart.destroy();
+      }
+      // Create label + dataPoints pairs
+      const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        return [label, dataPoints];
+      });
+
+      import("./charts").then(({ requestCountByEndpoint }) => {
+        const currentChart = requestCountByEndpoint(node, endpointData);
+        setOverviewChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return (
+    <OVERVIEWCANVAS>
+      <canvas ref={overviewCanvas} />
+    </OVERVIEWCANVAS>
+  );
 };
 
 const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
@@ -586,7 +611,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
         </ENDPOINTDIV1>
         <FLEXROW>
         <RTTDIV>
-          <h3>RTT Stats</h3>
+          <h3>Response Time (p50, p95)</h3>
           <button onClick={() => toggleChart(rttChart!)}>
             Switch to {rttButtonDisplay}
           </button>
@@ -597,7 +622,7 @@ const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
           </ENDPOINTDIV2>
         </RTTDIV>
         <ENDPOINTDIV1>
-          <h3>HTTP Status Counts and Errors</h3>
+          <h3>Request Count by Status</h3>
           <button onClick={() => toggleChart(totalChart!)}>
             Switch to {totalButtonDisplay}
           </button>

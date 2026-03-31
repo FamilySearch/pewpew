@@ -58,56 +58,17 @@ const colors = [
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [
-    "avg",
-    "min",
-    "max",
-    "std",
-    90,
-    95,
-    99
+    50,
+    95
   ].map((type, i) => {
     const borderColor = colors[i % colors.length];
-    const backgroundColor = borderColor + "46";
+    const backgroundColor = borderColor + "80"; // More opaque for area chart
     let label: string;
     // It's a ScatterDataPoint but thanks to chartjs-adapter-date-fns it will date Dates as well as numbers
     let data: (Omit<ScatterDataPoint, "x"> & { x: Date | number })[];
-    if (type === "avg") {
-      label = "Avg";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Math.round(dp.rttHistogram.getMean()) / MICROS_TO_MS
-          : NaN
-      }));
 
-    } else if (type === "min") {
-      label = "Min";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Number(dp.rttHistogram.getMinNonZeroValue()) / MICROS_TO_MS
-          : NaN
-      }));
-
-    } else if (type === "max") {
-      label = "Max";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Number(dp.rttHistogram.getMaxValue()) / MICROS_TO_MS
-          : NaN
-      }));
-
-    } else if (type === "std") {
-      label = "Std Dev";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Math.round(dp.rttHistogram.getStdDeviation()) / MICROS_TO_MS
-          : NaN
-      }));
-    } else if (typeof type === "number") {
-      label = type + "th PCTL";
+    if (typeof type === "number") {
+      label = "p" + type;
       data = dataPoints.map((dp) => ({
         x: dp.time,
         y: dp.rttHistogram.getTotalCount()
@@ -122,7 +83,8 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       borderColor,
       backgroundColor,
       data,
-      hidden: type === "std"
+      fill: true,
+      tension: 0.4
     };
   });
 
@@ -146,8 +108,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
         y: {
           type: chartType,
           title: {
-            display: true,
-            text: "RTT"
+            display: false
           },
           ticks: {
             callback: (v) => v + "ms",
@@ -159,12 +120,18 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           time: {
             unit: "second"
           },
+          title: {
+            display: false
+          },
           ticks: {
             autoSkip: true
           }
         }
       },
       plugins: {
+        legend: {
+          position: "bottom"
+        },
         tooltip: {
           callbacks: {
             label: ({ formattedValue }) => formattedValue + "ms"
@@ -233,6 +200,67 @@ class ChartDataSets {
   }
 }
 
+export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const chartDataSets = new ChartDataSets();
+
+  // For each endpoint, add its request counts over time
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    for (const dp of dataPoints) {
+      const x = dp.time;
+      const count = Number(dp.rttHistogram.getTotalCount());
+      chartDataSets.setPoint(endpointLabel, x, count, { fill: true, tension: 0.4 });
+    }
+  }
+
+  const datasets = chartDataSets.getDataSets();
+
+  const totalChart = new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true
+          },
+          title: {
+            display: false
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute"
+          },
+          title: {
+            display: false
+          },
+          ticks: {
+            autoSkip: true
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          mode: "index",
+          callbacks: {
+            label: ({ dataset, formattedValue: yLabel }) => {
+              return `${dataset.label}: ${yLabel}`;
+            }
+          }
+        }
+      }
+    }
+  });
+  return totalChart;
+}
+
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const chartDataSets = new ChartDataSets();
   for (const dp of dataPoints) {
@@ -242,13 +270,13 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     );
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {
-      chartDataSets.setPoint(key, x, count);
+      chartDataSets.setPoint(key, x, count, { fill: true, tension: 0.4 });
     }
     chartDataSets.setPoint(
       "total calls",
       x,
       Number(dp.rttHistogram.getTotalCount()),
-      { fill: false }
+      { fill: true, tension: 0.4 }
     );
   }
   const datasets = chartDataSets.getDataSets();
@@ -260,13 +288,13 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
       scales: {
         y: {
           type: "linear",
+          stacked: true,
           ticks: {
             precision: 0,
             autoSkip: true
           },
           title: {
-            display: true,
-            text: "Count"
+            display: false
           }
         },
         x: {
@@ -274,13 +302,20 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
           time: {
             unit: "second"
           },
+          title: {
+            display: false
+          },
           ticks: {
             autoSkip: true
           }
         }
       },
       plugins: {
+        legend: {
+          position: "bottom"
+        },
         tooltip: {
+          mode: "index",
           callbacks: {
             label: ({ datasetIndex, formattedValue: yLabel }) => {
               const { label } = datasets[datasetIndex || 0];

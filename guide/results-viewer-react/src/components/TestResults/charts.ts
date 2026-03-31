@@ -212,12 +212,13 @@ class ChartDataSets {
 export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
   const chartDataSets = new ChartDataSets();
 
-  // For each endpoint, add its request counts over time
+  // For each endpoint, add request counts at each timestamp
   for (const [endpointLabel, dataPoints] of allEndpoints) {
     log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
     for (const dp of dataPoints) {
       const x = dp.time;
       const count = Number(dp.rttHistogram.getTotalCount());
+      log(`  ${endpointLabel} at ${x.toISOString()}: ${count} requests`, LogLevel.DEBUG);
       chartDataSets.setPoint(endpointLabel, x, count, {
         fill: true, // fill to previous dataset for proper stacking
         tension: 0.4,

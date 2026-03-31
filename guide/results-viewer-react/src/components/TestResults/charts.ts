@@ -82,6 +82,30 @@ export const hostColors = [
   "#5cc5bf"  // Crystal Teal
 ];
 
+// Agent chart color palette (brown/gold theme)
+export const agentColors = [
+  "#b8904b", // Primary Gold/Brown (like Splunk agent)
+  "#c9a061", // Light Gold
+  "#a88040", // Dark Gold
+  "#d4ad6f", // Bright Gold
+  "#987030", // Deep Brown
+  "#e0ba7d", // Pale Gold
+  "#aa8550", // Caramel
+  "#c5a870", // Sand
+  "#8f6f40", // Copper Brown
+  "#b59a65", // Wheat
+  "#9d7f48", // Bronze
+  "#cbb078", // Amber
+  "#856a35", // Ochre
+  "#d5b585", // Tan
+  "#8a7245", // Sienna
+  "#bfa070", // Biscuit
+  "#967740", // Tawny
+  "#cab880", // Buff
+  "#7f6530", // Russet
+  "#b0955f"  // Khaki
+];
+
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [

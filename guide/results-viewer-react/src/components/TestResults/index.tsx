@@ -347,6 +347,8 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           <OverviewChart displayData={displayData} />
           <h1>Request Count by Host</h1>
           <HostChart displayData={displayData} />
+          <h1>Request Count by Agent</h1>
+          <AgentChart displayData={displayData} />
           <h1>Endpoint Data</h1>
           {displayData.map(([bucketId, dataPoints]) => {
             return (
@@ -547,6 +549,74 @@ const HostChart = ({ displayData }: OverviewChartProps) => {
   return (
     <OVERVIEWCANVAS>
       <canvas ref={hostCanvas} />
+    </OVERVIEWCANVAS>
+  );
+};
+
+const AgentChart = ({ displayData }: OverviewChartProps) => {
+  const [agentChart, setAgentChart] = useState<Chart>();
+
+  const agentCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (agentChart) {
+        agentChart.destroy();
+      }
+
+      // Group endpoints by agent/machine
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        // Look for agent information in tags (common fields: agent, host, machine, source)
+        let agent = "Unknown Agent";
+
+        // Check for agent-related fields in bucketId tags
+        if (bucketId.agent) {
+          agent = bucketId.agent;
+        } else if (bucketId.host) {
+          agent = bucketId.host;
+        } else if (bucketId.machine) {
+          agent = bucketId.machine;
+        } else if (bucketId.source) {
+          agent = bucketId.source;
+        } else {
+          // If no agent field, use "All Agents" as a fallback
+          agent = "All Agents";
+        }
+
+        log(`Agent found: ${agent}`, LogLevel.DEBUG, {
+          bucketId,
+          dataPointCount: dataPoints.length
+        });
+
+        if (groupedMap.has(agent)) {
+          // Merge data points with existing entry
+          const existing = groupedMap.get(agent)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(agent, merged);
+          log(`  -> Merged with existing ${agent}`, LogLevel.DEBUG);
+        } else {
+          groupedMap.set(agent, dataPoints);
+        }
+      }
+
+      const agentData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      log("Agent chart (after grouping)", LogLevel.DEBUG, {
+        originalCount: displayData.length,
+        groupedCount: agentData.length,
+        agents: agentData.map(([label]) => label)
+      });
+
+      import("./charts").then(({ requestCountByEndpoint, agentColors }) => {
+        const currentChart = requestCountByEndpoint(node, agentData, agentColors);
+        setAgentChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return (
+    <OVERVIEWCANVAS>
+      <canvas ref={agentCanvas} />
     </OVERVIEWCANVAS>
   );
 };

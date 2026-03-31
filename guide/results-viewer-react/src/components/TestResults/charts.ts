@@ -234,11 +234,11 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
       data,
       borderColor,
       backgroundColor,
-      fill: "origin", // Each area fills from y=0 to its own value
+      fill: "origin", // Fill from y=0 for stacking
       tension: 0.4,
       borderWidth: 2,
       pointRadius: 0,
-      order: index // Draw order: lower index = drawn on top
+      order: index // Draw order
     };
   });
 
@@ -257,14 +257,13 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
     data: { datasets },
     options: {
       interaction: {
-        mode: "nearest",
-        intersect: false,
-        axis: "x"
+        mode: "index",
+        intersect: false
       },
       scales: {
         y: {
           type: "linear",
-          stacked: false, // NOT stacked - overlapping areas
+          stacked: true, // STACKED - areas stack on top of each other
           beginAtZero: true,
           ticks: {
             precision: 0,
@@ -292,11 +291,13 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
           position: "bottom"
         },
         tooltip: {
-          mode: "nearest",
+          mode: "index",
           intersect: false,
           callbacks: {
             label: (context) => {
-              return `${context.dataset.label}: ${context.formattedValue}`;
+              // Show the raw value (not the stacked total)
+              const rawValue = context.parsed.y;
+              return `${context.dataset.label}: ${rawValue.toLocaleString()}`;
             }
           }
         }

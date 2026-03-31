@@ -42,6 +42,7 @@ module.exports = {
       fs: false,
       http: false,
       path: false,
+      url: false,
     },
   },
   plugins: [

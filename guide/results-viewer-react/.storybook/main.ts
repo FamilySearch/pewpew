@@ -34,6 +34,7 @@ const config: StorybookConfig = {
       fs: false,
       http: false,
       path: false,
+      url: false,
     };
     return config;
   },

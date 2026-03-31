@@ -631,6 +631,13 @@ export abstract class TestManager {
     return foundTest ? ({ testData: foundTest, cacheLocation }) : undefined;
   }
 
+  // Adds a list of tests to the recent cache, oldest first so newest survive eviction
+  public static async addRecentTests (tests: StoredTestData[]): Promise<void> {
+    for (const test of tests) {
+      await this.addToStoredList(test, CacheLocation.Recent);
+    }
+  }
+
   // Returns removed element or none if we haven't maxed out
   protected static async addToStoredList (newData: StoredTestData, cacheLocation: CacheLocation): Promise<StoredTestData | undefined> {
     log(`addToStoredTest testId (${newData.testId})`, LogLevel.DEBUG, { newData, cacheLocation });

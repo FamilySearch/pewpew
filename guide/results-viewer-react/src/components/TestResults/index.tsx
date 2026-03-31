@@ -175,16 +175,14 @@ const getSummaryDisplay = ({
   summaryTagFilter: string,
   summaryTagValueFilter: string
 }): string => {
-  let summary: string = "";
   if (summaryTagFilter) {
-    summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
+    let summary = `Showing only endpoints with a tag of "${summaryTagFilter}"`;
     if (summaryTagValueFilter) {
       summary += ` and a value containing "${summaryTagValueFilter}"`;
     }
-  } else {
-    summary = "Including all endpoints";
+    return summary;
   }
-  return summary;
+  return "Including all endpoints";
 };
 
 const getSummaryData = ({
@@ -197,14 +195,13 @@ const getSummaryData = ({
   summaryTagValueFilter: string
 }): ParsedFileEntry | undefined => {
   let summaryData: ParsedFileEntry | undefined;
-  let summary: string = "";
   if (filteredData && filteredData.length > 0) {
     const allDataPoints = [];
     for (const [, dataPoints] of filteredData) {
       allDataPoints.push(...dataPoints);
     }
     const dataPoints = mergeAllDataPoints(...allDataPoints);
-    summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+    const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
     const tags = { method: summary, url: "" };
     summaryData = [tags, dataPoints];
   }

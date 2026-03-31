@@ -34,11 +34,11 @@
     "node": "24"
   },
   "overrides": {
-    "eslint": "^10.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "eslint": "$eslint",
+    "react": "$react",
+    "react-dom": "$react-dom",
+    "@types/react": "$@types/react",
+    "@types/react-dom": "$@types/react-dom"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.363.0",

@@ -1,11 +1,11 @@
 import type { Configuration } from "webpack";
-import type { StorybookConfig } from "@storybook/nextjs";
+import type { StorybookConfig } from "@storybook/react-webpack5";
 
 const config: StorybookConfig = {
   stories: ["../src/components/**/story.tsx"],
-  addons: ["@storybook/addon-links", "@storybook/essentials", "@storybook/interactions"],
+  addons: ["@storybook/addon-links", "@storybook/addon-webpack5-compiler-swc"],
   framework: {
-    name: "@storybook/nextjs",
+    name: "@storybook/react-webpack5",
     options: {}
   },
   typescript: {
@@ -25,8 +25,17 @@ const config: StorybookConfig = {
     if (!config.output) {
       config.output = {};
     }
-    // config.output.publicPath = "/";
     config.output.webassemblyModuleFilename = 'static/wasm/[modulehash].wasm';
+    if (!config.resolve) {
+      config.resolve = {};
+    }
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      http: false,
+      path: false,
+      url: false,
+    };
     return config;
   },
   docs: {}

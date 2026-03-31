@@ -5,6 +5,7 @@ import {
   ErrorResponse,
   ScheduledTestData,
   ScheduledTestRecurrence,
+  StoredTestData,
   TestData,
   TestDataResponse,
   TestManagerError
@@ -15,9 +16,11 @@ import {
   PpaasTestStatus,
   TestMessage,
   TestStatus,
+  TestStatusMessage,
   log,
   util
 } from "@fs/ppaas-common";
+import { MAX_SAVED_TESTS_RECENT, getRecentTests } from "../src/testmanager";
 import {
   TestScheduler,
   TestSchedulerItem,
@@ -25,6 +28,14 @@ import {
   getTestsToRun
 } from "../src/testscheduler";
 import { getHourMinuteFromTimestamp, latestPewPewVersion } from "../src/clientutil";
+import {
+  mockGetObject,
+  mockGetObjectTagging,
+  mockListObject,
+  mockListObjects,
+  mockS3,
+  resetMockS3
+} from "./mock";
 import { EventInput } from "@fullcalendar/core";
 import { expect } from "chai";
 
@@ -142,6 +153,23 @@ export class TestSchedulerIntegration extends TestScheduler {
   /** public so we can call it for testing */
   public static runHistoricalDelete (deleteOldFilesDays?: number) {
     return TestScheduler.runHistoricalDelete(deleteOldFilesDays);
+  }
+
+  /** public so we can call it for testing */
+  public static populateCacheFromHistorical (days: number): Promise<void> {
+    return TestScheduler.populateCacheFromHistorical(days);
+  }
+
+  /** Calls populateCacheFromHistorical with loadHistoricalFromS3 overridden to throw */
+  public static async populateCacheFromHistoricalWithLoadError (days: number): Promise<void> {
+    const originalLoad = TestScheduler.loadHistoricalFromS3;
+    // eslint-disable-next-line require-await
+    TestScheduler.loadHistoricalFromS3 = async () => { throw new Error("simulated S3 error"); };
+    try {
+      return await TestScheduler.populateCacheFromHistorical(days);
+    } finally {
+      TestScheduler.loadHistoricalFromS3 = originalLoad;
+    }
   }
 }
 
@@ -1357,6 +1385,236 @@ describe("TestScheduler", () => {
         expect(historicalTests.size, "historicalTests.size").to.equal(2);
       } catch (error) {
         log("should remove old, but not new error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+  });
+
+  describe("populateCacheFromHistorical", () => {
+    before(() => {
+      mockS3();
+    });
+
+    after(() => {
+      resetMockS3();
+    });
+
+    beforeEach(() => {
+      // Clear historical and recent caches before each test
+      const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+      historicalTests.clear();
+      getRecentTests().clear();
+      // Default: S3 returns no status file found for PpaasTestStatus.getStatus
+      mockListObjects([]);
+    });
+
+    it("should add nothing if historicalTests is empty", async () => {
+      try {
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        expect(getRecentTests().size, "recentTests.size").to.equal(0);
+      } catch (error) {
+        log("should add nothing if historicalTests is empty error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should add test within days range to recent cache", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        const endTime = Date.now();
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Finished);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        const recentTests = getRecentTests();
+        expect(recentTests.size, "recentTests.size").to.equal(1);
+        expect(recentTests.has(testId), "recentTests.has testId").to.equal(true);
+      } catch (error) {
+        log("should add test within days range error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should not add test older than days cutoff", async () => {
+      try {
+        const startTime = Date.now() - (8 * ONE_DAY);
+        const endTime = Date.now() - (8 * ONE_DAY) + ONE_HOUR;
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Finished);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        expect(getRecentTests().size, "recentTests.size").to.equal(0);
+      } catch (error) {
+        log("should not add test older than days cutoff error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should filter old tests but keep recent ones", async () => {
+      try {
+        const recentStart = Date.now() - ONE_HOUR;
+        const oldStart = Date.now() - (8 * ONE_DAY);
+        const recentTestId = PpaasTestId.makeTestId(yamlFile).testId;
+        await util.sleep(5); // Ensure different testIds
+        const oldTestId = PpaasTestId.makeTestId(yamlFile).testId;
+        await TestSchedulerIntegration.addHistoricalTest(recentTestId, yamlFile, recentStart, recentStart + ONE_HOUR, TestStatus.Finished);
+        await TestSchedulerIntegration.addHistoricalTest(oldTestId, yamlFile, oldStart, oldStart + ONE_HOUR, TestStatus.Finished);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        const recentTests = getRecentTests();
+        expect(recentTests.size, "recentTests.size").to.equal(1);
+        expect(recentTests.has(recentTestId), "recentTests.has recentTestId").to.equal(true);
+        expect(recentTests.has(oldTestId), "recentTests.has oldTestId").to.equal(false);
+      } catch (error) {
+        log("should filter old tests but keep recent ones error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should map red color to Failed status", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, Date.now(), TestStatus.Failed);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        const found: StoredTestData | undefined = getRecentTests().get(testId);
+        expect(found, "found").to.not.equal(undefined);
+        expect(found?.status, "status").to.equal(TestStatus.Failed);
+      } catch (error) {
+        log("should map red color to Failed status error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should map green color to Finished status", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, Date.now(), TestStatus.Finished);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        const found: StoredTestData | undefined = getRecentTests().get(testId);
+        expect(found, "found").to.not.equal(undefined);
+        expect(found?.status, "status").to.equal(TestStatus.Finished);
+      } catch (error) {
+        log("should map green color to Finished status error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should not add Unknown status entries to recent cache", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        // TestStatus.Running produces "purple" color; mockListObjects([]) in beforeEach means getStatus returns undefined
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, Date.now(), TestStatus.Running);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        // Unknown status (no S3 result) should NOT be added to recent tests
+        expect(getRecentTests().has(testId), "recentTests.has testId").to.equal(false);
+      } catch (error) {
+        log("should not add Unknown status entries to recent cache error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should load actual status from S3 for unknown color entries", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        const endTime = Date.now();
+        // TestStatus.Running produces "purple" color
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Running);
+        // Mock S3 to return a status file with Failed status
+        const testStatusMessage: TestStatusMessage = {
+          startTime,
+          endTime,
+          resultsFilename: [],
+          status: TestStatus.Failed,
+          errors: ["test error from S3"]
+        };
+        mockListObject({ filename: `${testId}.info`, folder: ppaasTestId.s3Folder });
+        mockGetObject(JSON.stringify(testStatusMessage));
+        mockGetObjectTagging(undefined);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        const found: StoredTestData | undefined = getRecentTests().get(testId);
+        expect(found, "found").to.not.equal(undefined);
+        expect(found?.status, "status from S3").to.equal(TestStatus.Failed);
+        expect(found?.ppaasTestStatus, "ppaasTestStatus populated").to.not.equal(undefined);
+      } catch (error) {
+        log("should load actual status from S3 for unknown color entries error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should not add entry when S3 returns non-terminal status for unknown color", async () => {
+      try {
+        const startTime = Date.now() - ONE_HOUR;
+        const endTime = Date.now();
+        // TestStatus.Running produces "purple" color
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, endTime, TestStatus.Running);
+        // Mock S3 to return a status file with Created status (non-terminal)
+        const testStatusMessage: TestStatusMessage = {
+          startTime,
+          endTime,
+          resultsFilename: [],
+          status: TestStatus.Created,
+          errors: []
+        };
+        mockListObject({ filename: `${testId}.info`, folder: ppaasTestId.s3Folder });
+        mockGetObject(JSON.stringify(testStatusMessage));
+        mockGetObjectTagging(undefined);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        // Created status is not Finished or Failed, so should NOT be added
+        expect(getRecentTests().has(testId), "recentTests.has testId").to.equal(false);
+      } catch (error) {
+        log("should not add entry when S3 returns non-terminal status error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should skip invalid testId entries without throwing", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        const startTime = Date.now() - ONE_HOUR;
+        // Add an invalid testId that PpaasTestId.getFromTestId will reject
+        historicalTests.set("invalid-test-id", { start: startTime, end: Date.now(), color: "green" });
+        // Also add a valid one
+        await TestSchedulerIntegration.addHistoricalTest(testId, yamlFile, startTime, Date.now(), TestStatus.Finished);
+        await TestSchedulerIntegration.populateCacheFromHistorical(7);
+        // Only the valid one should be added
+        const recentTests = getRecentTests();
+        expect(recentTests.has(testId), "recentTests.has valid testId").to.equal(true);
+        expect(recentTests.has("invalid-test-id"), "recentTests.has invalid").to.equal(false);
+      } catch (error) {
+        log("should skip invalid testId entries error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should only keep the most recent MAX_SAVED_TESTS_RECENT items", async () => {
+      try {
+        const historicalTests: Map<string, EventInput> = TestSchedulerIntegration.getHistoricalTests();
+        const now = Date.now();
+        const testIds: string[] = [];
+        // Add MAX+2 tests with different start times
+        for (let i = 0; i < MAX_SAVED_TESTS_RECENT + 2; i++) {
+          await util.sleep(5); // Ensure unique testIds
+          const id = PpaasTestId.makeTestId(yamlFile).testId;
+          testIds.push(id);
+          const startTime = now - ((MAX_SAVED_TESTS_RECENT + 2 - i) * ONE_HOUR);
+          historicalTests.set(id, { start: startTime, end: startTime + ONE_HOUR, color: "green" });
+        }
+        await TestSchedulerIntegration.populateCacheFromHistorical(30);
+        const recentTests = getRecentTests();
+        expect(recentTests.size, "recentTests.size").to.equal(MAX_SAVED_TESTS_RECENT);
+        // The 2 oldest should have been sliced off (populateCacheFromHistorical takes last N)
+        expect(recentTests.has(testIds[0]), "oldest should be absent").to.equal(false);
+        expect(recentTests.has(testIds[1]), "second oldest should be absent").to.equal(false);
+        // The newest should be present
+        expect(recentTests.has(testIds[MAX_SAVED_TESTS_RECENT + 1]), "newest should be present").to.equal(true);
+      } catch (error) {
+        log("should only keep the most recent MAX_SAVED_TESTS_RECENT items error", LogLevel.ERROR, error);
+        throw error;
+      }
+    });
+
+    it("should return gracefully if loadHistoricalFromS3 throws", async () => {
+      try {
+        await TestSchedulerIntegration.populateCacheFromHistoricalWithLoadError(7);
+        // Should not throw, recent tests should be empty
+        expect(getRecentTests().size, "recentTests.size").to.equal(0);
+      } catch (error) {
+        log("should return gracefully if loadHistoricalFromS3 throws error", LogLevel.ERROR, error);
         throw error;
       }
     });

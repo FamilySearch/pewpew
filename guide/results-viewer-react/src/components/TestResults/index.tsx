@@ -445,20 +445,34 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
       if (overviewChart) {
         overviewChart.destroy();
       }
-      // Create label + dataPoints pairs
-      const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+
+      // Group endpoints by method+url, merging data points at same timestamps
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
         log(`Endpoint found: ${label}`, LogLevel.DEBUG, {
           bucketId,
           dataPointCount: dataPoints.length
         });
-        return [label, dataPoints];
-      });
 
-      log("Overview chart endpoints", LogLevel.DEBUG, {
-        count: endpointData.length,
-        labels: endpointData.map(([label]) => label),
-        uniqueLabels: [...new Set(endpointData.map(([label]) => label))]
+        if (groupedMap.has(label)) {
+          // Merge data points with existing entry (combining counts at same timestamps)
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+          log(`  -> Merged with existing ${label}`, LogLevel.DEBUG);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      log("Overview chart endpoints (after grouping)", LogLevel.DEBUG, {
+        originalCount: displayData.length,
+        groupedCount: endpointData.length,
+        labels: endpointData.map(([label]) => label)
       });
 
       import("./charts").then(({ requestCountByEndpoint }) => {

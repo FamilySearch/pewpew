@@ -537,8 +537,8 @@ const HostChart = ({ displayData }: OverviewChartProps) => {
         hosts: hostData.map(([label]) => label)
       });
 
-      import("./charts").then(({ requestCountByEndpoint }) => {
-        const currentChart = requestCountByEndpoint(node, hostData);
+      import("./charts").then(({ requestCountByEndpoint, hostColors }) => {
+        const currentChart = requestCountByEndpoint(node, hostData, hostColors);
         setHostChart(currentChart);
       });
     }

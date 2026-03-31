@@ -58,6 +58,30 @@ const colors = [
   "#008b8b"  // Dark Cyan
 ];
 
+// Host chart color palette (teal/cyan theme)
+export const hostColors = [
+  "#4d9f9a", // Primary Teal
+  "#5daba5", // Light Teal
+  "#3d8f8a", // Dark Teal
+  "#6dbdb7", // Bright Teal
+  "#2d7f7a", // Deep Teal
+  "#7dcdca", // Pale Teal
+  "#48a9a6", // Sea Green
+  "#56cac5", // Turquoise
+  "#3b8371", // Forest Teal
+  "#5eb3af", // Mint Teal
+  "#45918c", // Slate Teal
+  "#6fc1bc", // Sky Teal
+  "#358d87", // Ocean Teal
+  "#7fd4cf", // Aqua
+  "#2e7872", // Pine Teal
+  "#5fbbb5", // Lagoon
+  "#409b95", // Marine Teal
+  "#6dcbc5", // Seafoam
+  "#327f79", // Jade
+  "#5cc5bf"  // Crystal Teal
+];
+
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [
@@ -215,7 +239,7 @@ class ChartDataSets {
   }
 }
 
-export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][], colorPalette: string[] = colors): Chart {
   // Build datasets - each endpoint gets its own area chart (NOT stacked)
   const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
@@ -229,7 +253,7 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
       };
     });
 
-    const borderColor = colors[index % colors.length];
+    const borderColor = colorPalette[index % colorPalette.length];
     const backgroundColor = borderColor + "DD"; // High opacity for visible shading
 
     return {

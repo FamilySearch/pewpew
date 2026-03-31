@@ -214,6 +214,7 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
 
   // For each endpoint, add its request counts over time
   for (const [endpointLabel, dataPoints] of allEndpoints) {
+    log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
     for (const dp of dataPoints) {
       const x = dp.time;
       const count = Number(dp.rttHistogram.getTotalCount());
@@ -226,14 +227,15 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
     }
   }
 
-  const datasets = chartDataSets.getDataSets().map((ds, i) => {
-    const borderColor = colors[i % colors.length];
-    const backgroundColor = borderColor + "CC"; // More opaque for better shading
-    return {
-      ...ds,
-      borderColor,
-      backgroundColor
-    };
+  const datasets = chartDataSets.getDataSets();
+  log("Final datasets for overview chart", LogLevel.DEBUG, {
+    count: datasets.length,
+    datasets: datasets.map(ds => ({
+      label: ds.label,
+      dataPoints: (ds.data as any[]).length,
+      firstPoint: (ds.data as any[])[0],
+      lastPoint: (ds.data as any[])[(ds.data as any[]).length - 1]
+    }))
   });
 
   const totalChart = new Chart(el, {

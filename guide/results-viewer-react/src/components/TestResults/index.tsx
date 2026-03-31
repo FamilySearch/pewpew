@@ -432,8 +432,8 @@ const total = (dataPoints: DataPoint[]) => {
 
 const OVERVIEWCANVAS = styled.div`
   position: relative;
-  width: 100%;
-  max-width: 1200px;
+  width: 85%;
+  max-width: 1000px;
   margin: 2em auto;
 `;
 

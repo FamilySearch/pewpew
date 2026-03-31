@@ -3,3 +3,4 @@ src/results-viewer
 src/results-viewer-react
 0.6.x/src/results-viewer-react/
 gh-pages-local/
+storybook-static/

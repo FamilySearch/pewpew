@@ -475,6 +475,259 @@ const afterBuildTicks = (chart: any) => {
   chart.ticks = myTicks;
 };
 
+// Quad Panel Charts
+export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(50)) / MICROS_TO_MS
+        : NaN
+    }));
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => v + "ms",
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute" },
+          ticks: {
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        tooltip: {
+          mode: "nearest",
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(95)) / MICROS_TO_MS
+        : NaN
+    }));
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => v + "ms",
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute" },
+          ticks: {
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        tooltip: {
+          mode: "nearest",
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => {
+      // Count all 5xx status codes
+      let count = 0;
+      for (const [status, statusCount] of Object.entries(dp.statusCounts)) {
+        if (status.startsWith("5")) {
+          count += statusCount;
+        }
+      }
+      return { x: dp.time, y: count };
+    });
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "DD",
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute" },
+          ticks: {
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        tooltip: {
+          mode: "index",
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => {
+      // Count all non-200 status codes
+      let count = 0;
+      for (const [status, statusCount] of Object.entries(dp.statusCounts)) {
+        if (status !== "200") {
+          count += statusCount;
+        }
+      }
+      return { x: dp.time, y: count };
+    });
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "DD",
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute" },
+          ticks: {
+            autoSkip: true,
+            font: { size: 10 }
+          }
+        }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        tooltip: {
+          mode: "index",
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
 // add a double-click handler to the chart legends
 {
   let lastLegendClick: [number, number, Chart] | undefined;

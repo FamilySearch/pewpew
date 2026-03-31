@@ -349,6 +349,27 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           <HostChart displayData={displayData} />
           <h1>Request Count by Agent</h1>
           <AgentChart displayData={displayData} />
+
+          <h1>Performance & Error Metrics</h1>
+          <QUADGRID>
+            <QUADPANEL>
+              <h3>Median Duration by Path</h3>
+              <MedianDurationChart displayData={displayData} />
+            </QUADPANEL>
+            <QUADPANEL>
+              <h3>Worst 5% Duration by Path</h3>
+              <Worst5PercentChart displayData={displayData} />
+            </QUADPANEL>
+            <QUADPANEL>
+              <h3>5xx Error Count by Path</h3>
+              <Error5xxChart displayData={displayData} />
+            </QUADPANEL>
+            <QUADPANEL>
+              <h3>All Errors</h3>
+              <AllErrorsChart displayData={displayData} />
+            </QUADPANEL>
+          </QUADGRID>
+
           <h1>Endpoint Data</h1>
           {displayData.map(([bucketId, dataPoints]) => {
             return (
@@ -435,6 +456,34 @@ const OVERVIEWCANVAS = styled.div`
   width: 85%;
   max-width: 1000px;
   margin: 2em auto;
+`;
+
+const QUADGRID = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 2em;
+  width: 85%;
+  max-width: 1000px;
+  margin: 2em auto;
+`;
+
+const QUADPANEL = styled.div`
+  position: relative;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  padding: 1em;
+
+  h3 {
+    color: white;
+    font-size: 0.9em;
+    margin: 0 0 1em 0;
+    text-align: left;
+  }
+
+  canvas {
+    width: 100% !important;
+    height: 200px !important;
+  }
 `;
 
 interface OverviewChartProps {
@@ -619,6 +668,147 @@ const AgentChart = ({ displayData }: OverviewChartProps) => {
       <canvas ref={agentCanvas} />
     </OVERVIEWCANVAS>
   );
+};
+
+// Quad Panel Charts
+const MedianDurationChart = ({ displayData }: OverviewChartProps) => {
+  const [chart, setChart] = useState<Chart>();
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) {
+        chart.destroy();
+      }
+
+      // Group by method+url and show p50 (median) response time
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      import("./charts").then(({ medianDurationChart }) => {
+        const currentChart = medianDurationChart(node, endpointData);
+        setChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return <canvas ref={canvasRef} />;
+};
+
+const Worst5PercentChart = ({ displayData }: OverviewChartProps) => {
+  const [chart, setChart] = useState<Chart>();
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) {
+        chart.destroy();
+      }
+
+      // Group by method+url and show p95 (worst 5%) response time
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      import("./charts").then(({ worst5PercentChart }) => {
+        const currentChart = worst5PercentChart(node, endpointData);
+        setChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return <canvas ref={canvasRef} />;
+};
+
+const Error5xxChart = ({ displayData }: OverviewChartProps) => {
+  const [chart, setChart] = useState<Chart>();
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) {
+        chart.destroy();
+      }
+
+      // Group by method+url and show 5xx error counts
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      import("./charts").then(({ error5xxChart }) => {
+        const currentChart = error5xxChart(node, endpointData);
+        setChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return <canvas ref={canvasRef} />;
+};
+
+const AllErrorsChart = ({ displayData }: OverviewChartProps) => {
+  const [chart, setChart] = useState<Chart>();
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) {
+        chart.destroy();
+      }
+
+      // Group by method+url and show all non-200 status codes
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+
+      import("./charts").then(({ allErrorsChart }) => {
+        const currentChart = allErrorsChart(node, endpointData);
+        setChart(currentChart);
+      });
+    }
+  }, [displayData]);
+
+  return <canvas ref={canvasRef} />;
 };
 
 const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {

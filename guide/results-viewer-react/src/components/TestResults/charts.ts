@@ -106,6 +106,75 @@ export const agentColors = [
   "#b0955f"  // Khaki
 ];
 
+// Error chart color palette (orange/pink theme for error graphs)
+export const errorColors = [
+  "#ff6b6b", // Coral Red
+  "#ff8c42", // Orange
+  "#ffa07a", // Light Salmon
+  "#ff7f50", // Coral
+  "#ff4500", // Orange Red
+  "#ff69b4", // Hot Pink
+  "#ff6347", // Tomato
+  "#ff8c94", // Light Coral Pink
+  "#ffab91", // Peach
+  "#ff9a76", // Salmon
+  "#ff7eb3", // Pink
+  "#ff9966", // Atomic Tangerine
+  "#ff6f91", // Carnation Pink
+  "#ff8f5e", // Burnt Sienna
+  "#ff7aa2", // Blush Pink
+  "#ffa160", // Sandy Brown
+  "#ff8cb4", // Cherry Blossom
+  "#ff9c7d", // Apricot
+  "#ff79a8", // Flamingo
+  "#ffb380"  // Macaroni
+];
+
+// Legend click handler with double-click support
+let lastLegendClick: [number, number, Chart] | undefined;
+
+export const legendClickHandler = function (
+  _e: ChartEvent,
+  legendItem: LegendItem,
+  legend: LegendElement<keyof ChartTypeRegistry>
+) {
+  const chart: Chart = legend.chart;
+  const datasets = chart.data.datasets!;
+  let allHidden = true;
+  if (legendItem.datasetIndex === undefined) {
+    log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
+    return;
+  }
+  for (let i = 0; i < datasets.length; i++) {
+    const meta = chart.getDatasetMeta(i);
+    if (!meta.hidden && i !== legendItem.datasetIndex) {
+      allHidden = false;
+      break;
+    }
+  }
+  if (lastLegendClick && legendItem.datasetIndex === lastLegendClick[1]
+    && Date.now() - lastLegendClick[0] < 250) {
+    // double click - isolate this dataset
+    for (let i = 0; i < datasets.length; i++) {
+      const meta = chart.getDatasetMeta(i);
+      meta.hidden = i !== legendItem.datasetIndex;
+    }
+  } else if (allHidden) {
+    // all are hidden except clicked one, show all
+    for (let i = 0; i < datasets.length; i++) {
+      const meta = chart.getDatasetMeta(i);
+      meta.hidden = false;
+    }
+  } else {
+    // toggle this dataset
+    const meta = chart.getDatasetMeta(legendItem.datasetIndex);
+    meta.hidden = !meta.hidden;
+  }
+  chart.update();
+  // timeStamp was removed from ChartEvent, use Date.now() instead
+  lastLegendClick = [Date.now(), legendItem.datasetIndex, chart];
+};
+
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [
@@ -318,7 +387,8 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
           beginAtZero: true,
           ticks: {
             precision: 0,
-            autoSkip: true
+            autoSkip: true,
+            maxTicksLimit: 8
           },
           title: {
             display: false
@@ -327,13 +397,18 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
         x: {
           type: "time",
           time: {
-            unit: "minute"
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
           },
           title: {
             display: false
           },
           ticks: {
-            autoSkip: true
+            autoSkip: true,
+            maxTicksLimit: 8,
+            stepSize: 15
           }
         }
       },
@@ -496,7 +571,9 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
       fill: false,
       tension: 0.4,
       borderWidth: 2,
-      pointRadius: 0
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
     };
   });
 
@@ -505,6 +582,10 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
     data: { datasets },
     options: {
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
@@ -512,24 +593,57 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
           ticks: {
             callback: (v) => v + "ms",
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            font: { size: 12 }
           }
         },
         x: {
           type: "time",
-          time: { unit: "minute" },
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
           ticks: {
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
           }
         }
       },
       plugins: {
-        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        legend: {
+          display: false
+        },
         tooltip: {
-          mode: "nearest",
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              const value = context.parsed.y.toFixed(2);
+              return `${context.dataset.label}: ${value}ms (median)`;
+            }
           }
         }
       }
@@ -557,7 +671,9 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
       fill: false,
       tension: 0.4,
       borderWidth: 2,
-      pointRadius: 0
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
     };
   });
 
@@ -566,6 +682,10 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
     data: { datasets },
     options: {
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
@@ -573,24 +693,57 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
           ticks: {
             callback: (v) => v + "ms",
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            font: { size: 12 }
           }
         },
         x: {
           type: "time",
-          time: { unit: "minute" },
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
           ticks: {
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
           }
         }
       },
       plugins: {
-        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        legend: {
+          display: false
+        },
         tooltip: {
-          mode: "nearest",
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              const value = context.parsed.y.toFixed(2);
+              return `${context.dataset.label}: ${value}ms (p95)`;
+            }
           }
         }
       }
@@ -599,37 +752,56 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
 }
 
 export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
-  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
-    const data = dataPoints.map(dp => {
-      // Count all 5xx status codes
-      let count = 0;
-      for (const [status, statusCount] of Object.entries(dp.statusCounts)) {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique 5xx status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
         if (status.startsWith("5")) {
-          count += statusCount;
+          statusCodesSet.add(status);
         }
       }
-      return { x: dp.time, y: count };
-    });
+    }
 
-    const borderColor = colors[index % colors.length];
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
 
-    return {
-      label: endpointLabel,
-      data,
-      borderColor,
-      backgroundColor: borderColor + "DD",
-      fill: "origin",
-      tension: 0.4,
-      borderWidth: 2,
-      pointRadius: 0
-    };
-  });
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
 
   return new Chart(el, {
     type: "line",
     data: { datasets },
     options: {
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
@@ -638,24 +810,56 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
           ticks: {
             precision: 0,
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            font: { size: 12 }
           }
         },
         x: {
           type: "time",
-          time: { unit: "minute" },
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
           ticks: {
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
           }
         }
       },
       plugins: {
-        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        legend: {
+          display: false
+        },
         tooltip: {
+          enabled: true,
           mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              return `${context.dataset.label}: ${context.parsed.y}`;
+            }
           }
         }
       }
@@ -664,37 +868,56 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
 }
 
 export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
-  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
-    const data = dataPoints.map(dp => {
-      // Count all non-200 status codes
-      let count = 0;
-      for (const [status, statusCount] of Object.entries(dp.statusCounts)) {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique non-200 status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
         if (status !== "200") {
-          count += statusCount;
+          statusCodesSet.add(status);
         }
       }
-      return { x: dp.time, y: count };
-    });
+    }
 
-    const borderColor = colors[index % colors.length];
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
 
-    return {
-      label: endpointLabel,
-      data,
-      borderColor,
-      backgroundColor: borderColor + "DD",
-      fill: "origin",
-      tension: 0.4,
-      borderWidth: 2,
-      pointRadius: 0
-    };
-  });
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
 
   return new Chart(el, {
     type: "line",
     data: { datasets },
     options: {
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
       scales: {
         y: {
           type: "linear",
@@ -703,24 +926,56 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
           ticks: {
             precision: 0,
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            font: { size: 12 }
           }
         },
         x: {
           type: "time",
-          time: { unit: "minute" },
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
           ticks: {
             autoSkip: true,
-            font: { size: 10 }
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
           }
         }
       },
       plugins: {
-        legend: { position: "bottom", labels: { font: { size: 10 } } },
+        legend: {
+          display: false
+        },
         tooltip: {
+          enabled: true,
           mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              return `${context.dataset.label}: ${context.parsed.y}`;
+            }
           }
         }
       }
@@ -728,47 +983,5 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
   }) as any as Chart;
 }
 
-// add a double-click handler to the chart legends
-{
-  let lastLegendClick: [number, number, Chart] | undefined;
-
-  Chart.defaults.plugins.legend.onClick = function (
-    _e: ChartEvent,
-    legendItem: LegendItem,
-    legend: LegendElement<keyof ChartTypeRegistry>
-  ) {
-    const chart: Chart = legend.chart;
-    const datasets = chart.data.datasets!;
-    let allHidden = true;
-    if (legendItem.datasetIndex === undefined) {
-      log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
-      return;
-    }
-    for (let i = 0; i < datasets.length; i++) {
-      const meta = chart.getDatasetMeta(i);
-      if (!meta.hidden && i !== legendItem.datasetIndex) {
-        allHidden = false;
-        break;
-      }
-    }
-    if (lastLegendClick && legendItem.datasetIndex === lastLegendClick[1]
-      && Date.now() - lastLegendClick[0] < 250) {
-      // double click
-      for (let i = 0; i < datasets.length; i++) {
-        const meta = chart.getDatasetMeta(i);
-        meta.hidden = i !== legendItem.datasetIndex;
-      }
-    } else if (allHidden) {
-      for (let i = 0; i < datasets.length; i++) {
-        const meta = chart.getDatasetMeta(i);
-        meta.hidden = false;
-      }
-    } else {
-      const meta = chart.getDatasetMeta(legendItem.datasetIndex);
-      meta.hidden = !legendItem.hidden;
-    }
-    chart.update();
-    // timeStamp was removed from ChartEvent, use Date.now() instead
-    lastLegendClick = [Date.now(), legendItem.datasetIndex, chart];
-  };
-}
+// Apply legend click handler as global default
+Chart.defaults.plugins.legend.onClick = legendClickHandler;

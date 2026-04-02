@@ -45,10 +45,10 @@ export const RTTTABLE = styled(ENDPOINTDIV1)`
   margin-right: 15px;
 `;
 
-const CANVASBOX = styled.div`
-  position: relative;
-  width: calc(55vw - 100px);
-`;
+// const CANVASBOX = styled.div`
+//   position: relative;
+//   width: calc(55vw - 100px);
+// `;
 
 export const UL = styled.ul`
   list-style: none;
@@ -223,11 +223,12 @@ const DEFAULT_STATE: TestResultState = {
   minMaxTime: undefined,
   error: undefined
 };
-const MICROS_TO_MS = 1000;
+// const MICROS_TO_MS = 1000;
 
 export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
 
   const [state, setState] = useState(DEFAULT_STATE);
+  const [mergeEndpoints, setMergeEndpoints] = useState(false);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -343,8 +344,21 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
+
+          <TOGGLECONTAINER>
+            <input
+              type="checkbox"
+              id="merge-endpoints"
+              checked={mergeEndpoints}
+              onChange={(e) => setMergeEndpoints(e.target.checked)}
+            />
+            <label htmlFor="merge-endpoints">
+              Merge endpoints with different tags
+            </label>
+          </TOGGLECONTAINER>
+
           <h1>Request Count by Endpoint</h1>
-          <OverviewChart displayData={displayData} />
+          <OverviewChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
           <h1>Request Count by Host</h1>
           <HostChart displayData={displayData} />
           <h1>Request Count by Agent</h1>
@@ -354,28 +368,24 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           <QUADGRID>
             <QUADPANEL>
               <h3>Median Duration by Path</h3>
-              <MedianDurationChart displayData={displayData} />
+              <MedianDurationChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>Worst 5% Duration by Path</h3>
-              <Worst5PercentChart displayData={displayData} />
+              <Worst5PercentChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>5xx Error Count by Path</h3>
-              <Error5xxChart displayData={displayData} />
+              <Error5xxChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>All Errors</h3>
-              <AllErrorsChart displayData={displayData} />
+              <AllErrorsChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
           </QUADGRID>
 
-          <h1>Endpoint Data</h1>
-          {displayData.map(([bucketId, dataPoints]) => {
-            return (
-              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
-            );
-          })}
+          <h1>Final Results</h1>
+          <FinalResultsTable displayData={displayData} />
         </TIMETAKEN>
       ) : (
         <h4>{state.defaultMessage}</h4>
@@ -384,86 +394,90 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
   );
 });
 
-const total = (dataPoints: DataPoint[]) => {
-  if (dataPoints.length === 0) { return undefined; }
-  let totalRTT;
-  try {
-  const first: DataPoint = dataPoints[0];
-  totalRTT = first.rttHistogram.clone();
-  const statusCounts: DataPoint["statusCounts"] = Object.assign(
-    {},
-    first.statusCounts
-  );
-  const otherErrors = Object.assign({}, first.testErrors);
-  let requestTimeouts = first.requestTimeouts;
+// const total = (dataPoints: DataPoint[]) => {
+//   if (dataPoints.length === 0) { return undefined; }
+//   let totalRTT;
+//   try {
+//   const first: DataPoint = dataPoints[0];
+//   totalRTT = first.rttHistogram.clone();
+//   const statusCounts: DataPoint["statusCounts"] = Object.assign(
+//     {},
+//     first.statusCounts
+//   );
+//   const otherErrors = Object.assign({}, first.testErrors);
+//   let requestTimeouts = first.requestTimeouts;
 
-  for (let i = 1; i < dataPoints.length; i++) {
-    const dp = dataPoints[i];
-    totalRTT.add(dp.rttHistogram);
-    for (const [status, count] of Object.entries(dp.statusCounts)) {
-      statusCounts[status] = count + (statusCounts[status] || 0);
-    }
-    for (const [msg, count] of Object.entries(dp.testErrors)) {
-      otherErrors[msg] = count + (otherErrors[msg] || 0);
-    }
-    requestTimeouts += dp.requestTimeouts;
-  }
+//   for (let i = 1; i < dataPoints.length; i++) {
+//     const dp = dataPoints[i];
+//     totalRTT.add(dp.rttHistogram);
+//     for (const [status, count] of Object.entries(dp.statusCounts)) {
+//       statusCounts[status] = count + (statusCounts[status] || 0);
+//     }
+//     for (const [msg, count] of Object.entries(dp.testErrors)) {
+//       otherErrors[msg] = count + (otherErrors[msg] || 0);
+//     }
+//     requestTimeouts += dp.requestTimeouts;
+//   }
 
-  const statusAmount: [string, number, number?][] = Object.entries(
-    statusCounts
-  ).sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10));
-  for (const stat of statusAmount) {
-    stat.push(stat[1] / Number(totalRTT.getTotalCount()));
-  }
+//   const statusAmount: [string, number, number?][] = Object.entries(
+//     statusCounts
+//   ).sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10));
+//   for (const stat of statusAmount) {
+//     stat.push(stat[1] / Number(totalRTT.getTotalCount()));
+//   }
 
-  statusAmount.push(["Sum", Number(totalRTT.getTotalCount()), 1]);
+//   statusAmount.push(["Sum", Number(totalRTT.getTotalCount()), 1]);
 
-  const otherErrorsArray = Object.entries(otherErrors);
+//   const otherErrorsArray = Object.entries(otherErrors);
 
-  if (requestTimeouts > 0) {
-    otherErrorsArray.push(["Timeout", requestTimeouts]);
-  }
+//   if (requestTimeouts > 0) {
+//     otherErrorsArray.push(["Timeout", requestTimeouts]);
+//   }
 
-  return {
-    otherErrors: otherErrorsArray,
-    stats: [
-      ["p50", Number(totalRTT.getValueAtPercentile(50)) / MICROS_TO_MS],
-      ["p95", Number(totalRTT.getValueAtPercentile(95)) / MICROS_TO_MS],
-      ["Avg", Math.round(totalRTT.getMean()) / MICROS_TO_MS],
-      [
-        "Min",
-        Math.min(
-          Number(totalRTT.getMaxValue()) / MICROS_TO_MS,
-          Number(totalRTT.getMinNonZeroValue()) / MICROS_TO_MS
-        )
-      ],
-      ["Max", Number(totalRTT.getMaxValue()) / MICROS_TO_MS],
-      ["p90", Number(totalRTT.getValueAtPercentile(90)) / MICROS_TO_MS],
-      ["p99", Number(totalRTT.getValueAtPercentile(99)) / MICROS_TO_MS]
-    ],
-    statusCounts: statusAmount
-  };
-  } finally {
-    // Free memory
-    if (totalRTT) {
-      totalRTT.free();
-    }
-  }
-};
+//   return {
+//     otherErrors: otherErrorsArray,
+//     stats: [
+//       ["p50", Number(totalRTT.getValueAtPercentile(50)) / MICROS_TO_MS],
+//       ["p95", Number(totalRTT.getValueAtPercentile(95)) / MICROS_TO_MS],
+//       ["Avg", Math.round(totalRTT.getMean()) / MICROS_TO_MS],
+//       [
+//         "Min",
+//         Math.min(
+//           Number(totalRTT.getMaxValue()) / MICROS_TO_MS,
+//           Number(totalRTT.getMinNonZeroValue()) / MICROS_TO_MS
+//         )
+//       ],
+//       ["Max", Number(totalRTT.getMaxValue()) / MICROS_TO_MS],
+//       ["p90", Number(totalRTT.getValueAtPercentile(90)) / MICROS_TO_MS],
+//       ["p99", Number(totalRTT.getValueAtPercentile(99)) / MICROS_TO_MS]
+//     ],
+//     statusCounts: statusAmount
+//   };
+//   } finally {
+//     // Free memory
+//     if (totalRTT) {
+//       totalRTT.free();
+//     }
+//   }
+// };
 
 const OVERVIEWCANVAS = styled.div`
   position: relative;
   width: 85%;
   max-width: 1000px;
   margin: 2em auto;
+
+  canvas {
+    max-height: 300px !important;
+  }
 `;
 
 const QUADGRID = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-gap: 2em;
-  width: 85%;
-  max-width: 1000px;
+  width: 95%;
+  max-width: 1400px;
   margin: 2em auto;
 `;
 
@@ -472,6 +486,8 @@ const QUADPANEL = styled.div`
   background-color: #2a2a2a;
   border-radius: 4px;
   padding: 1em;
+  display: flex;
+  flex-direction: column;
 
   h3 {
     color: white;
@@ -482,15 +498,74 @@ const QUADPANEL = styled.div`
 
   canvas {
     width: 100% !important;
-    height: 200px !important;
+    height: 270px !important;
+  }
+`;
+
+const CUSTOMLEGEND = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 1em;
+  padding-top: 1em;
+  border-top: 1px solid #444;
+  justify-content: center;
+`;
+
+const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+  opacity: ${props => props.$hidden ? 0.3 : 1};
+  user-select: none;
+  font-size: 11px;
+  color: #999;
+
+  &:hover {
+    opacity: ${props => props.$hidden ? 0.5 : 0.8};
+  }
+
+  span.color-box {
+    width: 20px;
+    height: 12px;
+    border-radius: 2px;
+  }
+`;
+
+const TOGGLECONTAINER = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 1em 0 2em 0;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  width: fit-content;
+
+  label {
+    color: white;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
   }
 `;
 
 interface OverviewChartProps {
   displayData: ParsedFileEntry[];
+  mergeEndpoints: boolean;
 }
 
-const OverviewChart = ({ displayData }: OverviewChartProps) => {
+interface TableProps {
+  displayData: ParsedFileEntry[];
+}
+
+const OverviewChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [overviewChart, setOverviewChart] = useState<Chart>();
 
   const overviewCanvas = useCallback((node: HTMLCanvasElement | null) => {
@@ -499,28 +574,38 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
         overviewChart.destroy();
       }
 
-      // Group endpoints by method+url, merging data points at same timestamps
-      const groupedMap = new Map<string, DataPoint[]>();
+      let endpointData: [string, DataPoint[]][];
 
-      for (const [bucketId, dataPoints] of displayData) {
-        const label = `${bucketId.method} ${bucketId.url}`;
-        log(`Endpoint found: ${label}`, LogLevel.DEBUG, {
-          bucketId,
-          dataPointCount: dataPoints.length
-        });
+      if (mergeEndpoints) {
+        // Group endpoints by method+url, merging data points at same timestamps
+        const groupedMap = new Map<string, DataPoint[]>();
 
-        if (groupedMap.has(label)) {
-          // Merge data points with existing entry (combining counts at same timestamps)
-          const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
-          log(`  -> Merged with existing ${label}`, LogLevel.DEBUG);
-        } else {
-          groupedMap.set(label, dataPoints);
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          log(`Endpoint found: ${label}`, LogLevel.DEBUG, {
+            bucketId,
+            dataPointCount: dataPoints.length
+          });
+
+          if (groupedMap.has(label)) {
+            // Merge data points with existing entry (combining counts at same timestamps)
+            const existing = groupedMap.get(label)!;
+            const merged = mergeAllDataPoints(...existing, ...dataPoints);
+            groupedMap.set(label, merged);
+            log(`  -> Merged with existing ${label}`, LogLevel.DEBUG);
+          } else {
+            groupedMap.set(label, dataPoints);
+          }
         }
-      }
 
-      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries());
+      } else {
+        // Use raw data without merging
+        endpointData = displayData.map(([bucketId, dataPoints]) => {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+      }
 
       log("Overview chart endpoints (after grouping)", LogLevel.DEBUG, {
         originalCount: displayData.length,
@@ -533,7 +618,7 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
         setOverviewChart(currentChart);
       });
     }
-  }, [displayData]);
+  }, [displayData, mergeEndpoints]);
 
   return (
     <OVERVIEWCANVAS>
@@ -542,7 +627,7 @@ const OverviewChart = ({ displayData }: OverviewChartProps) => {
   );
 };
 
-const HostChart = ({ displayData }: OverviewChartProps) => {
+const HostChart = ({ displayData }: TableProps) => {
   const [hostChart, setHostChart] = useState<Chart>();
 
   const hostCanvas = useCallback((node: HTMLCanvasElement | null) => {
@@ -551,7 +636,7 @@ const HostChart = ({ displayData }: OverviewChartProps) => {
         hostChart.destroy();
       }
 
-      // Group endpoints by hostname extracted from URL
+      // Always group endpoints by hostname extracted from URL (always merged)
       const groupedMap = new Map<string, DataPoint[]>();
 
       for (const [bucketId, dataPoints] of displayData) {
@@ -560,7 +645,7 @@ const HostChart = ({ displayData }: OverviewChartProps) => {
         try {
           const urlObj = new URL(bucketId.url);
           hostname = urlObj.hostname;
-        } catch (e) {
+        } catch {
           // If URL parsing fails, use the URL as-is
         }
 
@@ -602,7 +687,7 @@ const HostChart = ({ displayData }: OverviewChartProps) => {
   );
 };
 
-const AgentChart = ({ displayData }: OverviewChartProps) => {
+const AgentChart = ({ displayData }: TableProps) => {
   const [agentChart, setAgentChart] = useState<Chart>();
 
   const agentCanvas = useCallback((node: HTMLCanvasElement | null) => {
@@ -611,7 +696,7 @@ const AgentChart = ({ displayData }: OverviewChartProps) => {
         agentChart.destroy();
       }
 
-      // Group endpoints by agent/machine
+      // Always group endpoints by agent/machine (always merged)
       const groupedMap = new Map<string, DataPoint[]>();
 
       for (const [bucketId, dataPoints] of displayData) {
@@ -671,8 +756,9 @@ const AgentChart = ({ displayData }: OverviewChartProps) => {
 };
 
 // Quad Panel Charts
-const MedianDurationChart = ({ displayData }: OverviewChartProps) => {
+const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
@@ -680,34 +766,85 @@ const MedianDurationChart = ({ displayData }: OverviewChartProps) => {
         chart.destroy();
       }
 
-      // Group by method+url and show p50 (median) response time
-      const groupedMap = new Map<string, DataPoint[]>();
+      let endpointData: [string, DataPoint[]][];
 
-      for (const [bucketId, dataPoints] of displayData) {
-        const label = `${bucketId.method} ${bucketId.url}`;
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
-        } else {
-          groupedMap.set(label, dataPoints);
+      if (mergeEndpoints) {
+        // Group by method+url and show p50 (median) response time
+        const groupedMap = new Map<string, DataPoint[]>();
+
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          if (groupedMap.has(label)) {
+            const existing = groupedMap.get(label)!;
+            const merged = mergeAllDataPoints(...existing, ...dataPoints);
+            groupedMap.set(label, merged);
+          } else {
+            groupedMap.set(label, dataPoints);
+          }
         }
-      }
 
-      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries());
+      } else {
+        // Use raw data without merging
+        endpointData = displayData.map(([bucketId, dataPoints]) => {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+      }
 
       import("./charts").then(({ medianDurationChart }) => {
         const currentChart = medianDurationChart(node, endpointData);
         setChart(currentChart);
+        setHiddenDatasets(new Set());
       });
     }
-  }, [displayData]);
+  }, [displayData, mergeEndpoints]);
 
-  return <canvas ref={canvasRef} />;
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+
+      setHiddenDatasets(prev => {
+        const newSet = new Set(prev);
+        if (meta.hidden) {
+          newSet.add(index);
+        } else {
+          newSet.delete(index);
+        }
+        return newSet;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM
+              key={index}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => toggleDataset(index)}
+            >
+              <span
+                className="color-box"
+                style={{ backgroundColor: dataset.borderColor as string }}
+              />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
 };
 
-const Worst5PercentChart = ({ displayData }: OverviewChartProps) => {
+const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
@@ -715,34 +852,85 @@ const Worst5PercentChart = ({ displayData }: OverviewChartProps) => {
         chart.destroy();
       }
 
-      // Group by method+url and show p95 (worst 5%) response time
-      const groupedMap = new Map<string, DataPoint[]>();
+      let endpointData: [string, DataPoint[]][];
 
-      for (const [bucketId, dataPoints] of displayData) {
-        const label = `${bucketId.method} ${bucketId.url}`;
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
-        } else {
-          groupedMap.set(label, dataPoints);
+      if (mergeEndpoints) {
+        // Group by method+url and show p95 (worst 5%) response time
+        const groupedMap = new Map<string, DataPoint[]>();
+
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          if (groupedMap.has(label)) {
+            const existing = groupedMap.get(label)!;
+            const merged = mergeAllDataPoints(...existing, ...dataPoints);
+            groupedMap.set(label, merged);
+          } else {
+            groupedMap.set(label, dataPoints);
+          }
         }
-      }
 
-      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries());
+      } else {
+        // Use raw data without merging
+        endpointData = displayData.map(([bucketId, dataPoints]) => {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+      }
 
       import("./charts").then(({ worst5PercentChart }) => {
         const currentChart = worst5PercentChart(node, endpointData);
         setChart(currentChart);
+        setHiddenDatasets(new Set());
       });
     }
-  }, [displayData]);
+  }, [displayData, mergeEndpoints]);
 
-  return <canvas ref={canvasRef} />;
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+
+      setHiddenDatasets(prev => {
+        const newSet = new Set(prev);
+        if (meta.hidden) {
+          newSet.add(index);
+        } else {
+          newSet.delete(index);
+        }
+        return newSet;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM
+              key={index}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => toggleDataset(index)}
+            >
+              <span
+                className="color-box"
+                style={{ backgroundColor: dataset.borderColor as string }}
+              />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
 };
 
-const Error5xxChart = ({ displayData }: OverviewChartProps) => {
+const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
@@ -750,34 +938,85 @@ const Error5xxChart = ({ displayData }: OverviewChartProps) => {
         chart.destroy();
       }
 
-      // Group by method+url and show 5xx error counts
-      const groupedMap = new Map<string, DataPoint[]>();
+      let endpointData: [string, DataPoint[]][];
 
-      for (const [bucketId, dataPoints] of displayData) {
-        const label = `${bucketId.method} ${bucketId.url}`;
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
-        } else {
-          groupedMap.set(label, dataPoints);
+      if (mergeEndpoints) {
+        // Group by method+url and show 5xx error counts
+        const groupedMap = new Map<string, DataPoint[]>();
+
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          if (groupedMap.has(label)) {
+            const existing = groupedMap.get(label)!;
+            const merged = mergeAllDataPoints(...existing, ...dataPoints);
+            groupedMap.set(label, merged);
+          } else {
+            groupedMap.set(label, dataPoints);
+          }
         }
-      }
 
-      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries());
+      } else {
+        // Use raw data without merging
+        endpointData = displayData.map(([bucketId, dataPoints]) => {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+      }
 
       import("./charts").then(({ error5xxChart }) => {
         const currentChart = error5xxChart(node, endpointData);
         setChart(currentChart);
+        setHiddenDatasets(new Set());
       });
     }
-  }, [displayData]);
+  }, [displayData, mergeEndpoints]);
 
-  return <canvas ref={canvasRef} />;
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+
+      setHiddenDatasets(prev => {
+        const newSet = new Set(prev);
+        if (meta.hidden) {
+          newSet.add(index);
+        } else {
+          newSet.delete(index);
+        }
+        return newSet;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM
+              key={index}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => toggleDataset(index)}
+            >
+              <span
+                className="color-box"
+                style={{ backgroundColor: dataset.borderColor as string }}
+              />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
 };
 
-const AllErrorsChart = ({ displayData }: OverviewChartProps) => {
+const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
@@ -785,203 +1024,420 @@ const AllErrorsChart = ({ displayData }: OverviewChartProps) => {
         chart.destroy();
       }
 
-      // Group by method+url and show all non-200 status codes
-      const groupedMap = new Map<string, DataPoint[]>();
+      let endpointData: [string, DataPoint[]][];
 
-      for (const [bucketId, dataPoints] of displayData) {
-        const label = `${bucketId.method} ${bucketId.url}`;
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
-        } else {
-          groupedMap.set(label, dataPoints);
+      if (mergeEndpoints) {
+        // Group by method+url and show all non-200 status codes
+        const groupedMap = new Map<string, DataPoint[]>();
+
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          if (groupedMap.has(label)) {
+            const existing = groupedMap.get(label)!;
+            const merged = mergeAllDataPoints(...existing, ...dataPoints);
+            groupedMap.set(label, merged);
+          } else {
+            groupedMap.set(label, dataPoints);
+          }
         }
-      }
 
-      const endpointData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries());
+      } else {
+        // Use raw data without merging
+        endpointData = displayData.map(([bucketId, dataPoints]) => {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+      }
 
       import("./charts").then(({ allErrorsChart }) => {
         const currentChart = allErrorsChart(node, endpointData);
         setChart(currentChart);
+        setHiddenDatasets(new Set());
       });
     }
-  }, [displayData]);
+  }, [displayData, mergeEndpoints]);
 
-  return <canvas ref={canvasRef} />;
-};
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
 
-const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
-  const [rttButtonDisplay, setRttButtonDisplay] = useState("");
-  const [totalButtonDisplay, setTotalButtonDisplay] = useState("");
-
-  const [rttChart, setRttChart] = useState<Chart>();
-  const [totalChart, setTotalChart] = useState<Chart>();
-
-  const totalResults = total(dataPoints);
-
-  const toggleChart = (chart: Chart) => {
-    const chartConfig = chart.config.options?.scales?.y;
-    if (chartConfig?.type === "linear") {
-      chartConfig.type = "logarithmic" as any;
-    } else if (chartConfig?.type === "logarithmic") {
-      chartConfig.type = "linear" as any;
+      setHiddenDatasets(prev => {
+        const newSet = new Set(prev);
+        if (meta.hidden) {
+          newSet.add(index);
+        } else {
+          newSet.delete(index);
+        }
+        return newSet;
+      });
     }
-    setRttButtonDisplay(rttChart
-      ? rttChart.config.options?.scales?.y?.type === "linear"
-        ? "logarithmic"
-        : "linear"
-      : ""
-    );
-    setTotalButtonDisplay(totalChart
-      ? totalChart.config.options?.scales?.y?.type === "linear"
-        ? "logarithmic"
-        : "linear"
-      : ""
-    );
-    chart.update();
   };
 
-  const rttCanvas = useCallback((node: HTMLCanvasElement | null) => {
-    if (node) {
-      if (rttChart) {
-        // We need to clean up the old one before creating a new one
-        rttChart.destroy();
-      }
-      // Dynamic import to reduce bundle size - handle async inside
-      import("./charts").then(({ RTT }) => {
-        const currentChart = RTT(node, dataPoints);
-        setRttChart(currentChart);
-        setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
-          ? "logarithmic"
-          : "linear"
-        );
-      });
-    }
-  }, [dataPoints]);
-
-  const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
-    if (node) {
-      if (totalChart) {
-        // We need to clean up the old one before creating a new one
-        totalChart.destroy();
-      }
-      // Dynamic import to reduce bundle size - handle async inside
-      import("./charts").then(({ totalCalls }) => {
-        const currentChart = totalCalls(node, dataPoints);
-        setTotalChart(currentChart);
-        setTotalButtonDisplay("logarithmic");
-      });
-    }
-  }, [dataPoints]);
-
   return (
-    <React.Fragment>
-      <ENDPOINT>
-        <H3>
-          {bucketId.method} {bucketId.url}
-        </H3>
-        <UL>
-          {Object.entries(bucketId).map(([key, value], idx) => {
-
-            if (key !== "method" && key !== "url") {
-              return (
-                <li key={idx}>
-                  {key} - {value}
-                </li>
-              );
-            }
-            return undefined; // fixes typescript error: Not all code paths return a value.
-          })}
-        </UL>
-        <ENDPOINTDIV1>
-          <h3>Endpoint Summary</h3>
-          {totalResults && <FLEXROW>
-            <RTTTABLE>
-              <h5>RTT Stats</h5>
-              <TABLE>
-                <tbody>
-                  {totalResults.stats.map(([label, stat], idx) => {
-                    return (
-                      <TR key={idx}>
-                        <TD>{label}</TD>
-                        <TD>{stat.toLocaleString()}ms</TD>
-                      </TR>
-                    );
-                  })}
-                </tbody>
-              </TABLE>
-            </RTTTABLE>
-            <ENDPOINTDIV1>
-              <h5>HTTP Status Counts and Errors</h5>
-              <TABLE>
-                <tbody>
-                  {totalResults.statusCounts.map(
-                    ([status, count, percent], idx) => {
-                      return (
-                        <TR key={idx}>
-                          <TD>{status}</TD>
-                          <TD>{count.toLocaleString()}</TD>
-                          <TD>
-                            {percent
-                              ? (percent * 100).toFixed(1) + "%"
-                              : undefined}
-                          </TD>
-                        </TR>
-                      );
-                    }
-                  )}
-                </tbody>
-              </TABLE>
-              {totalResults.otherErrors.length > 0 ? (
-                <div>
-                  <h5>Other Errors</h5>
-                  <TABLE>
-                    <tbody>
-                      {totalResults.otherErrors.map(([msg, count], idx) => {
-                        return (
-                          <TR key={idx}>
-                            <TD title={msg}>{msg}</TD>
-                            <TD>{count}</TD>
-                          </TR>
-                        );
-                      })}
-                    </tbody>
-                  </TABLE>
-                </div>
-              ) : (
-                  undefined
-                )}
-            </ENDPOINTDIV1>
-          </FLEXROW>}
-        </ENDPOINTDIV1>
-        <FLEXROW>
-        <RTTDIV>
-          <h3>Response Time (p50, p95)</h3>
-          <button onClick={() => toggleChart(rttChart!)}>
-            Switch to {rttButtonDisplay}
-          </button>
-          <ENDPOINTDIV2>
-            <CANVASBOX>
-              <canvas ref={rttCanvas} />
-            </CANVASBOX>
-          </ENDPOINTDIV2>
-        </RTTDIV>
-        <ENDPOINTDIV1>
-          <h3>Request Count by Status</h3>
-          <button onClick={() => toggleChart(totalChart!)}>
-            Switch to {totalButtonDisplay}
-          </button>
-          <ENDPOINTDIV2>
-            <CANVASBOX>
-              <canvas ref={totalCanvas} />
-            </CANVASBOX>
-          </ENDPOINTDIV2>
-        </ENDPOINTDIV1>
-      </FLEXROW>
-      </ENDPOINT>
-    </React.Fragment>
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM
+              key={index}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => toggleDataset(index)}
+            >
+              <span
+                className="color-box"
+                style={{ backgroundColor: dataset.borderColor as string }}
+              />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
   );
 };
+
+// Table styled components
+const TABLECONTAINER = styled.div`
+  width: 100%;
+  overflow-x: auto;
+  margin: 2em 0;
+`;
+
+const DATATABLE = styled.table`
+  color: white;
+  border-spacing: 0;
+  background-color: #2a2a2a;
+  width: 100%;
+  border-collapse: collapse;
+`;
+
+const TH = styled.th`
+  padding: 8px 12px;
+  text-align: left;
+  background-color: #1a1a1a;
+  border-bottom: 2px solid #444;
+  font-weight: bold;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+`;
+
+const DATATD = styled.td`
+  padding: 6px 12px;
+  border-bottom: 1px solid #444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+`;
+
+const DATATR = styled.tr`
+  &:nth-child(even) {
+    background: #333;
+  }
+  &:hover {
+    background: #404040;
+  }
+`;
+
+// Final Results Table Component
+const FinalResultsTable = ({ displayData }: TableProps) => {
+  const tableData = useMemo(() => {
+    const results: any[] = [];
+
+    for (const [bucketId, dataPoints] of displayData) {
+      if (dataPoints.length === 0) {continue;}
+
+      // Aggregate all datapoints for this endpoint
+      const first = dataPoints[0];
+      const totalRTT = first.rttHistogram.clone();
+      const statusCounts: Record<string, number> = { ...first.statusCounts };
+
+      for (let i = 1; i < dataPoints.length; i++) {
+        const dp = dataPoints[i];
+        totalRTT.add(dp.rttHistogram);
+        for (const [status, count] of Object.entries(dp.statusCounts)) {
+          statusCounts[status] = count + (statusCounts[status] || 0);
+        }
+      }
+
+      // Calculate statistics
+      const callCount = totalRTT.getTotalCount();
+      const p50 = callCount ? Number(totalRTT.getValueAtPercentile(50)) / 1000 : 0;
+      const p95 = callCount ? Number(totalRTT.getValueAtPercentile(95)) / 1000 : 0;
+      const p99 = callCount ? Number(totalRTT.getValueAtPercentile(99)) / 1000 : 0;
+      const min = callCount ? Number(totalRTT.getMinNonZeroValue()) / 1000 : 0;
+      const max = callCount ? Number(totalRTT.getMaxValue()) / 1000 : 0;
+      const stddev = callCount ? Number(totalRTT.getStdDeviation()) / 1000 : 0;
+
+      // Build status count array
+      const statusCountsArray: any[] = [];
+      for (const [status, count] of Object.entries(statusCounts)) {
+        statusCountsArray.push({ status: parseInt(status), count });
+      }
+      statusCountsArray.sort((a, b) => a.status - b.status);
+
+      // Extract URL parts
+      let hostname = "";
+      let path = "";
+      let queryString = "";
+      try {
+        const urlObj = new URL(bucketId.url);
+        hostname = urlObj.hostname;
+        path = urlObj.pathname;
+        queryString = urlObj.search.slice(1); // Remove leading '?'
+      } catch {
+        hostname = bucketId.url;
+        path = "";
+      }
+
+      results.push({
+        method: bucketId.method,
+        hostname,
+        path,
+        queryString,
+        tags: JSON.stringify(bucketId),
+        statusCounts: statusCountsArray,
+        callCount,
+        p50,
+        p95,
+        p99,
+        min,
+        max,
+        stddev,
+        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+      });
+    }
+
+    return results;
+  }, [displayData]);
+
+  return (
+    <TABLECONTAINER>
+      <DATATABLE>
+        <thead>
+          <tr>
+            <TH>method</TH>
+            <TH>hostname</TH>
+            <TH>path</TH>
+            <TH>queryString</TH>
+            <TH>tags</TH>
+            <TH>statusCount</TH>
+            <TH>callCount</TH>
+            <TH>p50</TH>
+            <TH>p95</TH>
+            <TH>p99</TH>
+            <TH>min</TH>
+            <TH>max</TH>
+            <TH>stddev</TH>
+            <TH>_time</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {tableData.map((row, idx) => (
+            <DATATR key={idx}>
+              <DATATD>{row.method}</DATATD>
+              <DATATD title={row.hostname}>{row.hostname}</DATATD>
+              <DATATD title={row.path}>{row.path}</DATATD>
+              <DATATD>{row.queryString}</DATATD>
+              <DATATD title={row.tags}>{row.tags}</DATATD>
+              <DATATD>
+                {row.statusCounts.map((sc: any, i: number) => (
+                  <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
+                ))}
+              </DATATD>
+              <DATATD>{row.callCount.toLocaleString()}</DATATD>
+              <DATATD>{row.p50.toFixed(2)}</DATATD>
+              <DATATD>{row.p95.toFixed(2)}</DATATD>
+              <DATATD>{row.p99.toFixed(2)}</DATATD>
+              <DATATD>{row.min.toFixed(2)}</DATATD>
+              <DATATD>{row.max.toFixed(2)}</DATATD>
+              <DATATD>{row.stddev.toFixed(2)}</DATATD>
+              <DATATD>{row.time.toLocaleString()}</DATATD>
+            </DATATR>
+          ))}
+        </tbody>
+      </DATATABLE>
+    </TABLECONTAINER>
+  );
+};
+
+// const Endpoint = ({ bucketId, dataPoints }: EndpointProps) => {
+//   const [rttButtonDisplay, setRttButtonDisplay] = useState("");
+//   const [totalButtonDisplay, setTotalButtonDisplay] = useState("");
+
+//   const [rttChart, setRttChart] = useState<Chart>();
+//   const [totalChart, setTotalChart] = useState<Chart>();
+
+//   const totalResults = total(dataPoints);
+
+//   const toggleChart = (chart: Chart) => {
+//     const chartConfig = chart.config.options?.scales?.y;
+//     if (chartConfig?.type === "linear") {
+//       chartConfig.type = "logarithmic" as any;
+//     } else if (chartConfig?.type === "logarithmic") {
+//       chartConfig.type = "linear" as any;
+//     }
+//     setRttButtonDisplay(rttChart
+//       ? rttChart.config.options?.scales?.y?.type === "linear"
+//         ? "logarithmic"
+//         : "linear"
+//       : ""
+//     );
+//     setTotalButtonDisplay(totalChart
+//       ? totalChart.config.options?.scales?.y?.type === "linear"
+//         ? "logarithmic"
+//         : "linear"
+//       : ""
+//     );
+//     chart.update();
+//   };
+
+//   const rttCanvas = useCallback((node: HTMLCanvasElement | null) => {
+//     if (node) {
+//       if (rttChart) {
+//         // We need to clean up the old one before creating a new one
+//         rttChart.destroy();
+//       }
+//       // Dynamic import to reduce bundle size - handle async inside
+//       import("./charts").then(({ RTT }) => {
+//         const currentChart = RTT(node, dataPoints);
+//         setRttChart(currentChart);
+//         setRttButtonDisplay(currentChart.config.options?.scales?.y?.type === "linear"
+//           ? "logarithmic"
+//           : "linear"
+//         );
+//       });
+//     }
+//   }, [dataPoints]);
+
+//   const totalCanvas = useCallback((node: HTMLCanvasElement | null) => {
+//     if (node) {
+//       if (totalChart) {
+//         // We need to clean up the old one before creating a new one
+//         totalChart.destroy();
+//       }
+//       // Dynamic import to reduce bundle size - handle async inside
+//       import("./charts").then(({ totalCalls }) => {
+//         const currentChart = totalCalls(node, dataPoints);
+//         setTotalChart(currentChart);
+//         setTotalButtonDisplay("logarithmic");
+//       });
+//     }
+//   }, [dataPoints]);
+
+//   return (
+//     <React.Fragment>
+//       <ENDPOINT>
+//         <H3>
+//           {bucketId.method} {bucketId.url}
+//         </H3>
+//         <UL>
+//           {Object.entries(bucketId).map(([key, value], idx) => {
+
+//             if (key !== "method" && key !== "url") {
+//               return (
+//                 <li key={idx}>
+//                   {key} - {value}
+//                 </li>
+//               );
+//             }
+//             return undefined; // fixes typescript error: Not all code paths return a value.
+//           })}
+//         </UL>
+//         <ENDPOINTDIV1>
+//           <h3>Endpoint Summary</h3>
+//           {totalResults && <FLEXROW>
+//             <RTTTABLE>
+//               <h5>RTT Stats</h5>
+//               <TABLE>
+//                 <tbody>
+//                   {totalResults.stats.map(([label, stat], idx) => {
+//                     return (
+//                       <TR key={idx}>
+//                         <TD>{label}</TD>
+//                         <TD>{stat.toLocaleString()}ms</TD>
+//                       </TR>
+//                     );
+//                   })}
+//                 </tbody>
+//               </TABLE>
+//             </RTTTABLE>
+//             <ENDPOINTDIV1>
+//               <h5>HTTP Status Counts and Errors</h5>
+//               <TABLE>
+//                 <tbody>
+//                   {totalResults.statusCounts.map(
+//                     ([status, count, percent], idx) => {
+//                       return (
+//                         <TR key={idx}>
+//                           <TD>{status}</TD>
+//                           <TD>{count.toLocaleString()}</TD>
+//                           <TD>
+//                             {percent
+//                               ? (percent * 100).toFixed(1) + "%"
+//                               : undefined}
+//                           </TD>
+//                         </TR>
+//                       );
+//                     }
+//                   )}
+//                 </tbody>
+//               </TABLE>
+//               {totalResults.otherErrors.length > 0 ? (
+//                 <div>
+//                   <h5>Other Errors</h5>
+//                   <TABLE>
+//                     <tbody>
+//                       {totalResults.otherErrors.map(([msg, count], idx) => {
+//                         return (
+//                           <TR key={idx}>
+//                             <TD title={msg}>{msg}</TD>
+//                             <TD>{count}</TD>
+//                           </TR>
+//                         );
+//                       })}
+//                     </tbody>
+//                   </TABLE>
+//                 </div>
+//               ) : (
+//                   undefined
+//                 )}
+//             </ENDPOINTDIV1>
+//           </FLEXROW>}
+//         </ENDPOINTDIV1>
+//         <FLEXROW>
+//         <RTTDIV>
+//           <h3>Response Time (p50, p95)</h3>
+//           <button onClick={() => toggleChart(rttChart!)}>
+//             Switch to {rttButtonDisplay}
+//           </button>
+//           <ENDPOINTDIV2>
+//             <CANVASBOX>
+//               <canvas ref={rttCanvas} />
+//             </CANVASBOX>
+//           </ENDPOINTDIV2>
+//         </RTTDIV>
+//         <ENDPOINTDIV1>
+//           <h3>Request Count by Status</h3>
+//           <button onClick={() => toggleChart(totalChart!)}>
+//             Switch to {totalButtonDisplay}
+//           </button>
+//           <ENDPOINTDIV2>
+//             <CANVASBOX>
+//               <canvas ref={totalCanvas} />
+//             </CANVASBOX>
+//           </ENDPOINTDIV2>
+//         </ENDPOINTDIV1>
+//       </FLEXROW>
+//       </ENDPOINT>
+//     </React.Fragment>
+//   );
+// };
 
 export default TestResults;

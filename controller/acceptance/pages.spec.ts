@@ -74,7 +74,7 @@ describe("Web Page Acceptance Tests", () => {
     it("with ?search= partial s3Folder should respond 200 with search results", async () => {
       const partialSearch = s3Folder.split("/")[0];
       const url = `${integrationUrl}${PAGE_TEST_HISTORY}?search=${encodeURIComponent(partialSearch)}`;
-      log(`GET ${url}`, LogLevel.WARN);
+      log(`GET ${url}`, LogLevel.INFO);
       const res: AxiosResponse = await fetchNoRedirects(url);
       expect(res.status, "status").to.equal(200);
       const html: string = res.data;
@@ -86,7 +86,7 @@ describe("Web Page Acceptance Tests", () => {
 
     it("with ?search= full s3Folder should respond 200 with search results", async () => {
       const url = `${integrationUrl}${PAGE_TEST_HISTORY}?search=${encodeURIComponent(s3Folder)}`;
-      log(`GET ${url}`, LogLevel.WARN);
+      log(`GET ${url}`, LogLevel.INFO);
       const res: AxiosResponse = await fetchNoRedirects(url);
       expect(res.status, "status").to.equal(200);
       const html: string = res.data;

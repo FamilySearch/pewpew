@@ -422,7 +422,7 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
           callbacks: {
             label: (context) => {
               // Show the raw value (not the stacked total)
-              const rawValue = context.parsed.y;
+              const rawValue = context.parsed.y || 0;
               return `${context.dataset.label}: ${rawValue.toLocaleString()}`;
             }
           }
@@ -635,13 +635,13 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
           callbacks: {
             title: (items) => {
               if (items.length > 0) {
-                const date = new Date(items[0].parsed.x);
+                const date = new Date(items[0].parsed.x || 0);
                 return date.toLocaleString();
               }
               return "";
             },
             label: (context) => {
-              const value = context.parsed.y.toFixed(2);
+              const value = (context.parsed.y || 0).toFixed(2);
               return `${context.dataset.label}: ${value}ms (median)`;
             }
           }
@@ -735,13 +735,13 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
           callbacks: {
             title: (items) => {
               if (items.length > 0) {
-                const date = new Date(items[0].parsed.x);
+                const date = new Date(items[0].parsed.x || 0);
                 return date.toLocaleString();
               }
               return "";
             },
             label: (context) => {
-              const value = context.parsed.y.toFixed(2);
+              const value = (context.parsed.y || 0).toFixed(2);
               return `${context.dataset.label}: ${value}ms (p95)`;
             }
           }
@@ -852,13 +852,13 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
           callbacks: {
             title: (items) => {
               if (items.length > 0) {
-                const date = new Date(items[0].parsed.x);
+                const date = new Date(items[0].parsed.x || 0);
                 return date.toLocaleString();
               }
               return "";
             },
             label: (context) => {
-              return `${context.dataset.label}: ${context.parsed.y}`;
+              return `${context.dataset.label}: ${context.parsed.y || 0}`;
             }
           }
         }
@@ -968,13 +968,13 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
           callbacks: {
             title: (items) => {
               if (items.length > 0) {
-                const date = new Date(items[0].parsed.x);
+                const date = new Date(items[0].parsed.x || 0);
                 return date.toLocaleString();
               }
               return "";
             },
             label: (context) => {
-              return `${context.dataset.label}: ${context.parsed.y}`;
+              return `${context.dataset.label}: ${context.parsed.y || 0}`;
             }
           }
         }

@@ -10,8 +10,9 @@
  */
 
 import { Chart } from "chart.js";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
+import * as XLSX from "xlsx";
 import { LogLevel, formatError, log } from "../../util/log";
 import { Danger } from "../Alert";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
@@ -64,15 +65,17 @@ const QUADPANEL = styled.div`
 const COMPARISONCHARTSGRID = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-gap: 2em;
+  grid-gap: 1.5em;
   margin-bottom: 2em;
 `;
 
-/** Each column contains 4 stacked charts */
+/** Each column contains 4 stacked charts or tables */
 const CHARTCOLUMN = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2em;
+  min-width: 0;
+  overflow: hidden;
 `;
 
 /**
@@ -135,6 +138,85 @@ const TOGGLECONTAINER = styled.div`
     cursor: pointer;
     width: 18px;
     height: 18px;
+  }
+`;
+
+/** Container for scrollable data table - compact for comparison view */
+const TABLECONTAINER = styled.div`
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+`;
+
+/** Styled data table with dark theme and compact sizing */
+const DATATABLE = styled.table`
+  color: white;
+  border-spacing: 0;
+  background-color: #2a2a2a;
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  table-layout: fixed;
+`;
+
+/** Table header with sticky positioning and text wrapping */
+const TH = styled.th`
+  padding: 4px 6px;
+  text-align: left;
+  background-color: #1a1a1a;
+  border-bottom: 2px solid #444;
+  font-weight: bold;
+  white-space: normal;
+  word-break: break-word;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-size: 10px;
+`;
+
+/** Table data cell with text wrapping for compact display */
+const DATATD = styled.td`
+  padding: 4px 6px;
+  border-bottom: 1px solid #444;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 150px;
+  font-size: 10px;
+  line-height: 1.3;
+`;
+
+/** Table row with striped styling */
+const DATATR = styled.tr`
+  &:nth-child(even) {
+    background: #333;
+  }
+  &:hover {
+    background: #404040;
+  }
+`;
+
+/** Download button for Excel export */
+const DOWNLOADBUTTON = styled.button`
+  background-color: #4CAF50;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  transition: background-color 0.3s;
+  width: 100%;
+
+  &:hover {
+    background-color: #45a049;
+  }
+
+  &:active {
+    background-color: #3d8b40;
   }
 `;
 
@@ -538,6 +620,172 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
 };
 
 // ============================================================================
+// Table Components
+// ============================================================================
+
+/**
+ * Final Results Table Component
+ * Displays aggregated statistics for each endpoint in a tabular format.
+ */
+const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: string }> = ({ displayData, fileLabel = "Results" }) => {
+  const tableData = useMemo(() => {
+    const results: any[] = [];
+
+    for (const [bucketId, dataPoints] of displayData) {
+      if (dataPoints.length === 0) {continue;}
+
+      // Aggregate all datapoints for this endpoint
+      const first = dataPoints[0];
+      const totalRTT = first.rttHistogram.clone();
+      const statusCounts: Record<string, number> = { ...first.statusCounts };
+
+      for (let i = 1; i < dataPoints.length; i++) {
+        const dp = dataPoints[i];
+        totalRTT.add(dp.rttHistogram);
+        for (const [status, count] of Object.entries(dp.statusCounts)) {
+          statusCounts[status] = count + (statusCounts[status] || 0);
+        }
+      }
+
+      // Calculate statistics
+      const callCount = totalRTT.getTotalCount();
+      const p50 = callCount ? Number(totalRTT.getValueAtPercentile(50)) / 1000 : 0;
+      const p95 = callCount ? Number(totalRTT.getValueAtPercentile(95)) / 1000 : 0;
+      const p99 = callCount ? Number(totalRTT.getValueAtPercentile(99)) / 1000 : 0;
+      const min = callCount ? Number(totalRTT.getMinNonZeroValue()) / 1000 : 0;
+      const max = callCount ? Number(totalRTT.getMaxValue()) / 1000 : 0;
+      const stddev = callCount ? Number(totalRTT.getStdDeviation()) / 1000 : 0;
+
+      // Build status count array
+      const statusCountsArray: any[] = [];
+      for (const [status, count] of Object.entries(statusCounts)) {
+        statusCountsArray.push({ status: parseInt(status), count });
+      }
+      statusCountsArray.sort((a, b) => a.status - b.status);
+
+      // Extract URL parts
+      let hostname = "";
+      let path = "";
+      let queryString = "";
+      try {
+        const urlObj = new URL(bucketId.url);
+        hostname = urlObj.hostname;
+        path = urlObj.pathname;
+        queryString = urlObj.search.slice(1); // Remove leading '?'
+      } catch {
+        hostname = bucketId.url;
+        path = "";
+      }
+
+      results.push({
+        method: bucketId.method,
+        hostname,
+        path,
+        queryString,
+        tags: JSON.stringify(bucketId),
+        statusCounts: statusCountsArray,
+        callCount,
+        p50,
+        p95,
+        p99,
+        min,
+        max,
+        stddev,
+        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+      });
+    }
+
+    return results;
+  }, [displayData]);
+
+  const exportToExcel = useCallback(() => {
+    // Prepare data for Excel export
+    const excelData = tableData.map(row => ({
+      Method: row.method,
+      Hostname: row.hostname,
+      Path: row.path,
+      QueryString: row.queryString,
+      Tags: row.tags,
+      StatusCounts: row.statusCounts.map((sc: any) => `${sc.status}: ${sc.count}`).join(", "),
+      CallCount: row.callCount,
+      P50: row.p50.toFixed(2),
+      P95: row.p95.toFixed(2),
+      P99: row.p99.toFixed(2),
+      Min: row.min.toFixed(2),
+      Max: row.max.toFixed(2),
+      StdDev: row.stddev.toFixed(2),
+      Time: new Date(row.time).toLocaleString()
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
+
+    // Download file
+    XLSX.writeFile(workbook, filename);
+  }, [tableData, fileLabel]);
+
+  return (
+    <>
+      <DOWNLOADBUTTON onClick={exportToExcel}>
+        Download as Excel
+      </DOWNLOADBUTTON>
+      <TABLECONTAINER>
+        <DATATABLE>
+        <thead>
+          <tr>
+            <TH>method</TH>
+            <TH>hostname</TH>
+            <TH>path</TH>
+            <TH>queryString</TH>
+            <TH>tags</TH>
+            <TH>statusCount</TH>
+            <TH>callCount</TH>
+            <TH>p50</TH>
+            <TH>p95</TH>
+            <TH>p99</TH>
+            <TH>min</TH>
+            <TH>max</TH>
+            <TH>stddev</TH>
+            <TH>_time</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {tableData.map((row, idx) => (
+            <DATATR key={idx}>
+              <DATATD>{row.method}</DATATD>
+              <DATATD title={row.hostname}>{row.hostname}</DATATD>
+              <DATATD title={row.path}>{row.path}</DATATD>
+              <DATATD>{row.queryString}</DATATD>
+              <DATATD title={row.tags}>{row.tags}</DATATD>
+              <DATATD>
+                {row.statusCounts.map((sc: any, i: number) => (
+                  <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
+                ))}
+              </DATATD>
+              <DATATD>{row.callCount.toLocaleString()}</DATATD>
+              <DATATD>{row.p50.toFixed(2)}</DATATD>
+              <DATATD>{row.p95.toFixed(2)}</DATATD>
+              <DATATD>{row.p99.toFixed(2)}</DATATD>
+              <DATATD>{row.min.toFixed(2)}</DATATD>
+              <DATATD>{row.max.toFixed(2)}</DATATD>
+              <DATATD>{row.stddev.toFixed(2)}</DATATD>
+              <DATATD>{row.time.toLocaleString()}</DATATD>
+            </DATATR>
+          ))}
+        </tbody>
+      </DATATABLE>
+    </TABLECONTAINER>
+    </>
+  );
+};
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -743,6 +991,18 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
                 <h3>All Errors</h3>
                 <ComparisonAllErrorsChart displayData={state.comparisonData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
+            </CHARTCOLUMN>
+          </COMPARISONCHARTSGRID>
+
+          <H1>Final Results Comparison</H1>
+          <COMPARISONCHARTSGRID>
+            <CHARTCOLUMN>
+              <H2>{baselineLabel}</H2>
+              <FinalResultsTable displayData={state.baselineData} fileLabel={baselineLabel} />
+            </CHARTCOLUMN>
+            <CHARTCOLUMN>
+              <H2>{comparisonLabel}</H2>
+              <FinalResultsTable displayData={state.comparisonData} fileLabel={comparisonLabel} />
             </CHARTCOLUMN>
           </COMPARISONCHARTSGRID>
         </>

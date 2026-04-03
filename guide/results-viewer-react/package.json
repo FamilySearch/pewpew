@@ -50,7 +50,8 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.2.3",
     "react-transition-group": "^4.4.5",
-    "styled-components": "^6.0.0"
+    "styled-components": "^6.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.12",

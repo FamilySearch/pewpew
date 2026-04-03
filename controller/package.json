@@ -46,7 +46,7 @@
     "@aws-sdk/s3-request-presigner": "^3.363.0",
     "@aws-sdk/types": "^3.363.0",
     "@fs/config-wasm": "*",
-    "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
+    "@fs/hdr-histogram-wasm": "file:../lib/hdr-histogram-wasm/pkg",
     "@fs/ppaas-common": "*",
     "@fullcalendar/core": "~6.1.9",
     "@fullcalendar/daygrid": "~6.1.9",

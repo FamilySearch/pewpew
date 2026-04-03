@@ -1,3 +1,16 @@
+/**
+ * TestResults Component
+ *
+ * Displays load test results with quad panel dashboard, charts, and data tables.
+ *
+ * Features:
+ * - Quad panel charts (Median Duration, Worst 5%, 5xx Errors, All Errors)
+ * - Custom HTML legends for better click handling
+ * - Merge endpoints toggle to group by method+url
+ * - Final Results table with aggregated statistics
+ * - Individual endpoint details with RTT and status charts
+ */
+
 import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
@@ -338,7 +351,7 @@ interface ChartPanelProps {
   onToggleDataset: (index: number) => void;
 }
 
-const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenDatasets, onToggleDataset }: ChartPanelProps) => {
+const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenDatasets, onToggleDataset }) => {
   return (
     <QUADPANEL>
       <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>{title}</h3>
@@ -367,7 +380,7 @@ interface QuadPanelChartsProps {
   mergeEndpoints: boolean;
 }
 
-const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEndpoints }: QuadPanelChartsProps) => {
+const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEndpoints }) => {
   const [medianChart, setMedianChart] = useState<Chart>();
   const [worst5Chart, setWorst5Chart] = useState<Chart>();
   const [error5xxChartState, setError5xxChartState] = useState<Chart>();

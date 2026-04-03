@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
@@ -6,7 +7,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import styled from "styled-components";
-import * as XLSX from "xlsx";
 
 const TIMETAKEN = styled.div`
   text-align: left;
@@ -699,7 +699,7 @@ const AgentChart = ({ displayData }: TableProps) => {
 
       for (const [bucketId, dataPoints] of displayData) {
         // Look for agent information in tags (common fields: agent, host, machine, source)
-        let agent = "Unknown Agent";
+        let agent: string;
 
         // Check for agent-related fields in bucketId tags
         if (bucketId.agent) {
@@ -1204,9 +1204,9 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       statusCountsArray.sort((a, b) => a.status - b.status);
 
       // Extract URL parts
-      let hostname = "";
-      let path = "";
-      let queryString = "";
+      let hostname: string;
+      let path: string;
+      let queryString: string;
       try {
         const urlObj = new URL(bucketId.url);
         hostname = urlObj.hostname;
@@ -1215,6 +1215,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       } catch {
         hostname = bucketId.url;
         path = "";
+        queryString = "";
       }
 
       results.push({

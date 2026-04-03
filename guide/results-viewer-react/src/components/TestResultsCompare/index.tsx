@@ -9,15 +9,15 @@
  * - Responsive two-column grid layout
  */
 
-import { Chart } from "chart.js";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import styled from "styled-components";
 import * as XLSX from "xlsx";
-import { LogLevel, formatError, log } from "../../util/log";
-import { Danger } from "../Alert";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
+import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "../TestResults/utils";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Chart } from "chart.js";
+import { Danger } from "../Alert";
+import styled from "styled-components";
 
 // ============================================================================
 // Styled Components
@@ -664,9 +664,9 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       statusCountsArray.sort((a, b) => a.status - b.status);
 
       // Extract URL parts
-      let hostname = "";
-      let path = "";
-      let queryString = "";
+      let hostname: string;
+      let path: string;
+      let queryString: string;
       try {
         const urlObj = new URL(bucketId.url);
         hostname = urlObj.hostname;
@@ -675,6 +675,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       } catch {
         hostname = bucketId.url;
         path = "";
+        queryString = "";
       }
 
       results.push({

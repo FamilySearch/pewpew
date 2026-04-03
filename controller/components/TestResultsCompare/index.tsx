@@ -9,10 +9,12 @@
  * - Side-by-side Final Results tables
  */
 
+/* eslint-disable sort-imports */
+import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Chart } from "chart.js";
 import React, { useCallback, useMemo, useState } from "react";
 import styled from "styled-components";
-import { DataPoint, ParsedFileEntry } from "../TestResults/model";
+/* eslint-enable sort-imports */
 
 // ============================================================================
 // Styled Components
@@ -318,7 +320,7 @@ interface TableProps {
   fileLabel?: string;
 }
 
-const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Results" }) => {
+const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel: _fileLabel = "Results" }) => {
   const tableData = useMemo(() => {
     const results: any[] = [];
 

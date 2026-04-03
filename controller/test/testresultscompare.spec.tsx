@@ -15,9 +15,9 @@ import { TestResultsCompare } from "../components/TestResultsCompare";
 
 // Mock Chart.js
 const mockChart = {
-  destroy: function() {},
-  update: function() {},
-  getDatasetMeta: function() { return { hidden: false }; },
+  destroy () { /* no-op */ },
+  update () { /* no-op */ },
+  getDatasetMeta () { return { hidden: false }; },
   data: {
     datasets: [
       { label: "GET /api/test", borderColor: "#6a7bb4" },
@@ -26,23 +26,23 @@ const mockChart = {
   }
 };
 
-describe("TestResultsCompare", function() {
+describe("TestResultsCompare", function () {
   // Skip if running in test environment (WASM doesn't load in jsdom)
-  beforeEach(function() {
+  beforeEach(function () {
     if (process.env.NODE_ENV === "test") {
       this.skip();
       return;
     }
   });
 
-  describe("Empty State", function() {
-    it("should show placeholder message when no data is provided", function() {
+  describe("Empty State", function () {
+    it("should show placeholder message when no data is provided", function () {
       render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
 
       screen.getByText("Select two results files to compare");
     });
 
-    it("should not render charts when no data is provided", function() {
+    it("should not render charts when no data is provided", function () {
       render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
 
       const performanceText = screen.queryByText("Performance & Error Metrics Comparison");
@@ -51,7 +51,7 @@ describe("TestResultsCompare", function() {
       }
     });
 
-    it("should not show merge toggle when no data is loaded", function() {
+    it("should not show merge toggle when no data is loaded", function () {
       render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
 
       const checkbox = screen.queryByLabelText("Merge endpoints with different tags");
@@ -61,8 +61,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Merge Endpoints Toggle", function() {
-    it("should render merge toggle checkbox with test component", function() {
+  describe("Merge Endpoints Toggle", function () {
+    it("should render merge toggle checkbox with test component", function () {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -87,7 +87,7 @@ describe("TestResultsCompare", function() {
       }
     });
 
-    it("should toggle merge state when checkbox is clicked", function() {
+    it("should toggle merge state when checkbox is clicked", function () {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -107,7 +107,7 @@ describe("TestResultsCompare", function() {
       render(<TestComponent />);
 
       const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      const stateDisplay = screen.getByTestId("merge-state");
+      const _stateDisplay = screen.getByTestId("merge-state");
 
       // Initial state
       if (checkbox.checked) {
@@ -130,7 +130,7 @@ describe("TestResultsCompare", function() {
       screen.getByText("raw");
     });
 
-    it("should default to unchecked (raw data)", function() {
+    it("should default to unchecked (raw data)", function () {
       const TestComponent = () => {
         const [mergeEndpoints] = React.useState(false);
 
@@ -155,8 +155,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Legend Functionality", function() {
-    it("should render custom legends outside the canvas", function() {
+  describe("Legend Functionality", function () {
+    it("should render custom legends outside the canvas", function () {
       const TestComponent = () => {
         const [chart] = React.useState<any>(mockChart);
         const [hiddenDatasets, setHiddenDatasets] = React.useState<Set<number>>(new Set());
@@ -208,12 +208,12 @@ describe("TestResultsCompare", function() {
       screen.getByText("POST /api/test");
     });
 
-    it("should toggle dataset visibility when legend is clicked", function() {
+    it("should toggle dataset visibility when legend is clicked", function () {
       const mockMeta = { hidden: false };
       const mockChartWithUpdate = {
         ...mockChart,
-        update: function() { mockMeta.hidden = !mockMeta.hidden; },
-        getDatasetMeta: function(_index: number) { return mockMeta; }
+        update () { mockMeta.hidden = !mockMeta.hidden; },
+        getDatasetMeta (_index: number) { return mockMeta; }
       };
 
       const TestComponent = () => {
@@ -263,7 +263,7 @@ describe("TestResultsCompare", function() {
       // In actual tests with full Chart.js, this would verify the chart state
     });
 
-    it("should apply grey color to legend text", function() {
+    it("should apply grey color to legend text", function () {
       const TestComponent = () => (
         <div style={{ color: "#999" }} data-testid="legend-item">
           Test Label
@@ -273,11 +273,11 @@ describe("TestResultsCompare", function() {
       render(<TestComponent />);
 
       const legendItem = screen.getByTestId("legend-item");
-      const styles = window.getComputedStyle(legendItem);
+      const _styles = window.getComputedStyle(legendItem);
       // Verify color is applied
     });
 
-    it("should have compact spacing between legend items", function() {
+    it("should have compact spacing between legend items", function () {
       const TestComponent = () => (
         <div style={{ gap: "0.5em", display: "flex" }} data-testid="legend-container">
           <div>Item 1</div>
@@ -291,8 +291,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Data Labels", function() {
-    it("should render component with baseline and comparison labels", function() {
+  describe("Data Labels", function () {
+    it("should render component with baseline and comparison labels", function () {
       render(
         <TestResultsCompare
           baselineData={[]}
@@ -306,7 +306,7 @@ describe("TestResultsCompare", function() {
       screen.getByText("Select two results files to compare");
     });
 
-    it("should accept default label props", function() {
+    it("should accept default label props", function () {
       render(
         <TestResultsCompare
           baselineData={[]}
@@ -319,8 +319,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Chart Configuration", function() {
-    it("should set yAlign to top for tooltips", function() {
+  describe("Chart Configuration", function () {
+    it("should set yAlign to top for tooltips", function () {
       // This test verifies the tooltip configuration
       // In actual implementation, tooltips use yAlign: 'top' to appear above the graph
       const tooltipConfig = {
@@ -344,8 +344,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Component Structure", function() {
-    it("should render placeholder when no data", function() {
+  describe("Component Structure", function () {
+    it("should render placeholder when no data", function () {
       render(
         <TestResultsCompare
           baselineData={[]}
@@ -357,7 +357,7 @@ describe("TestResultsCompare", function() {
       screen.getByText("Select two results files to compare");
     });
 
-    it("should render merge toggle container with test component", function() {
+    it("should render merge toggle container with test component", function () {
       const TestComponent = () => {
         return (
           <div>
@@ -382,8 +382,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Chart Types", function() {
-    it("should support all four chart types in layout", function() {
+  describe("Chart Types", function () {
+    it("should support all four chart types in layout", function () {
       // Test that the component structure supports:
       // 1. Median Duration by Path
       // 2. Worst 5% Duration by Path
@@ -405,8 +405,8 @@ describe("TestResultsCompare", function() {
     });
   });
 
-  describe("Final Results Tables", function() {
-    it("should have table component structure", function() {
+  describe("Final Results Tables", function () {
+    it("should have table component structure", function () {
       // Test that the FinalResultsTable component structure exists
       // The component uses:
       // - TABLECONTAINER for scrollable wrapper
@@ -450,7 +450,7 @@ describe("TestResultsCompare", function() {
       }
     });
 
-    it("should render side-by-side tables in comparison view", function() {
+    it("should render side-by-side tables in comparison view", function () {
       // When data is loaded, tables should render in side-by-side layout
       // using COMPARISONCHARTSGRID with two CHARTCOLUMN elements
       render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);

@@ -435,7 +435,9 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   );
 
   const toggleDataset = useCallback((chart: Chart | undefined, index: number, hiddenSet: Set<number>, setHiddenSet: React.Dispatch<React.SetStateAction<Set<number>>>) => {
-    if (!chart) return;
+    if (!chart) {
+      return;
+    }
     const meta = chart.getDatasetMeta(index);
     meta.hidden = !meta.hidden;
     chart.update();
@@ -453,7 +455,9 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
 
   const medianCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
-      if (medianChart) medianChart.destroy();
+      if (medianChart) {
+        medianChart.destroy();
+      }
       import("./charts").then(({ medianDurationChart }) => {
         setMedianChart(medianDurationChart(node, allEndpoints));
       });
@@ -462,7 +466,9 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
 
   const worst5Canvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
-      if (worst5Chart) worst5Chart.destroy();
+      if (worst5Chart) {
+        worst5Chart.destroy();
+      }
       import("./charts").then(({ worst5PercentChart }) => {
         setWorst5Chart(worst5PercentChart(node, allEndpoints));
       });
@@ -471,7 +477,9 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
 
   const error5xxCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
-      if (error5xxChartState) error5xxChartState.destroy();
+      if (error5xxChartState) {
+        error5xxChartState.destroy();
+      }
       import("./charts").then(({ error5xxChart }) => {
         setError5xxChartState(error5xxChart(node, allEndpoints));
       });
@@ -480,7 +488,9 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
 
   const allErrorsCanvas = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
-      if (allErrorsChartState) allErrorsChartState.destroy();
+      if (allErrorsChartState) {
+        allErrorsChartState.destroy();
+      }
       import("./charts").then(({ allErrorsChart }) => {
         setAllErrorsChartState(allErrorsChart(node, allEndpoints));
       });
@@ -824,13 +834,6 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
   const displayData = useMemo(() => {
     return state.filteredData || state.resultsData;
   }, [state.filteredData, state.resultsData]);
-
-  // Memoized summary tags calculation
-  const summaryTags: BucketId = useMemo(() => {
-    return state.summaryData && state.filteredData
-      ? state.summaryData[0]
-      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
-  }, [state.summaryData, state.filteredData]);
 
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (

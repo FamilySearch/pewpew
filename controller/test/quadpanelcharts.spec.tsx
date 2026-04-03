@@ -13,9 +13,9 @@ import React from "react";
 
 // Mock Chart.js
 const mockChart = {
-  destroy: function() {},
-  update: function() {},
-  getDatasetMeta: function() { return { hidden: false }; },
+  destroy () { /* no-op */ },
+  update () { /* no-op */ },
+  getDatasetMeta () { return { hidden: false }; },
   data: {
     datasets: [
       { label: "GET /api/test", borderColor: "#6a7bb4" },
@@ -27,17 +27,17 @@ const mockChart = {
 // Note: These tests verify the component structure and behavior.
 // Full integration tests with actual Chart.js and WASM are in the Storybook stories.
 
-describe("Quad Panel Charts", function() {
+describe("Quad Panel Charts", function () {
   // Skip if running in test environment (WASM doesn't load in jsdom)
-  beforeEach(function() {
+  beforeEach(function () {
     if (process.env.NODE_ENV === "test") {
       this.skip();
       return;
     }
   });
 
-  describe("Legend Functionality", function() {
-    it("should render custom legends outside the canvas", async function() {
+  describe("Legend Functionality", function () {
+    it("should render custom legends outside the canvas", async function () {
       const TestComponent = () => {
         const [chart, setChart] = React.useState<any>();
         const [hiddenDatasets, setHiddenDatasets] = React.useState<Set<number>>(new Set());
@@ -104,11 +104,11 @@ describe("Quad Panel Charts", function() {
       screen.getByText("POST /api/test");
     });
 
-    it("should toggle dataset visibility when legend item is clicked", async function() {
+    it("should toggle dataset visibility when legend item is clicked", async function () {
       const mockMeta = { hidden: false };
       const mockChartWithMeta = {
         ...mockChart,
-        getDatasetMeta: function(_index: number) { return mockMeta; }
+        getDatasetMeta (_index: number) { return mockMeta; }
       };
 
       const TestComponent = () => {
@@ -167,8 +167,8 @@ describe("Quad Panel Charts", function() {
     });
   });
 
-  describe("Merge Endpoints Toggle", function() {
-    it("should show merge toggle checkbox", function() {
+  describe("Merge Endpoints Toggle", function () {
+    it("should show merge toggle checkbox", function () {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -194,7 +194,7 @@ describe("Quad Panel Charts", function() {
       screen.getByText("Merge endpoints with different tags");
     });
 
-    it("should toggle merge state when checkbox is clicked", function() {
+    it("should toggle merge state when checkbox is clicked", function () {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -214,7 +214,7 @@ describe("Quad Panel Charts", function() {
       render(<TestComponent />);
 
       const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      const stateDisplay = screen.getByTestId("merge-state");
+      const _stateDisplay = screen.getByTestId("merge-state");
 
       // Initial state
       if (!checkbox.checked) {
@@ -238,8 +238,8 @@ describe("Quad Panel Charts", function() {
     });
   });
 
-  describe("Chart Configuration", function() {
-    it("should set yAlign to top for tooltips", function() {
+  describe("Chart Configuration", function () {
+    it("should set yAlign to top for tooltips", function () {
       // This test verifies the tooltip configuration
       // In actual implementation, tooltips use yAlign: 'top' to appear above the graph
       const tooltipConfig = {
@@ -263,8 +263,8 @@ describe("Quad Panel Charts", function() {
     });
   });
 
-  describe("Legend Styling", function() {
-    it("should apply grey color to legend text", function() {
+  describe("Legend Styling", function () {
+    it("should apply grey color to legend text", function () {
       const TestComponent = () => (
         <div style={{ color: "#999" }} data-testid="legend-item">
           Test Label
@@ -274,11 +274,11 @@ describe("Quad Panel Charts", function() {
       render(<TestComponent />);
 
       const legendItem = screen.getByTestId("legend-item");
-      const styles = window.getComputedStyle(legendItem);
+      const _styles = window.getComputedStyle(legendItem);
       // Verify color is set (actual computed value may vary)
     });
 
-    it("should have compact spacing between legend items", function() {
+    it("should have compact spacing between legend items", function () {
       const TestComponent = () => (
         <div style={{ gap: "0.5em", display: "flex" }} data-testid="legend-container">
           <div>Item 1</div>

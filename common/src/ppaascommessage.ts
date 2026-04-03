@@ -71,7 +71,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.DEBUG, temp);
         } catch (error: unknown) {
           log(`messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, LogLevel.WARN, error);
-          throw new Error(`New Communications Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`);
+          throw new Error(`New Communications Message Attribute could not be parsed: messageAttributes[${key}].BinaryValue = ${value.BinaryValue}`, { cause: error });
         }
         switch (key) {
           case "MessageData":
@@ -98,7 +98,7 @@ export class PpaasCommunicationsMessage implements CommunicationsMessage {
               messageType = MessageType[(value.StringValue || "") as keyof typeof MessageType];
             } catch (error: unknown) {
               log(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}`, LogLevel.WARN, error);
-              throw new Error(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}, error: ${error}`);
+              throw new Error(`New Communications Message Attribute 'MessageType' not be parsed: messageAttributes[${key}].StringValue = ${value.StringValue}, error: ${error}`, { cause: error });
             }
             break;
           case "MessageData":

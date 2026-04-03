@@ -16,6 +16,7 @@ coverage/
 mutants.out/
 /controller/aws*.sh
 testmerge.json
+.eslintcache
 .env.local*
 .env.development.local*
 .env.test.local*

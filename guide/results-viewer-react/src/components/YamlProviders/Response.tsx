@@ -43,7 +43,7 @@ export function ResponseProvider ({ data, ...props }: ResponseProviderProps) {
 
   const handleClick = (responseProviderType: ResponseProviderType) => {
     updateState({ responseProviderType });
-    let response: Record<string, string> = {};
+    let response: Record<string, string>;
     switch (responseProviderType) {
       case ResponseProviderType.Empty:
         response = {};

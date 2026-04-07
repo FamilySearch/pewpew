@@ -518,14 +518,20 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
   // Filter both datasets by selected method
   const filteredBaselineData = useMemo(() => {
-    if (!baselineData || methodFilter === "all") {
+    if (!baselineData) {
+      return baselineData;
+    }
+    if (methodFilter === "all") {
       return baselineData;
     }
     return baselineData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [baselineData, methodFilter]);
 
   const filteredComparisonData = useMemo(() => {
-    if (!comparisonData || methodFilter === "all") {
+    if (!comparisonData) {
+      return comparisonData;
+    }
+    if (methodFilter === "all") {
       return comparisonData;
     }
     return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);

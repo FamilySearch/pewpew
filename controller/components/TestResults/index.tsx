@@ -893,7 +893,10 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
 
   // Filter displayData by selected method
   const filteredDisplayData = useMemo(() => {
-    if (!displayData || methodFilter === "all") {
+    if (!displayData) {
+      return displayData;
+    }
+    if (methodFilter === "all") {
       return displayData;
     }
     return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
@@ -915,7 +918,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
             ))}
           </SELECT>
         )}
-      {displayData !== undefined ? (
+      {filteredDisplayData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
           <p>
@@ -985,7 +988,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           <FinalResultsTable displayData={filteredDisplayData} />
 
           <h1>Endpoint Data</h1>
-          {displayData.map(([bucketId, dataPoints]) => {
+          {filteredDisplayData.map(([bucketId, dataPoints]) => {
             return (
               <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
             );

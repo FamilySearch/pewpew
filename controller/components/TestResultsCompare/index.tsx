@@ -123,6 +123,47 @@ const TOGGLECONTAINER = styled.div`
   }
 `;
 
+const FILTERCONTAINER = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin: 1em 0 2em 0;
+`;
+
+const FILTERDROPDOWN = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+
+  label {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  select {
+    padding: 0.4em 0.8em;
+    background-color: #1a1a1a;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      border-color: #666;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #6a7bb4;
+    }
+  }
+`;
+
 /** Compact table for comparison view */
 const TABLECONTAINER = styled.div`
   width: 100%;
@@ -450,6 +491,45 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   comparisonLabel = "Comparison"
 }) => {
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
+
+  // Extract unique HTTP methods from both datasets
+  const availableMethods = useMemo(() => {
+    const methods = new Set<string>();
+
+    if (baselineData) {
+      for (const [bucketId] of baselineData) {
+        if (bucketId.method) {
+          methods.add(bucketId.method);
+        }
+      }
+    }
+
+    if (comparisonData) {
+      for (const [bucketId] of comparisonData) {
+        if (bucketId.method) {
+          methods.add(bucketId.method);
+        }
+      }
+    }
+
+    return Array.from(methods).sort();
+  }, [baselineData, comparisonData]);
+
+  // Filter both datasets by selected method
+  const filteredBaselineData = useMemo(() => {
+    if (!baselineData || methodFilter === "all") {
+      return baselineData;
+    }
+    return baselineData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [baselineData, methodFilter]);
+
+  const filteredComparisonData = useMemo(() => {
+    if (!comparisonData || methodFilter === "all") {
+      return comparisonData;
+    }
+    return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [comparisonData, methodFilter]);
 
   // Empty state
   if (!baselineData || baselineData.length === 0 || !comparisonData || comparisonData.length === 0) {
@@ -467,17 +547,35 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     <CONTAINER>
       <H1>Performance Comparison</H1>
 
-      <TOGGLECONTAINER>
-        <input
-          type="checkbox"
-          id="merge-endpoints-compare"
-          checked={mergeEndpoints}
-          onChange={(e) => setMergeEndpoints(e.target.checked)}
-        />
-        <label htmlFor="merge-endpoints-compare">
-          Merge endpoints with different tags
-        </label>
-      </TOGGLECONTAINER>
+      <FILTERCONTAINER>
+        <FILTERDROPDOWN>
+          <label htmlFor="method-filter-compare">Filter by Method:</label>
+          <select
+            id="method-filter-compare"
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+          >
+            <option value="all">All Methods</option>
+            {availableMethods.map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
+          </select>
+        </FILTERDROPDOWN>
+
+        <TOGGLECONTAINER style={{ margin: 0 }}>
+          <input
+            type="checkbox"
+            id="merge-endpoints-compare"
+            checked={mergeEndpoints}
+            onChange={(e) => setMergeEndpoints(e.target.checked)}
+          />
+          <label htmlFor="merge-endpoints-compare">
+            Merge endpoints with different tags
+          </label>
+        </TOGGLECONTAINER>
+      </FILTERCONTAINER>
 
       <H2>Performance & Error Metrics Comparison</H2>
       <COMPARISONCHARTSGRID>
@@ -488,7 +586,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={baselineData}
+                displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="median"
               />
@@ -501,7 +599,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={baselineData}
+                displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="worst5"
               />
@@ -514,7 +612,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={baselineData}
+                displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="error5xx"
               />
@@ -527,7 +625,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={baselineData}
+                displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="allErrors"
               />
@@ -542,7 +640,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={comparisonData}
+                displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="median"
               />
@@ -555,7 +653,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={comparisonData}
+                displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="worst5"
               />
@@ -568,7 +666,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={comparisonData}
+                displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="error5xx"
               />
@@ -581,7 +679,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             </h3>
             <QUADPANEL>
               <ComparisonChart
-                displayData={comparisonData}
+                displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="allErrors"
               />
@@ -594,11 +692,11 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
       <COMPARISONCHARTSGRID>
         <CHARTCOLUMN>
           <H2>{baselineLabel}</H2>
-          <FinalResultsTable displayData={baselineData} fileLabel={baselineLabel} />
+          <FinalResultsTable displayData={filteredBaselineData} fileLabel={baselineLabel} />
         </CHARTCOLUMN>
         <CHARTCOLUMN>
           <H2>{comparisonLabel}</H2>
-          <FinalResultsTable displayData={comparisonData} fileLabel={comparisonLabel} />
+          <FinalResultsTable displayData={filteredComparisonData} fileLabel={comparisonLabel} />
         </CHARTCOLUMN>
       </COMPARISONCHARTSGRID>
     </CONTAINER>

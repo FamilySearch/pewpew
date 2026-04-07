@@ -129,6 +129,47 @@ const TOGGLECONTAINER = styled.div`
   }
 `;
 
+const FILTERCONTAINER = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin: 1em 0 2em 0;
+`;
+
+const FILTERDROPDOWN = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+
+  label {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  select {
+    padding: 0.4em 0.8em;
+    background-color: #1a1a1a;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      border-color: #666;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #6a7bb4;
+    }
+  }
+`;
+
 const TABLECONTAINER = styled.div`
   width: 100%;
   overflow-x: auto;
@@ -536,6 +577,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
 
   const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
   const compareSearchModalRef = useRef<ModalObject| null>(null);
   useEffectModal(compareSearchModalRef);
 
@@ -835,6 +877,28 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     return state.filteredData || state.resultsData;
   }, [state.filteredData, state.resultsData]);
 
+  // Extract unique HTTP methods from displayData
+  const availableMethods = useMemo(() => {
+    if (!displayData) {
+      return [];
+    }
+    const methods = new Set<string>();
+    for (const [bucketId] of displayData) {
+      if (bucketId.method) {
+        methods.add(bucketId.method);
+      }
+    }
+    return Array.from(methods).sort();
+  }, [displayData]);
+
+  // Filter displayData by selected method
+  const filteredDisplayData = useMemo(() => {
+    if (!displayData || methodFilter === "all") {
+      return displayData;
+    }
+    return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [displayData, methodFilter]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
     <React.Fragment>
@@ -884,23 +948,41 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
             />
           </label>
 
-          <TOGGLECONTAINER>
-            <input
-              type="checkbox"
-              id="merge-endpoints"
-              checked={mergeEndpoints}
-              onChange={(e) => setMergeEndpoints(e.target.checked)}
-            />
-            <label htmlFor="merge-endpoints">
-              Merge endpoints with different tags
-            </label>
-          </TOGGLECONTAINER>
+          <FILTERCONTAINER>
+            <FILTERDROPDOWN>
+              <label htmlFor="method-filter">Filter by Method:</label>
+              <select
+                id="method-filter"
+                value={methodFilter}
+                onChange={(e) => setMethodFilter(e.target.value)}
+              >
+                <option value="all">All Methods</option>
+                {availableMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </FILTERDROPDOWN>
+
+            <TOGGLECONTAINER style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                id="merge-endpoints"
+                checked={mergeEndpoints}
+                onChange={(e) => setMergeEndpoints(e.target.checked)}
+              />
+              <label htmlFor="merge-endpoints">
+                Merge endpoints with different tags
+              </label>
+            </TOGGLECONTAINER>
+          </FILTERCONTAINER>
 
           <h2>Performance & Error Metrics</h2>
-          <QuadPanelCharts displayData={displayData} mergeEndpoints={mergeEndpoints} />
+          <QuadPanelCharts displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
 
           <h1>Final Results</h1>
-          <FinalResultsTable displayData={displayData} />
+          <FinalResultsTable displayData={filteredDisplayData} />
 
           <h1>Endpoint Data</h1>
           {displayData.map(([bucketId, dataPoints]) => {

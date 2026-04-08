@@ -3,6 +3,7 @@ import {
   ChartDataset,
   ChartEvent,
   ChartTypeRegistry,
+  Filler,
   Legend,
   LegendElement,
   LegendItem,
@@ -21,6 +22,7 @@ import { DataPoint } from "./model";
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc
 Chart.register(
+  Filler,
   LineElement,
   PointElement,
   LineController,
@@ -32,27 +34,52 @@ Chart.register(
   Tooltip
 );
 
+// Splunk-style color palette (matching the polished dashboard theme)
 const colors = [
-  "#3366cc",
-  "#dc3912",
-  "#ff9900",
-  "#109618",
-  "#990099",
-  "#0099c6",
-  "#dd4477",
-  "#66aa00",
-  "#b82e2e",
-  "#316395",
-  "#994499",
-  "#22aa99",
-  "#aaaa11",
-  "#6633cc",
-  "#e67300",
-  "#8b0707",
-  "#651067",
-  "#329262",
-  "#5574a6",
-  "#3b3eac"
+  "#6a7bb4", // Purple/Blue (like Splunk GET)
+  "#c94277", // Pink/Magenta (like Splunk POST)
+  "#d9915b", // Orange/Gold (like Splunk Agent)
+  "#4d9f9a", // Teal/Cyan (like Splunk Host)
+  "#b8904b", // Brown/Gold
+  "#7e5ba3", // Deep Purple
+  "#d16881", // Coral Pink
+  "#8fbc8f", // Green
+  "#6495ed", // Cornflower Blue
+  "#cd853f", // Peru
+  "#ba55d3", // Medium Orchid
+  "#20b2aa", // Light Sea Green
+  "#ff7f50", // Coral
+  "#9370db", // Medium Purple
+  "#3cb371", // Medium Sea Green
+  "#ff6347", // Tomato
+  "#4682b4", // Steel Blue
+  "#daa520", // Goldenrod
+  "#dc143c", // Crimson
+  "#008b8b"  // Dark Cyan
+];
+
+// Error chart color palette (orange/pink theme for error graphs)
+export const errorColors = [
+  "#ff6b6b", // Coral Red
+  "#ff8c42", // Orange
+  "#ffa07a", // Light Salmon
+  "#ff7f50", // Coral
+  "#ff4500", // Orange Red
+  "#ff69b4", // Hot Pink
+  "#ff6347", // Tomato
+  "#ff8c94", // Light Coral Pink
+  "#ffab91", // Peach
+  "#ff9a76", // Salmon
+  "#ff7eb3", // Pink
+  "#ff9966", // Atomic Tangerine
+  "#ff6f91", // Carnation Pink
+  "#ff8f5e", // Burnt Sienna
+  "#ff7aa2", // Blush Pink
+  "#ffa160", // Sandy Brown
+  "#ff8cb4", // Cherry Blossom
+  "#ff9c7d", // Apricot
+  "#ff79a8", // Flamingo
+  "#ffb380"  // Macaroni
 ];
 
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
@@ -150,7 +177,7 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
             text: "RTT"
           },
           ticks: {
-            callback: (v) => v + "ms",
+            callback: (v: any) => v + "ms",
             autoSkip: true
           }
         },
@@ -325,6 +352,439 @@ const afterBuildTicks = (chart: any) => {
   // Sets chart ticks to modified ticks
   chart.ticks = myTicks;
 };
+
+// Quad Panel Charts for polished dashboard
+export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(50)) / MICROS_TO_MS
+        : NaN
+    }));
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v: any) => v + "ms",
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items: any) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context: any) => {
+              const value = context.parsed.y.toFixed(2);
+              return `${context.dataset.label}: ${value}ms (median)`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(95)) / MICROS_TO_MS
+        : NaN
+    }));
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v: any) => v + "ms",
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items: any) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context: any) => {
+              const value = context.parsed.y.toFixed(2);
+              return `${context.dataset.label}: ${value}ms (p95)`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique 5xx status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
+        if (status.startsWith("5")) {
+          statusCodesSet.add(status);
+        }
+      }
+    }
+
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
+
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items: any) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context: any) => {
+              return `${context.dataset.label}: ${context.parsed.y}`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique non-200 status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
+        if (status !== "200") {
+          statusCodesSet.add(status);
+        }
+      }
+    }
+
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
+
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items: any) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context: any) => {
+              return `${context.dataset.label}: ${context.parsed.y}`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
 
 // add a double-click handler to the chart legends
 {

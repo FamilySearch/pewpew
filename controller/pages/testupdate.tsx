@@ -181,7 +181,7 @@ const TestUpdate = ({ testId, authPermission }: TestUpdateProps) => {
         <form onSubmit={onClickHandlerSubmit}>
           <TestUpdateRow className="update-yaml">
             <TestUpdateColumn className="update-yaml-form">
-              {(authPermission === undefined || authPermission === AuthPermission.Admin) ? <Div className="bypass-div">
+              {(authPermission === undefined || authPermission === AuthPermission.Admin) ? <Div data-testid="bypass-parser-section" className="bypass-div">
                 <label> Bypass Config Parser </label>
                 <input type="checkbox" name="bypassParser" className="bypass-control"
                   checked={state.bypassParser} onChange={onChangeHandlerCheckbox} />
@@ -201,7 +201,7 @@ const TestUpdate = ({ testId, authPermission }: TestUpdateProps) => {
                       <Info>File Uploading: {state.uploadProgress}%</Info>
                     </Column>
                   : <>
-                      <UpdateYamlButton type="submit">Update Yaml File</UpdateYamlButton>
+                      <UpdateYamlButton data-testid="update-yaml-button" type="submit">Update Yaml File</UpdateYamlButton>
                       <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
                         href={PAGE_TEST_HISTORY_FORMAT(testId)}>Back to Test Status</LinkButton>
                     </>
@@ -212,7 +212,7 @@ const TestUpdate = ({ testId, authPermission }: TestUpdateProps) => {
             </TestUpdateColumn>
           </TestUpdateRow>
         </form>
-        : <Danger>Must provide a TestId to this page</Danger>
+        : <Danger data-testid="missing-testid-error">Must provide a TestId to this page</Danger>
         }
       </TestUpdateColumn>
     </Layout>

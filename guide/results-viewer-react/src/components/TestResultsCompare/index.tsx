@@ -141,6 +141,47 @@ const TOGGLECONTAINER = styled.div`
   }
 `;
 
+const FILTERCONTAINER = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin: 1em 0 2em 0;
+`;
+
+const FILTERDROPDOWN = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+
+  label {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  select {
+    padding: 0.4em 0.8em;
+    background-color: #1a1a1a;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      border-color: #666;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #6a7bb4;
+    }
+  }
+`;
+
 /** Container for scrollable data table - compact for comparison view */
 const TABLECONTAINER = styled.div`
   width: 100%;
@@ -162,7 +203,7 @@ const DATATABLE = styled.table`
 `;
 
 /** Table header with sticky positioning and text wrapping */
-const TH = styled.th`
+const TH = styled.th<{ $hidden?: boolean }>`
   padding: 4px 6px;
   text-align: left;
   background-color: #1a1a1a;
@@ -173,18 +214,23 @@ const TH = styled.th`
   position: sticky;
   top: 0;
   z-index: 10;
-  font-size: 10px;
+  font-size: 9px;
+  display: ${props => props.$hidden ? 'none' : 'table-cell'};
+  line-height: 1.2;
 `;
 
 /** Table data cell with text wrapping for compact display */
-const DATATD = styled.td`
-  padding: 4px 6px;
+const DATATD = styled.td<{ $hidden?: boolean }>`
+  padding: 3px 4px;
   border-bottom: 1px solid #444;
   white-space: normal;
   word-break: break-word;
-  max-width: 150px;
-  font-size: 10px;
-  line-height: 1.3;
+  max-width: 120px;
+  font-size: 9px;
+  line-height: 1.2;
+  vertical-align: top;
+  display: ${props => props.$hidden ? 'none' : 'table-cell'};
+  overflow-wrap: break-word;
 `;
 
 /** Table row with striped styling */
@@ -217,6 +263,97 @@ const DOWNLOADBUTTON = styled.button`
 
   &:active {
     background-color: #3d8b40;
+  }
+`;
+
+const COLUMNSELECT = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1em;
+  padding: 0.75em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  position: relative;
+
+  label {
+    color: #ccc;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .column-count {
+    color: #999;
+    font-size: 9px;
+    font-style: italic;
+  }
+`;
+
+const DROPDOWNBUTTON = styled.button`
+  flex: 1;
+  padding: 0.5em 0.75em;
+  background-color: #1a1a1a;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 200px;
+
+  &:hover {
+    border-color: #666;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #6a7bb4;
+  }
+
+  .arrow {
+    margin-left: 0.5em;
+    font-size: 8px;
+  }
+`;
+
+const DROPDOWNMENU = styled.div<{ $isOpen: boolean }>`
+  display: ${props => props.$isOpen ? 'block' : 'none'};
+  position: absolute;
+  top: 100%;
+  left: 0.75em;
+  right: 0.75em;
+  background-color: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  margin-top: 0.25em;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+`;
+
+const DROPDOWNITEM = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.75em;
+  cursor: pointer;
+  font-size: 10px;
+  color: #ccc;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background-color: #2a2a2a;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
   }
 `;
 
@@ -628,6 +765,44 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
  * Displays aggregated statistics for each endpoint in a tabular format.
  */
 const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: string }> = ({ displayData, fileLabel = "Results" }) => {
+  // Column visibility state - start with commonly less important columns hidden
+  const [visibleColumns, setVisibleColumns] = useState({
+    method: true,
+    hostname: true,
+    path: true,
+    queryString: false,
+    tags: false,
+    statusCount: true,
+    callCount: true,
+    p50: true,
+    p95: true,
+    p99: false,
+    min: false,
+    max: false,
+    stddev: false,
+    time: false
+  });
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const toggleColumn = (column: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }));
+  };
+
+  const visibleCount = Object.values(visibleColumns).filter(Boolean).length;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.column-select-container')) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const tableData = useMemo(() => {
     const results: any[] = [];
 
@@ -648,13 +823,18 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       }
 
       // Calculate statistics
-      const callCount = totalRTT.getTotalCount();
+      const callCount = Number(totalRTT.getTotalCount());
       const p50 = callCount ? Number(totalRTT.getValueAtPercentile(50)) / 1000 : 0;
       const p95 = callCount ? Number(totalRTT.getValueAtPercentile(95)) / 1000 : 0;
       const p99 = callCount ? Number(totalRTT.getValueAtPercentile(99)) / 1000 : 0;
       const min = callCount ? Number(totalRTT.getMinNonZeroValue()) / 1000 : 0;
       const max = callCount ? Number(totalRTT.getMaxValue()) / 1000 : 0;
       const stddev = callCount ? Number(totalRTT.getStdDeviation()) / 1000 : 0;
+
+      // Note: We intentionally don't free() the histogram here.
+      // The WASM finalizer will automatically free it when the JS object is garbage collected.
+      // Manual freeing in React can cause double-free or use-after-free errors due to
+      // React's rendering behavior (strict mode, hot reload, etc.).
 
       // Build status count array
       const statusCountsArray: any[] = [];
@@ -736,47 +916,168 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       <DOWNLOADBUTTON onClick={exportToExcel}>
         Download as Excel
       </DOWNLOADBUTTON>
+      <COLUMNSELECT className="column-select-container">
+        <label>Show Columns:</label>
+        <DROPDOWNBUTTON onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
+          <span>{visibleCount} of 14 columns selected</span>
+          <span className="arrow">{dropdownOpen ? '▲' : '▼'}</span>
+        </DROPDOWNBUTTON>
+        <DROPDOWNMENU $isOpen={dropdownOpen}>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.method}
+              onChange={() => toggleColumn('method')}
+            />
+            Method
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.hostname}
+              onChange={() => toggleColumn('hostname')}
+            />
+            Hostname
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.path}
+              onChange={() => toggleColumn('path')}
+            />
+            Path
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.queryString}
+              onChange={() => toggleColumn('queryString')}
+            />
+            Query String
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.tags}
+              onChange={() => toggleColumn('tags')}
+            />
+            Tags
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.statusCount}
+              onChange={() => toggleColumn('statusCount')}
+            />
+            Status Count
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.callCount}
+              onChange={() => toggleColumn('callCount')}
+            />
+            Call Count
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p50}
+              onChange={() => toggleColumn('p50')}
+            />
+            p50 (Median)
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p95}
+              onChange={() => toggleColumn('p95')}
+            />
+            p95
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p99}
+              onChange={() => toggleColumn('p99')}
+            />
+            p99
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.min}
+              onChange={() => toggleColumn('min')}
+            />
+            Min
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.max}
+              onChange={() => toggleColumn('max')}
+            />
+            Max
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.stddev}
+              onChange={() => toggleColumn('stddev')}
+            />
+            Std Deviation
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.time}
+              onChange={() => toggleColumn('time')}
+            />
+            Time
+          </DROPDOWNITEM>
+        </DROPDOWNMENU>
+      </COLUMNSELECT>
       <TABLECONTAINER>
         <DATATABLE>
         <thead>
           <tr>
-            <TH>method</TH>
-            <TH>hostname</TH>
-            <TH>path</TH>
-            <TH>queryString</TH>
-            <TH>tags</TH>
-            <TH>statusCount</TH>
-            <TH>callCount</TH>
-            <TH>p50</TH>
-            <TH>p95</TH>
-            <TH>p99</TH>
-            <TH>min</TH>
-            <TH>max</TH>
-            <TH>stddev</TH>
-            <TH>_time</TH>
+            <TH $hidden={!visibleColumns.method}>method</TH>
+            <TH $hidden={!visibleColumns.hostname}>hostname</TH>
+            <TH $hidden={!visibleColumns.path}>path</TH>
+            <TH $hidden={!visibleColumns.queryString}>query</TH>
+            <TH $hidden={!visibleColumns.tags}>tags</TH>
+            <TH $hidden={!visibleColumns.statusCount}>status</TH>
+            <TH $hidden={!visibleColumns.callCount}>calls</TH>
+            <TH $hidden={!visibleColumns.p50}>p50</TH>
+            <TH $hidden={!visibleColumns.p95}>p95</TH>
+            <TH $hidden={!visibleColumns.p99}>p99</TH>
+            <TH $hidden={!visibleColumns.min}>min</TH>
+            <TH $hidden={!visibleColumns.max}>max</TH>
+            <TH $hidden={!visibleColumns.stddev}>std</TH>
+            <TH $hidden={!visibleColumns.time}>time</TH>
           </tr>
         </thead>
         <tbody>
           {tableData.map((row, idx) => (
             <DATATR key={idx}>
-              <DATATD>{row.method}</DATATD>
-              <DATATD title={row.hostname}>{row.hostname}</DATATD>
-              <DATATD title={row.path}>{row.path}</DATATD>
-              <DATATD>{row.queryString}</DATATD>
-              <DATATD title={row.tags}>{row.tags}</DATATD>
-              <DATATD>
+              <DATATD $hidden={!visibleColumns.method}>{row.method}</DATATD>
+              <DATATD $hidden={!visibleColumns.hostname} title={row.hostname}>{row.hostname}</DATATD>
+              <DATATD $hidden={!visibleColumns.path} title={row.path}>{row.path}</DATATD>
+              <DATATD $hidden={!visibleColumns.queryString}>{row.queryString}</DATATD>
+              <DATATD $hidden={!visibleColumns.tags} title={row.tags}>{row.tags}</DATATD>
+              <DATATD $hidden={!visibleColumns.statusCount}>
                 {row.statusCounts.map((sc: any, i: number) => (
                   <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
               </DATATD>
-              <DATATD>{row.callCount.toLocaleString()}</DATATD>
-              <DATATD>{row.p50.toFixed(2)}</DATATD>
-              <DATATD>{row.p95.toFixed(2)}</DATATD>
-              <DATATD>{row.p99.toFixed(2)}</DATATD>
-              <DATATD>{row.min.toFixed(2)}</DATATD>
-              <DATATD>{row.max.toFixed(2)}</DATATD>
-              <DATATD>{row.stddev.toFixed(2)}</DATATD>
-              <DATATD>{row.time.toLocaleString()}</DATATD>
+              <DATATD $hidden={!visibleColumns.callCount}>{row.callCount.toLocaleString()}</DATATD>
+              <DATATD $hidden={!visibleColumns.p50}>{row.p50.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.p95}>{row.p95.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.p99}>{row.p99.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.min}>{row.min.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.max}>{row.max.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.stddev}>{row.stddev.toFixed(2)}</DATATD>
+              <DATATD $hidden={!visibleColumns.time}>{row.time.toLocaleString()}</DATATD>
             </DATATR>
           ))}
         </tbody>
@@ -813,6 +1114,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
 
   // Merge endpoints toggle state (defaults to false - raw data)
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
 
   const updateState = (newState: Partial<TestResultsCompareState>) =>
     setState((oldState) => ({ ...oldState, ...newState }));
@@ -898,6 +1200,50 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
     loadData();
   }, [baselineText, comparisonText]);
 
+  // Extract unique HTTP methods from both datasets
+  const availableMethods = useMemo(() => {
+    const methods = new Set<string>();
+
+    if (state.baselineData) {
+      for (const [bucketId] of state.baselineData) {
+        if (bucketId.method) {
+          methods.add(bucketId.method);
+        }
+      }
+    }
+
+    if (state.comparisonData) {
+      for (const [bucketId] of state.comparisonData) {
+        if (bucketId.method) {
+          methods.add(bucketId.method);
+        }
+      }
+    }
+
+    return Array.from(methods).sort();
+  }, [state.baselineData, state.comparisonData]);
+
+  // Filter both datasets by selected method
+  const filteredBaselineData = useMemo(() => {
+    if (!state.baselineData) {
+      return state.baselineData;
+    }
+    if (methodFilter === "all") {
+      return state.baselineData;
+    }
+    return state.baselineData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [state.baselineData, methodFilter]);
+
+  const filteredComparisonData = useMemo(() => {
+    if (!state.comparisonData) {
+      return state.comparisonData;
+    }
+    if (methodFilter === "all") {
+      return state.comparisonData;
+    }
+    return state.comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [state.comparisonData, methodFilter]);
+
   if (state.loading) {
     return <H1>Loading comparison...</H1>;
   }
@@ -939,19 +1285,37 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
         </COMPARISON_SECTION>
       </COMPARISON_HEADER>
 
-      <TOGGLECONTAINER>
-        <input
-          type="checkbox"
-          id="merge-endpoints-compare"
-          checked={mergeEndpoints}
-          onChange={(e) => setMergeEndpoints(e.target.checked)}
-        />
-        <label htmlFor="merge-endpoints-compare">
-          Merge endpoints with different tags
-        </label>
-      </TOGGLECONTAINER>
+      <FILTERCONTAINER>
+        <FILTERDROPDOWN>
+          <label htmlFor="method-filter-compare">Filter by Method:</label>
+          <select
+            id="method-filter-compare"
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+          >
+            <option value="all">All Methods</option>
+            {availableMethods.map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
+          </select>
+        </FILTERDROPDOWN>
 
-      {state.baselineData && state.comparisonData && (
+        <TOGGLECONTAINER style={{ margin: 0 }}>
+          <input
+            type="checkbox"
+            id="merge-endpoints-compare"
+            checked={mergeEndpoints}
+            onChange={(e) => setMergeEndpoints(e.target.checked)}
+          />
+          <label htmlFor="merge-endpoints-compare">
+            Merge endpoints with different tags
+          </label>
+        </TOGGLECONTAINER>
+      </FILTERCONTAINER>
+
+      {filteredBaselineData && filteredComparisonData && (
         <>
           <H1>Performance & Error Metrics Comparison</H1>
           <COMPARISONCHARTSGRID>
@@ -959,38 +1323,38 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
               <H2>{baselineLabel}</H2>
               <QUADPANEL>
                 <h3>Median Duration by Path</h3>
-                <ComparisonMedianChart displayData={state.baselineData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonMedianChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>Worst 5% Duration by Path</h3>
-                <ComparisonWorst5Chart displayData={state.baselineData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonWorst5Chart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>5xx Error Count by Path</h3>
-                <ComparisonError5xxChart displayData={state.baselineData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonError5xxChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>All Errors</h3>
-                <ComparisonAllErrorsChart displayData={state.baselineData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonAllErrorsChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
             </CHARTCOLUMN>
             <CHARTCOLUMN>
               <H2>{comparisonLabel}</H2>
               <QUADPANEL>
                 <h3>Median Duration by Path</h3>
-                <ComparisonMedianChart displayData={state.comparisonData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonMedianChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>Worst 5% Duration by Path</h3>
-                <ComparisonWorst5Chart displayData={state.comparisonData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonWorst5Chart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>5xx Error Count by Path</h3>
-                <ComparisonError5xxChart displayData={state.comparisonData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonError5xxChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
               <QUADPANEL>
                 <h3>All Errors</h3>
-                <ComparisonAllErrorsChart displayData={state.comparisonData} mergeEndpoints={mergeEndpoints} />
+                <ComparisonAllErrorsChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
               </QUADPANEL>
             </CHARTCOLUMN>
           </COMPARISONCHARTSGRID>
@@ -999,11 +1363,11 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
           <COMPARISONCHARTSGRID>
             <CHARTCOLUMN>
               <H2>{baselineLabel}</H2>
-              <FinalResultsTable displayData={state.baselineData} fileLabel={baselineLabel} />
+              <FinalResultsTable displayData={filteredBaselineData} fileLabel={baselineLabel} />
             </CHARTCOLUMN>
             <CHARTCOLUMN>
               <H2>{comparisonLabel}</H2>
-              <FinalResultsTable displayData={state.comparisonData} fileLabel={comparisonLabel} />
+              <FinalResultsTable displayData={filteredComparisonData} fileLabel={comparisonLabel} />
             </CHARTCOLUMN>
           </COMPARISONCHARTSGRID>
         </>

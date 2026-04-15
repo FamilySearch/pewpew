@@ -227,6 +227,7 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
 
   const [state, setState] = useState(DEFAULT_STATE);
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -323,6 +324,31 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
     return state.filteredData || state.resultsData;
   }, [state.filteredData, state.resultsData]);
 
+  // Extract unique HTTP methods from displayData
+  const availableMethods = useMemo(() => {
+    if (!displayData) {
+      return [];
+    }
+    const methods = new Set<string>();
+    for (const [bucketId] of displayData) {
+      if (bucketId.method) {
+        methods.add(bucketId.method);
+      }
+    }
+    return Array.from(methods).sort();
+  }, [displayData]);
+
+  // Filter displayData by selected method
+  const filteredDisplayData = useMemo(() => {
+    if (!displayData) {
+      return displayData;
+    }
+    if (methodFilter === "all") {
+      return displayData;
+    }
+    return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [displayData, methodFilter]);
+
   // Commented out for Splunk-style view
   // Memoized summary tags calculation
   // const summaryTags: BucketId = useMemo(() => {
@@ -335,7 +361,7 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
-      {displayData !== undefined ? (
+      {filteredDisplayData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
           <p>
@@ -343,47 +369,65 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
 
-          <TOGGLECONTAINER>
-            <input
-              type="checkbox"
-              id="merge-endpoints"
-              checked={mergeEndpoints}
-              onChange={(e) => setMergeEndpoints(e.target.checked)}
-            />
-            <label htmlFor="merge-endpoints">
-              Merge endpoints with different tags
-            </label>
-          </TOGGLECONTAINER>
+          <FILTERCONTAINER>
+            <FILTERDROPDOWN>
+              <label htmlFor="method-filter">Filter by Method:</label>
+              <select
+                id="method-filter"
+                value={methodFilter}
+                onChange={(e) => setMethodFilter(e.target.value)}
+              >
+                <option value="all">All Methods</option>
+                {availableMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </FILTERDROPDOWN>
+
+            <TOGGLECONTAINER style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                id="merge-endpoints"
+                checked={mergeEndpoints}
+                onChange={(e) => setMergeEndpoints(e.target.checked)}
+              />
+              <label htmlFor="merge-endpoints">
+                Merge endpoints with different tags
+              </label>
+            </TOGGLECONTAINER>
+          </FILTERCONTAINER>
 
           <h1>Request Count by Endpoint</h1>
-          <OverviewChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
+          <OverviewChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
           <h1>Request Count by Host</h1>
-          <HostChart displayData={displayData} />
+          <HostChart displayData={filteredDisplayData} />
           <h1>Request Count by Agent</h1>
-          <AgentChart displayData={displayData} />
+          <AgentChart displayData={filteredDisplayData} />
 
           <h1>Performance & Error Metrics</h1>
           <QUADGRID>
             <QUADPANEL>
               <h3>Median Duration by Path</h3>
-              <MedianDurationChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
+              <MedianDurationChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>Worst 5% Duration by Path</h3>
-              <Worst5PercentChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
+              <Worst5PercentChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>5xx Error Count by Path</h3>
-              <Error5xxChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
+              <Error5xxChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
             <QUADPANEL>
               <h3>All Errors</h3>
-              <AllErrorsChart displayData={displayData} mergeEndpoints={mergeEndpoints} />
+              <AllErrorsChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
             </QUADPANEL>
           </QUADGRID>
 
           <h1>Final Results</h1>
-          <FinalResultsTable displayData={displayData} />
+          <FinalResultsTable displayData={filteredDisplayData} />
         </TIMETAKEN>
       ) : (
         <h4>{state.defaultMessage}</h4>
@@ -551,6 +595,47 @@ const TOGGLECONTAINER = styled.div`
     cursor: pointer;
     width: 18px;
     height: 18px;
+  }
+`;
+
+const FILTERCONTAINER = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin: 1em 0 2em 0;
+`;
+
+const FILTERDROPDOWN = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+
+  label {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  select {
+    padding: 0.4em 0.8em;
+    background-color: #1a1a1a;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      border-color: #666;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #6a7bb4;
+    }
   }
 `;
 
@@ -1188,13 +1273,18 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       }
 
       // Calculate statistics
-      const callCount = totalRTT.getTotalCount();
+      const callCount = Number(totalRTT.getTotalCount());
       const p50 = callCount ? Number(totalRTT.getValueAtPercentile(50)) / 1000 : 0;
       const p95 = callCount ? Number(totalRTT.getValueAtPercentile(95)) / 1000 : 0;
       const p99 = callCount ? Number(totalRTT.getValueAtPercentile(99)) / 1000 : 0;
       const min = callCount ? Number(totalRTT.getMinNonZeroValue()) / 1000 : 0;
       const max = callCount ? Number(totalRTT.getMaxValue()) / 1000 : 0;
       const stddev = callCount ? Number(totalRTT.getStdDeviation()) / 1000 : 0;
+
+      // Note: We intentionally don't free() the histogram here.
+      // The WASM finalizer will automatically free it when the JS object is garbage collected.
+      // Manual freeing in React can cause double-free or use-after-free errors due to
+      // React's rendering behavior (strict mode, hot reload, etc.).
 
       // Build status count array
       const statusCountsArray: any[] = [];

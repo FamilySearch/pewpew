@@ -1,4 +1,4 @@
-import { ParsedFileEntry } from "./model";
+import type { ParsedFileEntry } from "./model";
 
 export interface MinMaxTime {
   startTime?: string;
@@ -112,9 +112,9 @@ export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]>
 
     let parsedData: ParsedFileEntry[];
     if (results.length === 1 && !isOnlyTestStart) {
-      parsedData = modelCache.processJson(results[0]);
+      parsedData = await modelCache.processJson(results[0]);
     } else {
-      parsedData = modelCache.processNewJson(results);
+      parsedData = await modelCache.processNewJson(results);
     }
 
     // Sort once during parsing for better performance

@@ -41,8 +41,9 @@ module.exports = {
     fallback: {
       fs: false,
       http: false,
-      path: false,
+      path: require.resolve('path-browserify'),
       url: false,
+      util: require.resolve('util/'),
     },
   },
   plugins: [
@@ -50,5 +51,14 @@ module.exports = {
     new webpack.ProvidePlugin({
       process: 'process',
     }),
+    new webpack.NormalModuleReplacementPlugin(
+      /^util$/,
+      (resource) => {
+        // Only replace util when it's required by the WASM module
+        if (resource.context.includes('hdr-histogram-wasm')) {
+          resource.request = path.resolve(__dirname, 'src/util-shim.js');
+        }
+      }
+    ),
   ],
 };

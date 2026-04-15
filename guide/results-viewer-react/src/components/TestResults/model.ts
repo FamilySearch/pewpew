@@ -1,6 +1,15 @@
-import { HDRHistogram } from "@fs/hdr-histogram-wasm";
+import init, { HDRHistogram } from "@fs/hdr-histogram-wasm";
 type CheckType = string | ((x: unknown) => boolean);
 type Check = [string, CheckType];
+
+// Initialize WASM module once
+let wasmInitialized = false;
+async function ensureWasmInit() {
+  if (!wasmInitialized) {
+    await init();
+    wasmInitialized = true;
+  }
+}
 
 function isObject (o: unknown): o is object {
   return typeof o === "object" && !!o;
@@ -281,7 +290,8 @@ function asStatsFile (s: unknown): StatsFile | Error {
 
 export type ParsedFileEntry = [BucketId, DataPoint[]];
 
-export function processJson (json: any): ParsedFileEntry[] {
+export async function processJson (json: any): Promise<ParsedFileEntry[]> {
+  await ensureWasmInit();
   const result = asStatsFile(json);
 
   if (result instanceof Error) {
@@ -395,7 +405,8 @@ function checkNewJsonEntry (entry: unknown): entry is Header | Tags | Buckets {
     || isBuckets(entry);
 }
 
-export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
+export async function processNewJson (jsons: unknown[]): Promise<ParsedFileEntry[]> {
+  await ensureWasmInit();
   const tags: BucketId[] = [];
   const data: DataPointPreProcessed[][] = [];
   let bucketSize = 0;
@@ -437,5 +448,5 @@ export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
 
   const statsFile: StatsFile = { buckets };
 
-  return processJson(statsFile);
+  return await processJson(statsFile);
 }

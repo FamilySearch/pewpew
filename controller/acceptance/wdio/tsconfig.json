@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.test.json",
+  "compilerOptions": {
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
+    "rootDir": "../.."
+  },
+  "exclude": ["node_modules"],
+  "include": [
+    "../../src/**/*",
+    "../../types/**/*",
+    "../../pages/api/util/*",
+    "../util.ts",
+    "../../integration/util.ts",
+    "./**/*"
+  ]
+}

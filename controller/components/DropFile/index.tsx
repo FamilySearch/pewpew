@@ -44,8 +44,8 @@ export const DropFile = ({ onDropFile, multiple = true }: DropFileProps) => {
       <Dropzone onDrop={onDropFile} multiple={multiple} >
         {({getRootProps, getInputProps}: {getRootProps: (props?: DropzoneRootProps) => DropzoneRootProps, getInputProps: (props?: DropzoneInputProps) => DropzoneInputProps }) => (
           // <section>
-            <DropzoneDiv className="dropzone" {...getRootProps()}>
-              <input {...getInputProps()} />
+            <DropzoneDiv className="dropzone" {...getRootProps()} data-testid="dropzone">
+              <input {...getInputProps()} data-testid="dropzone-file-input" />
               <p>Drop files here, or click to select files</p>
             </DropzoneDiv>
           // </section>

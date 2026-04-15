@@ -140,13 +140,13 @@ export const Layout = ({
             <ImagePewPew className="img-pewpew" src={formatAssetHref("/img/pewpew.jpg")} alt="PEW PEW IMAGE" />
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_START_TEST} title="Start a new load test">New Test</LinkButton>
+            <LinkButton data-testid="nav-new-test" href={PAGE_START_TEST} title="Start a new load test">New Test</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_TEST_HISTORY} title="View the test history or search for a test">Test History</LinkButton>
+            <LinkButton data-testid="nav-test-history" href={PAGE_TEST_HISTORY} title="View the test history or search for a test">Test History</LinkButton>
           </LinkDiv>
           <LinkDiv>
-            <LinkButton href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
+            <LinkButton data-testid="nav-calendar" href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
           </LinkDiv>
           <LinkDiv>
             <a href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">
@@ -155,15 +155,15 @@ export const Layout = ({
           </LinkDiv>
           {authPermission === AuthPermission.Admin &&
             <LinkDiv>
-              <LinkButton href={PAGE_ADMIN} title="Manage the pewpew versions">Admin</LinkButton>
+              <LinkButton data-testid="nav-admin" href={PAGE_ADMIN} title="Manage the pewpew versions">Admin</LinkButton>
             </LinkDiv>
           }
           {Object.entries(visibleControllers).map(([name, data]) =>
             <LinkDiv key={name}>
-              <a href={data.url} title={data.hover} ><Button name={name} theme={{...defaultButtonTheme}}>{name} Controller</Button></a>
+              <a data-testid={`nav-${name.toLowerCase()}`} href={data.url} title={data.hover} ><Button name={name} theme={{...defaultButtonTheme}}>{name} Controller</Button></a>
             </LinkDiv>)}
           <LinkDiv>
-            <LinkButton href={API_LOGOUT} title="Log out of the controller" onClick={() => authLogout()}>Logout</LinkButton>
+            <LinkButton data-testid="nav-logout" href={API_LOGOUT} title="Log out of the controller" onClick={() => authLogout()}>Logout</LinkButton>
           </LinkDiv>
         </LinkContainer>
         <Index className="index">

@@ -134,7 +134,7 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
         <H1>Test Schedule</H1>
         <H3>Click on calendar to schedule a test</H3>
         {(state.error) && <Danger>{state.error}</Danger>}
-        {authPermission === AuthPermission.Admin && <Alert>Admin Override: Delete from Schedule with Shift+Alt+Click</Alert>}
+        {authPermission === AuthPermission.Admin && <Alert data-testid="admin-override-alert">Admin Override: Delete from Schedule with Shift+Alt+Click</Alert>}
         <CalendarComponent
           initialView={defaultView}
           initialDate={defaultDate}

@@ -52,6 +52,7 @@ export default [{
         "./controller/tsconfig.json",
         "./controller/tsconfig.test.json",
         "./controller/.storybook/tsconfig.json",
+        "./controller/acceptance/wdio/tsconfig.json",
       ],
     },
   },
@@ -113,4 +114,12 @@ export default [{
     "object-shorthand": 1,
     "quotes": ["warn", "double"]
   },
+},
+// WebdriverIO globals (browser, $, expect) are async at runtime but their ambient
+// type declarations don't always reflect that, causing false-positive await-thenable warnings.
+{
+  "files": ["controller/acceptance/wdio/**/*.ts"],
+  "rules": {
+    "@typescript-eslint/await-thenable": "off"
+  }
 }];

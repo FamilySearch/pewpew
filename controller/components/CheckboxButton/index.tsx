@@ -48,7 +48,7 @@ export const CheckboxButton = ({
   return (
     <CheckboxDiv>
       <Input id={id} type="checkbox" checked={value} onClick={onClick} onChange={() => {/* noop */}} style={style} />
-      <Label style={style} htmlFor={id} onClick={onClick}>{text || id}</Label>
+      <Label style={style} htmlFor={id} data-testid={"checkbox-" + id} onClick={onClick}>{text || id}</Label>
     </CheckboxDiv>
   );
 };

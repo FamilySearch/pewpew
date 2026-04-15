@@ -6,7 +6,7 @@
     }],
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "isolatedModules": true,
     "jsx": "react",
     "skipLibCheck": true,
@@ -25,10 +25,9 @@
     "strictPropertyInitialization": true,
     "sourceMap": true,
     "outDir": "dist",
-    "baseUrl": "test",
     "lib": ["ES2022", "esnext.asynciterable", "dom", "dom.iterable"]
   },
-  "exclude": ["node_modules", "pages/**/*", "components/**/*"],
+  "exclude": ["node_modules", "pages/**/*", "components/**/*", "acceptance/wdio/**/*"],
   "include": [
     "src/**/*",
     "test/**/*",

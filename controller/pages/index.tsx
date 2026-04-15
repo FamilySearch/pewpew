@@ -227,15 +227,15 @@ const TestStatusPage = ({
     </TestStatusSection>;
   } else if (allTests) {
     body = <React.Fragment>
-      <TestStatusSection>
+      <TestStatusSection data-testid="running-tests">
         <H3>Running Tests</H3>
         <TestsList tests={allTests.runningTests} />
       </TestStatusSection>
-      <TestStatusSection>
+      <TestStatusSection data-testid="recently-run-tests">
         <H3>Recently Run Tests</H3>
         <TestsList tests={allTests.recentTests} />
       </TestStatusSection>
-      <TestStatusSection>
+      <TestStatusSection data-testid="recently-viewed-tests">
         <H3>Recently Viewed Tests</H3>
         <TestsList tests={allTests.requestedTests} />
       </TestStatusSection>
@@ -316,14 +316,14 @@ const TestStatusPage = ({
         {!testData && <TestStatusSection>
           <form onSubmit={onClickHandlerSubmit}>
             <label>Search for S3Folder: </label>
-            <input type="text" name="testIdSearch" value={state.testIdSearch} onChange={updateInputHandler} />
+            <input type="text" name="testIdSearch" data-testid="search-input" value={state.testIdSearch} onChange={updateInputHandler} />
             <br/>(must be the start of the yaml file name)
           </form>
           {state.searchTestResult &&
-          <>
+          <div data-testid="search-results">
             <H3>Tests Found in S3</H3>
             <TestsList tests={state.searchTestResult} />
-          </>}
+          </div>}
         </TestStatusSection>}
         {state.error && <Danger>Error: {state.error}</Danger>}
       </TestStatusSection>

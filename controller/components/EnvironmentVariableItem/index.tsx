@@ -35,10 +35,10 @@ export const EnvironmentVariableItem = ({
   return (
     <React.Fragment>
       <TextCell>
-        <Input name={name + "_variableName"} value={variableName} type="text" onChange={onChange} required placeholder={isPassword ? "PASSWORD" : undefined} autoComplete={type === "password" ? "variable-name" : undefined}/>
+        <Input name={name + "_variableName"} data-testid={"env-var-name-" + name} value={variableName} type="text" onChange={onChange} required placeholder={isPassword ? "PASSWORD" : undefined} autoComplete={type === "password" ? "variable-name" : undefined}/>
       </TextCell>
       <TextCell className="env-var-div">
-        <Input name={name + "_variableValue"} value={variableValue} type={type} onChange={onChange} autoComplete={valueAutoComplete}/>
+        <Input name={name + "_variableValue"} data-testid={"env-var-value-" + name} value={variableValue} type={type} onChange={onChange} autoComplete={valueAutoComplete}/>
       </TextCell>
       <ButtonCell>
         <Input name={name + "_type"} type="checkbox" checked={isPassword} onChange={onChange} title={isPassword ? "Value will be hidden and not saved in S3" : undefined} />

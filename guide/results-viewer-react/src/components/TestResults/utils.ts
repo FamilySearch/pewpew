@@ -112,9 +112,9 @@ export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]>
 
     let parsedData: ParsedFileEntry[];
     if (results.length === 1 && !isOnlyTestStart) {
-      parsedData = await modelCache.processJson(results[0]);
+      parsedData = modelCache.processJson(results[0]);
     } else {
-      parsedData = await modelCache.processNewJson(results);
+      parsedData = modelCache.processNewJson(results);
     }
 
     // Sort once during parsing for better performance

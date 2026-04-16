@@ -38,7 +38,7 @@ jobs:
 
           # build the hdr-histogram-wasm for the results viewer
           cd $WASM_LIB_DIR
-          wasm-pack build --release -t bundler -d $WASM_OUTPUT_REACT_DIR --scope fs
+          wasm-pack build --release -t web -d $WASM_OUTPUT_REACT_DIR --scope fs
 
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci

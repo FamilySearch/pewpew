@@ -37,7 +37,7 @@
     "@types/react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@fs/hdr-histogram-wasm": "file:lib/hdr-histogram-wasm",
+    "@fs/hdr-histogram-wasm": "file:../../lib/hdr-histogram-wasm/pkg",
     "axios": "^1.7.8",
     "chart.js": "~4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",

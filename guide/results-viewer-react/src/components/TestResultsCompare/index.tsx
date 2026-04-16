@@ -321,7 +321,7 @@ const DROPDOWNBUTTON = styled.button`
 `;
 
 const DROPDOWNMENU = styled.div<{ $isOpen: boolean }>`
-  display: ${props => props.$isOpen ? 'block' : 'none'};
+  display: ${props => props.$isOpen ? "block" : "none"};
   position: absolute;
   top: 100%;
   left: 0.75em;

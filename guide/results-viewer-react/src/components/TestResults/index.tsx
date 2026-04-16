@@ -46,11 +46,6 @@ export const RTTTABLE = styled(ENDPOINTDIV1)`
   margin-right: 15px;
 `;
 
-// const CANVASBOX = styled.div`
-//   position: relative;
-//   width: calc(55vw - 100px);
-// `;
-
 export const UL = styled.ul`
   list-style: none;
 `;
@@ -1308,12 +1303,16 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         queryString = "";
       }
 
+      // Filter out method and url from tags since they're already in separate columns
+      const { method: _, url: __, ...otherTags } = bucketId;
+      const tagsString = Object.keys(otherTags).length > 0 ? JSON.stringify(otherTags) : "";
+
       results.push({
         method: bucketId.method,
         hostname,
         path,
         queryString,
-        tags: JSON.stringify(bucketId),
+        tags: tagsString,
         statusCounts: statusCountsArray,
         callCount,
         p50,

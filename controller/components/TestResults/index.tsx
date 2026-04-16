@@ -11,6 +11,7 @@
  * - Individual endpoint details with RTT and status charts
  */
 
+import * as XLSX from "xlsx";
 import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
@@ -213,6 +214,27 @@ const DATATR = styled.tr`
   }
   &:hover {
     background: #404040;
+  }
+`;
+
+const DOWNLOADBUTTON = styled.button`
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 1em;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #45a049;
+  }
+
+  &:active {
+    background-color: #3d8b40;
   }
 `;
 
@@ -1084,9 +1106,45 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
     return results;
   }, [displayData]);
 
+  const exportToExcel = useCallback(() => {
+    // Prepare data for Excel export
+    const excelData = tableData.map(row => ({
+      Method: row.method,
+      Hostname: row.hostname,
+      Path: row.path,
+      QueryString: row.queryString,
+      Tags: row.tags,
+      StatusCounts: row.statusCounts.map((sc: any) => `${sc.status}: ${sc.count}`).join(", "),
+      CallCount: row.callCount,
+      P50: row.p50.toFixed(2),
+      P95: row.p95.toFixed(2),
+      P99: row.p99.toFixed(2),
+      Min: row.min.toFixed(2),
+      Max: row.max.toFixed(2),
+      StdDev: row.stddev.toFixed(2),
+      Time: new Date(row.time).toLocaleString()
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Final Results");
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const filename = `performance-results-${timestamp}.xlsx`;
+
+    // Download file
+    XLSX.writeFile(workbook, filename);
+  }, [tableData]);
+
   return (
-    <TABLECONTAINER>
-      <DATATABLE>
+    <>
+      <DOWNLOADBUTTON onClick={exportToExcel}>
+        Download as Excel
+      </DOWNLOADBUTTON>
+      <TABLECONTAINER>
+        <DATATABLE>
         <thead>
           <tr>
             <TH>method</TH>
@@ -1131,6 +1189,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         </tbody>
       </DATATABLE>
     </TABLECONTAINER>
+    </>
   );
 };
 

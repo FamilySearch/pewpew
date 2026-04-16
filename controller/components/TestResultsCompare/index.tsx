@@ -10,9 +10,10 @@
  */
 
 /* eslint-disable sort-imports */
+import * as XLSX from "xlsx";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Chart } from "chart.js";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 /* eslint-enable sort-imports */
 
@@ -216,6 +217,120 @@ const DATATR = styled.tr`
   }
 `;
 
+/** Download button for Excel export */
+const DOWNLOADBUTTON = styled.button`
+  background-color: #4CAF50;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  transition: background-color 0.3s;
+  width: 100%;
+
+  &:hover {
+    background-color: #45a049;
+  }
+
+  &:active {
+    background-color: #3d8b40;
+  }
+`;
+
+const COLUMNSELECT = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1em;
+  padding: 0.75em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  position: relative;
+
+  label {
+    color: #ccc;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .column-count {
+    color: #999;
+    font-size: 9px;
+    font-style: italic;
+  }
+`;
+
+const DROPDOWNBUTTON = styled.button`
+  flex: 1;
+  padding: 0.5em 0.75em;
+  background-color: #1a1a1a;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 200px;
+
+  &:hover {
+    border-color: #666;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #6a7bb4;
+  }
+
+  .arrow {
+    margin-left: 0.5em;
+    font-size: 8px;
+  }
+`;
+
+const DROPDOWNMENU = styled.div<{ $isOpen: boolean }>`
+  display: ${props => props.$isOpen ? "block" : "none"};
+  position: absolute;
+  top: 100%;
+  left: 0.75em;
+  right: 0.75em;
+  background-color: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  margin-top: 0.25em;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+`;
+
+const DROPDOWNITEM = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.75em;
+  cursor: pointer;
+  font-size: 10px;
+  color: #ccc;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background-color: #2a2a2a;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+  }
+`;
+
 // ============================================================================
 // TypeScript Interfaces
 // ============================================================================
@@ -361,7 +476,45 @@ interface TableProps {
   fileLabel?: string;
 }
 
-const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel: _fileLabel = "Results" }) => {
+const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Results" }) => {
+  // Column visibility state - start with commonly less important columns hidden
+  const [visibleColumns, setVisibleColumns] = useState({
+    method: true,
+    hostname: true,
+    path: true,
+    queryString: false,
+    tags: false,
+    statusCount: true,
+    callCount: true,
+    p50: true,
+    p95: true,
+    p99: false,
+    min: false,
+    max: false,
+    stddev: false,
+    time: false
+  });
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const toggleColumn = (column: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }));
+  };
+
+  const visibleCount = Object.values(visibleColumns).filter(Boolean).length;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".column-select-container")) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const tableData = useMemo(() => {
     const results: any[] = [];
 
@@ -407,12 +560,16 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel: _file
         path = "";
       }
 
+      // Filter out method and url from tags since they're already in separate columns
+      const { method: _, url: __, ...otherTags } = bucketId;
+      const tagsString = Object.keys(otherTags).length > 0 ? JSON.stringify(otherTags) : "";
+
       results.push({
         method: bucketId.method,
         hostname,
         path,
         queryString,
-        tags: JSON.stringify(bucketId),
+        tags: tagsString,
         statusCounts: statusCountsArray,
         callCount,
         p50,
@@ -430,53 +587,211 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel: _file
     return results;
   }, [displayData]);
 
+  const exportToExcel = useCallback(() => {
+    // Prepare data for Excel export
+    const excelData = tableData.map(row => ({
+      Method: row.method,
+      Hostname: row.hostname,
+      Path: row.path,
+      QueryString: row.queryString,
+      Tags: row.tags,
+      StatusCounts: row.statusCounts.map((sc: any) => `${sc.status}: ${sc.count}`).join(", "),
+      CallCount: row.callCount,
+      P50: row.p50.toFixed(2),
+      P95: row.p95.toFixed(2),
+      P99: row.p99.toFixed(2),
+      Min: row.min.toFixed(2),
+      Max: row.max.toFixed(2),
+      StdDev: row.stddev.toFixed(2),
+      Time: new Date(row.time).toLocaleString()
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
+
+    // Download file
+    XLSX.writeFile(workbook, filename);
+  }, [tableData, fileLabel]);
+
   return (
-    <TABLECONTAINER>
-      <DATATABLE>
+    <>
+      <DOWNLOADBUTTON onClick={exportToExcel}>
+        Download as Excel
+      </DOWNLOADBUTTON>
+      <COLUMNSELECT className="column-select-container">
+        <label>Show Columns:</label>
+        <DROPDOWNBUTTON onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
+          <span>{visibleCount} of 14 columns selected</span>
+          <span className="arrow">{dropdownOpen ? "▲" : "▼"}</span>
+        </DROPDOWNBUTTON>
+        <DROPDOWNMENU $isOpen={dropdownOpen}>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.method}
+              onChange={() => toggleColumn("method")}
+            />
+            Method
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.hostname}
+              onChange={() => toggleColumn("hostname")}
+            />
+            Hostname
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.path}
+              onChange={() => toggleColumn("path")}
+            />
+            Path
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.queryString}
+              onChange={() => toggleColumn("queryString")}
+            />
+            Query String
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.tags}
+              onChange={() => toggleColumn("tags")}
+            />
+            Tags
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.statusCount}
+              onChange={() => toggleColumn("statusCount")}
+            />
+            Status Count
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.callCount}
+              onChange={() => toggleColumn("callCount")}
+            />
+            Call Count
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p50}
+              onChange={() => toggleColumn("p50")}
+            />
+            P50
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p95}
+              onChange={() => toggleColumn("p95")}
+            />
+            P95
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.p99}
+              onChange={() => toggleColumn("p99")}
+            />
+            P99
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.min}
+              onChange={() => toggleColumn("min")}
+            />
+            Min
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.max}
+              onChange={() => toggleColumn("max")}
+            />
+            Max
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.stddev}
+              onChange={() => toggleColumn("stddev")}
+            />
+            Std Dev
+          </DROPDOWNITEM>
+          <DROPDOWNITEM>
+            <input
+              type="checkbox"
+              checked={visibleColumns.time}
+              onChange={() => toggleColumn("time")}
+            />
+            Time
+          </DROPDOWNITEM>
+        </DROPDOWNMENU>
+      </COLUMNSELECT>
+      <TABLECONTAINER>
+        <DATATABLE>
         <thead>
           <tr>
-            <TH>method</TH>
-            <TH>hostname</TH>
-            <TH>path</TH>
-            <TH>queryString</TH>
-            <TH>tags</TH>
-            <TH>statusCount</TH>
-            <TH>callCount</TH>
-            <TH>p50</TH>
-            <TH>p95</TH>
-            <TH>p99</TH>
-            <TH>min</TH>
-            <TH>max</TH>
-            <TH>stddev</TH>
-            <TH>_time</TH>
+            {visibleColumns.method && <TH>method</TH>}
+            {visibleColumns.hostname && <TH>hostname</TH>}
+            {visibleColumns.path && <TH>path</TH>}
+            {visibleColumns.queryString && <TH>queryString</TH>}
+            {visibleColumns.tags && <TH>tags</TH>}
+            {visibleColumns.statusCount && <TH>statusCount</TH>}
+            {visibleColumns.callCount && <TH>callCount</TH>}
+            {visibleColumns.p50 && <TH>p50</TH>}
+            {visibleColumns.p95 && <TH>p95</TH>}
+            {visibleColumns.p99 && <TH>p99</TH>}
+            {visibleColumns.min && <TH>min</TH>}
+            {visibleColumns.max && <TH>max</TH>}
+            {visibleColumns.stddev && <TH>stddev</TH>}
+            {visibleColumns.time && <TH>_time</TH>}
           </tr>
         </thead>
         <tbody>
           {tableData.map((row, idx) => (
             <DATATR key={idx}>
-              <DATATD>{row.method}</DATATD>
-              <DATATD title={row.hostname}>{row.hostname}</DATATD>
-              <DATATD title={row.path}>{row.path}</DATATD>
-              <DATATD>{row.queryString}</DATATD>
-              <DATATD title={row.tags}>{row.tags}</DATATD>
-              <DATATD>
+              {visibleColumns.method && <DATATD>{row.method}</DATATD>}
+              {visibleColumns.hostname && <DATATD title={row.hostname}>{row.hostname}</DATATD>}
+              {visibleColumns.path && <DATATD title={row.path}>{row.path}</DATATD>}
+              {visibleColumns.queryString && <DATATD>{row.queryString}</DATATD>}
+              {visibleColumns.tags && <DATATD title={row.tags}>{row.tags}</DATATD>}
+              {visibleColumns.statusCount && <DATATD>
                 {row.statusCounts.map((sc: any, i: number) => (
                   <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
-              </DATATD>
-              <DATATD>{row.callCount.toLocaleString()}</DATATD>
-              <DATATD>{row.p50.toFixed(2)}</DATATD>
-              <DATATD>{row.p95.toFixed(2)}</DATATD>
-              <DATATD>{row.p99.toFixed(2)}</DATATD>
-              <DATATD>{row.min.toFixed(2)}</DATATD>
-              <DATATD>{row.max.toFixed(2)}</DATATD>
-              <DATATD>{row.stddev.toFixed(2)}</DATATD>
-              <DATATD>{row.time.toLocaleString()}</DATATD>
+              </DATATD>}
+              {visibleColumns.callCount && <DATATD>{row.callCount.toLocaleString()}</DATATD>}
+              {visibleColumns.p50 && <DATATD>{row.p50.toFixed(2)}</DATATD>}
+              {visibleColumns.p95 && <DATATD>{row.p95.toFixed(2)}</DATATD>}
+              {visibleColumns.p99 && <DATATD>{row.p99.toFixed(2)}</DATATD>}
+              {visibleColumns.min && <DATATD>{row.min.toFixed(2)}</DATATD>}
+              {visibleColumns.max && <DATATD>{row.max.toFixed(2)}</DATATD>}
+              {visibleColumns.stddev && <DATATD>{row.stddev.toFixed(2)}</DATATD>}
+              {visibleColumns.time && <DATATD>{row.time.toLocaleString()}</DATATD>}
             </DATATR>
           ))}
         </tbody>
       </DATATABLE>
     </TABLECONTAINER>
+    </>
   );
 };
 

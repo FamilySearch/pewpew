@@ -4,7 +4,7 @@ type Check = [string, CheckType];
 
 // Initialize WASM module once
 let wasmInitialized = false;
-async function ensureWasmInit() {
+async function ensureWasmInit () {
   if (!wasmInitialized) {
     await init();
     wasmInitialized = true;

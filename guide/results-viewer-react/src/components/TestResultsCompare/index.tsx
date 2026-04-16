@@ -215,7 +215,7 @@ const TH = styled.th<{ $hidden?: boolean }>`
   top: 0;
   z-index: 10;
   font-size: 9px;
-  display: ${props => props.$hidden ? 'none' : 'table-cell'};
+  display: ${props => props.$hidden ? "none" : "table-cell"};
   line-height: 1.2;
 `;
 
@@ -229,7 +229,7 @@ const DATATD = styled.td<{ $hidden?: boolean }>`
   font-size: 9px;
   line-height: 1.2;
   vertical-align: top;
-  display: ${props => props.$hidden ? 'none' : 'table-cell'};
+  display: ${props => props.$hidden ? "none" : "table-cell"};
   overflow-wrap: break-word;
 `;
 
@@ -795,12 +795,12 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.column-select-container')) {
+      if (!target.closest(".column-select-container")) {
         setDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const tableData = useMemo(() => {
@@ -920,14 +920,14 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
         <label>Show Columns:</label>
         <DROPDOWNBUTTON onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
           <span>{visibleCount} of 14 columns selected</span>
-          <span className="arrow">{dropdownOpen ? '▲' : '▼'}</span>
+          <span className="arrow">{dropdownOpen ? "▲" : "▼"}</span>
         </DROPDOWNBUTTON>
         <DROPDOWNMENU $isOpen={dropdownOpen}>
           <DROPDOWNITEM>
             <input
               type="checkbox"
               checked={visibleColumns.method}
-              onChange={() => toggleColumn('method')}
+              onChange={() => toggleColumn("method")}
             />
             Method
           </DROPDOWNITEM>
@@ -935,7 +935,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.hostname}
-              onChange={() => toggleColumn('hostname')}
+              onChange={() => toggleColumn("hostname")}
             />
             Hostname
           </DROPDOWNITEM>
@@ -943,7 +943,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.path}
-              onChange={() => toggleColumn('path')}
+              onChange={() => toggleColumn("path")}
             />
             Path
           </DROPDOWNITEM>
@@ -951,7 +951,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.queryString}
-              onChange={() => toggleColumn('queryString')}
+              onChange={() => toggleColumn("queryString")}
             />
             Query String
           </DROPDOWNITEM>
@@ -959,7 +959,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.tags}
-              onChange={() => toggleColumn('tags')}
+              onChange={() => toggleColumn("tags")}
             />
             Tags
           </DROPDOWNITEM>
@@ -967,7 +967,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.statusCount}
-              onChange={() => toggleColumn('statusCount')}
+              onChange={() => toggleColumn("statusCount")}
             />
             Status Count
           </DROPDOWNITEM>
@@ -975,7 +975,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.callCount}
-              onChange={() => toggleColumn('callCount')}
+              onChange={() => toggleColumn("callCount")}
             />
             Call Count
           </DROPDOWNITEM>
@@ -983,7 +983,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.p50}
-              onChange={() => toggleColumn('p50')}
+              onChange={() => toggleColumn("p50")}
             />
             p50 (Median)
           </DROPDOWNITEM>
@@ -991,7 +991,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.p95}
-              onChange={() => toggleColumn('p95')}
+              onChange={() => toggleColumn("p95")}
             />
             p95
           </DROPDOWNITEM>
@@ -999,7 +999,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.p99}
-              onChange={() => toggleColumn('p99')}
+              onChange={() => toggleColumn("p99")}
             />
             p99
           </DROPDOWNITEM>
@@ -1007,7 +1007,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.min}
-              onChange={() => toggleColumn('min')}
+              onChange={() => toggleColumn("min")}
             />
             Min
           </DROPDOWNITEM>
@@ -1015,7 +1015,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.max}
-              onChange={() => toggleColumn('max')}
+              onChange={() => toggleColumn("max")}
             />
             Max
           </DROPDOWNITEM>
@@ -1023,7 +1023,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.stddev}
-              onChange={() => toggleColumn('stddev')}
+              onChange={() => toggleColumn("stddev")}
             />
             Std Deviation
           </DROPDOWNITEM>
@@ -1031,7 +1031,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
             <input
               type="checkbox"
               checked={visibleColumns.time}
-              onChange={() => toggleColumn('time')}
+              onChange={() => toggleColumn("time")}
             />
             Time
           </DROPDOWNITEM>

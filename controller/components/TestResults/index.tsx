@@ -1056,12 +1056,16 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         path = "";
       }
 
+      // Filter out method and url from tags since they're already in separate columns
+      const { method: _, url: __, ...otherTags } = bucketId;
+      const tagsString = Object.keys(otherTags).length > 0 ? JSON.stringify(otherTags) : "";
+
       results.push({
         method: bucketId.method,
         hostname,
         path,
         queryString,
-        tags: JSON.stringify(bucketId),
+        tags: tagsString,
         statusCounts: statusCountsArray,
         callCount,
         p50,

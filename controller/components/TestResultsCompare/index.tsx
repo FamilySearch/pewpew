@@ -1096,16 +1096,16 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             }
 
             // Find matching endpoints
-            const matchedEndpoints: Array<{
+            const matchedEndpoints: {
               key: string;
               method: string;
               hostname: string;
               path: string;
               baselineData: DataPoint[];
               comparisonData: DataPoint[];
-            }> = [];
+            }[] = [];
 
-            for (const [key, baselineData] of baselineMap.entries()) {
+            for (const [key, baselineEndpointData] of baselineMap.entries()) {
               if (comparisonMap.has(key)) {
                 const [method, hostname, path] = key.split("||");
                 matchedEndpoints.push({
@@ -1113,7 +1113,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                   method,
                   hostname,
                   path,
-                  baselineData,
+                  baselineData: baselineEndpointData,
                   comparisonData: comparisonMap.get(key)!
                 });
               }
@@ -1153,12 +1153,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               );
             };
 
-            return matchedEndpoints.map(({ key, method, hostname, path, baselineData, comparisonData }) => {
+            return matchedEndpoints.map(({ key, method, hostname, path, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;
 
-              for (const dp of baselineData) {
+              for (const dp of endpointBaselineData) {
                 if (!baselineRTT) {
                   baselineRTT = dp.rttHistogram.clone();
                 } else {
@@ -1171,7 +1171,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               let comparisonRTT = null;
               let comparisonCallCount = 0;
 
-              for (const dp of comparisonData) {
+              for (const dp of endpointComparisonData) {
                 if (!comparisonRTT) {
                   comparisonRTT = dp.rttHistogram.clone();
                 } else {

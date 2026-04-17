@@ -1068,6 +1068,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       let hostname = "";
       let path = "";
       let queryString = "";
+      let tags: string = "";      
       try {
         const urlObj = new URL(bucketId.url);
         hostname = urlObj.hostname;

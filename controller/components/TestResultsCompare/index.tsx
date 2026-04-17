@@ -217,6 +217,52 @@ const DATATR = styled.tr`
   }
 `;
 
+/** Change indicator with color coding */
+const CHANGEVALUE = styled.span<{ $isPositive?: boolean; $isNegative?: boolean }>`
+  color: ${props => {
+    if (props.$isPositive) {
+      return "#4CAF50";
+    } // Green for improvements
+    if (props.$isNegative) {
+      return "#f44336";
+    } // Red for regressions
+    return "#999"; // Gray for no change
+  }};
+  font-weight: ${props => (props.$isPositive || props.$isNegative) ? "bold" : "normal"};
+`;
+
+/** Tab navigation container */
+const TABCONTAINER = styled.div`
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #444;
+  margin: 2em 0 1em 0;
+`;
+
+/** Individual tab button */
+const TAB = styled.button<{ $active?: boolean }>`
+  background-color: ${props => props.$active ? "#2a2a2a" : "#1a1a1a"};
+  color: ${props => props.$active ? "white" : "#999"};
+  border: none;
+  border-bottom: ${props => props.$active ? "2px solid #6a7bb4" : "2px solid transparent"};
+  padding: 1em 2em;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: ${props => props.$active ? "bold" : "normal"};
+  transition: all 0.2s;
+  margin-bottom: -2px;
+
+  &:hover {
+    background-color: #2a2a2a;
+    color: white;
+  }
+`;
+
+/** Tab content wrapper */
+const TABCONTENT = styled.div`
+  margin-top: 2em;
+`;
+
 /** Download button for Excel export */
 const DOWNLOADBUTTON = styled.button`
   background-color: #4CAF50;
@@ -562,7 +608,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
 
       // Filter out method and url from tags since they're already in separate columns
       const { method: _, url: __, ...otherTags } = bucketId;
-      const tagsString = Object.keys(otherTags).length > 0 ? JSON.stringify(otherTags) : "";
+      const tagsString = JSON.stringify(otherTags);
 
       results.push({
         method: bucketId.method,
@@ -807,6 +853,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 }) => {
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<"endpoint" | "final">("endpoint");
 
   // Extract unique HTTP methods from both datasets
   const availableMethods = useMemo(() => {
@@ -1009,17 +1056,212 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
         </CHARTCOLUMN>
       </COMPARISONCHARTSGRID>
 
-      <H1>Final Results Comparison</H1>
-      <COMPARISONCHARTSGRID>
-        <CHARTCOLUMN>
-          <H2>{baselineLabel}</H2>
-          <FinalResultsTable displayData={filteredBaselineData} fileLabel={baselineLabel} />
-        </CHARTCOLUMN>
-        <CHARTCOLUMN>
-          <H2>{comparisonLabel}</H2>
-          <FinalResultsTable displayData={filteredComparisonData} fileLabel={comparisonLabel} />
-        </CHARTCOLUMN>
-      </COMPARISONCHARTSGRID>
+      <TABCONTAINER>
+        <TAB $active={activeTab === "endpoint"} onClick={() => setActiveTab("endpoint")}>
+          Endpoint Comparison
+        </TAB>
+        <TAB $active={activeTab === "final"} onClick={() => setActiveTab("final")}>
+          Final Results Comparison
+        </TAB>
+      </TABCONTAINER>
+
+      {activeTab === "endpoint" && (
+        <TABCONTENT>
+          <p style={{ textAlign: "center", color: "#999", marginBottom: "1em" }}>
+            Per-endpoint metrics comparison (green = improvement, red = regression)
+          </p>
+          {(() => {
+            // Create a map to match endpoints between baseline and comparison
+            const baselineMap = new Map<string, DataPoint[]>();
+            const comparisonMap = new Map<string, DataPoint[]>();
+
+            // Build baseline map
+            for (const [bucketId, dataPoints] of filteredBaselineData) {
+              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              if (baselineMap.has(key)) {
+                baselineMap.get(key)!.push(...dataPoints);
+              } else {
+                baselineMap.set(key, [...dataPoints]);
+              }
+            }
+
+            // Build comparison map
+            for (const [bucketId, dataPoints] of filteredComparisonData) {
+              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              if (comparisonMap.has(key)) {
+                comparisonMap.get(key)!.push(...dataPoints);
+              } else {
+                comparisonMap.set(key, [...dataPoints]);
+              }
+            }
+
+            // Find matching endpoints
+            const matchedEndpoints: Array<{
+              key: string;
+              method: string;
+              hostname: string;
+              path: string;
+              baselineData: DataPoint[];
+              comparisonData: DataPoint[];
+            }> = [];
+
+            for (const [key, baselineData] of baselineMap.entries()) {
+              if (comparisonMap.has(key)) {
+                const [method, hostname, path] = key.split("||");
+                matchedEndpoints.push({
+                  key,
+                  method,
+                  hostname,
+                  path,
+                  baselineData,
+                  comparisonData: comparisonMap.get(key)!
+                });
+              }
+            }
+
+            const renderMetricRow = (label: string, baselineVal: number | null | undefined, comparisonVal: number | null | undefined, isCount = false) => {
+              const diff = baselineVal !== null && baselineVal !== undefined && comparisonVal !== null && comparisonVal !== undefined
+                ? comparisonVal - baselineVal
+                : null;
+              const percent = baselineVal && diff !== null && baselineVal !== 0 ? (diff / baselineVal) * 100 : null;
+
+              return (
+                <DATATR key={label}>
+                  <DATATD>{label}</DATATD>
+                  <DATATD>
+                    {baselineVal !== null && baselineVal !== undefined
+                      ? isCount ? baselineVal.toLocaleString() : `${baselineVal.toFixed(2)}ms`
+                      : "N/A"}
+                  </DATATD>
+                  <DATATD>
+                    {comparisonVal !== null && comparisonVal !== undefined
+                      ? isCount ? comparisonVal.toLocaleString() : `${comparisonVal.toFixed(2)}ms`
+                      : "N/A"}
+                  </DATATD>
+                  <DATATD>
+                    {diff !== null ? (
+                      <CHANGEVALUE
+                        $isPositive={!isCount && diff < 0}
+                        $isNegative={!isCount && diff > 0}
+                      >
+                        {diff > 0 ? "+" : ""}{isCount ? diff.toLocaleString() : `${diff.toFixed(2)}ms`}
+                        {percent !== null && ` (${diff > 0 ? "+" : ""}${percent.toFixed(1)}%)`}
+                      </CHANGEVALUE>
+                    ) : "N/A"}
+                  </DATATD>
+                </DATATR>
+              );
+            };
+
+            return matchedEndpoints.map(({ key, method, hostname, path, baselineData, comparisonData }) => {
+              // Aggregate baseline data for this endpoint
+              let baselineRTT = null;
+              let baselineCallCount = 0;
+
+              for (const dp of baselineData) {
+                if (!baselineRTT) {
+                  baselineRTT = dp.rttHistogram.clone();
+                } else {
+                  baselineRTT.add(dp.rttHistogram);
+                }
+                baselineCallCount += Number(dp.rttHistogram.getTotalCount());
+              }
+
+              // Aggregate comparison data for this endpoint
+              let comparisonRTT = null;
+              let comparisonCallCount = 0;
+
+              for (const dp of comparisonData) {
+                if (!comparisonRTT) {
+                  comparisonRTT = dp.rttHistogram.clone();
+                } else {
+                  comparisonRTT.add(dp.rttHistogram);
+                }
+                comparisonCallCount += Number(dp.rttHistogram.getTotalCount());
+              }
+
+              // Calculate metrics
+              const baselineMetrics = baselineRTT ? {
+                avg: baselineRTT.getMean() / 1000,
+                min: Number(baselineRTT.getMinNonZeroValue()) / 1000,
+                max: Number(baselineRTT.getMaxValue()) / 1000,
+                stdDev: Number(baselineRTT.getStdDeviation()) / 1000,
+                p50: Number(baselineRTT.getValueAtPercentile(50)) / 1000,
+                p90: Number(baselineRTT.getValueAtPercentile(90)) / 1000,
+                p95: Number(baselineRTT.getValueAtPercentile(95)) / 1000,
+                p99: Number(baselineRTT.getValueAtPercentile(99)) / 1000,
+                callCount: baselineCallCount
+              } : null;
+
+              const comparisonMetrics = comparisonRTT ? {
+                avg: comparisonRTT.getMean() / 1000,
+                min: Number(comparisonRTT.getMinNonZeroValue()) / 1000,
+                max: Number(comparisonRTT.getMaxValue()) / 1000,
+                stdDev: Number(comparisonRTT.getStdDeviation()) / 1000,
+                p50: Number(comparisonRTT.getValueAtPercentile(50)) / 1000,
+                p90: Number(comparisonRTT.getValueAtPercentile(90)) / 1000,
+                p95: Number(comparisonRTT.getValueAtPercentile(95)) / 1000,
+                p99: Number(comparisonRTT.getValueAtPercentile(99)) / 1000,
+                callCount: comparisonCallCount
+              } : null;
+
+              // Free histograms
+              if (baselineRTT) {
+                baselineRTT.free();
+              }
+              if (comparisonRTT) {
+                comparisonRTT.free();
+              }
+
+              return (
+                <div key={key} style={{ marginBottom: "3em" }}>
+                  <H2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
+                    {method} {hostname}{path}
+                  </H2>
+                  <TABLECONTAINER>
+                    <DATATABLE>
+                      <thead>
+                        <tr>
+                          <TH>Metric</TH>
+                          <TH title={baselineLabel}>Baseline</TH>
+                          <TH title={comparisonLabel}>Comparison</TH>
+                          <TH>Change</TH>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {renderMetricRow("Calls", baselineMetrics?.callCount, comparisonMetrics?.callCount, true)}
+                        {renderMetricRow("Avg Response Time", baselineMetrics?.avg, comparisonMetrics?.avg)}
+                        {renderMetricRow("Min Response Time", baselineMetrics?.min, comparisonMetrics?.min)}
+                        {renderMetricRow("Max Response Time", baselineMetrics?.max, comparisonMetrics?.max)}
+                        {renderMetricRow("Std Dev", baselineMetrics?.stdDev, comparisonMetrics?.stdDev)}
+                        {renderMetricRow("P50", baselineMetrics?.p50, comparisonMetrics?.p50)}
+                        {renderMetricRow("P90", baselineMetrics?.p90, comparisonMetrics?.p90)}
+                        {renderMetricRow("P95", baselineMetrics?.p95, comparisonMetrics?.p95)}
+                        {renderMetricRow("P99", baselineMetrics?.p99, comparisonMetrics?.p99)}
+                      </tbody>
+                    </DATATABLE>
+                  </TABLECONTAINER>
+                </div>
+              );
+            });
+          })()}
+        </TABCONTENT>
+      )}
+
+      {activeTab === "final" && (
+        <TABCONTENT>
+          <COMPARISONCHARTSGRID>
+            <CHARTCOLUMN>
+              <H2>{baselineLabel}</H2>
+              <FinalResultsTable displayData={filteredBaselineData} fileLabel={baselineLabel} />
+            </CHARTCOLUMN>
+            <CHARTCOLUMN>
+              <H2>{comparisonLabel}</H2>
+              <FinalResultsTable displayData={filteredComparisonData} fileLabel={comparisonLabel} />
+            </CHARTCOLUMN>
+          </COMPARISONCHARTSGRID>
+        </TABCONTENT>
+      )}
     </CONTAINER>
   );
 };

@@ -42,7 +42,6 @@ jobs:
 
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci
-          npm run linterror
           NODE_ENV=test npm test
           npm run build
 

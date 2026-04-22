@@ -893,15 +893,19 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       let hostname: string;
       let path: string;
       let queryString: string;
+      let tags: string;
       try {
         const urlObj = new URL(bucketId.url);
         hostname = urlObj.hostname;
         path = urlObj.pathname;
         queryString = urlObj.search.slice(1); // Remove leading '?'
+        const { method: _m, url: _u, ...rest } = bucketId;
+        tags = JSON.stringify(rest);
       } catch {
         hostname = bucketId.url;
         path = "";
         queryString = "";
+        tags = JSON.stringify(bucketId);
       }
 
       results.push({
@@ -909,7 +913,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
         hostname,
         path,
         queryString,
-        tags: JSON.stringify(bucketId),
+        tags,
         statusCounts: statusCountsArray,
         callCount,
         p50,

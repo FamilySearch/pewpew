@@ -1305,7 +1305,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
 
       // Filter out method and url from tags since they're already in separate columns
       const { method: _, url: __, ...otherTags } = bucketId;
-      const tagsString = Object.keys(otherTags).length > 0 ? JSON.stringify(otherTags) : "";
+      const tagsString = JSON.stringify(otherTags);
 
       results.push({
         method: bucketId.method,

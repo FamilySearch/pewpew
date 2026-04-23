@@ -1,4 +1,4 @@
-import { ParsedFileEntry } from "./model";
+import type { ParsedFileEntry } from "./model";
 
 export interface MinMaxTime {
   startTime?: string;

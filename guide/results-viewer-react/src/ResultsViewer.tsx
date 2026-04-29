@@ -34,18 +34,18 @@ const ModeToggle = styled.div`
   margin: 2em 0;
 `;
 
-const ModeButton = styled.button<{ active: boolean }>`
-  background-color: ${props => props.active ? "#007bff" : "#6c757d"};
+const ModeButton = styled.button<{ $active: boolean }>`
+  background-color: ${props => props.$active ? "#007bff" : "#6c757d"};
   color: white;
   border: none;
   padding: 0.5em 1em;
   margin: 0 0.5em;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: ${props => props.active ? "bold" : "normal"};
+  font-weight: ${props => props.$active ? "bold" : "normal"};
 
   &:hover {
-    background-color: ${props => props.active ? "#0056b3" : "#545b62"};
+    background-color: ${props => props.$active ? "#0056b3" : "#545b62"};
   }
 `;
 
@@ -279,13 +279,13 @@ export const ResultsViewer = () => {
 
       <ModeToggle>
         <ModeButton
-          active={state.mode === "single"}
+          $active={state.mode === "single"}
           onClick={() => setMode("single")}
         >
           Single Results
         </ModeButton>
         <ModeButton
-          active={state.mode === "compare"}
+          $active={state.mode === "compare"}
           onClick={() => setMode("compare")}
         >
           Compare Results

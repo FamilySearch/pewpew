@@ -350,7 +350,7 @@ describe("PewPewTest Integration Test", () => {
       };
       const testMessage: PpaasTestMessage = new PpaasTestMessage(expectedTestMessage);
       log("Send Test request", LogLevel.DEBUG, testMessage.sanitizedCopy());
-      await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value);
+      await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value!);
       log("Send Test Success: " + testMessage.toString(), LogLevel.DEBUG);
     });
 

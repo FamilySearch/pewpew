@@ -63,7 +63,7 @@ const responseLoggers: ResponseLogger = {
   "response": { display: "start-line", name: "response", value: "response[\"start-line\"]" },
   "status": { display: "status", name: "status", value: "response.status" },
   "responseHeaders": { display: "headers", name: "responseHeaders", value: "response.headers" },
-  "responseHeadersAll": { display: "headers_all", name: "responseHeadersAll", value: "response[\"headers-all\"]" },
+  "responseHeadersAll": { display: "headers_all", name: "responseHeadersAll", value: "response.headers_all" },
   "responseBody": { display: "body", name: "responseBody", value: "response.body" }
 };
 const timingLoggers: TimingLogger = {
@@ -387,18 +387,18 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
         </button>
       </Span>
       <table>
-        <tbody>
-          {data.select.map((item: LoggerSelectEntry, index: number) => {
-            return (
-              <tr key={index}>
-                <td><button id={item.id} onClick={() => handleClickDeleteItem(item.id, item.name)}>X</button></td>
-                <td>{item.name}</td>
-                <td>:</td>
-                <td>{item.value}</td>
-              </tr>);
-          })}
-        </tbody>
-      </table>
+      <tbody>
+        {data.select.map((item: LoggerSelectEntry, index: number) => {
+          return (
+            <tr key={index}>
+              <td><button id={item.id} onClick={() => handleClickDeleteItem(item.id, item.name)} title="Remove Entry">🗑️</button></td>
+              <td>{item.name}</td>
+              <td>:</td>
+              <td>{item.value}</td>
+            </tr>);
+        })}
+      </tbody>
+    </table>
     </Modal>
   );
 });

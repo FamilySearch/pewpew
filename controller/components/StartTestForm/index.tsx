@@ -59,7 +59,7 @@ const UploadTestButton = styled.button`
   text-align: center;
 `;
 
-const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <Info>
+const notAuthorizedMessageOpenId = (username?: string | null): JSX.Element => <Info data-testid="not-authorized-message">
   <Column>
   <p>
     {username ? `'${username}'` : "User"} is not authorized to run tests.<br/>
@@ -591,7 +591,7 @@ export const StartTestForm = ({
               onClick={onChangeHandlerCheckbox}
             /></ContentDiv>
           </CommonDiv>
-          {(authPermission === undefined || authPermission === AuthPermission.Admin) ? <CommonDiv>
+          {(authPermission === undefined || authPermission === AuthPermission.Admin) ? <CommonDiv data-testid="bypass-parser-section">
             <LabelDiv><label> Bypass Config Parser &nbsp;</label></LabelDiv>
             <ContentDiv><CheckboxButton
               id="bypassParser"
@@ -603,9 +603,9 @@ export const StartTestForm = ({
           <PewPewVersions name="pewpewVersion" {...versionInitalProps} pewpewVersion={state.pewpewVersion} onChange={onChangeHandlerSelect} />
           <CommonDiv>
             <label> Run Test
-              <input type="radio" checked={!state.scheduleTest} onChange={() => setState({ scheduleTest: false })} />
+              <input data-testid="schedule-now-radio" type="radio" checked={!state.scheduleTest} onChange={() => setState({ scheduleTest: false })} />
               Now
-              <input type="radio" checked={state.scheduleTest} onChange={() => setState({ scheduleTest: true })} />
+              <input data-testid="schedule-future-radio" type="radio" checked={state.scheduleTest} onChange={() => setState({ scheduleTest: true })} />
               In the future
             </label>
           </CommonDiv>
@@ -629,9 +629,9 @@ export const StartTestForm = ({
             </CommonDiv>
             <CommonDiv>
               <label> Recurring
-                <input type="radio" checked={state.recurringTest} onChange={() => setRecurring()} />
+                <input data-testid="recurring-yes-radio" type="radio" checked={state.recurringTest} onChange={() => setRecurring()} />
                 Yes
-                <input type="radio" checked={!state.recurringTest} onChange={() => setState({ recurringTest: false })} />
+                <input data-testid="recurring-no-radio" type="radio" checked={!state.recurringTest} onChange={() => setState({ recurringTest: false })} />
                 No
               </label>
             </CommonDiv>
@@ -672,7 +672,7 @@ export const StartTestForm = ({
                   />
                   <Info>Files Uploading: {(storybookProps as StartTestPropsStorybook).uploadProgress || state.uploadProgress}%</Info>
                 </Column>
-              : <UploadTestButton type="submit" onClick={onClickHandlerSubmit} disabled={readOnly} >
+              : <UploadTestButton data-testid="submit-test-button" type="submit" onClick={onClickHandlerSubmit} disabled={readOnly} >
                   Upload Files and {state.scheduleTest ? (editSchedule ? "Update Scheduled" : "Schedule") : "Run"} Test
                 </UploadTestButton>
             }
@@ -700,12 +700,12 @@ export const StartTestForm = ({
                       href={PAGE_TEST_HISTORY_FORMAT(state.testId)}>Test Status</LinkButton>
         </Column>}
       </Row>
-      {previousTestData && <Row>
+      {previousTestData && <Row data-testid="prior-yaml-section">
         <Column>
           <Row style={{ textAlign: "left", justifyContent: "left" }}>
             <H3>
               View Prior Yaml File&nbsp;
-              <button onClick={onYamlExpand}><H3>{state.yamlFileExpand ? <>&uArr;</> : <>&dArr;</>}</H3></button>
+              <button data-testid="expand-yaml-button" onClick={onYamlExpand}><H3>{state.yamlFileExpand ? <>&uArr;</> : <>&dArr;</>}</H3></button>
             </H3>
           </Row>
           {state.yamlFileExpand &&

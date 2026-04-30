@@ -85,7 +85,7 @@ describe("PpaasTestMessage", () => {
 
   it("Send Test Should succeed", (done: Mocha.Done) => {
     mockSendMessage();
-    ppaasUnitTestMessage.send(QUEUE_URL_TEST.keys().next().value).then(() => {
+    ppaasUnitTestMessage.send(QUEUE_URL_TEST.keys().next().value!).then(() => {
       // As long as we don't throw, it passes
       done();
     }).catch((error) => {

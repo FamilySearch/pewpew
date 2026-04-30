@@ -55,7 +55,7 @@ export const PewPewVersions = ({
     <VersionDiv>
       <VersionDivLabel><label>PewPew Version </label></VersionDivLabel>
       {loading && <VersionDivSelect>Loading...</VersionDivSelect>}
-      {!loading && !error && <VersionDivSelect><select name={name} value={pewpewVersion} onChange={onChange}>{optionItems} </select></VersionDivSelect>}
+      {!loading && !error && <VersionDivSelect><select name={name} data-testid="pewpew-version-select" value={pewpewVersion} onChange={onChange}>{optionItems} </select></VersionDivSelect>}
       {error && <VersionDivSelect><Danger>Could not load the current PewPew Versions</Danger></VersionDivSelect>}
       <Toaster id="toaster" message={toasterMessage}/>
     </VersionDiv>

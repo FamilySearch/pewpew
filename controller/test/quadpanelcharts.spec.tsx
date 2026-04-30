@@ -8,6 +8,9 @@
  * - Component structure
  */
 
+// Must be the first import so DOM globals are present before
+// @testing-library/react's render() is loaded.
+import "jsdom-global/register";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 

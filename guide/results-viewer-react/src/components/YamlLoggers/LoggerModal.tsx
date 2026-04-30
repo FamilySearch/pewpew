@@ -396,7 +396,7 @@ export const LoggerModal = forwardRef(({ onClose, changeLogger, data }: LoggerMo
         {data.select.map((item: LoggerSelectEntry, index: number) => {
           return (
             <tr key={index}>
-              <td><button id={item.id} onClick={() => handleClickDeleteItem(item.id, item.name)}>X</button></td>
+              <td><button id={item.id} onClick={() => handleClickDeleteItem(item.id, item.name)} title="Remove Entry">🗑️</button></td>
               <td>{item.name}</td>
               <td>:</td>
               <td>{item.value}</td>

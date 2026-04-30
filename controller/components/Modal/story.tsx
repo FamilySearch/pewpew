@@ -88,7 +88,7 @@ const ModalUploadDemo = () => {
          <div>
            {files.map((file, index) => (
              <div style={{paddingTop: "13px"}} key={index}>
-               <button name={`remove${index}`} style={{marginRight: "5px", marginTop: "40px"}} onClick={() => onRemoveFile(index)}>X</button>
+               <button name={`remove${index}`} style={{marginRight: "5px", marginTop: "40px"}} onClick={() => onRemoveFile(index)}>🗑️</button>
                {file.name}
              </div>
            ))}

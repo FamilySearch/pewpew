@@ -64,7 +64,7 @@ const ModalUploadHarDemo = () => {
          <div>
            {files.map((file, index) => (
              <div style={{paddingTop: "13px"}} key={index}>
-               <button name={`remove${index}`} style={{marginRight: "5px", marginTop: "40px"}} onClick={() => onRemoveFile(index)}>X</button>
+               <button name={`remove${index}`} style={{marginRight: "5px", marginTop: "40px"}} onClick={() => onRemoveFile(index)}>🗑️</button>
                {file.name}
              </div>
            ))}
@@ -109,7 +109,7 @@ const ModalListDemo = () => {
                 return (
                   <tr key={index}>
                     <td className="tableButton">
-                      <button id="providerList" name="list item" value={item.id}>X</button>
+                      <button id="providerList" name="list item" value={item.id}>🗑️</button>
                     </td>
                     <td className="tableListItem">{item.value}</td>
                   </tr>);

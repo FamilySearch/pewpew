@@ -121,7 +121,7 @@ async function getInstanceId (): Promise<string> {
     globalInstanceId = await ec2.getInstanceId();
     log("instanceId new string: " + globalInstanceId, LogLevel.DEBUG, globalInstanceId);
   } catch (error) {
-    globalInstanceId = error;
+    globalInstanceId = error instanceof Error ? error : new Error(String(error));
     log("instanceId new Error: " + globalInstanceId, LogLevel.DEBUG, globalInstanceId);
     throw globalInstanceId;
   }
@@ -360,7 +360,7 @@ export class PewPewTest {
       try {
         await fs.mkdir(this.localPath); // What to do if it already exists?
       } catch (error) {
-        if (!error || error.code !== "EEXIST") {
+        if (!error || (error as NodeJS.ErrnoException).code !== "EEXIST") {
           throw error;
         }
       }

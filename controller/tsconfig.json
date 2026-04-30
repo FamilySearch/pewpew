@@ -8,6 +8,7 @@
       "esnext"
     ],
     "allowJs": true,
+    "rootDir": ".",
     "skipLibCheck": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -19,6 +20,23 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true
+  },
+  // TS 6 narrowed automatic @types acquisition — @types/mocha and @types/chai
+  // no longer get auto-injected globally. Listing them in the main
+  // compilerOptions.types would also restrict Next.js' build, so the override
+  // is scoped to ts-node here (used by mocha when running tests).
+  // The interaction is amplified by `--require jsdom-global/register` in the
+  // testonly/test/coverage scripts: jsdom-global loads before ts-node and
+  // disrupts auto-type discovery. Reordering the requires in .mocharc.json
+  // works for single-file mocha runs but not for directory-glob runs, so this
+  // override is the simpler fix. If TS 7 changes ts-node's handling of this
+  // block, alternatives are: (a) drop jsdom-global/register globally and only
+  // import jsdom in the 3 .spec.tsx files that need DOM; (b) set
+  // TS_NODE_PROJECT=tsconfig.test.json and put types there.
+  "ts-node": {
+    "compilerOptions": {
+      "types": ["node", "mocha", "chai"]
+    }
   },
   "exclude": [
     "node_modules",

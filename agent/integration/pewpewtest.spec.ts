@@ -122,7 +122,7 @@ describe("PewPewTest Integration Test", () => {
       };
       const testMessage: PpaasTestMessage = new PpaasTestMessage(expectedTestMessage);
       log("Send Test request", LogLevel.DEBUG, testMessage.sanitizedCopy());
-      await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value);
+      await testMessage.send(sqs.QUEUE_URL_TEST.keys().next().value!);
       log("Send Test Success: " + testMessage.toString(), LogLevel.DEBUG);
     });
 
@@ -206,7 +206,7 @@ describe("PewPewTest Integration Test", () => {
           const result = await s3.getObject(`${ppaasTestId!.s3Folder}/${filename}`);
           expect(result, "result").to.not.equal(undefined);
           expect(result.ContentType, "result.ContentType").to.equal("application/json");
-          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value;
+          const [tagKeyExtra, tagValueExtra]: [string, string] = s3.defaultTestExtraFileTags().entries().next().value!;
           const stdoutFilename = logger.pewpewStdOutFilename(ppaasTestId!.testId);
           const stderrFilename = logger.pewpewStdErrFilename(ppaasTestId!.testId);
           const stdouttags = await s3.getTags({ s3Folder: ppaasTestId!.s3Folder, filename: stdoutFilename });

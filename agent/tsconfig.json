@@ -6,7 +6,7 @@
     }],
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "isolatedModules": true,
     "jsx": "react",
     "skipLibCheck": true,
@@ -25,7 +25,10 @@
     "strictPropertyInitialization": true,
     "sourceMap": true,
     "outDir": "dist",
-    "baseUrl": "src",
+    // TS 6 narrowed automatic @types acquisition — @types/mocha and
+    // @types/chai are no longer auto-injected globally for test files.
+    // Listing them here restores the ambient describe/it/Mocha.Done globals.
+    "types": ["node", "mocha", "chai"],
     "lib": ["ES2022", "esnext.asynciterable", "dom", "dom.iterable"]
   },
   "exclude": ["node_modules"],

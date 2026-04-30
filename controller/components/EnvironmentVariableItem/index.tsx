@@ -44,7 +44,7 @@ export const EnvironmentVariableItem = ({
         <Input name={name + "_type"} type="checkbox" checked={isPassword} onChange={onChange} title={isPassword ? "Value will be hidden and not saved in S3" : undefined} />
       </ButtonCell>
       <ButtonCell>
-        <button name={name} onClick={onRemove} title="Delete this value">X</button>
+        <button name={name} onClick={onRemove} title="Delete this value">🗑️</button>
       </ButtonCell>
     </React.Fragment>
   );

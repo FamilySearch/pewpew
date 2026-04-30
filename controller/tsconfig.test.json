@@ -25,6 +25,11 @@
     "strictPropertyInitialization": true,
     "sourceMap": true,
     "outDir": "dist",
+    // TS 6 narrowed automatic @types acquisition. Used by build:test
+    // (`tsc -p tsconfig.test.json --noEmit`) which runs tsc directly and so
+    // can't inherit the ts-node override block from tsconfig.json. See
+    // tsconfig.json for the full reasoning.
+    "types": ["node", "mocha", "chai"],
     "lib": ["ES2022", "esnext.asynciterable", "dom", "dom.iterable"]
   },
   "exclude": ["node_modules", "pages/**/*", "components/**/*", "acceptance/wdio/**/*"],

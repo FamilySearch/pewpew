@@ -8,6 +8,7 @@
       "esnext"
     ],
     "allowJs": true,
+    "rootDir": ".",
     "skipLibCheck": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -19,6 +20,18 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true
+  },
+  // TS 6 narrowed automatic @types acquisition — @types/mocha and @types/chai
+  // no longer get auto-injected globally when ts-node compiles test files via
+  // mocha. Listing them in the main compilerOptions.types would also restrict
+  // Next.js' build, so the override is scoped to ts-node here. If TS 7
+  // changes ts-node's handling of this block, alternatives are: (a) set
+  // TS_NODE_PROJECT=tsconfig.test.json in the npm scripts and put `types`
+  // there; (b) add `import "mocha"` to a shared file every spec imports.
+  "ts-node": {
+    "compilerOptions": {
+      "types": ["node", "mocha", "chai"]
+    }
   },
   "exclude": [
     "node_modules",

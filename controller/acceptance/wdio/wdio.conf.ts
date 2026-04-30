@@ -1,3 +1,4 @@
+import "dotenv-flow/config";
 import { basename, join } from "path";
 import { integrationUrl } from "../util.js";
 import { tmpdir } from "os";

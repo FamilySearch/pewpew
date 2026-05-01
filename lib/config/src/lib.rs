@@ -168,8 +168,8 @@ mod either {
                     // file providers
                     let mut provider_files = lt
                         .providers
-                        .iter()
-                        .filter_map(|(_, v)| {
+                        .values()
+                        .filter_map(|v| {
                             if let v1::Provider::File(f) = v {
                                 Some(f.path.as_str().into())
                             } else {
@@ -202,8 +202,8 @@ mod either {
                     // file providers
                     let mut provider_files = lt
                         .providers
-                        .iter()
-                        .filter_map(|(_, v)| {
+                        .values()
+                        .filter_map(|v| {
                             if let crate::ProviderType::File(f) = v {
                                 Some(f.path.get().as_str().into())
                             } else {

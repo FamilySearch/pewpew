@@ -405,14 +405,14 @@ export async function sendTestScalingMessage (sqsQueueName?: string): Promise<st
       StringValue: "test"
     }
   };
-  let queueUrlScale: string = QUEUE_URL_SCALE_IN.values().next().value;
+  let queueUrlScale: string = QUEUE_URL_SCALE_IN.values().next().value!;
   if (QUEUE_URL_SCALE_IN.size !== 1) {
     if (!sqsQueueName || !QUEUE_URL_SCALE_IN.has(sqsQueueName)) {
       throw new Error("You must specify a valid sqsQueueName: " + sqsQueueName);
     }
     queueUrlScale = QUEUE_URL_SCALE_IN.get(sqsQueueName)!;
   } else {
-    sqsQueueName = QUEUE_URL_SCALE_IN.keys().next().value;
+    sqsQueueName = QUEUE_URL_SCALE_IN.keys().next().value!;
   }
   try {
     const sqsMessageRequest: SendMessageCommandInput = {

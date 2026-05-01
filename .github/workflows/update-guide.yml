@@ -52,6 +52,7 @@ jobs:
           # build the results viewer (used by both guide versions)
           cd $RESULTS_VIEWER_REACT_DIR
           npm ci
+          NODE_ENV=test npm test
           npm run build
 
           # build the 0.6.x guide (scripting version)

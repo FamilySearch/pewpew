@@ -98,13 +98,13 @@ export const EnvironmentVariablesList = ({
   };
 
   return (
-    <EnvironmentVariablesDiv className="env-vars-div">
+    <EnvironmentVariablesDiv className="env-vars-div" data-testid="env-vars-list">
       <Div>
-        <AddVariableButton name="addenv" onClick={addItemHandler}>Add Environment Variable</AddVariableButton>
+        <AddVariableButton name="addenv" data-testid="add-env-var-button" onClick={addItemHandler}>Add Environment Variable</AddVariableButton>
       </Div>
       <br/>
       {environmentVariables.length > 0 && <>
-        <Warning title="Use SessionIds only in production">Do Not Use Production Passwords!!!</Warning>
+        <Warning data-testid="env-vars-warning" title="Use SessionIds only in production">Do Not Use Production Passwords!!!</Warning>
         <FlexTable>
           <Row>
             <TextCell>Name</TextCell>

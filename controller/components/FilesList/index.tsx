@@ -17,7 +17,7 @@ export const FilesList = ({
   onClick
 }: FileListProps) => {
   const additionalFileJsx: JSX.Element[] = files.map((file: File | string) => (typeof file === "string") ? file : file.name)
-    .map((filename: string) => <li key={filename}>{filename} <button name={filename} onClick={onClick}>X</button></li>);
+    .map((filename: string) => <li key={filename}>{filename} <button name={filename} onClick={onClick} title="Remove this File">🗑️</button></li>);
   return (
     <React.Fragment>
       {additionalFileJsx.length > 0 && <FilesDiv className="files-div"><ul>{additionalFileJsx}</ul></FilesDiv>}

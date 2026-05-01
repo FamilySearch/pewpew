@@ -1,3 +1,17 @@
+/**
+ * TestResults Component
+ *
+ * Displays load test results with quad panel dashboard, charts, and data tables.
+ *
+ * Features:
+ * - Quad panel charts (Median Duration, Worst 5%, 5xx Errors, All Errors)
+ * - Custom HTML legends for better click handling
+ * - Merge endpoints toggle to group by method+url
+ * - Final Results table with aggregated statistics
+ * - Individual endpoint details with RTT and status charts
+ */
+
+import * as XLSX from "xlsx";
 import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
@@ -36,6 +50,192 @@ const TIMETAKEN = styled.div`
 const CANVASBOX = styled.div`
   position: relative;
   width: calc(55vw - 100px);
+`;
+
+// New Dashboard Styled Components
+const QUADGRID = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-gap: 1.5em;
+  margin: 2em 0;
+  width: 100%;
+`;
+
+const QUADPANEL = styled.div`
+  position: relative;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  padding: 1em;
+  display: flex;
+  flex-direction: column;
+
+  canvas {
+    width: 100% !important;
+    height: 270px !important;
+  }
+`;
+
+const CUSTOMLEGEND = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 1em;
+  padding-top: 1em;
+  border-top: 1px solid #444;
+  justify-content: center;
+`;
+
+const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+  opacity: ${props => props.$hidden ? 0.3 : 1};
+  user-select: none;
+  font-size: 11px;
+  color: #999;
+
+  &:hover {
+    opacity: ${props => props.$hidden ? 0.5 : 0.8};
+  }
+
+  span.color-box {
+    width: 20px;
+    height: 12px;
+    border-radius: 2px;
+  }
+`;
+
+const TOGGLECONTAINER = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 1em 0 2em 0;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  width: fit-content;
+
+  label {
+    color: white;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+  }
+`;
+
+const FILTERCONTAINER = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin: 1em 0 2em 0;
+`;
+
+const FILTERDROPDOWN = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 1em;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+
+  label {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  select {
+    padding: 0.4em 0.8em;
+    background-color: #1a1a1a;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      border-color: #666;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #6a7bb4;
+    }
+  }
+`;
+
+const TABLECONTAINER = styled.div`
+  width: 100%;
+  overflow-x: auto;
+  margin: 2em 0;
+`;
+
+const DATATABLE = styled.table`
+  color: white;
+  border-spacing: 0;
+  background-color: #2a2a2a;
+  width: 100%;
+  border-collapse: collapse;
+`;
+
+const TH = styled.th`
+  padding: 8px 12px;
+  text-align: left;
+  background-color: #1a1a1a;
+  border-bottom: 2px solid #444;
+  font-weight: bold;
+  white-space: normal;
+  word-break: break-word;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+`;
+
+const DATATD = styled.td`
+  padding: 6px 12px;
+  border-bottom: 1px solid #444;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 200px;
+  line-height: 1.4;
+  vertical-align: top;
+`;
+
+const DATATR = styled.tr`
+  &:nth-child(even) {
+    background: #333;
+  }
+  &:hover {
+    background: #404040;
+  }
+`;
+
+const DOWNLOADBUTTON = styled.button`
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 1em;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #45a049;
+  }
+
+  &:active {
+    background-color: #3d8b40;
+  }
 `;
 
 export interface TestResultProps {
@@ -205,10 +405,201 @@ const DEFAULT_STATE: TestResultState = {
 };
 const MICROS_TO_MS = 1000;
 
+// Chart component with custom HTML legend
+interface ChartPanelProps {
+  title: string;
+  chartRef: React.RefCallback<HTMLCanvasElement>;
+  chart: Chart | undefined;
+  hiddenDatasets: Set<number>;
+  onToggleDataset: (index: number) => void;
+}
+
+const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenDatasets, onToggleDataset }) => {
+  return (
+    <QUADPANEL>
+      <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>{title}</h3>
+      <canvas ref={chartRef} />
+      {chart && chart.data.datasets && chart.data.datasets.length > 0 && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LEGENDITEM
+              key={index}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => onToggleDataset(index)}
+            >
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor }} />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </QUADPANEL>
+  );
+};
+
+// Quad Panel Charts Component
+interface QuadPanelChartsProps {
+  displayData: ParsedFileEntry[];
+  mergeEndpoints: boolean;
+}
+
+const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEndpoints }) => {
+  const [medianChart, setMedianChart] = useState<Chart>();
+  const [worst5Chart, setWorst5Chart] = useState<Chart>();
+  const [error5xxChartState, setError5xxChartState] = useState<Chart>();
+  const [allErrorsChartState, setAllErrorsChartState] = useState<Chart>();
+
+  const [medianHidden, setMedianHidden] = useState<Set<number>>(new Set());
+  const [worst5Hidden, setWorst5Hidden] = useState<Set<number>>(new Set());
+  const [error5xxHidden, setError5xxHidden] = useState<Set<number>>(new Set());
+  const [allErrorsHidden, setAllErrorsHidden] = useState<Set<number>>(new Set());
+
+  // Process data based on mergeEndpoints flag
+  const allEndpoints = useMemo(() => {
+    let endpointData: [string, DataPoint[]][];
+
+    if (mergeEndpoints) {
+      // Group endpoints by method+url, merging data points at same timestamps
+      const groupedMap = new Map<string, DataPoint[]>();
+
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          groupedMap.set(label, mergeAllDataPoints(...existing, ...dataPoints));
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+
+      endpointData = Array.from(groupedMap.entries());
+    } else {
+      // Use raw data - create label with all tags
+      endpointData = displayData.map(([bucketId, dataPoints]) => {
+        const tagList = Object.entries(bucketId)
+          .filter(([key]) => key !== "method" && key !== "url")
+          .map(([key, value]) => `${key}:${value}`)
+          .join(" ");
+        const label = tagList
+          ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+          : `${bucketId.method} ${bucketId.url}`;
+        return [label, dataPoints];
+      });
+    }
+
+    return endpointData;
+  }, [displayData, mergeEndpoints]);
+
+  // Create stable key for data points
+  const dataKey = useMemo(() =>
+    allEndpoints.map(([label, dps]: [string, DataPoint[]]) => `${label}-${dps.length}`).join(";"),
+    [allEndpoints]
+  );
+
+  const toggleDataset = useCallback((chart: Chart | undefined, index: number, hiddenSet: Set<number>, setHiddenSet: React.Dispatch<React.SetStateAction<Set<number>>>) => {
+    if (!chart) {
+      return;
+    }
+    const meta = chart.getDatasetMeta(index);
+    meta.hidden = !meta.hidden;
+    chart.update();
+
+    setHiddenSet((prev: Set<number>) => {
+      const newSet = new Set(prev);
+      if (meta.hidden) {
+        newSet.add(index);
+      } else {
+        newSet.delete(index);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const medianCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (medianChart) {
+        medianChart.destroy();
+      }
+      import("./charts").then(({ medianDurationChart }) => {
+        setMedianChart(medianDurationChart(node, allEndpoints));
+      });
+    }
+  }, [dataKey, allEndpoints]);
+
+  const worst5Canvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (worst5Chart) {
+        worst5Chart.destroy();
+      }
+      import("./charts").then(({ worst5PercentChart }) => {
+        setWorst5Chart(worst5PercentChart(node, allEndpoints));
+      });
+    }
+  }, [dataKey, allEndpoints]);
+
+  const error5xxCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (error5xxChartState) {
+        error5xxChartState.destroy();
+      }
+      import("./charts").then(({ error5xxChart }) => {
+        setError5xxChartState(error5xxChart(node, allEndpoints));
+      });
+    }
+  }, [dataKey, allEndpoints]);
+
+  const allErrorsCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (allErrorsChartState) {
+        allErrorsChartState.destroy();
+      }
+      import("./charts").then(({ allErrorsChart }) => {
+        setAllErrorsChartState(allErrorsChart(node, allEndpoints));
+      });
+    }
+  }, [dataKey, allEndpoints]);
+
+  return (
+    <QUADGRID>
+      <ChartPanel
+        title="Median Duration by Path"
+        chartRef={medianCanvas}
+        chart={medianChart}
+        hiddenDatasets={medianHidden}
+        onToggleDataset={(idx: number) => toggleDataset(medianChart, idx, medianHidden, setMedianHidden)}
+      />
+      <ChartPanel
+        title="Worst 5% Duration by Path"
+        chartRef={worst5Canvas}
+        chart={worst5Chart}
+        hiddenDatasets={worst5Hidden}
+        onToggleDataset={(idx: number) => toggleDataset(worst5Chart, idx, worst5Hidden, setWorst5Hidden)}
+      />
+      <ChartPanel
+        title="5xx Error Count by Path"
+        chartRef={error5xxCanvas}
+        chart={error5xxChartState}
+        hiddenDatasets={error5xxHidden}
+        onToggleDataset={(idx: number) => toggleDataset(error5xxChartState, idx, error5xxHidden, setError5xxHidden)}
+      />
+      <ChartPanel
+        title="All Errors"
+        chartRef={allErrorsCanvas}
+        chart={allErrorsChartState}
+        hiddenDatasets={allErrorsHidden}
+        onToggleDataset={(idx: number) => toggleDataset(allErrorsChartState, idx, allErrorsHidden, setAllErrorsHidden)}
+      />
+    </QUADGRID>
+  );
+};
+
 export const TestResults = React.memo(({ testData }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
+  const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [methodFilter, setMethodFilter] = useState<string>("all");
   const compareSearchModalRef = useRef<ModalObject| null>(null);
   useEffectModal(compareSearchModalRef);
 
@@ -508,12 +899,30 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     return state.filteredData || state.resultsData;
   }, [state.filteredData, state.resultsData]);
 
-  // Memoized summary tags calculation
-  const summaryTags: BucketId = useMemo(() => {
-    return state.summaryData && state.filteredData
-      ? state.summaryData[0]
-      : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
-  }, [state.summaryData, state.filteredData]);
+  // Extract unique HTTP methods from displayData
+  const availableMethods = useMemo(() => {
+    if (!displayData) {
+      return [];
+    }
+    const methods = new Set<string>();
+    for (const [bucketId] of displayData) {
+      if (bucketId.method) {
+        methods.add(bucketId.method);
+      }
+    }
+    return Array.from(methods).sort();
+  }, [displayData]);
+
+  // Filter displayData by selected method
+  const filteredDisplayData = useMemo(() => {
+    if (!displayData) {
+      return displayData;
+    }
+    if (methodFilter === "all") {
+      return displayData;
+    }
+    return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
+  }, [displayData, methodFilter]);
 
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
@@ -531,7 +940,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
             ))}
           </SELECT>
         )}
-      {displayData !== undefined ? (
+      {filteredDisplayData !== undefined ? (
         <TIMETAKEN>
           <h1>Time Taken</h1>
           <p>
@@ -563,12 +972,45 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
               onChange={(e) => onSummaryTagFilterChange(e, "summaryTagValueFilter")}
             />
           </label>
-          {state.summaryData
-            ? <Endpoint key={"summary"} bucketId={summaryTags} dataPoints={state.summaryData[1]} />
-            : <p>No summary data to display</p>
-          }
+
+          <FILTERCONTAINER>
+            <FILTERDROPDOWN>
+              <label htmlFor="method-filter">Filter by Method:</label>
+              <select
+                id="method-filter"
+                value={methodFilter}
+                onChange={(e) => setMethodFilter(e.target.value)}
+              >
+                <option value="all">All Methods</option>
+                {availableMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </FILTERDROPDOWN>
+
+            <TOGGLECONTAINER style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                id="merge-endpoints"
+                checked={mergeEndpoints}
+                onChange={(e) => setMergeEndpoints(e.target.checked)}
+              />
+              <label htmlFor="merge-endpoints">
+                Merge endpoints with different tags
+              </label>
+            </TOGGLECONTAINER>
+          </FILTERCONTAINER>
+
+          <h2>Performance & Error Metrics</h2>
+          <QuadPanelCharts displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
+
+          <h1>Final Results</h1>
+          <FinalResultsTable displayData={filteredDisplayData} />
+
           <h1>Endpoint Data</h1>
-          {displayData.map(([bucketId, dataPoints]) => {
+          {filteredDisplayData.map(([bucketId, dataPoints]) => {
             return (
               <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
             );
@@ -580,6 +1022,176 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     </React.Fragment>
   );
 });
+
+// Final Results Table Component (without Excel export)
+interface TableProps {
+  displayData: ParsedFileEntry[];
+}
+
+const FinalResultsTable = ({ displayData }: TableProps) => {
+  const tableData = useMemo(() => {
+    const results: any[] = [];
+
+    for (const [bucketId, dataPoints] of displayData) {
+      if (dataPoints.length === 0) { continue; }
+
+      // Aggregate all datapoints for this endpoint
+      const first = dataPoints[0];
+      const totalRTT = first.rttHistogram.clone();
+      const statusCounts: Record<string, number> = { ...first.statusCounts };
+
+      for (let i = 1; i < dataPoints.length; i++) {
+        const dp = dataPoints[i];
+        totalRTT.add(dp.rttHistogram);
+        for (const [status, count] of Object.entries(dp.statusCounts)) {
+          statusCounts[status] = count + (statusCounts[status] || 0);
+        }
+      }
+
+      // Calculate statistics
+      const callCount = totalRTT.getTotalCount();
+      const p50 = callCount ? Number(totalRTT.getValueAtPercentile(50)) / 1000 : 0;
+      const p95 = callCount ? Number(totalRTT.getValueAtPercentile(95)) / 1000 : 0;
+      const p99 = callCount ? Number(totalRTT.getValueAtPercentile(99)) / 1000 : 0;
+      const min = callCount ? Number(totalRTT.getMinNonZeroValue()) / 1000 : 0;
+      const max = callCount ? Number(totalRTT.getMaxValue()) / 1000 : 0;
+      const stddev = callCount ? Number(totalRTT.getStdDeviation()) / 1000 : 0;
+
+      // Build status count array
+      const statusCountsArray: any[] = [];
+      for (const [status, count] of Object.entries(statusCounts)) {
+        statusCountsArray.push({ status: parseInt(status), count });
+      }
+      statusCountsArray.sort((a, b) => a.status - b.status);
+
+      // Extract URL parts
+      let hostname = "";
+      let path = "";
+      let queryString = "";
+      try {
+        const urlObj = new URL(bucketId.url);
+        hostname = urlObj.hostname;
+        path = urlObj.pathname;
+        queryString = urlObj.search.slice(1); // Remove leading '?'
+      } catch {
+        hostname = bucketId.url;
+        path = "";
+      }
+
+      // Filter out method and url from tags since they're already in separate columns
+      const { method: _, url: __, ...otherTags } = bucketId;
+      const tagsString = JSON.stringify(otherTags);
+
+      results.push({
+        method: bucketId.method,
+        hostname,
+        path,
+        queryString,
+        tags: tagsString,
+        statusCounts: statusCountsArray,
+        callCount,
+        p50,
+        p95,
+        p99,
+        min,
+        max,
+        stddev,
+        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+      });
+
+      // Free cloned histogram
+      totalRTT.free();
+    }
+
+    return results;
+  }, [displayData]);
+
+  const exportToExcel = useCallback(() => {
+    // Prepare data for Excel export
+    const excelData = tableData.map(row => ({
+      Method: row.method,
+      Hostname: row.hostname,
+      Path: row.path,
+      QueryString: row.queryString,
+      Tags: row.tags,
+      StatusCounts: row.statusCounts.map((sc: any) => `${sc.status}: ${sc.count}`).join(", "),
+      CallCount: row.callCount,
+      P50: row.p50.toFixed(2),
+      P95: row.p95.toFixed(2),
+      P99: row.p99.toFixed(2),
+      Min: row.min.toFixed(2),
+      Max: row.max.toFixed(2),
+      StdDev: row.stddev.toFixed(2),
+      Time: new Date(row.time).toLocaleString()
+    }));
+
+    // Create worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Final Results");
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const filename = `performance-results-${timestamp}.xlsx`;
+
+    // Download file
+    XLSX.writeFile(workbook, filename);
+  }, [tableData]);
+
+  return (
+    <>
+      <DOWNLOADBUTTON onClick={exportToExcel}>
+        Download as Excel
+      </DOWNLOADBUTTON>
+      <TABLECONTAINER>
+        <DATATABLE>
+        <thead>
+          <tr>
+            <TH>method</TH>
+            <TH>hostname</TH>
+            <TH>path</TH>
+            <TH>queryString</TH>
+            <TH>tags</TH>
+            <TH>statusCount</TH>
+            <TH>callCount</TH>
+            <TH>p50</TH>
+            <TH>p95</TH>
+            <TH>p99</TH>
+            <TH>min</TH>
+            <TH>max</TH>
+            <TH>stddev</TH>
+            <TH>_time</TH>
+          </tr>
+        </thead>
+        <tbody>
+          {tableData.map((row, idx) => (
+            <DATATR key={idx}>
+              <DATATD>{row.method}</DATATD>
+              <DATATD title={row.hostname}>{row.hostname}</DATATD>
+              <DATATD title={row.path}>{row.path}</DATATD>
+              <DATATD>{row.queryString}</DATATD>
+              <DATATD title={row.tags}>{row.tags}</DATATD>
+              <DATATD>
+                {row.statusCounts.map((sc: any, i: number) => (
+                  <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
+                ))}
+              </DATATD>
+              <DATATD>{row.callCount.toLocaleString()}</DATATD>
+              <DATATD>{row.p50.toFixed(2)}</DATATD>
+              <DATATD>{row.p95.toFixed(2)}</DATATD>
+              <DATATD>{row.p99.toFixed(2)}</DATATD>
+              <DATATD>{row.min.toFixed(2)}</DATATD>
+              <DATATD>{row.max.toFixed(2)}</DATATD>
+              <DATATD>{row.stddev.toFixed(2)}</DATATD>
+              <DATATD>{row.time.toLocaleString()}</DATATD>
+            </DATATR>
+          ))}
+        </tbody>
+      </DATATABLE>
+    </TABLECONTAINER>
+    </>
+  );
+};
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }

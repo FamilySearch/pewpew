@@ -1,3 +1,6 @@
+// Must be the first import so DOM globals are present before
+// @testing-library/react's render() is loaded.
+import "jsdom-global/register";
 import TestResults, { configureURL } from "../components/TestResults";
 import React from "react";
 import { TestData } from "../types/testmanager";

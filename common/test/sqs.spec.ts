@@ -98,16 +98,16 @@ describe("SqsUtil", () => {
     log("QUEUE_URL_SCALE=" + [...QUEUE_URL_SCALE_IN], LogLevel.DEBUG);
     log("QUEUE_URL_COMMUNICATION=" + QUEUE_URL_COMMUNICATION, LogLevel.DEBUG);
     // Can't set these until after init.
-    expectedQueueUrlTest = receiveParamsTest.QueueUrl = QUEUE_URL_TEST.values().next().value;
+    expectedQueueUrlTest = receiveParamsTest.QueueUrl = QUEUE_URL_TEST.values().next().value!;
     expect(typeof expectedQueueUrlTest).to.equal("string");
     expect(expectedQueueUrlTest.length).to.be.greaterThan(0);
-    expectedQueueUrlTestName = QUEUE_URL_TEST.keys().next().value;
+    expectedQueueUrlTestName = QUEUE_URL_TEST.keys().next().value!;
     expect(typeof expectedQueueUrlTestName).to.equal("string");
     expect(expectedQueueUrlTestName.length).to.be.greaterThan(0);
-    expectedQueueUrlScale = receiveParamsScale.QueueUrl = QUEUE_URL_SCALE_IN.values().next().value;
+    expectedQueueUrlScale = receiveParamsScale.QueueUrl = QUEUE_URL_SCALE_IN.values().next().value!;
     expect(typeof expectedQueueUrlScale).to.equal("string");
     expect(expectedQueueUrlScale.length).to.be.greaterThan(0);
-    expectedQueueUrlScaleName = QUEUE_URL_SCALE_IN.keys().next().value;
+    expectedQueueUrlScaleName = QUEUE_URL_SCALE_IN.keys().next().value!;
     expect(typeof expectedQueueUrlScaleName).to.equal("string");
     expect(expectedQueueUrlScaleName.length).to.be.greaterThan(0);
     receiveParamsComm.QueueUrl = QUEUE_URL_COMMUNICATION;

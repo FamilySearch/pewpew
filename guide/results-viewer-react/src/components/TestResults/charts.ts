@@ -3,6 +3,7 @@ import {
   ChartDataset,
   ChartEvent,
   ChartTypeRegistry,
+  Filler,
   Legend,
   LegendElement,
   LegendItem,
@@ -21,6 +22,7 @@ import { DataPoint } from "./model";
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc
 Chart.register(
+  Filler,
   LineElement,
   PointElement,
   LineController,
@@ -32,82 +34,161 @@ Chart.register(
   Tooltip
 );
 
+// Splunk-style color palette (matching your dashboard theme)
 const colors = [
-  "#3366cc",
-  "#dc3912",
-  "#ff9900",
-  "#109618",
-  "#990099",
-  "#0099c6",
-  "#dd4477",
-  "#66aa00",
-  "#b82e2e",
-  "#316395",
-  "#994499",
-  "#22aa99",
-  "#aaaa11",
-  "#6633cc",
-  "#e67300",
-  "#8b0707",
-  "#651067",
-  "#329262",
-  "#5574a6",
-  "#3b3eac"
+  "#6a7bb4", // Purple/Blue (like Splunk GET)
+  "#c94277", // Pink/Magenta (like Splunk POST)
+  "#d9915b", // Orange/Gold (like Splunk Agent)
+  "#4d9f9a", // Teal/Cyan (like Splunk Host)
+  "#b8904b", // Brown/Gold
+  "#7e5ba3", // Deep Purple
+  "#d16881", // Coral Pink
+  "#8fbc8f", // Green
+  "#6495ed", // Cornflower Blue
+  "#cd853f", // Peru
+  "#ba55d3", // Medium Orchid
+  "#20b2aa", // Light Sea Green
+  "#ff7f50", // Coral
+  "#9370db", // Medium Purple
+  "#3cb371", // Medium Sea Green
+  "#ff6347", // Tomato
+  "#4682b4", // Steel Blue
+  "#daa520", // Goldenrod
+  "#dc143c", // Crimson
+  "#008b8b"  // Dark Cyan
 ];
+
+// Host chart color palette (teal/cyan theme)
+export const hostColors = [
+  "#4d9f9a", // Primary Teal
+  "#5daba5", // Light Teal
+  "#3d8f8a", // Dark Teal
+  "#6dbdb7", // Bright Teal
+  "#2d7f7a", // Deep Teal
+  "#7dcdca", // Pale Teal
+  "#48a9a6", // Sea Green
+  "#56cac5", // Turquoise
+  "#3b8371", // Forest Teal
+  "#5eb3af", // Mint Teal
+  "#45918c", // Slate Teal
+  "#6fc1bc", // Sky Teal
+  "#358d87", // Ocean Teal
+  "#7fd4cf", // Aqua
+  "#2e7872", // Pine Teal
+  "#5fbbb5", // Lagoon
+  "#409b95", // Marine Teal
+  "#6dcbc5", // Seafoam
+  "#327f79", // Jade
+  "#5cc5bf"  // Crystal Teal
+];
+
+// Agent chart color palette (brown/gold theme)
+export const agentColors = [
+  "#b8904b", // Primary Gold/Brown (like Splunk agent)
+  "#c9a061", // Light Gold
+  "#a88040", // Dark Gold
+  "#d4ad6f", // Bright Gold
+  "#987030", // Deep Brown
+  "#e0ba7d", // Pale Gold
+  "#aa8550", // Caramel
+  "#c5a870", // Sand
+  "#8f6f40", // Copper Brown
+  "#b59a65", // Wheat
+  "#9d7f48", // Bronze
+  "#cbb078", // Amber
+  "#856a35", // Ochre
+  "#d5b585", // Tan
+  "#8a7245", // Sienna
+  "#bfa070", // Biscuit
+  "#967740", // Tawny
+  "#cab880", // Buff
+  "#7f6530", // Russet
+  "#b0955f"  // Khaki
+];
+
+// Error chart color palette (orange/pink theme for error graphs)
+export const errorColors = [
+  "#ff6b6b", // Coral Red
+  "#ff8c42", // Orange
+  "#ffa07a", // Light Salmon
+  "#ff7f50", // Coral
+  "#ff4500", // Orange Red
+  "#ff69b4", // Hot Pink
+  "#ff6347", // Tomato
+  "#ff8c94", // Light Coral Pink
+  "#ffab91", // Peach
+  "#ff9a76", // Salmon
+  "#ff7eb3", // Pink
+  "#ff9966", // Atomic Tangerine
+  "#ff6f91", // Carnation Pink
+  "#ff8f5e", // Burnt Sienna
+  "#ff7aa2", // Blush Pink
+  "#ffa160", // Sandy Brown
+  "#ff8cb4", // Cherry Blossom
+  "#ff9c7d", // Apricot
+  "#ff79a8", // Flamingo
+  "#ffb380"  // Macaroni
+];
+
+// Legend click handler with double-click support
+let lastLegendClick: [number, number, Chart] | undefined;
+
+export const legendClickHandler = function (
+  _e: ChartEvent,
+  legendItem: LegendItem,
+  legend: LegendElement<keyof ChartTypeRegistry>
+) {
+  const chart: Chart = legend.chart;
+  const datasets = chart.data.datasets!;
+  let allHidden = true;
+  if (legendItem.datasetIndex === undefined) {
+    log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
+    return;
+  }
+  for (let i = 0; i < datasets.length; i++) {
+    const meta = chart.getDatasetMeta(i);
+    if (!meta.hidden && i !== legendItem.datasetIndex) {
+      allHidden = false;
+      break;
+    }
+  }
+  if (lastLegendClick && legendItem.datasetIndex === lastLegendClick[1]
+    && Date.now() - lastLegendClick[0] < 250) {
+    // double click - isolate this dataset
+    for (let i = 0; i < datasets.length; i++) {
+      const meta = chart.getDatasetMeta(i);
+      meta.hidden = i !== legendItem.datasetIndex;
+    }
+  } else if (allHidden) {
+    // all are hidden except clicked one, show all
+    for (let i = 0; i < datasets.length; i++) {
+      const meta = chart.getDatasetMeta(i);
+      meta.hidden = false;
+    }
+  } else {
+    // toggle this dataset
+    const meta = chart.getDatasetMeta(legendItem.datasetIndex);
+    meta.hidden = !meta.hidden;
+  }
+  chart.update();
+  // timeStamp was removed from ChartEvent, use Date.now() instead
+  lastLegendClick = [Date.now(), legendItem.datasetIndex, chart];
+};
 
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [
-    "avg",
-    "min",
-    "max",
-    "std",
-    90,
-    95,
-    99
+    50,
+    95
   ].map((type, i) => {
     const borderColor = colors[i % colors.length];
-    const backgroundColor = borderColor + "46";
+    const backgroundColor = borderColor + "DD"; // High opacity for visible shading
     let label: string;
     // It's a ScatterDataPoint but thanks to chartjs-adapter-date-fns it will date Dates as well as numbers
     let data: (Omit<ScatterDataPoint, "x"> & { x: Date | number })[];
-    if (type === "avg") {
-      label = "Avg";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Math.round(dp.rttHistogram.getMean()) / MICROS_TO_MS
-          : NaN
-      }));
 
-    } else if (type === "min") {
-      label = "Min";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Number(dp.rttHistogram.getMinNonZeroValue()) / MICROS_TO_MS
-          : NaN
-      }));
-
-    } else if (type === "max") {
-      label = "Max";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Number(dp.rttHistogram.getMaxValue()) / MICROS_TO_MS
-          : NaN
-      }));
-
-    } else if (type === "std") {
-      label = "Std Dev";
-      data = dataPoints.map((dp) => ({
-        x: dp.time,
-        y: dp.rttHistogram.getTotalCount()
-          ? Math.round(dp.rttHistogram.getStdDeviation()) / MICROS_TO_MS
-          : NaN
-      }));
-    } else if (typeof type === "number") {
-      label = type + "th PCTL";
+    if (typeof type === "number") {
+      label = "p" + type;
       data = dataPoints.map((dp) => ({
         x: dp.time,
         y: dp.rttHistogram.getTotalCount()
@@ -122,7 +203,11 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       borderColor,
       backgroundColor,
       data,
-      hidden: type === "std"
+      fill: "origin", // Each fills from origin (overlapping, not stacked)
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: i
     };
   });
 
@@ -142,12 +227,18 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
     type: "line",
     data: { datasets },
     options: {
+      interaction: {
+        mode: "nearest",
+        intersect: false,
+        axis: "x"
+      },
       scales: {
         y: {
           type: chartType,
+          beginAtZero: true,
+          stacked: false,
           title: {
-            display: true,
-            text: "RTT"
+            display: false
           },
           ticks: {
             callback: (v) => v + "ms",
@@ -159,15 +250,23 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
           time: {
             unit: "second"
           },
+          title: {
+            display: false
+          },
           ticks: {
             autoSkip: true
           }
         }
       },
       plugins: {
+        legend: {
+          position: "bottom"
+        },
         tooltip: {
+          mode: "nearest",
+          intersect: false,
           callbacks: {
-            label: ({ formattedValue }) => formattedValue + "ms"
+            label: (context) => `${context.dataset.label}: ${context.formattedValue}ms`
           }
         }
       }
@@ -225,12 +324,113 @@ class ChartDataSets {
         data.push({ x, y });
       }
       const borderColor = colors[ret.length % colors.length];
-      const backgroundColor = borderColor + "46";
+      const backgroundColor = borderColor + "CC"; // More opaque shading
       const dataset = { label, data, borderColor, backgroundColor };
       ret.push(Object.assign(datasetParams, dataset));
     }
     return ret;
   }
+}
+
+export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][], colorPalette: string[] = colors): Chart {
+  // Build datasets - each endpoint gets its own area chart (NOT stacked)
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
+
+    const data = dataPoints.map(dp => {
+      const count = Number(dp.rttHistogram.getTotalCount());
+      log(`  ${endpointLabel} at ${dp.time.toISOString()}: ${count} requests`, LogLevel.DEBUG);
+      return {
+        x: dp.time,
+        y: count
+      };
+    });
+
+    const borderColor = colorPalette[index % colorPalette.length];
+    const backgroundColor = borderColor + "DD"; // High opacity for visible shading
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor,
+      fill: "origin", // Fill from y=0 for stacking
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: index // Draw order
+    };
+  });
+
+  log("Final datasets for overview chart", LogLevel.DEBUG, {
+    count: datasets.length,
+    datasets: datasets.map(ds => ({
+      label: ds.label,
+      dataPoints: ds.data.length,
+      firstPoint: ds.data[0],
+      lastPoint: ds.data[ds.data.length - 1]
+    }))
+  });
+
+  const totalChart = new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true, // STACKED - areas stack on top of each other
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 8
+          },
+          title: {
+            display: false
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          title: {
+            display: false
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 8,
+            stepSize: 15
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: "bottom"
+        },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          callbacks: {
+            label: (context) => {
+              // Show the raw value (not the stacked total)
+              const rawValue = context.parsed.y || 0;
+              return `${context.dataset.label}: ${rawValue.toLocaleString()}`;
+            }
+          }
+        }
+      }
+    }
+  });
+  return totalChart as any as Chart;
 }
 
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
@@ -242,13 +442,23 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     );
     const pairs = [...statusCounts, ...Object.entries(dp.testErrors)];
     for (const [key, count] of pairs) {
-      chartDataSets.setPoint(key, x, count);
+      chartDataSets.setPoint(key, x, count, {
+        fill: "origin", // Each fills from origin (overlapping)
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0
+      });
     }
     chartDataSets.setPoint(
       "total calls",
       x,
       Number(dp.rttHistogram.getTotalCount()),
-      { fill: false }
+      {
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0
+      }
     );
   }
   const datasets = chartDataSets.getDataSets();
@@ -257,16 +467,22 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
     type: "line",
     data: { datasets },
     options: {
+      interaction: {
+        mode: "nearest",
+        intersect: false,
+        axis: "x"
+      },
       scales: {
         y: {
           type: "linear",
+          stacked: false, // Overlapping, not stacked
+          beginAtZero: true,
           ticks: {
             precision: 0,
             autoSkip: true
           },
           title: {
-            display: true,
-            text: "Count"
+            display: false
           }
         },
         x: {
@@ -274,23 +490,31 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
           time: {
             unit: "second"
           },
+          title: {
+            display: false
+          },
           ticks: {
             autoSkip: true
           }
         }
       },
       plugins: {
+        legend: {
+          position: "bottom"
+        },
         tooltip: {
+          mode: "nearest",
+          intersect: false,
           callbacks: {
-            label: ({ datasetIndex, formattedValue: yLabel }) => {
-              const { label } = datasets[datasetIndex || 0];
+            label: (context) => {
+              const { label } = context.dataset;
               const status = label ? parseInt(label.slice(0, 3), 10) : NaN;
               if (!isNaN(status)) {
-                return `${yLabel} HTTP ${status}s`;
+                return `${label}: ${context.formattedValue} HTTP ${status}s`;
               } else if (label && label.startsWith("total")) {
-                return `${yLabel} ${label.toLowerCase()}`;
+                return `${context.formattedValue} ${label.toLowerCase()}`;
               } else {
-                return `${yLabel} ${label}`;
+                return `${label}: ${context.formattedValue}`;
               }
             }
           }
@@ -326,47 +550,438 @@ const afterBuildTicks = (chart: any) => {
   chart.ticks = myTicks;
 };
 
-// add a double-click handler to the chart legends
-{
-  let lastLegendClick: [number, number, Chart] | undefined;
+// Quad Panel Charts
+export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(50)) / MICROS_TO_MS
+        : NaN
+    }));
 
-  Chart.defaults.plugins.legend.onClick = function (
-    _e: ChartEvent,
-    legendItem: LegendItem,
-    legend: LegendElement<keyof ChartTypeRegistry>
-  ) {
-    const chart: Chart = legend.chart;
-    const datasets = chart.data.datasets!;
-    let allHidden = true;
-    if (legendItem.datasetIndex === undefined) {
-      log("legendItem.datasetIndex was undefined. Please investigate", LogLevel.ERROR, legendItem);
-      return;
-    }
-    for (let i = 0; i < datasets.length; i++) {
-      const meta = chart.getDatasetMeta(i);
-      if (!meta.hidden && i !== legendItem.datasetIndex) {
-        allHidden = false;
-        break;
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => v + "ms",
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x || 0);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              const value = (context.parsed.y || 0).toFixed(2);
+              return `${context.dataset.label}: ${value}ms (median)`;
+            }
+          }
+        }
       }
     }
-    if (lastLegendClick && legendItem.datasetIndex === lastLegendClick[1]
-      && Date.now() - lastLegendClick[0] < 250) {
-      // double click
-      for (let i = 0; i < datasets.length; i++) {
-        const meta = chart.getDatasetMeta(i);
-        meta.hidden = i !== legendItem.datasetIndex;
-      }
-    } else if (allHidden) {
-      for (let i = 0; i < datasets.length; i++) {
-        const meta = chart.getDatasetMeta(i);
-        meta.hidden = false;
-      }
-    } else {
-      const meta = chart.getDatasetMeta(legendItem.datasetIndex);
-      meta.hidden = !legendItem.hidden;
-    }
-    chart.update();
-    // timeStamp was removed from ChartEvent, use Date.now() instead
-    lastLegendClick = [Date.now(), legendItem.datasetIndex, chart];
-  };
+  }) as any as Chart;
 }
+
+export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  const MICROS_TO_MS = 1000;
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: dp.rttHistogram.getTotalCount()
+        ? Number(dp.rttHistogram.getValueAtPercentile(95)) / MICROS_TO_MS
+        : NaN
+    }));
+
+    const borderColor = colors[index % colors.length];
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor: borderColor + "80",
+      fill: false,
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      pointHoverBorderWidth: 2
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => v + "ms",
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x || 0);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              const value = (context.parsed.y || 0).toFixed(2);
+              return `${context.dataset.label}: ${value}ms (p95)`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique 5xx status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
+        if (status.startsWith("5")) {
+          statusCodesSet.add(status);
+        }
+      }
+    }
+
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
+
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x || 0);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              return `${context.dataset.label}: ${context.parsed.y || 0}`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  // Build datasets - one for each status code + endpoint combination
+  const datasets: any[] = [];
+  let colorIndex = 0;
+
+  for (const [endpointLabel, dataPoints] of allEndpoints) {
+    // Collect all unique non-200 status codes for this endpoint
+    const statusCodesSet = new Set<string>();
+    for (const dp of dataPoints) {
+      for (const status of Object.keys(dp.statusCounts)) {
+        if (status !== "200") {
+          statusCodesSet.add(status);
+        }
+      }
+    }
+
+    // Create a dataset for each status code
+    for (const statusCode of Array.from(statusCodesSet).sort()) {
+      const data = dataPoints.map(dp => {
+        const count = dp.statusCounts[statusCode] || 0;
+        return { x: dp.time, y: count };
+      });
+
+      const borderColor = errorColors[colorIndex % errorColors.length];
+
+      datasets.push({
+        label: `${statusCode} ${endpointLabel}`,
+        data,
+        borderColor,
+        backgroundColor: borderColor + "DD",
+        fill: "origin",
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBorderWidth: 2
+      });
+
+      colorIndex++;
+    }
+  }
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 6,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: {
+            unit: "minute",
+            displayFormats: {
+              minute: "HH:mm"
+            }
+          },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 6,
+            stepSize: 15,
+            font: { size: 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          enabled: true,
+          mode: "index",
+          intersect: false,
+          position: "nearest",
+          yAlign: "top",
+          xAlign: "center",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 12, bottom: 12, left: 14, right: 14 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 13 },
+          bodySpacing: 8,
+          titleSpacing: 6,
+          titleMarginBottom: 8,
+          caretPadding: 10,
+          callbacks: {
+            title: (items) => {
+              if (items.length > 0) {
+                const date = new Date(items[0].parsed.x || 0);
+                return date.toLocaleString();
+              }
+              return "";
+            },
+            label: (context) => {
+              return `${context.dataset.label}: ${context.parsed.y || 0}`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
+}
+
+// Apply legend click handler as global default
+Chart.defaults.plugins.legend.onClick = legendClickHandler;

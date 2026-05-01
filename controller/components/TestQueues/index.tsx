@@ -52,7 +52,7 @@ export const TestQueues = ({
     <QueueDiv className="queue-div">
       <QueueDivLabel className="queue-div-label"><label>Test Queue </label></QueueDivLabel>
       {loading && <QueueDivSelect className="queue-div-loading">Loading...</QueueDivSelect>}
-      {!loading && !error && <QueueDivSelect className="queue-div-select"><select name={name} value={queueName} onChange={onChange}>{optionItems} </select></QueueDivSelect>}
+      {!loading && !error && <QueueDivSelect className="queue-div-select"><select name={name} data-testid="queue-select" value={queueName} onChange={onChange}>{optionItems} </select></QueueDivSelect>}
       {error && <QueueDivSelect className="queue-div-error"><Danger>Could not load the current Test Queues</Danger></QueueDivSelect>}
     </QueueDiv>
   );

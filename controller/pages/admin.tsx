@@ -278,8 +278,8 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
     <Layout authPermission={authPermission}>
       <AdminColumn>
         <H1>Admin Page</H1>
-        {state.error && <Danger>Error: {state.error}</Danger>}
-        {state.success && <Success>Success: {state.success}</Success>}
+        {state.error && <Danger data-testid="admin-error">Error: {state.error}</Danger>}
+        {state.success && <Success data-testid="admin-success">Success: {state.success}</Success>}
         <AdminRow>
         <AdminColumn>
         <H3>Upload a new version of PewPew</H3>
@@ -305,7 +305,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
                     />
                     <Info>Files Changing: {state.uploadProgress}%</Info>
                   </Column>
-                : <UploadPewpewButton className="upload-pewpew-button" type="submit">Upload PewPew</UploadPewpewButton>
+                : <UploadPewpewButton className="upload-pewpew-button" data-testid="upload-pewpew-button" type="submit">Upload PewPew</UploadPewpewButton>
               }
             </ButtonDiv>
           </AdminColumn>
@@ -318,7 +318,7 @@ const Admin = ({ authPermission, versionInitalProps, error: propsError }: AdminP
         <ButtonDiv>
           {state.uploading
             ? <Info>Files Changing</Info>
-            : <UploadPewpewButton name="delete" onClick={onClickHandlerDelete}>Remove PewPew Version</UploadPewpewButton>
+            : <UploadPewpewButton name="delete" data-testid="remove-pewpew-button" onClick={onClickHandlerDelete}>Remove PewPew Version</UploadPewpewButton>
           }
         </ButtonDiv>
         </AdminColumn>

@@ -89,7 +89,10 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
   }, [router.isReady, router.query.defaultView, router.query.defaultDate]);
 
   // After hydration, router.query is authoritative (SSR props don't update on shallow nav).
-  const calendarInitialView = router.isReady && typeof router.query.defaultView === "string"
+  const VALID_VIEWS = ["timeGridDay", "timeGridWeek", "dayGridMonth"] as const;
+  const calendarInitialView: GridView = router.isReady
+    && typeof router.query.defaultView === "string"
+    && (VALID_VIEWS as readonly string[]).includes(router.query.defaultView)
     ? router.query.defaultView as GridView
     : defaultView;
   const rawDate = router.isReady && typeof router.query.defaultDate === "string"

@@ -345,7 +345,7 @@ const TestStatusPage = ({
   // Before hydration (SSR), fall back to the server-rendered props so the initial render is
   // correct. Never fall back to SSR props post-hydration: a missing query param means the
   // user cleared that selection, not that the prop should be re-applied.
-  const resultsN = parseInt(String(router.query.results ?? ""), 10);
+  const resultsN = parseInt(typeof router.query.results === "string" ? router.query.results : "", 10);
   const currentResultsIndex = router.isReady ? (isNaN(resultsN) ? undefined : resultsN) : propsResultsIndex;
   const currentCompareTestId = router.isReady ? (typeof router.query.compare === "string" ? router.query.compare : undefined) : propsCompareTestId;
 

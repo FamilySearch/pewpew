@@ -31,6 +31,22 @@ const oneResult: TestData = {
   status: TestStatus.Finished
 };
 
+const discoveryRun1: TestData = {
+  testId: "discoverywicffamilybeta20200311T194618937",
+  s3Folder: "discoverywicffamilybeta/20200311T194618937",
+  resultsFileLocation: ["test-results/stats-discoverywicffamilybeta20200311T194618937.json"],
+  startTime: 1583955978000,
+  status: TestStatus.Finished
+};
+
+const discoveryRun2: TestData = {
+  testId: "discoverywicffamilybeta20200311T200153210",
+  s3Folder: "discoverywicffamilybeta/20200311T200153210",
+  resultsFileLocation: ["test-results/stats-discoverywicffamilybeta20200311T200153210.json"],
+  startTime: 1583956913000,
+  status: TestStatus.Finished
+};
+
 const multipleResults: TestData = {
   testId: "discoverywicffamilybeta20200311T221932362",
   s3Folder: "discoverywicffamilybeta/20200311T221932362",
@@ -82,6 +98,25 @@ export const _1Result = () => (
   <React.Fragment>
     <GlobalStyle />
     <TestResults testData={oneResult} />
+  </React.Fragment>
+);
+
+export const _1ResultSelected = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults testData={oneResult} initialResultsIndex={0} />
+  </React.Fragment>
+);
+
+export const _1ResultSelectedWithCompare = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults
+      testData={discoveryRun2}
+      initialResultsIndex={0}
+      initialCompareTestId={discoveryRun1.testId}
+      initialCompareTestData={discoveryRun1}
+    />
   </React.Fragment>
 );
 

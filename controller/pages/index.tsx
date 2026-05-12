@@ -60,6 +60,8 @@ export interface TestStatusProps {
   searchTestResult?: TestData[];
   errorLoading: string | undefined;
   authPermission?: AuthPermission;
+  resultsIndex?: number;
+  compareTestId?: string;
 }
 
 // It's own data that will redraw the UI on changes
@@ -81,7 +83,9 @@ const TestStatusPage = ({
   errorLoading,
   authPermission,
   searchTestResult: propsSearchTestResult,
-  testIdSearch: propsTestIdSearch
+  testIdSearch: propsTestIdSearch,
+  resultsIndex: propsResultsIndex,
+  compareTestId: propsCompareTestId
 }: TestStatusProps) => {
   let doubleClickCheck: boolean = false;
   const defaultState: TestStatusState = {
@@ -95,6 +99,37 @@ const TestStatusPage = ({
   const [state, setFormData] = useState(defaultState);
   const setState = (newState: Partial<TestStatusState>) => setFormData((oldState: TestStatusState) => ({ ...oldState, ...newState}));
   const router = useRouter();
+
+  const updateQuery = (changes: Record<string, string | undefined>): void => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(router.query)) {
+      if (Array.isArray(v)) {
+        v.forEach((val) => params.append(k, val));
+      } else if (v !== undefined) {
+        params.set(k, v);
+      }
+    }
+    for (const [k, v] of Object.entries(changes)) {
+      if (v !== undefined) {
+        params.set(k, v);
+      } else {
+        params.delete(k);
+      }
+    }
+    const queryStr = params.toString();
+    const newUrl = queryStr ? `${router.pathname}?${queryStr}` : router.pathname;
+    log("router.push in updateQuery", LogLevel.DEBUG, { newUrl, pathname: router.pathname, query: router.query, asPath: router.asPath });
+    router.push(newUrl, formatPageHref(newUrl), { shallow: true });
+  };
+
+  const handleResultsIndexChange = (index: number | undefined): void => {
+    updateQuery({ results: index !== undefined ? String(index) : undefined });
+  };
+
+  const handleCompareTestIdChange = (testId: string | undefined): void => {
+    updateQuery({ compare: testId });
+  };
+
   const fetchData = async (testId: string) => {
     try {
       const url = formatPageHref(API_TEST_FORMAT(testId));
@@ -306,6 +341,14 @@ const TestStatusPage = ({
     }
   };
 
+  // After hydration router.isReady is true and router.query is the single source of truth.
+  // Before hydration (SSR), fall back to the server-rendered props so the initial render is
+  // correct. Never fall back to SSR props post-hydration: a missing query param means the
+  // user cleared that selection, not that the prop should be re-applied.
+  const resultsN = parseInt(String(router.query.results ?? ""), 10);
+  const currentResultsIndex = router.isReady ? (isNaN(resultsN) ? undefined : resultsN) : propsResultsIndex;
+  const currentCompareTestId = router.isReady ? (typeof router.query.compare === "string" ? router.query.compare : undefined) : propsCompareTestId;
+
   return (
     <Layout authPermission={authPermission}>
       <TestStatusSection>
@@ -327,7 +370,14 @@ const TestStatusPage = ({
         </TestStatusSection>}
         {state.error && <Danger>Error: {state.error}</Danger>}
       </TestStatusSection>
-      {testData && <TestResults testData={testData} />}
+      {testData && <TestResults
+        key={`${testData.testId}-${router.query.results ?? ""}-${router.query.compare ?? ""}`}
+        testData={testData}
+        initialResultsIndex={currentResultsIndex}
+        onResultsIndexChange={handleResultsIndexChange}
+        initialCompareTestId={currentCompareTestId}
+        onCompareTestIdChange={handleCompareTestIdChange}
+      />}
     </Layout>
   );
 };
@@ -364,12 +414,15 @@ export const getServerSideProps: GetServerSideProps =
       // Convert it to json
       const testData: TestData = (testDataResponse as TestDataResponse).json;
 
+      const resultsParam = typeof ctx.query.results === "string" ? parseInt(ctx.query.results, 10) : NaN;
       return {
         props: {
           testData,
           allTests: undefined,
           errorLoading: undefined,
-          authPermission: authPermissions.authPermission
+          authPermission: authPermissions.authPermission,
+          resultsIndex: !isNaN(resultsParam) ? resultsParam : undefined,
+          compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined
         }
       };
     } else {

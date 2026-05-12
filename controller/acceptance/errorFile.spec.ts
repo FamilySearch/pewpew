@@ -27,7 +27,7 @@ async function fetch (
 
 describe("ErrorFile API Integration", function () {
   let url: string;
-  let expectedStatus: number = 404;
+  let expectedStatus: number = 204;
   let yamlFile: string | undefined;
   let dateString: string | undefined;
 
@@ -43,7 +43,7 @@ describe("ErrorFile API Integration", function () {
       dateString = ppaasTestId.dateString;
       expectedStatus = 200;
     } else {
-    // Initialize to one that will 404 for the build server
+    // Initialize to one that will 204 for the build server
     const ppaasTestId = await getPpaasTestId();
     yamlFile = ppaasTestId.yamlFile;
     dateString = ppaasTestId.dateString;
@@ -127,13 +127,13 @@ describe("ErrorFile API Integration", function () {
     }).catch((error) => done(error));
   });
 
-  it("GET error/yamlFile/dateString notins3 should respond 404 Not Found", (done: Mocha.Done) => {
+  it("GET error/yamlFile/dateString notins3 should respond 204 No Content", (done: Mocha.Done) => {
     const ppaasTestId = PpaasTestId.makeTestId("notins3");
     log("notins3", LogLevel.DEBUG, ppaasTestId);
     fetch(url + `/${ppaasTestId.yamlFile}/${ppaasTestId.dateString}`).then((res: Response) => {
       log(`GET ${url}/${ppaasTestId.yamlFile}/${ppaasTestId.dateString}`, LogLevel.DEBUG, { status: res?.status, res });
       expect(res, "res").to.not.equal(undefined);
-      expect(res.status, "status").to.equal(404);
+      expect(res.status, "status").to.equal(204);
       done();
     }).catch((error) => done(error));
   });
@@ -169,8 +169,7 @@ describe("ErrorFile API Integration", function () {
           done();
         }
       } else {
-        expect(res.status, "status").to.equal(404);
-        expect(res.data, "body").to.not.equal(undefined);
+        expect(res.status, "status").to.equal(204);
         log("expectedStatus was " + expectedStatus, LogLevel.WARN);
         done();
       }

@@ -15,10 +15,25 @@ For your full deployment you should have environment variables injected into Clo
 $ npm i && npm run build
 ```
 
-## Mac and Windows Testing
-The unit tests, integration, and acceptance tests are designed to run on Linux. As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew.zip`).
+## Mac, Windows, and ARM Testing
+The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew.zip`).
 
-To override these tests for mac or windows, the pewpew exectuable must be named `pewpew.exe` for Windows and `pewpew.mac` for Mac. These files should then be zipped up as `pewpew.exe.zip` or `pewpew.mac.zip` correspondingly. Then either override the `PEWPEW_ZIP_FILEPATH` environment variable to point to the full path to your zip file, or drop the zipped file in the `test/` folder.
+To override these tests for other platforms, rename the pewpew executable to match your platform, zip it with the matching name, then either drop the zip in the `test/` folder or override `PEWPEW_ZIP_FILEPATH` to point to the full path to your zip file:
+
+| Platform | Binary name | Zip name |
+|---|---|---|
+| Linux x86_64 | `pewpew` | `pewpew.zip` (default, already checked in) |
+| Windows | `pewpew.exe` | `pewpew.exe.zip` |
+| macOS | `pewpew.mac` | `pewpew.mac.zip` |
+| ARM64 / Graviton | `pewpew.arm` | `pewpew.arm.zip` |
+
+Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS).
+
+### Deploying to ARM64/Graviton
+
+The controller runs `pewpew --version` on upload to validate binaries, so the controller and agents **must share the same architecture**. When migrating to Graviton:
+1. Upload `pewpew.arm` for each required version via the controller UI (from an ARM64 controller) before deploying Graviton agents.
+2. Deploy the ARM64 controller and ARM64 agents together — plan for a brief downtime since both must switch simultaneously.
 
 ## Test
 ```bash

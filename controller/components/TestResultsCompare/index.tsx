@@ -381,6 +381,39 @@ const DROPDOWNITEM = styled.label`
 `;
 
 // ============================================================================
+// Shared state shape constants
+// ============================================================================
+
+const INITIAL_VISIBLE_COLUMNS = {
+  method: true,
+  hostname: true,
+  path: true,
+  queryString: false,
+  tags: false,
+  statusCount: true,
+  callCount: true,
+  p50: true,
+  p95: true,
+  p99: false,
+  min: false,
+  max: false,
+  stddev: false,
+  time: false
+};
+
+const INITIAL_VISIBLE_METRICS = {
+  calls: true,
+  avg: true,
+  min: false,
+  max: false,
+  stdDev: false,
+  p50: true,
+  p90: false,
+  p95: true,
+  p99: true
+};
+
+// ============================================================================
 // TypeScript Interfaces
 // ============================================================================
 
@@ -523,32 +556,12 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 interface TableProps {
   displayData: ParsedFileEntry[];
   fileLabel?: string;
+  visibleColumns: typeof INITIAL_VISIBLE_COLUMNS;
+  onToggleColumn: (column: keyof typeof INITIAL_VISIBLE_COLUMNS) => void;
 }
 
-const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Results" }) => {
-  // Column visibility state - start with commonly less important columns hidden
-  const [visibleColumns, setVisibleColumns] = useState({
-    method: true,
-    hostname: true,
-    path: true,
-    queryString: false,
-    tags: false,
-    statusCount: true,
-    callCount: true,
-    p50: true,
-    p95: true,
-    p99: false,
-    min: false,
-    max: false,
-    stddev: false,
-    time: false
-  });
-
+const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Results", visibleColumns, onToggleColumn }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  const toggleColumn = (column: keyof typeof visibleColumns) => {
-    setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }));
-  };
 
   const visibleCount = Object.values(visibleColumns).filter(Boolean).length;
 
@@ -684,7 +697,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.method}
-              onChange={() => toggleColumn("method")}
+              onChange={() => onToggleColumn("method")}
             />
             Method
           </DROPDOWNITEM>
@@ -692,7 +705,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.hostname}
-              onChange={() => toggleColumn("hostname")}
+              onChange={() => onToggleColumn("hostname")}
             />
             Hostname
           </DROPDOWNITEM>
@@ -700,7 +713,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.path}
-              onChange={() => toggleColumn("path")}
+              onChange={() => onToggleColumn("path")}
             />
             Path
           </DROPDOWNITEM>
@@ -708,7 +721,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.queryString}
-              onChange={() => toggleColumn("queryString")}
+              onChange={() => onToggleColumn("queryString")}
             />
             Query String
           </DROPDOWNITEM>
@@ -716,7 +729,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.tags}
-              onChange={() => toggleColumn("tags")}
+              onChange={() => onToggleColumn("tags")}
             />
             Tags
           </DROPDOWNITEM>
@@ -724,7 +737,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.statusCount}
-              onChange={() => toggleColumn("statusCount")}
+              onChange={() => onToggleColumn("statusCount")}
             />
             Status Count
           </DROPDOWNITEM>
@@ -732,7 +745,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.callCount}
-              onChange={() => toggleColumn("callCount")}
+              onChange={() => onToggleColumn("callCount")}
             />
             Call Count
           </DROPDOWNITEM>
@@ -740,7 +753,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.p50}
-              onChange={() => toggleColumn("p50")}
+              onChange={() => onToggleColumn("p50")}
             />
             P50
           </DROPDOWNITEM>
@@ -748,7 +761,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.p95}
-              onChange={() => toggleColumn("p95")}
+              onChange={() => onToggleColumn("p95")}
             />
             P95
           </DROPDOWNITEM>
@@ -756,7 +769,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.p99}
-              onChange={() => toggleColumn("p99")}
+              onChange={() => onToggleColumn("p99")}
             />
             P99
           </DROPDOWNITEM>
@@ -764,7 +777,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.min}
-              onChange={() => toggleColumn("min")}
+              onChange={() => onToggleColumn("min")}
             />
             Min
           </DROPDOWNITEM>
@@ -772,7 +785,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.max}
-              onChange={() => toggleColumn("max")}
+              onChange={() => onToggleColumn("max")}
             />
             Max
           </DROPDOWNITEM>
@@ -780,7 +793,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.stddev}
-              onChange={() => toggleColumn("stddev")}
+              onChange={() => onToggleColumn("stddev")}
             />
             Std Dev
           </DROPDOWNITEM>
@@ -788,7 +801,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
             <input
               type="checkbox"
               checked={visibleColumns.time}
-              onChange={() => toggleColumn("time")}
+              onChange={() => onToggleColumn("time")}
             />
             Time
           </DROPDOWNITEM>
@@ -858,6 +871,31 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"endpoint" | "final">("endpoint");
 
+  // Shared column visibility for both Final Results tables — toggling one syncs the other
+  const [visibleColumns, setVisibleColumns] = useState(INITIAL_VISIBLE_COLUMNS);
+  const toggleColumn = useCallback((column: keyof typeof INITIAL_VISIBLE_COLUMNS) => {
+    setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }));
+  }, []);
+
+  // Metric row visibility for the Endpoint Comparison table
+  const [visibleMetrics, setVisibleMetrics] = useState(INITIAL_VISIBLE_METRICS);
+  const [metricsDropdownOpen, setMetricsDropdownOpen] = useState(false);
+  const toggleMetric = useCallback((metric: keyof typeof INITIAL_VISIBLE_METRICS) => {
+    setVisibleMetrics(prev => ({ ...prev, [metric]: !prev[metric] }));
+  }, []);
+
+  // Close metrics dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".metric-select-container")) {
+        setMetricsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Extract unique HTTP methods from both datasets
   const availableMethods = useMemo(() => {
     const methods = new Set<string>();
@@ -913,6 +951,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
       </CONTAINER>
     );
   }
+
+  const visibleMetricsCount = Object.values(visibleMetrics).filter(Boolean).length;
 
   return (
     <CONTAINER>
@@ -1073,6 +1113,51 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           <p style={{ textAlign: "center", color: "#999", marginBottom: "1em" }}>
             Per-endpoint metrics comparison (green = improvement, red = regression)
           </p>
+          <COLUMNSELECT className="metric-select-container">
+            <label>Show Metrics:</label>
+            <DROPDOWNBUTTON onClick={() => setMetricsDropdownOpen(!metricsDropdownOpen)} type="button">
+              <span>{visibleMetricsCount} of 9 metrics selected</span>
+              <span className="arrow">{metricsDropdownOpen ? "▲" : "▼"}</span>
+            </DROPDOWNBUTTON>
+            <DROPDOWNMENU $isOpen={metricsDropdownOpen}>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.calls} onChange={() => toggleMetric("calls")} />
+                Calls
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.avg} onChange={() => toggleMetric("avg")} />
+                Avg Response Time
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.min} onChange={() => toggleMetric("min")} />
+                Min Response Time
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.max} onChange={() => toggleMetric("max")} />
+                Max Response Time
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.stdDev} onChange={() => toggleMetric("stdDev")} />
+                Std Dev
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.p50} onChange={() => toggleMetric("p50")} />
+                P50
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.p90} onChange={() => toggleMetric("p90")} />
+                P90
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.p95} onChange={() => toggleMetric("p95")} />
+                P95
+              </DROPDOWNITEM>
+              <DROPDOWNITEM>
+                <input type="checkbox" checked={visibleMetrics.p99} onChange={() => toggleMetric("p99")} />
+                P99
+              </DROPDOWNITEM>
+            </DROPDOWNMENU>
+          </COLUMNSELECT>
           {(() => {
             // Create a map to match endpoints between baseline and comparison
             const baselineMap = new Map<string, DataPoint[]>();
@@ -1232,15 +1317,15 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {renderMetricRow("Calls", baselineMetrics?.callCount, comparisonMetrics?.callCount, true)}
-                        {renderMetricRow("Avg Response Time", baselineMetrics?.avg, comparisonMetrics?.avg)}
-                        {renderMetricRow("Min Response Time", baselineMetrics?.min, comparisonMetrics?.min)}
-                        {renderMetricRow("Max Response Time", baselineMetrics?.max, comparisonMetrics?.max)}
-                        {renderMetricRow("Std Dev", baselineMetrics?.stdDev, comparisonMetrics?.stdDev)}
-                        {renderMetricRow("P50", baselineMetrics?.p50, comparisonMetrics?.p50)}
-                        {renderMetricRow("P90", baselineMetrics?.p90, comparisonMetrics?.p90)}
-                        {renderMetricRow("P95", baselineMetrics?.p95, comparisonMetrics?.p95)}
-                        {renderMetricRow("P99", baselineMetrics?.p99, comparisonMetrics?.p99)}
+                        {visibleMetrics.calls && renderMetricRow("Calls", baselineMetrics?.callCount, comparisonMetrics?.callCount, true)}
+                        {visibleMetrics.avg && renderMetricRow("Avg Response Time", baselineMetrics?.avg, comparisonMetrics?.avg)}
+                        {visibleMetrics.min && renderMetricRow("Min Response Time", baselineMetrics?.min, comparisonMetrics?.min)}
+                        {visibleMetrics.max && renderMetricRow("Max Response Time", baselineMetrics?.max, comparisonMetrics?.max)}
+                        {visibleMetrics.stdDev && renderMetricRow("Std Dev", baselineMetrics?.stdDev, comparisonMetrics?.stdDev)}
+                        {visibleMetrics.p50 && renderMetricRow("P50", baselineMetrics?.p50, comparisonMetrics?.p50)}
+                        {visibleMetrics.p90 && renderMetricRow("P90", baselineMetrics?.p90, comparisonMetrics?.p90)}
+                        {visibleMetrics.p95 && renderMetricRow("P95", baselineMetrics?.p95, comparisonMetrics?.p95)}
+                        {visibleMetrics.p99 && renderMetricRow("P99", baselineMetrics?.p99, comparisonMetrics?.p99)}
                       </tbody>
                     </DATATABLE>
                   </TABLECONTAINER>
@@ -1256,11 +1341,21 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           <COMPARISONCHARTSGRID>
             <CHARTCOLUMN>
               <H2>{baselineLabel}</H2>
-              <FinalResultsTable displayData={filteredBaselineData} fileLabel={baselineLabel} />
+              <FinalResultsTable
+                displayData={filteredBaselineData}
+                fileLabel={baselineLabel}
+                visibleColumns={visibleColumns}
+                onToggleColumn={toggleColumn}
+              />
             </CHARTCOLUMN>
             <CHARTCOLUMN>
               <H2>{comparisonLabel}</H2>
-              <FinalResultsTable displayData={filteredComparisonData} fileLabel={comparisonLabel} />
+              <FinalResultsTable
+                displayData={filteredComparisonData}
+                fileLabel={comparisonLabel}
+                visibleColumns={visibleColumns}
+                onToggleColumn={toggleColumn}
+              />
             </CHARTCOLUMN>
           </COMPARISONCHARTSGRID>
         </TABCONTENT>

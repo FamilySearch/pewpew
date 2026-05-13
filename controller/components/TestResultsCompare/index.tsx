@@ -56,6 +56,10 @@ const COMPARISONCHARTSGRID = styled.div`
   grid-template-columns: 1fr 1fr;
   grid-gap: 1.5em;
   margin-bottom: 2em;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 /** Each column contains stacked charts */
@@ -181,7 +185,6 @@ const DATATABLE = styled.table`
   max-width: 100%;
   border-collapse: collapse;
   font-size: 10px;
-  table-layout: fixed;
 `;
 
 const TH = styled.th`
@@ -190,8 +193,7 @@ const TH = styled.th`
   background-color: #1a1a1a;
   border-bottom: 2px solid #444;
   font-weight: bold;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -201,9 +203,10 @@ const TH = styled.th`
 const DATATD = styled.td`
   padding: 4px 6px;
   border-bottom: 1px solid #444;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 150px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 10px;
   line-height: 1.3;
 `;

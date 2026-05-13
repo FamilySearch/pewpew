@@ -11,6 +11,8 @@ on:
       - 'agent/package.json'
       - 'agent/test/pewpew'
       - 'agent/test/pewpew.arm'
+      - 'agent/createtest/scripting/pewpew'
+      - 'agent/createtest/scripting/pewpew.arm'
       - 'controller/**.html'
       - 'controller/**.js*'
       - 'controller/**.ts*'

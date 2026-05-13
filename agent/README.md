@@ -16,9 +16,11 @@ $ npm i && npm run build
 ```
 
 ## Mac, Windows, and ARM Testing
-The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew`).
+The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew` for 0.5.x/legacy and `createtest/scripting/pewpew` for 0.6.x/scripting).
 
-To override these tests for other platforms, rename the pewpew executable to match your platform and drop it in the `test/` folder:
+### Legacy (0.5.x) Binaries — `test/`
+
+To override the legacy tests for other platforms, rename the 0.5.x pewpew executable to match your platform and drop it in the `test/` folder:
 
 | Platform | Binary name |
 |---|---|
@@ -27,7 +29,18 @@ To override these tests for other platforms, rename the pewpew executable to mat
 | macOS | `pewpew.mac` |
 | ARM64 / Graviton | `pewpew.arm` |
 
-Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS).
+### Scripting (0.6.x) Binaries — `createtest/scripting/`
+
+To override the scripting tests for other platforms, rename the 0.6.x pewpew executable to match your platform and drop it in the `createtest/scripting/` folder:
+
+| Platform | Binary name |
+|---|---|
+| Linux x86_64 | `pewpew` (default, already checked in) |
+| Windows | `pewpew.exe` |
+| macOS | `pewpew.mac` |
+| ARM64 / Graviton | `pewpew.arm` |
+
+Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS). Use a 0.5.x release for `test/` and a 0.6.x release for `createtest/scripting/`.
 
 ## Test
 

@@ -18,7 +18,9 @@ $ npm i && npm run build
 ## Mac, Windows, and ARM Testing
 The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew.zip`/0.5.x and `test/scripting/pewpew.zip`/0.6.x).
 
-To override these tests for other platforms, rename the pewpew executable to match your platform, zip it with the matching name, then either drop the zip in the `test/` and `test/scripting/` folders or override `PEWPEW_ZIP_LEGACY_FILEPATH` and `PEWPEW_ZIP_SCRIPTING_FILEPATH` to point to the full path to your zip file(s):
+To override for other platforms, rename the pewpew executable to match your platform, zip it with the matching name, and drop the zip in the appropriate folder (or override the environment variable to point to the full path):
+
+### Legacy (0.5.x) Binaries — `test/` or `PEWPEW_ZIP_LEGACY_FILEPATH`
 
 | Platform | Binary name | Zip name |
 |---|---|---|
@@ -27,7 +29,16 @@ To override these tests for other platforms, rename the pewpew executable to mat
 | macOS | `pewpew.mac` | `pewpew.mac.zip` |
 | ARM64 / Graviton | `pewpew.arm` | `pewpew.arm.zip` |
 
-Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS).
+### Scripting (0.6.x) Binaries — `test/scripting/` or `PEWPEW_ZIP_SCRIPTING_FILEPATH`
+
+| Platform | Binary name | Zip name |
+|---|---|---|
+| Linux x86_64 | `pewpew` | `pewpew.zip` (default, already checked in) |
+| Windows | `pewpew.exe` | `pewpew.exe.zip` |
+| macOS | `pewpew.mac` | `pewpew.mac.zip` |
+| ARM64 / Graviton | `pewpew.arm` | `pewpew.arm.zip` |
+
+Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS). Use a 0.5.x release for `test/` and a 0.6.x release for `test/scripting/`.
 
 ### Deploying to ARM64/Graviton
 

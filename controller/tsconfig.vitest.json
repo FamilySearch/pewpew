@@ -5,6 +5,8 @@
   },
   "include": [
     "vitest.setup.ts",
+    "vitest.config.ts",
+    "coverage-provider.ts",
     "components/**/*.spec.ts",
     "components/**/*.spec.tsx",
     "components/**/*.tsx",

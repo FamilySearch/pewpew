@@ -16,7 +16,7 @@ $ npm i && npm run build
 ```
 
 ## Mac, Windows, and ARM Testing
-The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew`).
+The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew`).
 
 To override these tests for other platforms, rename the pewpew executable to match your platform and drop it in the `test/` folder:
 

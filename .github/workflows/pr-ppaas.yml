@@ -85,7 +85,7 @@ jobs:
           mkdir ~/bin
           PATH=$PATH:~/bin
           WASM_PACK_ARCH=$(uname -m)
-          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-${WASM_PACK_ARCH}-unknown-linux-musl.tar.gz \
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.13.1/wasm-pack-v0.13.1-${WASM_PACK_ARCH}-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C ~/bin --no-anchored wasm-pack
 
           # setup some envs to various paths for convenience

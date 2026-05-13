@@ -16,7 +16,7 @@ $ npm i && npm run build
 ```
 
 ## Mac, Windows, and ARM Testing
-The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew.zip`).
+The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew.zip`).
 
 To override these tests for other platforms, rename the pewpew executable to match your platform, zip it with the matching name, then either drop the zip in the `test/` folder or override `PEWPEW_ZIP_FILEPATH` to point to the full path to your zip file:
 
@@ -32,8 +32,8 @@ Download the appropriate binary from the [pewpew releases](https://github.com/Fa
 ### Deploying to ARM64/Graviton
 
 The controller runs `pewpew --version` on upload to validate binaries, so the controller and agents **must share the same architecture**. When migrating to Graviton:
-1. Upload `pewpew.arm` for each required version via the controller UI (from an ARM64 controller) before deploying Graviton agents.
-2. Deploy the ARM64 controller and ARM64 agents together — plan for a brief downtime since both must switch simultaneously.
+1. From the **existing x86 controller**, upload a zip containing both `pewpew` (x86) and `pewpew.arm` for each required version. The controller validates the version using the x86 binary and uploads all files to S3, so both architecture binaries land in S3 in a single upload.
+2. Take downtime and deploy the ARM64 controller and ARM64 agents simultaneously — they must switch together since each only runs its own architecture's binary.
 
 ## Test
 ```bash

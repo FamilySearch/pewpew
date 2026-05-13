@@ -1,6 +1,12 @@
+import path from "path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@fs/hdr-histogram-wasm": path.resolve(__dirname, "__mocks__/hdr-histogram-wasm.ts")
+    }
+  },
   test: {
     environment: "jsdom",
     globals: true,

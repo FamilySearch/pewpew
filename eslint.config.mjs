@@ -31,7 +31,6 @@ export default [{
     "controller/coverage-provider.ts",
     "controller/vitest.config.ts",
     "controller/vitest.setup.ts",
-    "controller/next-env.d.ts",
     "eslint.config.mjs"
   ],
 }, ...compat.extends(

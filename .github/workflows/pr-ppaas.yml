@@ -9,10 +9,14 @@ on:
       - 'agent/**.js*'
       - 'agent/**.ts*'
       - 'agent/package.json'
+      - 'agent/test/pewpew'
+      - 'agent/test/pewpew.arm'
       - 'controller/**.html'
       - 'controller/**.js*'
       - 'controller/**.ts*'
       - 'controller/package.json'
+      - 'controller/test/pewpew.zip'
+      - 'controller/test/pewpew.arm.zip'
 
 name: Pull Request PPaaS
 jobs:

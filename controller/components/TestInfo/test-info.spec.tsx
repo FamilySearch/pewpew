@@ -7,7 +7,7 @@ vi.mock("axios", () => ({
 }));
 vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} }) }));
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { TestData } from "../../types";
 import TestInfo from ".";
@@ -107,5 +107,110 @@ describe("TestInfo Component", () => {
   it("renders storybook message prop", () => {
     render(<TestInfo testData={baseTestData} message="Stop Sent" />);
     expect(screen.getByText("Stop Sent")).toBeInTheDocument();
+  });
+
+  it("renders messageId when both message and messageId are provided", () => {
+    render(<TestInfo testData={baseTestData} message="Stop Sent" messageId="msg-123" />);
+    expect(screen.getByText(/MessageId: msg-123/)).toBeInTheDocument();
+  });
+
+  describe("optional fields", () => {
+    it("renders instanceId when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, instanceId: "i-1234abcd" }} />);
+      expect(screen.getByText(/InstanceId:/)).toBeInTheDocument();
+    });
+
+    it("renders hostname when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, hostname: "test-host-1" }} />);
+      expect(screen.getByText(/Hostname:/)).toBeInTheDocument();
+    });
+
+    it("renders ipAddress when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, ipAddress: "10.0.0.1" }} />);
+      expect(screen.getByText(/IPAddress:/)).toBeInTheDocument();
+    });
+
+    it("renders queueName when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, queueName: "unit-test-queue" }} />);
+      expect(screen.getByText(/Test Queue:/)).toBeInTheDocument();
+    });
+
+    it("renders version when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, version: "0.5.8" }} />);
+      expect(screen.getByText(/Pewpew Version:/)).toBeInTheDocument();
+    });
+
+    it("renders userId as an email link when provided", () => {
+      render(<TestInfo testData={{ ...baseTestData, userId: "user@example.com" }} />);
+      expect(screen.getByText("user@example.com")).toBeInTheDocument();
+    });
+
+    it("renders a single resultsFileLocation link", () => {
+      const testWithResults: TestData = {
+        ...baseTestData,
+        resultsFileLocation: ["https://s3.example.com/results/test.json"]
+      };
+      render(<TestInfo testData={testWithResults} />);
+      expect(screen.getByText("S3 Results Url")).toBeInTheDocument();
+    });
+
+    it("renders multiple resultsFileLocation links with numbered labels", () => {
+      const testWithResults: TestData = {
+        ...baseTestData,
+        resultsFileLocation: [
+          "https://s3.example.com/results/test1.json",
+          "https://s3.example.com/results/test2.json"
+        ]
+      };
+      render(<TestInfo testData={testWithResults} />);
+      expect(screen.getByText("S3 Results Url")).toBeInTheDocument();
+      expect(screen.getByText("S3 Results Url 2")).toBeInTheDocument();
+    });
+
+    it("renders lastUpdated for a running test with a recent timestamp", () => {
+      const recentTime = new Date().toISOString();
+      const runningTest: TestData = { ...baseTestData, status: TestStatus.Running, lastUpdated: recentTime };
+      render(<TestInfo testData={runningTest} />);
+      expect(screen.getByText(/Last Updated:/)).toBeInTheDocument();
+    });
+
+    it("renders lastUpdated for a running test with a stale timestamp", () => {
+      const staleTime = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+      const runningTest: TestData = { ...baseTestData, status: TestStatus.Running, lastUpdated: staleTime };
+      render(<TestInfo testData={runningTest} />);
+      expect(screen.getByText(/Last Updated:/)).toBeInTheDocument();
+    });
+  });
+
+  describe("interactions", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("calls window.confirm when the stop button is clicked", () => {
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const runningTest: TestData = { ...baseTestData, status: TestStatus.Running };
+      render(<TestInfo testData={runningTest} />);
+      fireEvent.click(screen.getByText("Stop Test"));
+      expect(confirmSpy).toHaveBeenCalled();
+    });
+
+    it("shows an error when stop is confirmed but the response is not a TestManagerMessage", async () => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      const runningTest: TestData = { ...baseTestData, status: TestStatus.Running };
+      render(<TestInfo testData={runningTest} />);
+      fireEvent.click(screen.getByText("Stop Test"));
+      await waitFor(() => {
+        expect(screen.getByText(/Error:/)).toBeInTheDocument();
+      });
+    });
+
+    it("shows an error when the download button is clicked and the response is invalid", async () => {
+      render(<TestInfo testData={baseTestData} />);
+      fireEvent.click(screen.getByText("Download Test Files"));
+      await waitFor(() => {
+        expect(screen.getByText(/Error:/)).toBeInTheDocument();
+      });
+    });
   });
 });

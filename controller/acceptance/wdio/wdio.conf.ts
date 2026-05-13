@@ -14,7 +14,7 @@ export const config = {
     "./**/*.spec.ts"
   ],
 
-  maxInstances: 1,
+  maxInstances: process.env.WDIO_MAX_INSTANCES ? parseInt(process.env.WDIO_MAX_INSTANCES, 10) : 1,
 
   capabilities: [{
     browserName: "chrome",

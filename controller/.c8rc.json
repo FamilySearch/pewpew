@@ -11,6 +11,8 @@
     ".storybook/**",
     "storybook-static/**",
     "components/**/story.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
     "next.config.ts"
   ],
   "reporter": ["lcov", "text"],

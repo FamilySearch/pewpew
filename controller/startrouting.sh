@@ -2,4 +2,5 @@
 set -e
 set -x
 
-BASE_PATH='/pewpew/load-test' npm run start
+export BASE_PATH='/pewpew/load-test'
+npm run build && npm run start

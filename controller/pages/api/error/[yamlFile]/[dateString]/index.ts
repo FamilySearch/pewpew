@@ -50,7 +50,7 @@ export default async (request: NextApiRequest, response: NextApiResponse<GetObje
         const found = await getS3Response({ request, response, filename, s3Folder, redirectToS3 });
         if (found) { return; }
 
-        response.status(404).json({ message: `No error file found for ${request.method} ${request.url}` });
+        response.status(204).end();
       } else {
         response.status(400).json({ message: `method ${request.method} must have an yamlFile and dateString` });
       }

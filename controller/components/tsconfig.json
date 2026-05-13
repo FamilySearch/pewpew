@@ -1,0 +1,14 @@
+{
+  // Extends tsconfig.vitest.json so VS Code resolves vitest globals (vi, expect, etc.)
+  // in spec files without requiring explicit imports. Mirrors the pattern used in
+  // acceptance/wdio/tsconfig.json for WebdriverIO globals.
+  "extends": "../tsconfig.vitest.json",
+  "compilerOptions": {
+    "rootDir": ".."
+  },
+  "exclude": ["node_modules"],
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
+}

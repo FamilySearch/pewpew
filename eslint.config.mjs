@@ -28,6 +28,9 @@ export default [{
     "controller/storybook-static",
     "controller/test/**.js",
     "controller/next-env.d.ts",
+    "controller/coverage-provider.ts",
+    "controller/vitest.config.ts",
+    "controller/vitest.setup.ts",
     "eslint.config.mjs"
   ],
 }, ...compat.extends(
@@ -51,6 +54,7 @@ export default [{
         "./agent/tsconfig.json",
         "./controller/tsconfig.json",
         "./controller/tsconfig.test.json",
+        "./controller/tsconfig.vitest.json",
         "./controller/.storybook/tsconfig.json",
         "./controller/acceptance/wdio/tsconfig.json",
       ],

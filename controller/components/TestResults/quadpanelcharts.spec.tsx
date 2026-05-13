@@ -1,20 +1,6 @@
-/**
- * Unit Tests for Quad Panel Charts
- *
- * Tests the new quad panel dashboard functionality including:
- * - Custom HTML legend functionality
- * - Merge endpoints toggle
- * - Chart configuration
- * - Component structure
- */
-
-// Must be the first import so DOM globals are present before
-// @testing-library/react's render() is loaded.
-import "jsdom-global/register";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-// Mock Chart.js
 const mockChart = {
   destroy () { /* no-op */ },
   update () { /* no-op */ },
@@ -27,20 +13,9 @@ const mockChart = {
   }
 };
 
-// Note: These tests verify the component structure and behavior.
-// Full integration tests with actual Chart.js and WASM are in the Storybook stories.
-
-describe("Quad Panel Charts", function () {
-  // Skip if running in test environment (WASM doesn't load in jsdom)
-  beforeEach(function () {
-    if (process.env.NODE_ENV === "test") {
-      this.skip();
-      return;
-    }
-  });
-
-  describe("Legend Functionality", function () {
-    it("should render custom legends outside the canvas", async function () {
+describe("Quad Panel Charts", () => {
+  describe("Legend Functionality", () => {
+    it("should render custom legends outside the canvas", async () => {
       const TestComponent = () => {
         const [chart, setChart] = React.useState<any>();
         const [hiddenDatasets, setHiddenDatasets] = React.useState<Set<number>>(new Set());
@@ -93,21 +68,17 @@ describe("Quad Panel Charts", function () {
 
       render(<TestComponent />);
 
-      // Check legend is rendered
       await waitFor(() => {
         screen.getByTestId("custom-legend");
       });
 
-      // Check legend items are rendered
-      screen.getByTestId("legend-item-0");
-      screen.getByTestId("legend-item-1");
-
-      // Check legend text
-      screen.getByText("GET /api/test");
-      screen.getByText("POST /api/test");
+      expect(screen.getByTestId("legend-item-0")).toBeInTheDocument();
+      expect(screen.getByTestId("legend-item-1")).toBeInTheDocument();
+      expect(screen.getByText("GET /api/test")).toBeInTheDocument();
+      expect(screen.getByText("POST /api/test")).toBeInTheDocument();
     });
 
-    it("should toggle dataset visibility when legend item is clicked", async function () {
+    it("should toggle dataset visibility when legend item is clicked", async () => {
       const mockMeta = { hidden: false };
       const mockChartWithMeta = {
         ...mockChart,
@@ -153,25 +124,16 @@ describe("Quad Panel Charts", function () {
       render(<TestComponent />);
 
       const legendItem = screen.getByTestId("legend-item-0");
-
-      // Click to hide
       fireEvent.click(legendItem);
 
       await waitFor(() => {
-        // Verify the dataset was toggled
-        // In actual tests with full Chart.js, this would verify the chart state
+        expect(legendItem).toBeInTheDocument();
       });
-
-      // Check opacity changes
-      const styles = window.getComputedStyle(legendItem);
-      if (styles.opacity) {
-        // Verify opacity changed
-      }
     });
   });
 
-  describe("Merge Endpoints Toggle", function () {
-    it("should show merge toggle checkbox", function () {
+  describe("Merge Endpoints Toggle", () => {
+    it("should show merge toggle checkbox", () => {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -191,13 +153,11 @@ describe("Quad Panel Charts", function () {
       render(<TestComponent />);
 
       const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      if (!checkbox.checked) {
-        // Checkbox starts unchecked
-      }
-      screen.getByText("Merge endpoints with different tags");
+      expect(checkbox.checked).toBe(false);
+      expect(screen.getByText("Merge endpoints with different tags")).toBeInTheDocument();
     });
 
-    it("should toggle merge state when checkbox is clicked", function () {
+    it("should toggle merge state when checkbox is clicked", () => {
       const TestComponent = () => {
         const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
 
@@ -217,34 +177,21 @@ describe("Quad Panel Charts", function () {
       render(<TestComponent />);
 
       const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      const _stateDisplay = screen.getByTestId("merge-state");
+      expect(checkbox.checked).toBe(false);
+      expect(screen.getByText("raw")).toBeInTheDocument();
 
-      // Initial state
-      if (!checkbox.checked) {
-        // Starts unchecked
-      }
-      screen.getByText("raw");
-
-      // Click to enable merge
       fireEvent.click(checkbox);
-      if (checkbox.checked) {
-        // Now checked
-      }
-      screen.getByText("merged");
+      expect(checkbox.checked).toBe(true);
+      expect(screen.getByText("merged")).toBeInTheDocument();
 
-      // Click to disable merge
       fireEvent.click(checkbox);
-      if (!checkbox.checked) {
-        // Back to unchecked
-      }
-      screen.getByText("raw");
+      expect(checkbox.checked).toBe(false);
+      expect(screen.getByText("raw")).toBeInTheDocument();
     });
   });
 
-  describe("Chart Configuration", function () {
-    it("should set yAlign to top for tooltips", function () {
-      // This test verifies the tooltip configuration
-      // In actual implementation, tooltips use yAlign: 'top' to appear above the graph
+  describe("Chart Configuration", () => {
+    it("should set yAlign to top for tooltips", () => {
       const tooltipConfig = {
         yAlign: "top" as const,
         backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -254,20 +201,14 @@ describe("Quad Panel Charts", function () {
         bodySpacing: 8
       };
 
-      if (tooltipConfig.yAlign !== "top") {
-        throw new Error("yAlign should be 'top'");
-      }
-      if (tooltipConfig.bodySpacing !== 8) {
-        throw new Error("bodySpacing should be 8");
-      }
-      if (tooltipConfig.bodyFont.size !== 13) {
-        throw new Error("bodyFont size should be 13");
-      }
+      expect(tooltipConfig.yAlign).toBe("top");
+      expect(tooltipConfig.bodySpacing).toBe(8);
+      expect(tooltipConfig.bodyFont.size).toBe(13);
     });
   });
 
-  describe("Legend Styling", function () {
-    it("should apply grey color to legend text", function () {
+  describe("Legend Styling", () => {
+    it("should apply grey color to legend text", () => {
       const TestComponent = () => (
         <div style={{ color: "#999" }} data-testid="legend-item">
           Test Label
@@ -275,13 +216,10 @@ describe("Quad Panel Charts", function () {
       );
 
       render(<TestComponent />);
-
-      const legendItem = screen.getByTestId("legend-item");
-      const _styles = window.getComputedStyle(legendItem);
-      // Verify color is set (actual computed value may vary)
+      expect(screen.getByTestId("legend-item")).toBeInTheDocument();
     });
 
-    it("should have compact spacing between legend items", function () {
+    it("should have compact spacing between legend items", () => {
       const TestComponent = () => (
         <div style={{ gap: "0.5em", display: "flex" }} data-testid="legend-container">
           <div>Item 1</div>
@@ -290,9 +228,7 @@ describe("Quad Panel Charts", function () {
       );
 
       render(<TestComponent />);
-
-      screen.getByTestId("legend-container");
-      // Verify container is rendered
+      expect(screen.getByTestId("legend-container")).toBeInTheDocument();
     });
   });
 });

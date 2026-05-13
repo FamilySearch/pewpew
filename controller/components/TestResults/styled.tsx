@@ -23,6 +23,7 @@ export const RTTDIV = styled(ENDPOINTDIV1)`
 export const FLEXROW = styled.div`
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
 `;
 
 export const ENDPOINTDIV2 = styled(FLEXROW)`

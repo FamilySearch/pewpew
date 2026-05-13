@@ -46,6 +46,10 @@ const TIMETAKEN = styled.div`
 const CANVASBOX = styled.div`
   position: relative;
   width: calc(55vw - 100px);
+
+  @media (max-width: 768px) {
+    width: calc(100vw - 40px);
+  }
 `;
 
 // New Dashboard Styled Components
@@ -56,6 +60,11 @@ const QUADGRID = styled.div`
   grid-gap: 1.5em;
   margin: 2em 0;
   width: 100%;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: unset;
+  }
 `;
 
 const QUADPANEL = styled.div`
@@ -187,8 +196,7 @@ const TH = styled.th`
   background-color: #1a1a1a;
   border-bottom: 2px solid #444;
   font-weight: bold;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -197,9 +205,10 @@ const TH = styled.th`
 const DATATD = styled.td`
   padding: 6px 12px;
   border-bottom: 1px solid #444;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 200px;
+  white-space: nowrap;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.4;
   vertical-align: top;
 `;

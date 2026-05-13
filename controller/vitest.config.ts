@@ -1,10 +1,13 @@
-import path from "path";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 import { defineConfig } from "vitest/config";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@fs/hdr-histogram-wasm": path.resolve(__dirname, "__mocks__/hdr-histogram-wasm.ts")
+      "@fs/hdr-histogram-wasm": resolve(__dirname, "__mocks__/hdr-histogram-wasm.ts")
     }
   },
   test: {

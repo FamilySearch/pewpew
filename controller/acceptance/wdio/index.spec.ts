@@ -1,9 +1,10 @@
 import { LogLevel, log } from "@fs/ppaas-common";
 import {
   PAGE_TEST_HISTORY,
-  PAGE_TEST_HISTORY_FORMAT
+  PAGE_TEST_HISTORY_FORMAT,
+  TestData
 } from "../../types";
-import { assertNoPageError, getTestData } from "./util";
+import { assertNoPageError, getTestData, getTestDataWithResults } from "./util";
 
 describe("GET / (Test History Page)", () => {
   let testId: string;
@@ -86,6 +87,85 @@ describe("GET / (Test History Page)", () => {
       // Verify testId appears as a link in the search results list
       const searchResultLink = await $(`button[name='${testId}']`);
       await expect(searchResultLink).toExist();
+    });
+  });
+
+  describe("TestResults Dropdown", () => {
+    let testDataWithResults: TestData | undefined;
+
+    before(async () => {
+      testDataWithResults = await getTestDataWithResults();
+      log("index.spec testDataWithResults", LogLevel.INFO, { testId: testDataWithResults?.testId });
+    });
+
+    it("should display the results dropdown for a test with results", async () => {
+      if (!testDataWithResults) { return; }
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await assertNoPageError();
+      const select = await $("[data-testid='results-select']");
+      await expect(select).toExist();
+    });
+
+    it("selecting a result file should load the results", async () => {
+      if (!testDataWithResults) { return; }
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await assertNoPageError();
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(1);
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load after selecting from dropdown" });
+    });
+
+    it("deselecting the result should hide the results", async () => {
+      if (!testDataWithResults) { return; }
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await assertNoPageError();
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(1);
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load before deselect" });
+      await select.selectByIndex(0);
+      await resultsLoaded.waitForExist({ reverse: true, timeout: 10000, timeoutMsg: "Results did not disappear after deselecting" });
+    });
+
+    it("with ?results=0 should auto-select the first result and load it", async () => {
+      if (!testDataWithResults) { return; }
+      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId)}&results=0`;
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not auto-load with ?results=0" });
+    });
+
+    it("selecting a result should update the URL to include results=0", async () => {
+      if (!testDataWithResults) { return; }
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await assertNoPageError();
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(1);
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return currentUrl.includes("results=0");
+      }, { timeout: 5000, timeoutMsg: "URL did not update to include results=0 after selecting" });
+    });
+
+    it("deselecting should remove results= from the URL", async () => {
+      if (!testDataWithResults) { return; }
+      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId)}&results=0`;
+      await browser.url(url);
+      await assertNoPageError();
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not auto-load" });
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(0);
+      await resultsLoaded.waitForExist({ reverse: true, timeout: 10000, timeoutMsg: "Results did not disappear after deselecting" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return !currentUrl.includes("results=");
+      }, { timeout: 5000, timeoutMsg: "URL still contains results= after deselecting" });
     });
   });
 

@@ -9,7 +9,7 @@ import {
   TestManagerError
 } from "../types";
 import { Alert, Danger } from "../components/Alert";
-import { EventApi, EventInput, ViewApi } from "@fullcalendar/core";
+import { DatesSetArg, EventApi, EventInput, ViewApi } from "@fullcalendar/core";
 import {
   GetServerSideProps,
   GetServerSidePropsContext,
@@ -18,7 +18,7 @@ import {
 import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestManagerError } from "../src/clientutil";
 import Div from "../components/Div";
@@ -64,6 +64,53 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
   const [state, setState] = useState(defaultState);
   const updateState = (newState: Partial<CalendarPageState>) => setState((oldState: CalendarPageState) => ({ ...oldState, ...newState}));
   const router = useRouter();
+
+  const isInitialDatesSet = useRef(true);
+  const hasMounted = useRef(false);
+  // Set to true before every router.replace we trigger ourselves so the effect can
+  // distinguish our programmatic URL updates from external navigation (back/forward/Layout).
+  const isProgrammaticUpdate = useRef(false);
+  const [calendarKey, setCalendarKey] = useState(0);
+
+  // Remount the calendar on any external URL change (back/forward button, Layout nav link).
+  // Programmatic updates from handleDatesSet set isProgrammaticUpdate so we can skip them.
+  useEffect(() => {
+    if (!router.isReady) { return; }
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+    if (isProgrammaticUpdate.current) {
+      isProgrammaticUpdate.current = false;
+      return;
+    }
+    isInitialDatesSet.current = true;
+    setCalendarKey((k) => k + 1);
+  }, [router.isReady, router.query.defaultView, router.query.defaultDate]);
+
+  // After hydration, router.query is authoritative (SSR props don't update on shallow nav).
+  const VALID_VIEWS = ["timeGridDay", "timeGridWeek", "dayGridMonth"] as const;
+  const calendarInitialView: GridView = router.isReady
+    && typeof router.query.defaultView === "string"
+    && (VALID_VIEWS as readonly string[]).includes(router.query.defaultView)
+    ? router.query.defaultView as GridView
+    : defaultView;
+  const rawDate = router.isReady && typeof router.query.defaultDate === "string"
+    ? Number(router.query.defaultDate)
+    : NaN;
+  const calendarInitialDate = isNaN(rawDate) ? defaultDate : new Date(rawDate);
+
+  const handleDatesSet = (arg: DatesSetArg) => {
+    if (isInitialDatesSet.current) {
+      isInitialDatesSet.current = false;
+      return;
+    }
+    isProgrammaticUpdate.current = true;
+    const url = `${router.pathname}?defaultView=${arg.view.type}&defaultDate=${arg.view.currentStart.getTime()}`;
+    log("router.replace in handleDatesSet", LogLevel.DEBUG, { url, pathname: router.pathname, query: router.query, asPath: router.asPath });
+    router.replace(url, formatPageHref(url), { shallow: true })
+    .catch((error) => log("Could not Router.replace calendar dates", LogLevel.ERROR, error));
+  };
 
   const handleDateClick = (arg: {
     date: Date;
@@ -136,11 +183,13 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
         {(state.error) && <Danger>{state.error}</Danger>}
         {authPermission === AuthPermission.Admin && <Alert data-testid="admin-override-alert">Admin Override: Delete from Schedule with Shift+Alt+Click</Alert>}
         <CalendarComponent
-          initialView={defaultView}
-          initialDate={defaultDate}
+          key={calendarKey}
+          initialView={calendarInitialView}
+          initialDate={calendarInitialDate}
           events={scheduledEvents}
           dateClick={handleDateClick}
           eventClick={handleEventClick}
+          datesSet={handleDatesSet}
         />
       </Column>
     </Layout>

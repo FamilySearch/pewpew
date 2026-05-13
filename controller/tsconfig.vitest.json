@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom/vitest"]
+  },
+  "exclude": [
+    "node_modules",
+    "test/**/*",
+    "acceptance/**/*",
+    "integration/**/*",
+    "testcleanup/**/*"
+  ],
+  "include": [
+    "vitest.setup.ts",
+    "vitest.config.ts",
+    "coverage-provider.ts",
+    "components/**/*.spec.ts",
+    "components/**/*.spec.tsx",
+    "components/**/*.tsx",
+    "components/**/*.ts"
+  ]
+}

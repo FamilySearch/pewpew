@@ -38,7 +38,12 @@
     "test/**/*",
     "acceptance/**/*",
     "integration/**/*",
-    "testcleanup/**/*"
+    "testcleanup/**/*",
+    "coverage-provider.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "components/**/*.spec.ts",
+    "components/**/*.spec.tsx"
   ],
   "include": [
     "next-env.d.ts",

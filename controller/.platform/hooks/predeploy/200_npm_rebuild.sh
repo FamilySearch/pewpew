@@ -15,6 +15,12 @@ cd "${APP_STAGING_DIR}"
 # https://github.com/vitejs/vite/issues/1361
 # https://github.com/evanw/esbuild/issues/1711
 npm install -D esbuild
+# PERF-3613: When the artifact is built on x86 CodeBuild but deployed to a
+# Graviton (arm64) instance, the platform-specific optionalDependencies
+# (@next/swc-*, sharp) arrive with the wrong arch. Reinstalling next forces
+# npm to pick the correct optional binaries for the running instance.
+# Idempotent across x86 and arm64 instances.
+npm install --no-save next
 npm rebuild
 chmod a+x node_modules/.bin/*
 npm install -g rimraf

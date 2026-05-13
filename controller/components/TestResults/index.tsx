@@ -39,10 +39,6 @@ import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import styled from "styled-components";
 
-const SELECT = styled.select`
-  width: 150px;
-`;
-
 const TIMETAKEN = styled.div`
   text-align: left;
 `;
@@ -50,6 +46,10 @@ const TIMETAKEN = styled.div`
 const CANVASBOX = styled.div`
   position: relative;
   width: calc(55vw - 100px);
+
+  @media (max-width: 768px) {
+    width: calc(100vw - 40px);
+  }
 `;
 
 // New Dashboard Styled Components
@@ -60,6 +60,11 @@ const QUADGRID = styled.div`
   grid-gap: 1.5em;
   margin: 2em 0;
   width: 100%;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: unset;
+  }
 `;
 
 const QUADPANEL = styled.div`
@@ -191,8 +196,7 @@ const TH = styled.th`
   background-color: #1a1a1a;
   border-bottom: 2px solid #444;
   font-weight: bold;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -201,9 +205,10 @@ const TH = styled.th`
 const DATATD = styled.td`
   padding: 6px 12px;
   border-bottom: 1px solid #444;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 200px;
+  white-space: nowrap;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.4;
   vertical-align: top;
 `;
@@ -238,8 +243,19 @@ const DOWNLOADBUTTON = styled.button`
   }
 `;
 
+
 export interface TestResultProps {
   testData: TestData;
+  /** Auto-select this results index (0-based) on mount */
+  initialResultsIndex?: number;
+  /** Called when the user changes the selected results file (undefined = deselected) */
+  onResultsIndexChange?: (index: number | undefined) => void;
+  /** Auto-load this testId as the compare target once primary results are available */
+  initialCompareTestId?: string;
+  /** Pre-fetched compare TestData for Storybook. Skips the API fetch when set. */
+  initialCompareTestData?: TestData;
+  /** Called when the compare test selection changes (undefined = cleared) */
+  onCompareTestIdChange?: (testId: string | undefined) => void;
 }
 
 export interface TestResultState {
@@ -594,10 +610,17 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   );
 };
 
-export const TestResults = React.memo(({ testData }: TestResultProps) => {
+export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
-  const [state, setState] = useState({ ...DEFAULT_STATE, defaultMessage: defaultMessage() });
+  const [state, setState] = useState(() => {
+    const init = { ...DEFAULT_STATE, defaultMessage: defaultMessage() };
+    if (initialResultsIndex !== undefined && testData.resultsFileLocation?.[initialResultsIndex]) {
+      init.resultsPath = testData.resultsFileLocation[initialResultsIndex];
+      init.defaultMessage = "Results Loading...";
+    }
+    return init;
+  });
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const compareSearchModalRef = useRef<ModalObject| null>(null);
@@ -667,12 +690,14 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
   const onResultsFileChange = async (
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
+    const selectedIndex = event.target.selectedIndex;
     updateState({
       defaultMessage: "Results Loading...",
       resultsPath: event.target.value
     });
-    if (event.target.selectedIndex !== 0) {
+    if (selectedIndex !== 0) {
       await updateResults(event.target.value);
+      onResultsIndexChange?.(selectedIndex - 1);
     } else {
       setState((oldState: TestResultState) => {
         // Free the old data
@@ -692,6 +717,7 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
           minMaxTime: undefined
         };
       });
+      onResultsIndexChange?.(undefined);
     }
   };
 
@@ -798,6 +824,43 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     }
   };
 
+  const loadCompareByTestId = async (testId: string, overrideTestData?: TestData): Promise<void> => {
+    let compareTestData: TestData;
+    if (overrideTestData) {
+      compareTestData = overrideTestData;
+    } else {
+      const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(testId)));
+      log("test data response", LogLevel.DEBUG, response.data);
+      const result: TestManagerError | TestData = response.data;
+      if ("message" in result) {
+        throw result;
+      }
+      compareTestData = result;
+    }
+    const s3ResultPath = compareTestData.resultsFileLocation?.[0];
+    if (!s3ResultPath) {
+      throw new Error(`No results path found for test ${testId}`);
+    }
+    const compareText: string = await fetchResults(s3ResultPath);
+    if (state.compareText === compareText) {
+      log("compareText not changed", LogLevel.DEBUG);
+      return;
+    }
+    setState((oldState: TestResultState) => {
+      freeHistograms(undefined, undefined, oldState.compareData);
+      return {
+        ...oldState,
+        compareTest: compareTestData,
+        compareText: undefined,
+        compareData: undefined,
+        error: undefined
+      };
+    });
+    const compareData = await parseResultsData(compareText);
+    log("loadCompareByTestId done", LogLevel.DEBUG, { compareData: compareData?.length });
+    updateState({ compareTest: compareTestData, compareText, compareData });
+  };
+
   const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
     event.preventDefault();
     if (doubleClickCheckRef.current) {
@@ -806,58 +869,13 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     try {
       doubleClickCheckRef.current = true;
       compareSearchModalRef.current?.closeModal();
-      // Load the Status and find results
-      const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(compareTest.testId)));
-      // It's either a TestManagerError | TestData
-      log("test data response", LogLevel.DEBUG, response.data);
-      const compareTestData: TestManagerError | TestData = response.data;
-      if ("message" in compareTestData) {
-        throw compareTestData;
-      }
-      const s3ResultPath = compareTestData.resultsFileLocation && compareTestData.resultsFileLocation.length > 0
-        ? compareTestData.resultsFileLocation[0]
-        : undefined;
-      if (!s3ResultPath) {
-        throw new Error(`No results path found for test ${compareTest.testId}`);
-      }
-      const compareText: string = await fetchResults(s3ResultPath);
-      // Check if the data has changed. No need to reprocess and redraw if it didn't
-      if (state.compareText === compareText) {
-        log("compareText not changed", LogLevel.DEBUG);
-      } else {
-        setState((oldState: TestResultState) => {
-          // Free the old ones
-          freeHistograms(undefined, undefined, oldState.compareData);
-
-          log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
-          return {
-            ...oldState,
-            compareTest,
-            compareText: undefined,
-            compareData: undefined, // Set this back to undefined while loading. Need compareData to be freed
-            error: undefined
-          };
-        });
-        // Use shared parsing utility (includes sorting)
-        const compareData = await parseResultsData(compareText);
-        // Update the state with the new compare data
-        log("updateCompareData", LogLevel.DEBUG, { compareData: compareData?.length });
-        updateState({
-          compareTest,
-          compareText,
-          compareData
-        });
-      }
+      await loadCompareByTestId(compareTest.testId);
+      onCompareTestIdChange?.(compareTest.testId);
     } catch (error) {
       log("onPriorTestLoad error", LogLevel.ERROR, error);
-      updateState({
-        // message: undefined,
-        error: formatError(error)
-      });
+      updateState({ error: formatError(error) });
       // Clear the message after 30 seconds or it never goes away
-      setTimeout(() => updateState({
-        error: undefined
-      }), 30000);
+      setTimeout(() => updateState({ error: undefined }), 30000);
     } finally {
       doubleClickCheckRef.current = false;
     }
@@ -893,6 +911,15 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
     }
     return undefined;
   }, [testData.status, state.resultsPath]);
+
+  useEffect(() => {
+    if (initialCompareTestId && state.resultsData && !state.compareData && !state.compareTest) {
+      loadCompareByTestId(initialCompareTestId, initialCompareTestData).catch((error: unknown) => {
+        log("Auto-load compare error", LogLevel.WARN, error);
+        updateState({ error: formatError(error) });
+      });
+    }
+  }, [state.resultsData]);
 
   // Memoized display data to avoid unnecessary recalculations
   const displayData = useMemo(() => {
@@ -931,17 +958,26 @@ export const TestResults = React.memo(({ testData }: TestResultProps) => {
       {testData &&
         testData.resultsFileLocation &&
         testData.resultsFileLocation.length > 0 && (
-          <SELECT value={state.resultsPath} onChange={onResultsFileChange}>
-            <option>Select Result File</option>
-            {testData.resultsFileLocation.map((fileLocation, idx) => (
-              <option key={fileLocation} value={fileLocation}>
-                Test Result - {idx}
-              </option>
-            ))}
-          </SELECT>
+          <FILTERDROPDOWN>
+            <label htmlFor="results-file-select">Results File:</label>
+            <select
+              id="results-file-select"
+              data-testid="results-select"
+              value={state.resultsPath}
+              onChange={onResultsFileChange}
+              style={{ minWidth: "220px" }}
+            >
+              <option>Select Result File</option>
+              {testData.resultsFileLocation.map((fileLocation, idx) => (
+                <option key={fileLocation} value={fileLocation}>
+                  Test Result - {idx}
+                </option>
+              ))}
+            </select>
+          </FILTERDROPDOWN>
         )}
       {filteredDisplayData !== undefined ? (
-        <TIMETAKEN>
+        <TIMETAKEN data-testid="results-loaded">
           <h1>Time Taken</h1>
           <p>
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
@@ -1164,16 +1200,16 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
           </tr>
         </thead>
         <tbody>
-          {tableData.map((row, idx) => (
-            <DATATR key={idx}>
+          {tableData.map((row) => (
+            <DATATR key={`${row.method}-${row.hostname}-${row.path}-${row.tags}`}>
               <DATATD>{row.method}</DATATD>
               <DATATD title={row.hostname}>{row.hostname}</DATATD>
               <DATATD title={row.path}>{row.path}</DATATD>
               <DATATD>{row.queryString}</DATATD>
               <DATATD title={row.tags}>{row.tags}</DATATD>
               <DATATD>
-                {row.statusCounts.map((sc: any, i: number) => (
-                  <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
+                {row.statusCounts.map((sc: any) => (
+                  <div key={sc.status}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
               </DATATD>
               <DATATD>{row.callCount.toLocaleString()}</DATATD>
@@ -1338,11 +1374,11 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
           {bucketId.method} {bucketId.url}
         </H3>
         <UL>
-          {Object.entries(bucketId).map(([key, value], idx) => {
+          {Object.entries(bucketId).map(([key, value]) => {
 
             if (key !== "method" && key !== "url") {
               return (
-                <li key={idx}>
+                <li key={key}>
                   {key} - {value}
                 </li>
               );
@@ -1357,9 +1393,9 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
               <h5>RTT Stats</h5>
               <TABLE>
                 <tbody>
-                  {totalResults.stats.map(([label, stat], idx) => {
+                  {totalResults.stats.map(([label, stat]) => {
                     return (
-                      <TR key={idx}>
+                      <TR key={String(label)}>
                         <TD>{label}</TD>
                         <TD>{stat.toLocaleString()}ms</TD>
                       </TR>
@@ -1373,9 +1409,9 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
               <TABLE>
                 <tbody>
                   {totalResults.statusCounts.map(
-                    ([status, count, percent], idx) => {
+                    ([status, count, percent]) => {
                       return (
-                        <TR key={idx}>
+                        <TR key={String(status)}>
                           <TD>{status}</TD>
                           <TD>{count.toLocaleString()}</TD>
                           <TD>
@@ -1394,9 +1430,9 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
                   <h5>Other Errors</h5>
                   <TABLE>
                     <tbody>
-                      {totalResults.otherErrors.map(([msg, count], idx) => {
+                      {totalResults.otherErrors.map(([msg, count]) => {
                         return (
-                          <TR key={idx}>
+                          <TR key={msg}>
                             <TD title={msg}>{msg}</TD>
                             <TD>{count}</TD>
                           </TR>

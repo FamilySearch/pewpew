@@ -15,10 +15,25 @@ For your full deployment you should have environment variables injected into Clo
 $ npm i && npm run build
 ```
 
-## Mac and Windows Testing
-The unit tests, integration, and acceptance tests are designed to run on Linux. As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our Github Actions (`test/pewpew.zip`/0.5.x and `test/scripting/pewpew.zip`/0.6.x).
+## Mac, Windows, and ARM Testing
+The unit tests, integration, and acceptance tests are designed to run on Linux (x86_64). As such, the pewpew executable files required for running on Linux are checked into the tree in the test server so that the files are available for our GitHub Actions (`test/pewpew.zip`/0.5.x and `test/scripting/pewpew.zip`/0.6.x).
 
-To override these tests for mac or windows, the pewpew exectuable must be named `pewpew.exe` for Windows and `pewpew.mac` for Mac. These files should then be zipped up as `pewpew.exe.zip` or `pewpew.mac.zip` correspondingly. Then either override the `PEWPEW_ZIP_LEGACY_FILEPATH` and `PEWPEW_ZIP_SCRIPTING_FILEPATH` environment variable(s) to point to the full path to your zip file(s), or drop the zipped file(s) in the `test/` and `test/scripting/` folder(s).
+To override these tests for other platforms, rename the pewpew executable to match your platform, zip it with the matching name, then either drop the zip in the `test/` and `test/scripting/` folders or override `PEWPEW_ZIP_LEGACY_FILEPATH` and `PEWPEW_ZIP_SCRIPTING_FILEPATH` to point to the full path to your zip file(s):
+
+| Platform | Binary name | Zip name |
+|---|---|---|
+| Linux x86_64 | `pewpew` | `pewpew.zip` (default, already checked in) |
+| Windows | `pewpew.exe` | `pewpew.exe.zip` |
+| macOS | `pewpew.mac` | `pewpew.mac.zip` |
+| ARM64 / Graviton | `pewpew.arm` | `pewpew.arm.zip` |
+
+Download the appropriate binary from the [pewpew releases](https://github.com/FamilySearch/pewpew/releases) page (look for the `aarch64-linux` tarball for ARM64/Graviton, `apple-darwin` for macOS).
+
+### Deploying to ARM64/Graviton
+
+The controller runs `pewpew --version` on upload to validate binaries, so the controller and agents **must share the same architecture**. When migrating to Graviton:
+1. From the **existing x86 controller**, upload a zip containing both `pewpew` (x86) and `pewpew.arm` for each required version. The controller validates the version using the x86 binary and uploads all files to S3, so both architecture binaries land in S3 in a single upload.
+2. Take downtime and deploy the ARM64 controller and ARM64 agents simultaneously — they must switch together since each only runs its own architecture's binary.
 
 ## Test
 ```bash

@@ -17,6 +17,7 @@
     "**/lib/test/**",
     "**/*.spec.js",
     "**/*.spec.ts",
+    "**/*.spec.tsx",
     "**/*.test.js",
     "**/*.test.ts",
     "**/.storybook/**",

@@ -18,7 +18,7 @@
     "test": "npm run build:test && npm run build:wdio && npm run testonly",
     "testonly": "npm run testonly:mocha && npm run testonly:components && c8 report",
     "testonly:mocha": "c8 mocha --project tsconfig.test.json ./test",
-    "testonly:components": "vitest run --coverage --passWithNoTests",
+    "testonly:components": "vitest run --coverage",
     "acceptance": "npm run acceptance:api && npm run acceptance:wdio",
     "acceptance:api": "mocha --project tsconfig.test.json --timeout 30000 ./acceptance",
     "acceptance:wdio": "wdio run ./acceptance/wdio/wdio.conf.ts",

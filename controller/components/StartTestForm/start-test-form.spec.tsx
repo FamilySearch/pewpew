@@ -9,11 +9,12 @@ vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.f
 vi.mock("rc-progress", () => ({ Line: () => <div data-testid="progress-line" /> }));
 vi.mock("react-datepicker", () => ({ default: () => <input data-testid="date-picker" /> }));
 
-import { AuthPermission, AuthPermissions } from "../../types";
-import { render, screen } from "@testing-library/react";
+import { AuthPermission, AuthPermissions, PreviousTestData } from "../../types";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueueInitialProps } from "../TestQueues";
 import React from "react";
 import StartTestForm from ".";
+import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { VersionInitalProps } from "../PewPewVersions";
 
 const defaultQueueProps: QueueInitialProps = {
@@ -167,5 +168,111 @@ describe("StartTestForm Component", () => {
       />
     );
     expect(screen.getByText(/Something went wrong/)).toBeInTheDocument();
+  });
+
+  it("shows validation error when submitted without a yaml file", async () => {
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+      />
+    );
+    fireEvent.click(screen.getByTestId("submit-test-button"));
+    await waitFor(() =>
+      expect(screen.getByText(/You must provide 1 yaml file and 1 queueName/)).toBeInTheDocument()
+    );
+  });
+
+  it("shows schedule date picker when scheduling in the future", () => {
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+      />
+    );
+    fireEvent.click(screen.getByTestId("schedule-future-radio"));
+    expect(screen.getByTestId("date-picker")).toBeInTheDocument();
+  });
+
+  it("updates queue selection when select changes", () => {
+    const multiQueueProps: QueueInitialProps = {
+      queueName: "queue-a",
+      testQueues: { "queue-a": "Queue A", "queue-b": "Queue B" },
+      loading: false,
+      error: false
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={multiQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+      />
+    );
+    const select = screen.getByTestId("queue-select") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "queue-b" } });
+    expect(select.value).toBe("queue-b");
+  });
+
+  it("updates version selection when select changes", () => {
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+      />
+    );
+    const select = screen.getByTestId("pewpew-version-select") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "0.5.8" } });
+    expect(select.value).toBe("0.5.8");
+  });
+
+  it("shows upload progress bar when uploading storybook prop is set", () => {
+    const storyProps = { uploading: true, uploadProgress: 50 };
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        {...(storyProps as any)}
+      />
+    );
+    expect(screen.getByTestId("progress-line")).toBeInTheDocument();
+  });
+
+  it("shows prior yaml section when previousTestData is provided", () => {
+    const previousTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      environmentVariables: {}
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        previousTestData={previousTestData}
+      />
+    );
+    expect(screen.getByTestId("prior-yaml-section")).toBeInTheDocument();
+  });
+
+  it("shows recurring test options when scheduling in future and recurring is selected", () => {
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+      />
+    );
+    fireEvent.click(screen.getByTestId("schedule-future-radio"));
+    fireEvent.click(screen.getByTestId("recurring-yes-radio"));
+    expect(screen.getByTestId("recurring-yes-radio")).toBeInTheDocument();
+    expect(screen.getByTestId("recurring-no-radio")).toBeInTheDocument();
   });
 });

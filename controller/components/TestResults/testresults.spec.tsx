@@ -1,7 +1,47 @@
-vi.mock("@fs/hdr-histogram-wasm", () => ({ HDRHistogram: vi.fn() }));
-vi.mock("chart.js", () => ({
-  Chart: vi.fn(() => ({ destroy: vi.fn(), update: vi.fn(), data: { datasets: [] } }))
-}));
+vi.mock("@fs/hdr-histogram-wasm", () => {
+  function makeHist () {
+    return {
+      getTotalCount: vi.fn(() => 100),
+      getMean: vi.fn(() => 1000),
+      getMaxValue: vi.fn(() => 2000),
+      getMinNonZeroValue: vi.fn(() => 500),
+      getStdDeviation: vi.fn(() => 100),
+      getValueAtPercentile: vi.fn(() => 1500),
+      add: vi.fn(),
+      free: vi.fn(),
+      clone: vi.fn(makeHist)
+    };
+  }
+  return { HDRHistogram: vi.fn(makeHist) };
+});
+vi.mock("chart.js", () => {
+  function MockChart () {
+    return {
+      destroy: vi.fn(),
+      update: vi.fn(),
+      data: { datasets: [] },
+      getDatasetMeta: vi.fn(() => ({ hidden: false }))
+    };
+  }
+  const chartFn: any = MockChart;
+  chartFn.register = vi.fn();
+  chartFn.defaults = { plugins: { legend: {} } };
+  return {
+    Chart: chartFn,
+    Filler: {},
+    Legend: {},
+    LegendElement: {},
+    LegendItem: {},
+    LineController: {},
+    LineElement: {},
+    LinearScale: {},
+    LogarithmicScale: {},
+    PointElement: {},
+    TimeScale: {},
+    Title: {},
+    Tooltip: {}
+  };
+});
 
 import TestResults, { configureURL } from ".";
 import { render, screen } from "@testing-library/react";
@@ -24,25 +64,49 @@ describe("Test Result Component", () => {
     expect(screen.getByText("No Results Found")).toBeInTheDocument();
   });
 
-  // The following unit tests are commented out until we figure out a way to load wasm with virtual dom.
+  it("should render results file select when resultsFileLocation is provided", () => {
+    const oneResult: TestData = {
+      ...noResult,
+      resultsFileLocation: [
+        "unittest/20200424T191934978/stats-test.json"
+      ],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={oneResult} />);
+    expect(screen.getByTestId("results-select")).toBeInTheDocument();
+  });
 
-  // it('should render Time Taken', async () => {
-  //   const oneResult: TestData = {
-  //     testId: "discoverywicffamilybeta20200311T221932362",
-  //     s3Folder: "discoverywicffamilybeta/20200311T221932362",
-  //     resultsFileLocation: [
-  //       "https://ps-services-us-east-1-unittests-pewpewcontroller.s3.amazonaws.com/discoverywicffamilybeta/20200311T221932362/stats-discoverywicffamilybeta20200311T221932362.json"
-  //     ],
-  //     startTime: 1583965172953,
-  //     status: TestStatus.Finished
-  //   };
-  //   const { getByText } = render(<TestResults testData={oneResult} />);
-  //   return waitFor(() => getByText("Time Taken"));
-  // });
+  it("should render Select Result File option for each results file", () => {
+    const multipleResults: TestData = {
+      ...noResult,
+      resultsFileLocation: [
+        "unittest/20200424T191934978/stats-test1.json",
+        "unittest/20200424T191934978/stats-test2.json"
+      ],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={multipleResults} />);
+    expect(screen.getByText("Test Result - 0")).toBeInTheDocument();
+    expect(screen.getByText("Test Result - 1")).toBeInTheDocument();
+  });
 
-  // it('should render Select Result File', async () => {
-  //   const multipleResults: TestData = { ... };
-  //   const { getByText } = render(<TestResults testData={multipleResults} />);
-  //   return waitFor(() => getByText("Select Result File"));
-  // });
+  it("should show Select Results File message when results file is present but not yet selected", () => {
+    const oneResult: TestData = {
+      ...noResult,
+      resultsFileLocation: ["unittest/20200424T191934978/stats-test.json"],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={oneResult} />);
+    expect(screen.getByText("Select Results File")).toBeInTheDocument();
+  });
+
+  it("should show loading message when initialResultsIndex is provided", () => {
+    const oneResult: TestData = {
+      ...noResult,
+      resultsFileLocation: ["unittest/20200424T191934978/stats-test.json"],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={oneResult} initialResultsIndex={0} />);
+    expect(screen.getByText("Results Loading...")).toBeInTheDocument();
+  });
 });

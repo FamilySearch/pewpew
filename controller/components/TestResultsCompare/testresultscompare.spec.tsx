@@ -1,23 +1,68 @@
-vi.mock("@fs/hdr-histogram-wasm", () => ({ HDRHistogram: vi.fn() }));
-vi.mock("chart.js", () => ({
-  Chart: vi.fn(() => ({ destroy: vi.fn(), update: vi.fn(), data: { datasets: [] } }))
-}));
+vi.mock("@fs/hdr-histogram-wasm", () => {
+  function makeHist () {
+    return {
+      getTotalCount: vi.fn(() => 100),
+      getMean: vi.fn(() => 1000),
+      getMaxValue: vi.fn(() => 2000),
+      getMinNonZeroValue: vi.fn(() => 500),
+      getStdDeviation: vi.fn(() => 100),
+      getValueAtPercentile: vi.fn(() => 1500),
+      add: vi.fn(),
+      free: vi.fn(),
+      clone: vi.fn(makeHist)
+    };
+  }
+  return { HDRHistogram: vi.fn(makeHist) };
+});
+vi.mock("chart.js", () => {
+  function MockChart () {
+    return {
+      destroy: vi.fn(),
+      update: vi.fn(),
+      data: { datasets: [] },
+      getDatasetMeta: vi.fn(() => ({ hidden: false }))
+    };
+  }
+  const chartFn: any = MockChart;
+  chartFn.register = vi.fn();
+  chartFn.defaults = { plugins: { legend: {} } };
+  return {
+    Chart: chartFn,
+    Filler: {},
+    Legend: {},
+    LegendElement: {},
+    LegendItem: {},
+    LineController: {},
+    LineElement: {},
+    LinearScale: {},
+    LogarithmicScale: {},
+    PointElement: {},
+    TimeScale: {},
+    Title: {},
+    Tooltip: {}
+  };
+});
 
+import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { TestResultsCompare } from ".";
 
-const mockChart = {
-  destroy () { /* no-op */ },
-  update () { /* no-op */ },
-  getDatasetMeta () { return { hidden: false }; },
-  data: {
-    datasets: [
-      { label: "GET /api/test", borderColor: "#6a7bb4" },
-      { label: "POST /api/test", borderColor: "#c94277" }
-    ]
-  }
-};
+const makeBucketId = (method: string, url: string): BucketId => ({ method, url });
+
+const makeDataPoint = (): DataPoint => new DataPoint({
+  time: 1000,
+  duration: 60,
+  endTime: 1060,
+  rttHistogram: "encoded",
+  startTime: 1000,
+  statusCounts: { "200": 5 },
+  testErrors: {}
+});
+
+const makeTestData = (): ParsedFileEntry[] => [
+  [makeBucketId("GET", "http://example.com/api"), [makeDataPoint()]]
+];
 
 describe("TestResultsCompare", () => {
   describe("Empty State", () => {
@@ -35,217 +80,13 @@ describe("TestResultsCompare", () => {
       render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
       expect(screen.queryByLabelText("Merge endpoints with different tags")).not.toBeInTheDocument();
     });
-  });
 
-  describe("Merge Endpoints Toggle", () => {
-    it("should render merge toggle checkbox with test component", () => {
-      const TestComponent = () => {
-        const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
-
-        return (
-          <div>
-            <input
-              type="checkbox"
-              data-testid="merge-toggle"
-              checked={mergeEndpoints}
-              onChange={(e) => setMergeEndpoints(e.target.checked)}
-            />
-            <label>Merge endpoints with different tags</label>
-          </div>
-        );
-      };
-
-      render(<TestComponent />);
-
-      const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      expect(checkbox.checked).toBe(false);
+    it("should accept default label props with empty data", () => {
+      render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
+      expect(screen.getByText("Select two results files to compare")).toBeInTheDocument();
     });
 
-    it("should toggle merge state when checkbox is clicked", () => {
-      const TestComponent = () => {
-        const [mergeEndpoints, setMergeEndpoints] = React.useState(false);
-
-        return (
-          <div>
-            <input
-              type="checkbox"
-              data-testid="merge-toggle"
-              checked={mergeEndpoints}
-              onChange={(e) => setMergeEndpoints(e.target.checked)}
-            />
-            <div data-testid="merge-state">{mergeEndpoints ? "merged" : "raw"}</div>
-          </div>
-        );
-      };
-
-      render(<TestComponent />);
-
-      const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      expect(checkbox.checked).toBe(false);
-      expect(screen.getByText("raw")).toBeInTheDocument();
-
-      fireEvent.click(checkbox);
-      expect(checkbox.checked).toBe(true);
-      expect(screen.getByText("merged")).toBeInTheDocument();
-
-      fireEvent.click(checkbox);
-      expect(checkbox.checked).toBe(false);
-      expect(screen.getByText("raw")).toBeInTheDocument();
-    });
-
-    it("should default to unchecked (raw data)", () => {
-      const TestComponent = () => {
-        const [mergeEndpoints] = React.useState(false);
-
-        return (
-          <div>
-            <input
-              type="checkbox"
-              data-testid="merge-toggle"
-              checked={mergeEndpoints}
-              readOnly
-            />
-          </div>
-        );
-      };
-
-      render(<TestComponent />);
-
-      const checkbox = screen.getByTestId("merge-toggle") as HTMLInputElement;
-      expect(checkbox.checked).toBe(false);
-    });
-  });
-
-  describe("Legend Functionality", () => {
-    it("should render custom legends outside the canvas", () => {
-      const TestComponent = () => {
-        const [chart] = React.useState<any>(mockChart);
-        const [hiddenDatasets, setHiddenDatasets] = React.useState<Set<number>>(new Set());
-
-        const toggleDataset = (index: number) => {
-          const meta = chart.getDatasetMeta(index);
-          meta.hidden = !meta.hidden;
-          chart.update();
-
-          setHiddenDatasets((prev: Set<number>) => {
-            const newSet = new Set(prev);
-            if (meta.hidden) {
-              newSet.add(index);
-            } else {
-              newSet.delete(index);
-            }
-            return newSet;
-          });
-        };
-
-        return (
-          <div>
-            <canvas data-testid="chart-canvas" />
-            {chart.data.datasets && (
-              <div data-testid="custom-legend">
-                {chart.data.datasets.map((dataset: any, index: number) => (
-                  <div
-                    key={index}
-                    data-testid={`legend-item-${index}`}
-                    onClick={() => toggleDataset(index)}
-                    style={{ opacity: hiddenDatasets.has(index) ? 0.3 : 1 }}
-                  >
-                    <span className="color-box" style={{ backgroundColor: dataset.borderColor }} />
-                    <span>{dataset.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      };
-
-      render(<TestComponent />);
-
-      expect(screen.getByTestId("custom-legend")).toBeInTheDocument();
-      expect(screen.getByTestId("legend-item-0")).toBeInTheDocument();
-      expect(screen.getByTestId("legend-item-1")).toBeInTheDocument();
-      expect(screen.getByText("GET /api/test")).toBeInTheDocument();
-      expect(screen.getByText("POST /api/test")).toBeInTheDocument();
-    });
-
-    it("should toggle dataset visibility when legend is clicked", () => {
-      const mockMeta = { hidden: false };
-      const mockChartWithUpdate = {
-        ...mockChart,
-        update () { mockMeta.hidden = !mockMeta.hidden; },
-        getDatasetMeta (_index: number) { return mockMeta; }
-      };
-
-      const TestComponent = () => {
-        const [chart] = React.useState(mockChartWithUpdate);
-        const [hiddenDatasets, setHiddenDatasets] = React.useState<Set<number>>(new Set());
-
-        const toggleDataset = (index: number) => {
-          const meta = chart.getDatasetMeta(index);
-          meta.hidden = !meta.hidden;
-          chart.update();
-
-          setHiddenDatasets((prev: Set<number>) => {
-            const newSet = new Set(prev);
-            if (meta.hidden) {
-              newSet.add(index);
-            } else {
-              newSet.delete(index);
-            }
-            return newSet;
-          });
-        };
-
-        return (
-          <div>
-            {chart.data.datasets.map((dataset: any, index: number) => (
-              <div
-                key={index}
-                data-testid={`legend-item-${index}`}
-                onClick={() => toggleDataset(index)}
-                style={{ opacity: hiddenDatasets.has(index) ? 0.3 : 1 }}
-              >
-                {dataset.label}
-              </div>
-            ))}
-          </div>
-        );
-      };
-
-      render(<TestComponent />);
-
-      const legendItem = screen.getByTestId("legend-item-0");
-      fireEvent.click(legendItem);
-      expect(legendItem).toBeInTheDocument();
-    });
-
-    it("should apply grey color to legend text", () => {
-      const TestComponent = () => (
-        <div style={{ color: "#999" }} data-testid="legend-item">
-          Test Label
-        </div>
-      );
-
-      render(<TestComponent />);
-      expect(screen.getByTestId("legend-item")).toBeInTheDocument();
-    });
-
-    it("should have compact spacing between legend items", () => {
-      const TestComponent = () => (
-        <div style={{ gap: "0.5em", display: "flex" }} data-testid="legend-container">
-          <div>Item 1</div>
-          <div>Item 2</div>
-        </div>
-      );
-
-      render(<TestComponent />);
-      expect(screen.getByTestId("legend-container")).toBeInTheDocument();
-    });
-  });
-
-  describe("Data Labels", () => {
-    it("should render component with baseline and comparison labels", () => {
+    it("should accept custom labels with empty data", () => {
       render(
         <TestResultsCompare
           baselineData={[]}
@@ -256,99 +97,124 @@ describe("TestResultsCompare", () => {
       );
       expect(screen.getByText("Select two results files to compare")).toBeInTheDocument();
     });
-
-    it("should accept default label props", () => {
-      render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
-      expect(screen.getByText("Select two results files to compare")).toBeInTheDocument();
-    });
   });
 
-  describe("Chart Configuration", () => {
-    it("should set yAlign to top for tooltips", () => {
-      const tooltipConfig = {
-        yAlign: "top" as const,
-        backgroundColor: "rgba(0, 0, 0, 0.6)",
-        padding: { top: 12, bottom: 12, left: 14, right: 14 },
-        titleFont: { size: 13, weight: "bold" as const },
-        bodyFont: { size: 13 },
-        bodySpacing: 8
-      };
+  describe("With data", () => {
+    let baselineData: ParsedFileEntry[];
+    let comparisonData: ParsedFileEntry[];
 
-      expect(tooltipConfig.yAlign).toBe("top");
-      expect(tooltipConfig.bodySpacing).toBe(8);
-      expect(tooltipConfig.bodyFont.size).toBe(13);
-    });
-  });
-
-  describe("Component Structure", () => {
-    it("should render placeholder when no data", () => {
-      render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
-      expect(screen.getByText("Select two results files to compare")).toBeInTheDocument();
+    beforeEach(() => {
+      baselineData = makeTestData();
+      comparisonData = makeTestData();
     });
 
-    it("should render merge toggle container with test component", () => {
-      const TestComponent = () => (
-        <div>
-          <input
-            type="checkbox"
-            id="merge-endpoints-compare"
-            data-testid="merge-toggle"
-          />
-          <label htmlFor="merge-endpoints-compare">
-            Merge endpoints with different tags
-          </label>
-        </div>
+    it("shows Performance Comparison heading", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByRole("heading", { name: "Performance Comparison" })).toBeInTheDocument();
+    });
+
+    it("shows Performance and Error Metrics Comparison sub-heading", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByText("Performance & Error Metrics Comparison")).toBeInTheDocument();
+    });
+
+    it("shows method filter dropdown with all methods option", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByLabelText("Filter by Method:")).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: "All Methods" })).toBeInTheDocument();
+    });
+
+    it("shows available methods in filter dropdown", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByRole("option", { name: "GET" })).toBeInTheDocument();
+    });
+
+    it("shows merge endpoints toggle", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByLabelText("Merge endpoints with different tags")).toBeInTheDocument();
+    });
+
+    it("merge endpoints toggle starts unchecked", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      const checkbox = screen.getByLabelText("Merge endpoints with different tags") as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+    });
+
+    it("toggles merge endpoints when checkbox is clicked", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      const checkbox = screen.getByLabelText("Merge endpoints with different tags") as HTMLInputElement;
+      fireEvent.click(checkbox);
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it("shows tab navigation buttons", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByText("Endpoint Comparison")).toBeInTheDocument();
+      expect(screen.getByText("Final Results Comparison")).toBeInTheDocument();
+    });
+
+    it("shows endpoint comparison content by default", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByText(/Per-endpoint metrics comparison/)).toBeInTheDocument();
+    });
+
+    it("filters by method when method filter changes", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      const select = screen.getByLabelText("Filter by Method:") as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: "GET" } });
+      expect(select.value).toBe("GET");
+      expect(screen.getByText("Performance Comparison")).toBeInTheDocument();
+    });
+
+    it("switches to final results tab on click", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      expect(screen.getByRole("heading", { name: "Baseline" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Comparison" })).toBeInTheDocument();
+    });
+
+    it("shows FinalResultsTable column headers when on final tab", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      expect(screen.getAllByText("method").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText("p50").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText("p95").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("shows FinalResultsTable row data when on final tab", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      expect(screen.getAllByText("GET").length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("shows endpoint comparison table headers", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getAllByText("Metric").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Change").length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("shows custom labels in final results tab", () => {
+      render(
+        <TestResultsCompare
+          baselineData={baselineData}
+          comparisonData={comparisonData}
+          baselineLabel="Production v1"
+          comparisonLabel="Staging v2"
+        />
       );
-
-      render(<TestComponent />);
-
-      const toggle = screen.getByTestId("merge-toggle");
-      expect(toggle.parentElement).not.toBeNull();
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      expect(screen.getByRole("heading", { name: "Production v1" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Staging v2" })).toBeInTheDocument();
     });
-  });
 
-  describe("Chart Types", () => {
-    it("should support all four chart types in layout", () => {
-      const chartTypes = [
-        "Median Duration",
-        "Worst 5%",
-        "5xx Errors",
-        "All Errors"
+    it("shows multiple methods from both datasets in filter", () => {
+      const multiMethodData: ParsedFileEntry[] = [
+        [makeBucketId("GET", "http://example.com/api"), [makeDataPoint()]],
+        [makeBucketId("POST", "http://example.com/data"), [makeDataPoint()]]
       ];
-
-      expect(chartTypes).toHaveLength(4);
-    });
-  });
-
-  describe("Final Results Tables", () => {
-    it("should have table component structure", () => {
-      const tableColumns = [
-        "method",
-        "hostname",
-        "path",
-        "queryString",
-        "tags",
-        "statusCount",
-        "callCount",
-        "p50",
-        "p95",
-        "p99",
-        "min",
-        "max",
-        "stddev",
-        "_time"
-      ];
-
-      expect(tableColumns).toHaveLength(14);
-      expect(tableColumns).toContain("method");
-      expect(tableColumns).toContain("p50");
-      expect(tableColumns).toContain("p95");
-      expect(tableColumns).toContain("p99");
-    });
-
-    it("should render side-by-side tables in comparison view", () => {
-      render(<TestResultsCompare baselineData={[]} comparisonData={[]} />);
-      expect(screen.getByText("Select two results files to compare")).toBeInTheDocument();
+      render(<TestResultsCompare baselineData={multiMethodData} comparisonData={multiMethodData} />);
+      expect(screen.getByRole("option", { name: "GET" })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: "POST" })).toBeInTheDocument();
     });
   });
 });

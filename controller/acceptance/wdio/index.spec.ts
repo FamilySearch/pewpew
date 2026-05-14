@@ -98,17 +98,19 @@ describe("GET / (Test History Page)", () => {
       log("index.spec testDataWithResults", LogLevel.INFO, { testId: testDataWithResults?.testId });
     });
 
+    beforeEach(function () {
+      if (!testDataWithResults) { this.skip(); }
+    });
+
     it("should display the results dropdown for a test with results", async () => {
-      if (!testDataWithResults) { return; }
-      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
       const select = await $("[data-testid='results-select']");
       await expect(select).toExist();
     });
 
     it("selecting a result file should load the results", async () => {
-      if (!testDataWithResults) { return; }
-      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
       const select = await $("[data-testid='results-select']");
       await select.selectByIndex(1);
@@ -117,8 +119,7 @@ describe("GET / (Test History Page)", () => {
     });
 
     it("deselecting the result should hide the results", async () => {
-      if (!testDataWithResults) { return; }
-      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
       const select = await $("[data-testid='results-select']");
       await select.selectByIndex(1);
@@ -129,8 +130,7 @@ describe("GET / (Test History Page)", () => {
     });
 
     it("with ?results=0 should auto-select the first result and load it", async () => {
-      if (!testDataWithResults) { return; }
-      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId)}&results=0`;
+      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId)}&results=0`;
       log(`navigating to ${url}`, LogLevel.DEBUG);
       await browser.url(url);
       await assertNoPageError();
@@ -139,8 +139,7 @@ describe("GET / (Test History Page)", () => {
     });
 
     it("selecting a result should update the URL to include results=0", async () => {
-      if (!testDataWithResults) { return; }
-      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId));
+      await browser.url(PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
       const select = await $("[data-testid='results-select']");
       await select.selectByIndex(1);
@@ -153,8 +152,7 @@ describe("GET / (Test History Page)", () => {
     });
 
     it("deselecting should remove results= from the URL", async () => {
-      if (!testDataWithResults) { return; }
-      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults.testId)}&results=0`;
+      const url = `${PAGE_TEST_HISTORY_FORMAT(testDataWithResults!.testId)}&results=0`;
       await browser.url(url);
       await assertNoPageError();
       const resultsLoaded = await $("[data-testid='results-loaded']");

@@ -20,7 +20,10 @@ npm install -D esbuild
 # (@next/swc-*, sharp) arrive with the wrong arch. Reinstalling next forces
 # npm to pick the correct optional binaries for the running instance.
 # Idempotent across x86 and arm64 instances.
-npm install --no-save next
+# Pin to the exact version from the lock file to avoid picking up a newer
+# release than what CI validated.
+NEXT_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/next'].version")
+npm install --no-save "next@${NEXT_VERSION}"
 npm rebuild
 chmod a+x node_modules/.bin/*
 npm install -g rimraf

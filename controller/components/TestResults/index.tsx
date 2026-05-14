@@ -1200,7 +1200,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         </thead>
         <tbody>
           {tableData.map((row) => (
-            <DATATR key={`${row.method}-${row.hostname}-${row.path}-${row.tags}`}>
+            <DATATR key={`${row.method}-${row.hostname}-${row.path}-${row.queryString}-${row.tags}`}>
               <DATATD>{row.method}</DATATD>
               <DATATD title={row.hostname}>{row.hostname}</DATATD>
               <DATATD title={row.path}>{row.path}</DATATD>

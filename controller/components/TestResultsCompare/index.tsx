@@ -13,7 +13,7 @@
 import * as XLSX from "xlsx";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Chart } from "chart.js";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 /* eslint-enable sort-imports */
 
@@ -454,58 +454,63 @@ interface ChartComponentProps {
 }
 
 const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndpoints, chartType }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
   const [chart, setChart] = useState<Chart>();
   const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
-  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
-    if (node) {
+  const allEndpoints = useMemo(() => {
+    if (mergeEndpoints) {
+      const groupedMap = new Map<string, DataPoint[]>();
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+      return Array.from(groupedMap.entries());
+    }
+    return displayData.map(([bucketId, dataPoints]) =>
+      [`${bucketId.method} ${bucketId.url}`, dataPoints] as [string, DataPoint[]]
+    );
+  }, [displayData, mergeEndpoints]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || allEndpoints.length === 0) { return; }
+
+    import("../TestResults/charts").then((charts) => {
       if (chart) {
         chart.destroy();
       }
-
-      let endpointData: [string, DataPoint[]][];
-
-      if (mergeEndpoints) {
-        const groupedMap = new Map<string, DataPoint[]>();
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-        endpointData = Array.from(groupedMap.entries());
-      } else {
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
-        });
+      let currentChart: Chart;
+      switch (chartType) {
+        case "median":
+          currentChart = charts.medianDurationChart(node, allEndpoints);
+          break;
+        case "worst5":
+          currentChart = charts.worst5PercentChart(node, allEndpoints);
+          break;
+        case "error5xx":
+          currentChart = charts.error5xxChart(node, allEndpoints);
+          break;
+        case "allErrors":
+          currentChart = charts.allErrorsChart(node, allEndpoints);
+          break;
       }
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
 
-      import("../TestResults/charts").then((charts) => {
-        let currentChart: Chart;
-        switch (chartType) {
-          case "median":
-            currentChart = charts.medianDurationChart(node, endpointData);
-            break;
-          case "worst5":
-            currentChart = charts.worst5PercentChart(node, endpointData);
-            break;
-          case "error5xx":
-            currentChart = charts.error5xxChart(node, endpointData);
-            break;
-          case "allErrors":
-            currentChart = charts.allErrorsChart(node, endpointData);
-            break;
-        }
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
-    }
-  }, [displayData, mergeEndpoints, chartType]);
+    return () => {
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, [allEndpoints, chartType]);
 
   const toggleDataset = (index: number) => {
     if (chart) {
@@ -527,7 +532,7 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasNodeRef} />
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -674,8 +679,8 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
     XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
 
     // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-    const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, -5);
+    const filename = `${fileLabel.toLowerCase().replaceAll(/\s/g, "-")}-${timestamp}.xlsx`;
 
     // Download file
     XLSX.writeFile(workbook, filename);
@@ -1165,7 +1170,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
             // Build baseline map
             for (const [bucketId, dataPoints] of filteredBaselineData) {
-              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              const key = `${bucketId.method}||${bucketId.url}`;
               if (baselineMap.has(key)) {
                 baselineMap.get(key)!.push(...dataPoints);
               } else {
@@ -1175,7 +1180,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
             // Build comparison map
             for (const [bucketId, dataPoints] of filteredComparisonData) {
-              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              const key = `${bucketId.method}||${bucketId.url}`;
               if (comparisonMap.has(key)) {
                 comparisonMap.get(key)!.push(...dataPoints);
               } else {
@@ -1187,20 +1192,18 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             const matchedEndpoints: {
               key: string;
               method: string;
-              hostname: string;
-              path: string;
+              url: string;
               baselineData: DataPoint[];
               comparisonData: DataPoint[];
             }[] = [];
 
             for (const [key, baselineEndpointData] of baselineMap.entries()) {
               if (comparisonMap.has(key)) {
-                const [method, hostname, path] = key.split("||");
+                const [method, url] = key.split("||");
                 matchedEndpoints.push({
                   key,
                   method,
-                  hostname,
-                  path,
+                  url,
                   baselineData: baselineEndpointData,
                   comparisonData: comparisonMap.get(key)!
                 });
@@ -1241,16 +1244,16 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               );
             };
 
-            return matchedEndpoints.map(({ key, method, hostname, path, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
+            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;
 
               for (const dp of endpointBaselineData) {
-                if (!baselineRTT) {
-                  baselineRTT = dp.rttHistogram.clone();
-                } else {
+                if (baselineRTT) {
                   baselineRTT.add(dp.rttHistogram);
+                } else {
+                  baselineRTT = dp.rttHistogram.clone();
                 }
                 baselineCallCount += Number(dp.rttHistogram.getTotalCount());
               }
@@ -1260,10 +1263,10 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               let comparisonCallCount = 0;
 
               for (const dp of endpointComparisonData) {
-                if (!comparisonRTT) {
-                  comparisonRTT = dp.rttHistogram.clone();
-                } else {
+                if (comparisonRTT) {
                   comparisonRTT.add(dp.rttHistogram);
+                } else {
+                  comparisonRTT = dp.rttHistogram.clone();
                 }
                 comparisonCallCount += Number(dp.rttHistogram.getTotalCount());
               }
@@ -1304,7 +1307,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               return (
                 <div key={key} style={{ marginBottom: "3em" }}>
                   <H2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
-                    {method} {hostname}{path}
+                    {method} {url}
                   </H2>
                   <TABLECONTAINER>
                     <DATATABLE>

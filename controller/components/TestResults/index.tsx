@@ -438,7 +438,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenD
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LEGENDITEM
-              key={index}
+              key={dataset.label || index}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => onToggleDataset(index)}
             >
@@ -1166,7 +1166,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Final Results");
 
     // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, -5);
     const filename = `performance-results-${timestamp}.xlsx`;
 
     // Download file

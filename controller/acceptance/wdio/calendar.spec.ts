@@ -176,8 +176,7 @@ describe("GET /calendar (Calendar Page)", () => {
       }, { timeout: 5000, timeoutMsg: "URL still contains query params after clicking Calendar nav link" });
 
       // Should have reverted to week view (7 col headers)
-      const colHeaders = $$(".fc-col-header-cell");
-      await browser.waitUntil(async () => await colHeaders.length === 7,
+      await browser.waitUntil(async () => await $$(".fc-col-header-cell").length === 7,
         { timeout: 5000, timeoutMsg: "Calendar did not revert to week view after nav link click" });
     });
 

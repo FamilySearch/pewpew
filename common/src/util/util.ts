@@ -15,14 +15,17 @@ export const PEWPEW_BINARY_EXECUTABLE_LINUX = "pewpew";
 export const PEWPEW_BINARY_EXECUTABLE_WINDOWS = "pewpew.exe";
 export const PEWPEW_BINARY_EXECUTABLE_MAC = "pewpew.mac";
 export const PEWPEW_BINARY_EXECUTABLE_ARM = "pewpew.arm";
-export const PEWPEW_BINARY_EXECUTABLE = process.env.PEWPEW_BINARY_EXECUTABLE
-  || (os.platform() === "win32"
-    ? PEWPEW_BINARY_EXECUTABLE_WINDOWS
-    : os.platform() === "darwin"
-      ? PEWPEW_BINARY_EXECUTABLE_MAC
-      : os.arch() === "arm64"
-        ? PEWPEW_BINARY_EXECUTABLE_ARM
-        : PEWPEW_BINARY_EXECUTABLE_LINUX);
+export const PEWPEW_BINARY_EXECUTABLE = process.env.PEWPEW_BINARY_EXECUTABLE || (() => {
+  if (os.platform() === "win32") {
+    return PEWPEW_BINARY_EXECUTABLE_WINDOWS;
+  } else if (os.platform() === "darwin") {
+    return PEWPEW_BINARY_EXECUTABLE_MAC;
+  } else if (os.arch() === "arm64") {
+    return PEWPEW_BINARY_EXECUTABLE_ARM;
+  } else {
+    return PEWPEW_BINARY_EXECUTABLE_LINUX;
+  }
+})();
 export const PEWPEW_BINARY_EXECUTABLE_NAMES = [
   PEWPEW_BINARY_EXECUTABLE_LINUX,
   PEWPEW_BINARY_EXECUTABLE_WINDOWS,

@@ -1,9 +1,15 @@
 import { expect } from "chai";
+import os from "os";
 import { util } from "../src/index.js";
 
 const {
   CONTROLLER_ENV,
   CONTROLLER_APPLICATION_PREFIX,
+  PEWPEW_BINARY_EXECUTABLE,
+  PEWPEW_BINARY_EXECUTABLE_ARM,
+  PEWPEW_BINARY_EXECUTABLE_LINUX,
+  PEWPEW_BINARY_EXECUTABLE_MAC,
+  PEWPEW_BINARY_EXECUTABLE_WINDOWS,
   PREFIX_DEFAULT,
   createStatsFileName,
   getLocalIpAddress,
@@ -30,6 +36,23 @@ describe("Util", () => {
       const controllerEnv = "override";
       const prefix: string = getPrefix(controllerEnv);
       expect(prefix).to.equal(CONTROLLER_APPLICATION_PREFIX + controllerEnv.toUpperCase());
+      done();
+    });
+  });
+
+  describe("PEWPEW_BINARY_EXECUTABLE", () => {
+    it("should match the expected binary for the current platform/arch", (done: Mocha.Done) => {
+      let expected: string;
+      if (os.platform() === "win32") {
+        expected = PEWPEW_BINARY_EXECUTABLE_WINDOWS;
+      } else if (os.platform() === "darwin") {
+        expected = PEWPEW_BINARY_EXECUTABLE_MAC;
+      } else if (os.arch() === "arm64") {
+        expected = PEWPEW_BINARY_EXECUTABLE_ARM;
+      } else {
+        expected = PEWPEW_BINARY_EXECUTABLE_LINUX;
+      }
+      expect(PEWPEW_BINARY_EXECUTABLE).to.equal(expected);
       done();
     });
   });

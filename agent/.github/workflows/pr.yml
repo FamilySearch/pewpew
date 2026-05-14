@@ -42,8 +42,10 @@ jobs:
     strategy:
       matrix:
         node-version: [22.x, 24.x]
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+      fail-fast: false
     needs: changedfiles
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     env:
       DOWNLOAD_PEWPEW: true
 

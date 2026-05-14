@@ -1,3 +1,11 @@
+vi.mock("axios", () => ({
+  default: {
+    get: vi.fn(() => Promise.resolve({ data: [] })),
+    put: vi.fn(() => Promise.resolve({ data: {} })),
+    delete: vi.fn(() => Promise.resolve({ data: {} }))
+  }
+}));
+vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} }) }));
 vi.mock("@fs/hdr-histogram-wasm", () => {
   function makeHist () {
     return {

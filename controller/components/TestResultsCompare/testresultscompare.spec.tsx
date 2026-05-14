@@ -44,7 +44,7 @@ vi.mock("chart.js", () => {
 });
 
 import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { TestResultsCompare } from ".";
 
@@ -215,6 +215,56 @@ describe("TestResultsCompare", () => {
       render(<TestResultsCompare baselineData={multiMethodData} comparisonData={multiMethodData} />);
       expect(screen.getByRole("option", { name: "GET" })).toBeInTheDocument();
       expect(screen.getByRole("option", { name: "POST" })).toBeInTheDocument();
+    });
+
+    it("FinalResultsTable shows 7 of 14 columns selected by default", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      expect(screen.getAllByText("7 of 14 columns selected").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("toggling a column in one FinalResultsTable syncs the count in both", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      fireEvent.click(screen.getByText("Final Results Comparison"));
+      // Open the first table's column dropdown so its checkboxes become accessible
+      const [firstColumnBtn] = screen.getAllByRole("button", { name: /of 14 columns selected/ });
+      fireEvent.click(firstColumnBtn);
+      // Scope to the open dropdown container and click the first (Method) checkbox
+      const columnContainer = firstColumnBtn.closest(".column-select-container");
+      const [methodCheckbox] = within(columnContainer!).getAllByRole("checkbox");
+      fireEvent.click(methodCheckbox);
+      // Both tables share the same column visibility state
+      expect(screen.getAllByText("6 of 14 columns selected").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("metrics dropdown shows 5 of 9 metrics selected by default", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.getByText("5 of 9 metrics selected")).toBeInTheDocument();
+    });
+
+    it("toggling a metric off decrements the visible metrics count", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      // Open the metrics dropdown so its checkboxes become accessible
+      const metricsBtn = screen.getByText("5 of 9 metrics selected").closest("button")!;
+      fireEvent.click(metricsBtn);
+      const metricsContainer = metricsBtn.closest(".metric-select-container");
+      // "Calls" is the first checkbox in the metrics dropdown (initially checked)
+      const [callsCheckbox] = within(metricsContainer!).getAllByRole("checkbox");
+      fireEvent.click(callsCheckbox);
+      expect(screen.getByText("4 of 9 metrics selected")).toBeInTheDocument();
+    });
+
+    it("toggling a metric on increments the visible metrics count", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      // Open the metrics dropdown so its checkboxes become accessible
+      const metricsBtn = screen.getByText("5 of 9 metrics selected").closest("button")!;
+      fireEvent.click(metricsBtn);
+      const metricsContainer = metricsBtn.closest(".metric-select-container");
+      // Checkboxes in order: calls(0), avg(1), min(2), max(3), stdDev(4), p50(5), p90(6), p95(7), p99(8)
+      // "min" is at index 2 and is initially unchecked
+      const metricCheckboxes = within(metricsContainer!).getAllByRole("checkbox");
+      fireEvent.click(metricCheckboxes[2]);
+      expect(screen.getByText("6 of 9 metrics selected")).toBeInTheDocument();
     });
   });
 });

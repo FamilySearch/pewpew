@@ -119,7 +119,7 @@ const TestStatusPage = ({
     const queryStr = params.toString();
     const newUrl = queryStr ? `${router.pathname}?${queryStr}` : router.pathname;
     log("router.push in updateQuery", LogLevel.DEBUG, { newUrl, pathname: router.pathname, query: router.query, asPath: router.asPath });
-    router.push(newUrl, formatPageHref(newUrl), { shallow: true });
+    router.push(newUrl, formatPageHref(newUrl), { shallow: true }).catch((error: unknown) => log("router.push error", LogLevel.ERROR, error));
   };
 
   const handleResultsIndexChange = (index: number | undefined): void => {
@@ -345,7 +345,8 @@ const TestStatusPage = ({
   // Before hydration (SSR), fall back to the server-rendered props so the initial render is
   // correct. Never fall back to SSR props post-hydration: a missing query param means the
   // user cleared that selection, not that the prop should be re-applied.
-  const resultsN = parseInt(typeof router.query.results === "string" ? router.query.results : "", 10);
+  const resultsStr = typeof router.query.results === "string" ? router.query.results : "";
+  const resultsN = /^\d+$/.test(resultsStr) ? parseInt(resultsStr, 10) : NaN;
   const currentResultsIndex = router.isReady ? (isNaN(resultsN) ? undefined : resultsN) : propsResultsIndex;
   const currentCompareTestId = router.isReady ? (typeof router.query.compare === "string" ? router.query.compare : undefined) : propsCompareTestId;
 
@@ -371,7 +372,7 @@ const TestStatusPage = ({
         {state.error && <Danger>Error: {state.error}</Danger>}
       </TestStatusSection>
       {testData && <TestResults
-        key={`${testData.testId}-${router.query.results ?? ""}-${router.query.compare ?? ""}`}
+        key={testData.testId}
         testData={testData}
         initialResultsIndex={currentResultsIndex}
         onResultsIndexChange={handleResultsIndexChange}
@@ -414,7 +415,8 @@ export const getServerSideProps: GetServerSideProps =
       // Convert it to json
       const testData: TestData = (testDataResponse as TestDataResponse).json;
 
-      const resultsParam = typeof ctx.query.results === "string" ? parseInt(ctx.query.results, 10) : NaN;
+      const resultsQueryStr = typeof ctx.query.results === "string" ? ctx.query.results : "";
+      const resultsParam = /^\d+$/.test(resultsQueryStr) ? parseInt(resultsQueryStr, 10) : NaN;
       return {
         props: {
           testData,

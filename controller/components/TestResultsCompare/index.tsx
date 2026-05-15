@@ -692,8 +692,8 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
         Download as Excel
       </DownloadButton>
       <ColumnSelect className="column-select-container">
-        <label>Show Columns:</label>
-        <DropdownButton onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
+        <label htmlFor={`show-columns-${fileLabel}`}>Show Columns:</label>
+        <DropdownButton id={`show-columns-${fileLabel}`} onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
           <span>{visibleCount} of 14 columns selected</span>
           <span className="arrow">{dropdownOpen ? "▲" : "▼"}</span>
         </DropdownButton>
@@ -1119,8 +1119,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             Per-endpoint metrics comparison (green = improvement, red = regression)
           </p>
           <ColumnSelect className="metric-select-container">
-            <label>Show Metrics:</label>
-            <DropdownButton onClick={() => setMetricsDropdownOpen(!metricsDropdownOpen)} type="button">
+            <label htmlFor="metrics-dropdown">Show Metrics:</label>
+            <DropdownButton id="metrics-dropdown" onClick={() => setMetricsDropdownOpen(!metricsDropdownOpen)} type="button">
               <span>{visibleMetricsCount} of 9 metrics selected</span>
               <span className="arrow">{metricsDropdownOpen ? "▲" : "▼"}</span>
             </DropdownButton>

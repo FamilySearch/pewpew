@@ -25,11 +25,11 @@ import {
   RttTable,
   StyledUl
 } from "./styled";
+import { HtmlTable, HtmlTd, HtmlTr } from "../Table";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
 import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HtmlTable, HtmlTd, HtmlTr } from "../Table";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";

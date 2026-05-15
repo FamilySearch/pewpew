@@ -1,4 +1,4 @@
-import { Cell, FlexTable, Row, SmallCell, TABLE, TD, TH, TR } from ".";
+import { Cell, FlexTable, HtmlTable, HtmlTd, HtmlTh, HtmlTr, Row, SmallCell } from ".";
 import { GlobalStyle } from "../Layout";
 import React from "react";
 
@@ -55,46 +55,46 @@ export const FlexWithSmall = () => (
 export const Empty = () => (
   <React.Fragment>
     <GlobalStyle />
-    <TABLE>
+    <HtmlTable>
       <thead>
-      <TR>
-        <TH>Head 1</TH>
-        <TH>Head 2</TH>
-        <TH>Head 3</TH>
-      </TR>
+      <HtmlTr>
+        <HtmlTh>Head 1</HtmlTh>
+        <HtmlTh>Head 2</HtmlTh>
+        <HtmlTh>Head 3</HtmlTh>
+      </HtmlTr>
       </thead>
-    </TABLE>
+    </HtmlTable>
   </React.Fragment>
 );
 
 export const Full = () => (
   <React.Fragment>
     <GlobalStyle />
-    <TABLE>
+    <HtmlTable>
       <thead>
-      <TR>
-        <TH>Head 1</TH>
-        <TH>Head 2</TH>
-        <TH>Head 3</TH>
-      </TR>
+      <HtmlTr>
+        <HtmlTh>Head 1</HtmlTh>
+        <HtmlTh>Head 2</HtmlTh>
+        <HtmlTh>Head 3</HtmlTh>
+      </HtmlTr>
       </thead>
       <tbody>
-      <TR>
-        <TD>TD 1</TD>
-        <TD>TD 2</TD>
-        <TD>TD 3</TD>
-      </TR>
-      <TR>
-        <TD>TD 4</TD>
-        <TD>TD 5</TD>
-        <TD>TD 6</TD>
-      </TR>
-      <TR>
-        <TD>TD 7</TD>
-        <TD>TD 8</TD>
-        <TD>TD 9</TD>
-      </TR>
+      <HtmlTr>
+        <HtmlTd>HtmlTd 1</HtmlTd>
+        <HtmlTd>HtmlTd 2</HtmlTd>
+        <HtmlTd>HtmlTd 3</HtmlTd>
+      </HtmlTr>
+      <HtmlTr>
+        <HtmlTd>HtmlTd 4</HtmlTd>
+        <HtmlTd>HtmlTd 5</HtmlTd>
+        <HtmlTd>HtmlTd 6</HtmlTd>
+      </HtmlTr>
+      <HtmlTr>
+        <HtmlTd>HtmlTd 7</HtmlTd>
+        <HtmlTd>HtmlTd 8</HtmlTd>
+        <HtmlTd>HtmlTd 9</HtmlTd>
+      </HtmlTr>
       </tbody>
-    </TABLE>
+    </HtmlTable>
   </React.Fragment>
 );

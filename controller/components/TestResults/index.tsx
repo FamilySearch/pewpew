@@ -16,20 +16,20 @@ import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
 import {
-  ENDPOINT,
-  ENDPOINTDIV1,
-  ENDPOINTDIV2,
-  FLEXROW,
+  EndpointDiv,
+  EndpointDiv1,
+  EndpointDiv2,
+  FlexRow,
   H3,
-  RTTDIV,
-  RTTTABLE,
-  UL
+  RttDiv,
+  RttTable,
+  StyledUl
 } from "./styled";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
 import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { TABLE, TD, TR } from "../Table";
+import { HtmlTable, HtmlTd, HtmlTr } from "../Table";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
@@ -39,11 +39,11 @@ import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import styled from "styled-components";
 
-const TIMETAKEN = styled.div`
+const TimeTaken = styled.div`
   text-align: left;
 `;
 
-const CANVASBOX = styled.div`
+const CanvasBox = styled.div`
   position: relative;
   width: calc(55vw - 100px);
 
@@ -53,7 +53,7 @@ const CANVASBOX = styled.div`
 `;
 
 // New Dashboard Styled Components
-const QUADGRID = styled.div`
+const QuadGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -67,7 +67,7 @@ const QUADGRID = styled.div`
   }
 `;
 
-const QUADPANEL = styled.div`
+const QuadPanel = styled.div`
   position: relative;
   background-color: #2a2a2a;
   border-radius: 4px;
@@ -81,7 +81,7 @@ const QUADPANEL = styled.div`
   }
 `;
 
-const CUSTOMLEGEND = styled.div`
+const CustomLegend = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.5em;
@@ -91,7 +91,7 @@ const CUSTOMLEGEND = styled.div`
   justify-content: center;
 `;
 
-const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
+const LegendItem = styled.div<{ $hidden?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -112,7 +112,7 @@ const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
   }
 `;
 
-const TOGGLECONTAINER = styled.div`
+const ToggleContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -135,14 +135,14 @@ const TOGGLECONTAINER = styled.div`
   }
 `;
 
-const FILTERCONTAINER = styled.div`
+const FilterContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 1em;
   margin: 1em 0 2em 0;
 `;
 
-const FILTERDROPDOWN = styled.div`
+const FilterDropdown = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -176,13 +176,13 @@ const FILTERDROPDOWN = styled.div`
   }
 `;
 
-const TABLECONTAINER = styled.div`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   margin: 2em 0;
 `;
 
-const DATATABLE = styled.table`
+const DataTable = styled.table`
   color: white;
   border-spacing: 0;
   background-color: #2a2a2a;
@@ -190,7 +190,7 @@ const DATATABLE = styled.table`
   border-collapse: collapse;
 `;
 
-const TH = styled.th`
+const Th = styled.th`
   padding: 8px 12px;
   text-align: left;
   background-color: #1a1a1a;
@@ -202,7 +202,7 @@ const TH = styled.th`
   z-index: 10;
 `;
 
-const DATATD = styled.td`
+const DataTd = styled.td`
   padding: 6px 12px;
   border-bottom: 1px solid #444;
   white-space: nowrap;
@@ -213,7 +213,7 @@ const DATATD = styled.td`
   vertical-align: top;
 `;
 
-const DATATR = styled.tr`
+const DataTr = styled.tr`
   &:nth-child(even) {
     background: #333;
   }
@@ -222,7 +222,7 @@ const DATATR = styled.tr`
   }
 `;
 
-const DOWNLOADBUTTON = styled.button`
+const DownloadButton = styled.button`
   background-color: #4CAF50;
   color: white;
   padding: 10px 20px;
@@ -431,24 +431,24 @@ interface ChartPanelProps {
 
 const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenDatasets, onToggleDataset }) => {
   return (
-    <QUADPANEL>
+    <QuadPanel>
       <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>{title}</h3>
       <canvas ref={chartRef} />
       {chart && chart.data.datasets && chart.data.datasets.length > 0 && (
-        <CUSTOMLEGEND>
+        <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
-            <LEGENDITEM
+            <LegendItem
               key={dataset.label || index}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => onToggleDataset(index)}
             >
               <span className="color-box" style={{ backgroundColor: dataset.borderColor }} />
               <span>{dataset.label}</span>
-            </LEGENDITEM>
+            </LegendItem>
           ))}
-        </CUSTOMLEGEND>
+        </CustomLegend>
       )}
-    </QUADPANEL>
+    </QuadPanel>
   );
 };
 
@@ -576,7 +576,7 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   }, [dataKey, allEndpoints]);
 
   return (
-    <QUADGRID>
+    <QuadGrid>
       <ChartPanel
         title="Median Duration by Path"
         chartRef={medianCanvas}
@@ -605,7 +605,7 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
         hiddenDatasets={allErrorsHidden}
         onToggleDataset={(idx: number) => toggleDataset(allErrorsChartState, idx, allErrorsHidden, setAllErrorsHidden)}
       />
-    </QUADGRID>
+    </QuadGrid>
   );
 };
 
@@ -957,7 +957,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       {testData &&
         testData.resultsFileLocation &&
         testData.resultsFileLocation.length > 0 && (
-          <FILTERDROPDOWN>
+          <FilterDropdown>
             <label htmlFor="results-file-select">Results File:</label>
             <select
               id="results-file-select"
@@ -973,10 +973,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
                 </option>
               ))}
             </select>
-          </FILTERDROPDOWN>
+          </FilterDropdown>
         )}
       {filteredDisplayData !== undefined ? (
-        <TIMETAKEN data-testid="results-loaded">
+        <TimeTaken data-testid="results-loaded">
           <h1>Time Taken</h1>
           <p>
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
@@ -1008,8 +1008,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             />
           </label>
 
-          <FILTERCONTAINER>
-            <FILTERDROPDOWN>
+          <FilterContainer>
+            <FilterDropdown>
               <label htmlFor="method-filter">Filter by Method:</label>
               <select
                 id="method-filter"
@@ -1023,9 +1023,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
                   </option>
                 ))}
               </select>
-            </FILTERDROPDOWN>
+            </FilterDropdown>
 
-            <TOGGLECONTAINER style={{ margin: 0 }}>
+            <ToggleContainer style={{ margin: 0 }}>
               <input
                 type="checkbox"
                 id="merge-endpoints"
@@ -1035,8 +1035,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
               <label htmlFor="merge-endpoints">
                 Merge endpoints with different tags
               </label>
-            </TOGGLECONTAINER>
-          </FILTERCONTAINER>
+            </ToggleContainer>
+          </FilterContainer>
 
           <h2>Performance & Error Metrics</h2>
           <QuadPanelCharts displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
@@ -1050,7 +1050,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
               <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
             );
           })}
-        </TIMETAKEN>
+        </TimeTaken>
       ) : (
         <h4>{state.defaultMessage}</h4>
       )}
@@ -1175,55 +1175,55 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
 
   return (
     <>
-      <DOWNLOADBUTTON onClick={exportToExcel}>
+      <DownloadButton onClick={exportToExcel}>
         Download as Excel
-      </DOWNLOADBUTTON>
-      <TABLECONTAINER>
-        <DATATABLE>
+      </DownloadButton>
+      <TableContainer>
+        <DataTable>
         <thead>
           <tr>
-            <TH>method</TH>
-            <TH>hostname</TH>
-            <TH>path</TH>
-            <TH>queryString</TH>
-            <TH>tags</TH>
-            <TH>statusCount</TH>
-            <TH>callCount</TH>
-            <TH>p50</TH>
-            <TH>p95</TH>
-            <TH>p99</TH>
-            <TH>min</TH>
-            <TH>max</TH>
-            <TH>stddev</TH>
-            <TH>_time</TH>
+            <Th>method</Th>
+            <Th>hostname</Th>
+            <Th>path</Th>
+            <Th>queryString</Th>
+            <Th>tags</Th>
+            <Th>statusCount</Th>
+            <Th>callCount</Th>
+            <Th>p50</Th>
+            <Th>p95</Th>
+            <Th>p99</Th>
+            <Th>min</Th>
+            <Th>max</Th>
+            <Th>stddev</Th>
+            <Th>_time</Th>
           </tr>
         </thead>
         <tbody>
           {tableData.map((row) => (
-            <DATATR key={`${row.method}-${row.hostname}-${row.path}-${row.queryString}-${row.tags}`}>
-              <DATATD>{row.method}</DATATD>
-              <DATATD title={row.hostname}>{row.hostname}</DATATD>
-              <DATATD title={row.path}>{row.path}</DATATD>
-              <DATATD>{row.queryString}</DATATD>
-              <DATATD title={row.tags}>{row.tags}</DATATD>
-              <DATATD>
+            <DataTr key={`${row.method}-${row.hostname}-${row.path}-${row.queryString}-${row.tags}`}>
+              <DataTd>{row.method}</DataTd>
+              <DataTd title={row.hostname}>{row.hostname}</DataTd>
+              <DataTd title={row.path}>{row.path}</DataTd>
+              <DataTd>{row.queryString}</DataTd>
+              <DataTd title={row.tags}>{row.tags}</DataTd>
+              <DataTd>
                 {row.statusCounts.map((sc: any) => (
                   <div key={sc.status}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
-              </DATATD>
-              <DATATD>{row.callCount.toLocaleString()}</DATATD>
-              <DATATD>{row.p50.toFixed(2)}</DATATD>
-              <DATATD>{row.p95.toFixed(2)}</DATATD>
-              <DATATD>{row.p99.toFixed(2)}</DATATD>
-              <DATATD>{row.min.toFixed(2)}</DATATD>
-              <DATATD>{row.max.toFixed(2)}</DATATD>
-              <DATATD>{row.stddev.toFixed(2)}</DATATD>
-              <DATATD>{row.time.toLocaleString()}</DATATD>
-            </DATATR>
+              </DataTd>
+              <DataTd>{row.callCount.toLocaleString()}</DataTd>
+              <DataTd>{row.p50.toFixed(2)}</DataTd>
+              <DataTd>{row.p95.toFixed(2)}</DataTd>
+              <DataTd>{row.p99.toFixed(2)}</DataTd>
+              <DataTd>{row.min.toFixed(2)}</DataTd>
+              <DataTd>{row.max.toFixed(2)}</DataTd>
+              <DataTd>{row.stddev.toFixed(2)}</DataTd>
+              <DataTd>{row.time.toLocaleString()}</DataTd>
+            </DataTr>
           ))}
         </tbody>
-      </DATATABLE>
-    </TABLECONTAINER>
+      </DataTable>
+    </TableContainer>
     </>
   );
 };
@@ -1368,11 +1368,11 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
 
   return (
     <React.Fragment>
-      <ENDPOINT>
+      <EndpointDiv>
         <H3>
           {bucketId.method} {bucketId.url}
         </H3>
-        <UL>
+        <StyledUl>
           {Object.entries(bucketId).map(([key, value]) => {
 
             if (key !== "method" && key !== "url") {
@@ -1384,93 +1384,93 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
             }
             return undefined; // fixes typescript error: Not all code paths return a value.
           })}
-        </UL>
-        <ENDPOINTDIV1>
+        </StyledUl>
+        <EndpointDiv1>
           <h3>Endpoint Summary</h3>
-          {totalResults && <FLEXROW>
-            <RTTTABLE>
+          {totalResults && <FlexRow>
+            <RttTable>
               <h5>RTT Stats</h5>
-              <TABLE>
+              <HtmlTable>
                 <tbody>
                   {totalResults.stats.map(([label, stat]) => {
                     return (
-                      <TR key={String(label)}>
-                        <TD>{label}</TD>
-                        <TD>{stat.toLocaleString()}ms</TD>
-                      </TR>
+                      <HtmlTr key={String(label)}>
+                        <HtmlTd>{label}</HtmlTd>
+                        <HtmlTd>{stat.toLocaleString()}ms</HtmlTd>
+                      </HtmlTr>
                     );
                   })}
                 </tbody>
-              </TABLE>
-            </RTTTABLE>
-            <ENDPOINTDIV1>
+              </HtmlTable>
+            </RttTable>
+            <EndpointDiv1>
               <h5>HTTP Status Counts and Errors</h5>
-              <TABLE>
+              <HtmlTable>
                 <tbody>
                   {totalResults.statusCounts.map(
                     ([status, count, percent]) => {
                       return (
-                        <TR key={String(status)}>
-                          <TD>{status}</TD>
-                          <TD>{count.toLocaleString()}</TD>
-                          <TD>
+                        <HtmlTr key={String(status)}>
+                          <HtmlTd>{status}</HtmlTd>
+                          <HtmlTd>{count.toLocaleString()}</HtmlTd>
+                          <HtmlTd>
                             {percent
                               ? (percent * 100).toFixed(1) + "%"
                               : undefined}
-                          </TD>
-                        </TR>
+                          </HtmlTd>
+                        </HtmlTr>
                       );
                     }
                   )}
                 </tbody>
-              </TABLE>
+              </HtmlTable>
               {totalResults.otherErrors.length > 0 ? (
                 <div>
                   <h5>Other Errors</h5>
-                  <TABLE>
+                  <HtmlTable>
                     <tbody>
                       {totalResults.otherErrors.map(([msg, count]) => {
                         return (
-                          <TR key={msg}>
-                            <TD title={msg}>{msg}</TD>
-                            <TD>{count}</TD>
-                          </TR>
+                          <HtmlTr key={msg}>
+                            <HtmlTd title={msg}>{msg}</HtmlTd>
+                            <HtmlTd>{count}</HtmlTd>
+                          </HtmlTr>
                         );
                       })}
                     </tbody>
-                  </TABLE>
+                  </HtmlTable>
                 </div>
               ) : (
                   undefined
                 )}
-            </ENDPOINTDIV1>
-          </FLEXROW>}
-        </ENDPOINTDIV1>
-        <FLEXROW>
-        <RTTDIV>
+            </EndpointDiv1>
+          </FlexRow>}
+        </EndpointDiv1>
+        <FlexRow>
+        <RttDiv>
           <h3>RTT Stats</h3>
           <button onClick={() => rttChart && toggleChart(rttChart)} disabled={!rttChart}>
             Switch to {rttButtonDisplay}
           </button>
-          <ENDPOINTDIV2>
-            <CANVASBOX>
+          <EndpointDiv2>
+            <CanvasBox>
               <canvas ref={rttCanvas} />
-            </CANVASBOX>
-          </ENDPOINTDIV2>
-        </RTTDIV>
-        <ENDPOINTDIV1>
+            </CanvasBox>
+          </EndpointDiv2>
+        </RttDiv>
+        <EndpointDiv1>
           <h3>HTTP Status Counts and Errors</h3>
           <button onClick={() => totalChart && toggleChart(totalChart)} disabled={!totalChart}>
             Switch to {totalButtonDisplay}
           </button>
-          <ENDPOINTDIV2>
-            <CANVASBOX>
+          <EndpointDiv2>
+            <CanvasBox>
               <canvas ref={totalCanvas} />
-            </CANVASBOX>
-          </ENDPOINTDIV2>
-        </ENDPOINTDIV1>
-      </FLEXROW>
-      </ENDPOINT>
+            </CanvasBox>
+          </EndpointDiv2>
+        </EndpointDiv1>
+      </FlexRow>
+      </EndpointDiv>
     </React.Fragment>
   );
 });

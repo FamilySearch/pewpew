@@ -22,13 +22,13 @@ export const SmallCell = styled(Div)`
   flex: 0 0 10%;
 `;
 
-export const TABLE = styled.table`
+export const HtmlTable = styled.table`
   color: white;
   border-spacing: 0;
   background-color: grey;
 `;
 
-export const TH = styled.th`
+export const HtmlTh = styled.th`
   max-width: 150px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -37,7 +37,7 @@ export const TH = styled.th`
   background-color: black;
 `;
 
-export const TD = styled.td`
+export const HtmlTd = styled.td`
   max-width: 150px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -51,7 +51,7 @@ export const TD = styled.td`
   };
 `;
 
-export const TR = styled.tr`
+export const HtmlTr = styled.tr`
   &:nth-child(even) {
     background: #474747;
   };

@@ -1,4 +1,4 @@
-import { Cell, FlexTable, Row, SmallCell, TABLE, TD, TH, TR } from ".";
+import { Cell, FlexTable, HtmlTable, HtmlTd, HtmlTh, HtmlTr, Row, SmallCell } from ".";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -47,23 +47,23 @@ describe("Table Components", () => {
     });
   });
 
-  describe("TABLE / TH / TD / TR", () => {
+  describe("HtmlTable / HtmlTh / HtmlTd / HtmlTr", () => {
     it("renders a complete table structure with header and data cells", () => {
       render(
-        <TABLE>
+        <HtmlTable>
           <thead>
-            <TR>
-              <TH>Name</TH>
-              <TH>Status</TH>
-            </TR>
+            <HtmlTr>
+              <HtmlTh>Name</HtmlTh>
+              <HtmlTh>Status</HtmlTh>
+            </HtmlTr>
           </thead>
           <tbody>
-            <TR>
-              <TD>test-run-01</TD>
-              <TD>passed</TD>
-            </TR>
+            <HtmlTr>
+              <HtmlTd>test-run-01</HtmlTd>
+              <HtmlTd>passed</HtmlTd>
+            </HtmlTr>
           </tbody>
-        </TABLE>
+        </HtmlTable>
       );
       expect(screen.getByText("Name")).toBeInTheDocument();
       expect(screen.getByText("Status")).toBeInTheDocument();
@@ -71,43 +71,43 @@ describe("Table Components", () => {
       expect(screen.getByText("passed")).toBeInTheDocument();
     });
 
-    it("renders TH as a th element", () => {
+    it("renders HtmlTh as a th element", () => {
       render(
-        <TABLE>
+        <HtmlTable>
           <thead>
-            <TR>
-              <TH>Column Header</TH>
-            </TR>
+            <HtmlTr>
+              <HtmlTh>Column Header</HtmlTh>
+            </HtmlTr>
           </thead>
-        </TABLE>
+        </HtmlTable>
       );
       const header = screen.getByText("Column Header");
       expect(header.tagName.toLowerCase()).toBe("th");
     });
 
-    it("renders TD as a td element", () => {
+    it("renders HtmlTd as a td element", () => {
       render(
-        <TABLE>
+        <HtmlTable>
           <tbody>
-            <TR>
-              <TD>Cell Data</TD>
-            </TR>
+            <HtmlTr>
+              <HtmlTd>Cell Data</HtmlTd>
+            </HtmlTr>
           </tbody>
-        </TABLE>
+        </HtmlTable>
       );
       const cell = screen.getByText("Cell Data");
       expect(cell.tagName.toLowerCase()).toBe("td");
     });
 
-    it("renders TR as a tr element", () => {
+    it("renders HtmlTr as a tr element", () => {
       const { container } = render(
-        <TABLE>
+        <HtmlTable>
           <tbody>
-            <TR>
-              <TD>row data</TD>
-            </TR>
+            <HtmlTr>
+              <HtmlTd>row data</HtmlTd>
+            </HtmlTr>
           </tbody>
-        </TABLE>
+        </HtmlTable>
       );
       const rows = container.querySelectorAll("tr");
       expect(rows.length).toBeGreaterThan(0);

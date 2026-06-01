@@ -51,6 +51,12 @@ const TestStatusSection = styled(Div)`
   text-align: center;
   justify-content: flex-start;
 `;
+const TestResultsContainer = styled.div`
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+`;
 
 // What this returns or calls from the parents
 export interface TestStatusProps {
@@ -371,14 +377,16 @@ const TestStatusPage = ({
         </TestStatusSection>}
         {state.error && <Danger>Error: {state.error}</Danger>}
       </TestStatusSection>
-      {testData && <TestResults
-        key={testData.testId}
-        testData={testData}
-        initialResultsIndex={currentResultsIndex}
-        onResultsIndexChange={handleResultsIndexChange}
-        initialCompareTestId={currentCompareTestId}
-        onCompareTestIdChange={handleCompareTestIdChange}
-      />}
+      {testData && <TestResultsContainer>
+        <TestResults
+          key={testData.testId}
+          testData={testData}
+          initialResultsIndex={currentResultsIndex}
+          onResultsIndexChange={handleResultsIndexChange}
+          initialCompareTestId={currentCompareTestId}
+          onCompareTestIdChange={handleCompareTestIdChange}
+        />
+      </TestResultsContainer>}
     </Layout>
   );
 };

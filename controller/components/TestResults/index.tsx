@@ -45,10 +45,10 @@ const TimeTaken = styled.div`
 
 const CanvasBox = styled.div`
   position: relative;
-  width: calc(55vw - 100px);
+  width: 55%;
 
   @media (max-width: 768px) {
-    width: calc(100vw - 40px);
+    width: 100%;
   }
 `;
 

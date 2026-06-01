@@ -174,8 +174,12 @@ export const StartTestForm = ({
     endDate: new Date(previousTestData?.endDate || defaultDate.getTime() + ONE_WEEK), // Default the end date to one week later
     daysOfWeek: defaultDaysOfWeek,
     allDays: defaultDaysOfWeek.every((dayOfWeek: DayValue) => dayOfWeek.value),
-    queueName: previousTestData?.queueName || queueInitialProps.queueName,
-    pewpewVersion: previousTestData?.version || versionInitalProps.pewpewVersion || latestPewPewVersion,
+    queueName: (previousTestData?.queueName && Object.keys(queueInitialProps.testQueues).includes(previousTestData.queueName))
+      ? previousTestData.queueName
+      : queueInitialProps.queueName,
+    pewpewVersion: (previousTestData?.version && versionInitalProps.pewpewVersions.includes(previousTestData.version))
+      ? previousTestData.version
+      : versionInitalProps.pewpewVersion || latestPewPewVersion,
     environmentVariables: previousTestData?.environmentVariables
       ? Object.entries(previousTestData.environmentVariables).map(([variableName, variableValue]: [string, string | null], index: number) => ({
         // Map these to the placeholder values

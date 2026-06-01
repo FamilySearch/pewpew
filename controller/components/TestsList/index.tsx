@@ -1,5 +1,5 @@
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
-import { API_TEST_STATUS, API_TEST_STATUS_FORMAT, PAGE_TEST_HISTORY_FORMAT, TestData, TestManagerMessage } from "../../types";
+import { API_TEST_STATUS, API_TEST_STATUS_FORMAT, PAGE_TEST_STATUS_FORMAT, TestData, TestManagerMessage } from "../../types";
 import { Button, LinkButton } from "../LinkButton";
 import { LogLevel, log } from "../../src/log";
 import React, { JSX, useEffect, useState } from "react";
@@ -96,7 +96,7 @@ export const TestsList = ({
           ? <Button name={testIdData.ppaasTestId.testId} onClick={(event) => onClick(event, testIdData.testData)}>
               {testIdData.ppaasTestId.testId}
             </Button>
-          : <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_HISTORY_FORMAT(testIdData.ppaasTestId.testId)}>
+          : <LinkButton name={testIdData.ppaasTestId.testId} href={PAGE_TEST_STATUS_FORMAT(testIdData.ppaasTestId.testId)}>
               {testIdData.ppaasTestId.testId}
             </LinkButton>}
         - {testIdData.testData.status}

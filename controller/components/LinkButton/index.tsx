@@ -49,7 +49,7 @@ export const LinkButton = ({
   return (
     <React.Fragment>
       {/* https://nextjs.org/docs/messages/invalid-new-link-with-extra-anchor */}
-      <Link href={href} as={formatPageHref(href)} title={title} passHref legacyBehavior>
+      <Link href={href} as={formatPageHref(href)} title={title} legacyBehavior>
         <a href={formatPageHref(href)} title={title} target={target} data-testid={dataTestId}>
           <Button name={name} theme={{...defaultButtonTheme, ...theme}} onClick={onClick}>{children}</Button>
         </a>

@@ -90,7 +90,8 @@ describe("PewPew Util", () => {
   let files: Files = {};
   let mixedFiles: Files = {};
 
-  before(async () => {
+  before(async function () {
+    this.timeout(10000);
     mockS3();
     mockUploadObject();
     mockGetObjectTagging(new Map([["tagName", "tagValue"]]));

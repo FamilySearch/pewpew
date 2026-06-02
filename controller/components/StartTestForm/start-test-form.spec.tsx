@@ -262,6 +262,102 @@ describe("StartTestForm Component", () => {
     expect(screen.getByTestId("prior-yaml-section")).toBeInTheDocument();
   });
 
+  it("uses previousTestData queueName when it exists in available queues", () => {
+    const multiQueueProps: QueueInitialProps = {
+      queueName: "unittestqueue",
+      testQueues: { unittestqueue: "Unit Test Queue", devxl: "c5n.xlarge" },
+      loading: false,
+      error: false
+    };
+    const previousTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      queueName: "devxl",
+      environmentVariables: {}
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={multiQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        previousTestData={previousTestData}
+      />
+    );
+    expect((screen.getByTestId("queue-select") as HTMLSelectElement).value).toBe("devxl");
+  });
+
+  it("falls back to default queueName when previousTestData queueName is not in available queues", () => {
+    const previousTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      queueName: "devxl",
+      environmentVariables: {}
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        previousTestData={previousTestData}
+      />
+    );
+    // devxl is not in defaultQueueProps.testQueues — should fall back to "unittestqueue"
+    expect((screen.getByTestId("queue-select") as HTMLSelectElement).value).toBe("unittestqueue");
+  });
+
+  it("uses previousTestData version when it exists in available versions", () => {
+    const previousTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      version: "0.5.8",
+      environmentVariables: {}
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        previousTestData={previousTestData}
+      />
+    );
+    expect((screen.getByTestId("pewpew-version-select") as HTMLSelectElement).value).toBe("0.5.8");
+  });
+
+  it("falls back to default version when previousTestData version is not in available versions", () => {
+    const previousTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      version: "0.5.7",
+      environmentVariables: {}
+    };
+    render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={defaultAuthPermissions}
+        previousTestData={previousTestData}
+      />
+    );
+    // 0.5.7 is not in defaultVersionProps.pewpewVersions — should fall back to "latest"
+    expect((screen.getByTestId("pewpew-version-select") as HTMLSelectElement).value).toBe("latest");
+  });
+
   it("shows recurring test options when scheduling in future and recurring is selected", () => {
     render(
       <StartTestForm

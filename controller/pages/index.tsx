@@ -18,7 +18,7 @@ import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
-import { formatError, formatPageHref } from "../src/clientutil";
+import { formatError, formatPageHref, isTestData } from "../src/clientutil";
 import { Danger } from "../components/Alert";
 import Div from "../components/Div";
 import { Layout } from "../components/Layout";
@@ -132,7 +132,7 @@ const TestHistoryPage = ({
         });
         return;
       }
-      if (!Array.isArray(response.data) || !(response.data as TestData[]).every((data) => data !== null && typeof data === "object" && !Array.isArray(data))) {
+      if (!Array.isArray(response.data) || !(response.data as TestData[]).every((data) => isTestData(data))) {
         const errorString = "/api/search did not return a TestData array";
         log(errorString, LogLevel.ERROR, response.data);
         throw new Error(errorString);

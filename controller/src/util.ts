@@ -23,6 +23,7 @@ import { platform, tmpdir } from "os";
 import { NextApiRequest as Request } from "next";
 import { createWriteStream } from "fs";
 import fs from "fs/promises";
+import { pipeline } from "stream/promises";
 import { promisify } from "util";
 
 const yauzlOpen: (path: string, options: ZipOptions) => Promise<ZipFile | undefined> = promisify(_yauzlOpen);
@@ -133,52 +134,51 @@ export async function unzipFile (file: File): Promise<File[]> {
           // Directory file names end with '/'.
           reject(new Error("Zip files with directories are not supported: " + entry.fileName));
           return;
-        } else {
-          // file entry
-          // Check the size to avoid filling up the memory/hard drive?
-          if (entry.uncompressedSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
-            reject(new Error(`File ${entry.fileName} is ${entry.uncompressedSize} bytes which is larger than the max ${MAX_FILE_SIZE_MB} MB`));
+        }
+        // Check the size to avoid filling up the memory/hard drive?
+        if (entry.uncompressedSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          reject(new Error(`File ${entry.fileName} is ${entry.uncompressedSize} bytes which is larger than the max ${MAX_FILE_SIZE_MB} MB`));
+          return;
+        }
+        zipfile!.openReadStream(entry, (error, readStream) => {
+          if (error) {
+            log(`checkUnzipFile zipfile.openReadStream error ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, error, entry);
+            reject(error);
+            return;
           }
-          zipfile!.openReadStream(entry, (error, readStream) => {
-            if (error) {
-              log(`checkUnzipFile zipfile.openReadStream error ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, error, entry);
-              reject(error);
-              return;
-            }
-            if (!readStream) {
-              log(`checkUnzipFile zipfile.openReadStream undefined ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, entry);
-              reject(new Error (`Could not open ${entry.fileName} from ${file.originalFilename || file.filepath}`));
-              return;
-            }
-            const filename: string = entry.fileName;
-            const newFilepath = path.join(basepath, filename);
-            const newFile: File = createFormidableFile(
-              filename,
-              newFilepath,
-              null,
-              entry.uncompressedSize,
-              entry.getLastModDate()
-            );
-            log(`checkUnzipFile new file ${newFile.originalFilename || file.filepath}`, LogLevel.DEBUG, newFile.toJSON());
-            newFiles.push(newFile);
-            readStream.on("error", (err) => {
-              log(`checkUnzipFile zipfile.openReadStream on error ${newFile.originalFilename}`, LogLevel.WARN, err, { filename: file.originalFilename || file.filepath });
-              reject(err);
-            });
-            readStream.on("end", () => {
+          if (!readStream) {
+            log(`checkUnzipFile zipfile.openReadStream undefined ${entry.fileName} from ${file.originalFilename || file.filepath}`, LogLevel.WARN, entry);
+            reject(new Error(`Could not open ${entry.fileName} from ${file.originalFilename || file.filepath}`));
+            return;
+          }
+          const filename: string = entry.fileName;
+          const newFilepath = path.join(basepath, filename);
+          const newFile: File = createFormidableFile(
+            filename,
+            newFilepath,
+            null,
+            entry.uncompressedSize,
+            entry.getLastModDate()
+          );
+          log(`checkUnzipFile new file ${newFile.originalFilename || file.filepath}`, LogLevel.DEBUG, newFile.toJSON());
+          newFiles.push(newFile);
+          pipeline(readStream, createWriteStream(newFilepath))
+            .then(() => {
               log(`checkUnzipFile zipfile.openReadStream on end ${newFile.originalFilename}`, LogLevel.DEBUG, { filename: file.originalFilename || file.filepath });
               zipfile!.readEntry();
+            })
+            .catch((err: unknown) => {
+              log(`checkUnzipFile zipfile.openReadStream pipeline error ${newFile.originalFilename}`, LogLevel.WARN, err, { filename: file.originalFilename || file.filepath });
+              reject(err);
             });
-            readStream.pipe(createWriteStream(newFilepath));
-          });
-        }
+        });
       });
       zipfile!.on("error", (error) => {
         log(`checkUnzipFile zipfile error ${file.originalFilename || file.filepath}`, LogLevel.WARN, error, { filename: file.originalFilename || file.filepath });
         reject(error);
       });
-      zipfile!.on("end", (entry) => {
-        log(`checkUnzipFile zipfile end ${file.originalFilename || file.filepath}`, LogLevel.DEBUG, { filename: file.originalFilename || file.filepath, entry });
+      zipfile!.on("end", () => {
+        log(`checkUnzipFile zipfile end ${file.originalFilename || file.filepath}`, LogLevel.DEBUG, { filename: file.originalFilename || file.filepath });
         resolve();
       });
     });

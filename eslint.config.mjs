@@ -28,9 +28,6 @@ export default [{
     "controller/storybook-static",
     "controller/test/**.js",
     "controller/next-env.d.ts",
-    "controller/coverage-provider.ts",
-    "controller/vitest.config.ts",
-    "controller/vitest.setup.ts",
     "eslint.config.mjs"
   ],
 }, ...compat.extends(

@@ -11,7 +11,7 @@ import {
   PAGE_START_TEST,
   PAGE_START_TEST_FORMAT,
   PAGE_TEST_HISTORY,
-  PAGE_TEST_HISTORY_FORMAT,
+  PAGE_TEST_STATUS_FORMAT,
   PAGE_TEST_UPDATE,
   PAGE_TEST_UPDATE_FORMAT
 } from "../types";
@@ -96,8 +96,8 @@ describe("Web Page Acceptance Tests", () => {
       expect(html, `s3Folder '${s3Folder}' in results`).to.include(s3Folder);
     });
 
-    it("with ?testId= should respond 200 with test data in the HTML", async () => {
-      const url = integrationUrl + PAGE_TEST_HISTORY_FORMAT(testId);
+    it("GET /test/[testId] should respond 200 with test data in the HTML", async () => {
+      const url = integrationUrl + PAGE_TEST_STATUS_FORMAT(testId);
       log(`GET ${url}`, LogLevel.DEBUG);
       const res: AxiosResponse = await fetchNoRedirects(url);
       expect(res.status, "status").to.equal(200);

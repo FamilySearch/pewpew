@@ -2,8 +2,7 @@ import { LogLevel, log } from "@fs/ppaas-common";
 import {
   PAGE_CALENDAR,
   PAGE_START_TEST,
-  PAGE_START_TEST_FORMAT,
-  PAGE_TEST_HISTORY
+  PAGE_START_TEST_FORMAT
 } from "../../types";
 import { assertNoPageError, getTestData } from "./util";
 import path from "path";
@@ -16,6 +15,11 @@ const TEXT_FILE = path.join(TEST_FOLDER, "text.txt");
 const TEXT_FILE_2 = path.join(TEST_FOLDER, "text2.txt");
 
 describe("Start Test Submissions", () => {
+  // Capture a testId from a successful earlier submission to use as the prior test in the re-run test.
+  // This guarantees the S3 files exist (just uploaded) rather than relying on getTestData() which
+  // may return an old test whose files have been cleaned up or are from a different environment.
+  let recentTestId: string | undefined;
+
   describe("Basic Test with Environment Variables", () => {
     it("submitting basicwithenv.yaml without env vars should display an error", async () => {
       await browser.url(PAGE_START_TEST);
@@ -77,10 +81,13 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const url = await browser.getUrl();
-        return url.includes(PAGE_TEST_HISTORY) && url.includes("testId=");
-      }, { timeout: 30000, timeoutMsg: "Expected navigation to test history with testId" });
+        return /\/test\/\w/.test(url);
+      }, { timeout: 30000, timeoutMsg: "Expected navigation to /test/<testId>" });
       await assertNoPageError();
-      log("basicwithenv with env vars: test submitted successfully", LogLevel.INFO);
+      const envUrl = await browser.getUrl();
+      const envMatch = envUrl.match(/\/test\/(\w+)/);
+      if (envMatch?.[1]) { recentTestId = envMatch[1]; }
+      log("basicwithenv with env vars: test submitted successfully", LogLevel.INFO, { recentTestId });
     });
   });
 
@@ -136,8 +143,8 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const url = await browser.getUrl();
-        return url.includes(PAGE_TEST_HISTORY) && url.includes("testId=");
-      }, { timeout: 30000, timeoutMsg: "Expected navigation to test history with testId" });
+        return /\/test\/\w/.test(url);
+      }, { timeout: 30000, timeoutMsg: "Expected navigation to /test/<testId>" });
       await assertNoPageError();
       log("basicwithfiles with files: test submitted successfully", LogLevel.INFO);
     });
@@ -179,12 +186,18 @@ describe("Start Test Submissions", () => {
     let priorTestId: string;
 
     before(async () => {
-      const testData = await getTestData();
-      priorTestId = testData.testId;
-      log("re-run test: priorTestId", LogLevel.INFO, { priorTestId });
+      if (recentTestId) {
+        priorTestId = recentTestId;
+        log("re-run test: using testId captured from earlier submission", LogLevel.INFO, { priorTestId });
+      } else {
+        const testData = await getTestData();
+        priorTestId = testData.testId;
+        log("re-run test: using testId from getTestData fallback", LogLevel.INFO, { priorTestId });
+      }
     });
 
-    it("re-running a prior test should pre-populate and submit successfully", async () => {
+    it("re-running a prior test should pre-populate and submit successfully", async function () {
+      this.timeout(60000); // increase timeout for this test since it involves multiple steps and navigation
       const url = PAGE_START_TEST_FORMAT(priorTestId);
       log(`navigating to ${url}`, LogLevel.DEBUG);
       await browser.url(url);
@@ -200,7 +213,7 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const currentUrl = await browser.getUrl();
-        return currentUrl.includes(PAGE_TEST_HISTORY) && currentUrl.includes("testId=");
+        return /\/test\/\w/.test(currentUrl);
       }, { timeout: 30000, timeoutMsg: "Expected navigation to test history with testId" });
       await assertNoPageError();
       log("re-run test: test re-submitted successfully", LogLevel.INFO);

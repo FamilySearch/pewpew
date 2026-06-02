@@ -13,7 +13,7 @@
 import * as XLSX from "xlsx";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Chart } from "chart.js";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 /* eslint-enable sort-imports */
 
@@ -21,7 +21,7 @@ import styled from "styled-components";
 // Styled Components
 // ============================================================================
 
-const CONTAINER = styled.div`
+const Container = styled.div`
   text-align: left;
   margin: 2em 0;
 `;
@@ -36,7 +36,7 @@ const H2 = styled.h2`
 `;
 
 /** Chart container with fixed height */
-const QUADPANEL = styled.div`
+const QuadPanel = styled.div`
   position: relative;
   background-color: #2a2a2a;
   border-radius: 4px;
@@ -51,7 +51,7 @@ const QUADPANEL = styled.div`
 `;
 
 /** Side-by-side grid layout */
-const COMPARISONCHARTSGRID = styled.div`
+const ComparisonChartsGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-gap: 1.5em;
@@ -63,7 +63,7 @@ const COMPARISONCHARTSGRID = styled.div`
 `;
 
 /** Each column contains stacked charts */
-const CHARTCOLUMN = styled.div`
+const ChartColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2em;
@@ -72,7 +72,7 @@ const CHARTCOLUMN = styled.div`
 `;
 
 /** Custom HTML legend */
-const CUSTOMLEGEND = styled.div`
+const CustomLegend = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.5em;
@@ -83,7 +83,7 @@ const CUSTOMLEGEND = styled.div`
 `;
 
 /** Individual legend item */
-const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
+const LegendItem = styled.div<{ $hidden?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -105,7 +105,7 @@ const LEGENDITEM = styled.div<{ $hidden?: boolean }>`
 `;
 
 /** Merge endpoints toggle */
-const TOGGLECONTAINER = styled.div`
+const ToggleContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -128,14 +128,14 @@ const TOGGLECONTAINER = styled.div`
   }
 `;
 
-const FILTERCONTAINER = styled.div`
+const FilterContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 1em;
   margin: 1em 0 2em 0;
 `;
 
-const FILTERDROPDOWN = styled.div`
+const FilterDropdown = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -170,14 +170,14 @@ const FILTERDROPDOWN = styled.div`
 `;
 
 /** Compact table for comparison view */
-const TABLECONTAINER = styled.div`
+const TableContainer = styled.div`
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
   margin: 1em 0;
 `;
 
-const DATATABLE = styled.table`
+const DataTable = styled.table`
   color: white;
   border-spacing: 0;
   background-color: #2a2a2a;
@@ -187,7 +187,7 @@ const DATATABLE = styled.table`
   font-size: 10px;
 `;
 
-const TH = styled.th`
+const Th = styled.th`
   padding: 4px 6px;
   text-align: left;
   background-color: #1a1a1a;
@@ -200,7 +200,7 @@ const TH = styled.th`
   font-size: 10px;
 `;
 
-const DATATD = styled.td`
+const DataTd = styled.td`
   padding: 4px 6px;
   border-bottom: 1px solid #444;
   white-space: nowrap;
@@ -211,7 +211,7 @@ const DATATD = styled.td`
   line-height: 1.3;
 `;
 
-const DATATR = styled.tr`
+const DataTr = styled.tr`
   &:nth-child(even) {
     background: #333;
   }
@@ -221,7 +221,7 @@ const DATATR = styled.tr`
 `;
 
 /** Change indicator with color coding */
-const CHANGEVALUE = styled.span<{ $isPositive?: boolean; $isNegative?: boolean }>`
+const ChangeValue = styled.span<{ $isPositive?: boolean; $isNegative?: boolean }>`
   color: ${props => {
     if (props.$isPositive) {
       return "#4CAF50";
@@ -235,7 +235,7 @@ const CHANGEVALUE = styled.span<{ $isPositive?: boolean; $isNegative?: boolean }
 `;
 
 /** Tab navigation container */
-const TABCONTAINER = styled.div`
+const TabContainer = styled.div`
   display: flex;
   gap: 0;
   border-bottom: 2px solid #444;
@@ -243,7 +243,7 @@ const TABCONTAINER = styled.div`
 `;
 
 /** Individual tab button */
-const TAB = styled.button<{ $active?: boolean }>`
+const Tab = styled.button<{ $active?: boolean }>`
   background-color: ${props => props.$active ? "#2a2a2a" : "#1a1a1a"};
   color: ${props => props.$active ? "white" : "#999"};
   border: none;
@@ -262,12 +262,12 @@ const TAB = styled.button<{ $active?: boolean }>`
 `;
 
 /** Tab content wrapper */
-const TABCONTENT = styled.div`
+const TabContent = styled.div`
   margin-top: 2em;
 `;
 
 /** Download button for Excel export */
-const DOWNLOADBUTTON = styled.button`
+const DownloadButton = styled.button`
   background-color: #4CAF50;
   color: white;
   padding: 8px 16px;
@@ -289,7 +289,7 @@ const DOWNLOADBUTTON = styled.button`
   }
 `;
 
-const COLUMNSELECT = styled.div`
+const ColumnSelect = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -313,7 +313,7 @@ const COLUMNSELECT = styled.div`
   }
 `;
 
-const DROPDOWNBUTTON = styled.button`
+const DropdownButton = styled.button`
   flex: 1;
   padding: 0.5em 0.75em;
   background-color: #1a1a1a;
@@ -343,7 +343,7 @@ const DROPDOWNBUTTON = styled.button`
   }
 `;
 
-const DROPDOWNMENU = styled.div<{ $isOpen: boolean }>`
+const DropdownMenu = styled.div<{ $isOpen: boolean }>`
   display: ${props => props.$isOpen ? "block" : "none"};
   position: absolute;
   top: 100%;
@@ -359,7 +359,7 @@ const DROPDOWNMENU = styled.div<{ $isOpen: boolean }>`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 `;
 
-const DROPDOWNITEM = styled.label`
+const DropdownItem = styled.label`
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -454,58 +454,63 @@ interface ChartComponentProps {
 }
 
 const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndpoints, chartType }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
   const [chart, setChart] = useState<Chart>();
   const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
-  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
-    if (node) {
+  const allEndpoints = useMemo(() => {
+    if (mergeEndpoints) {
+      const groupedMap = new Map<string, DataPoint[]>();
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          const merged = mergeAllDataPoints(...existing, ...dataPoints);
+          groupedMap.set(label, merged);
+        } else {
+          groupedMap.set(label, dataPoints);
+        }
+      }
+      return Array.from(groupedMap.entries());
+    }
+    return displayData.map(([bucketId, dataPoints]) =>
+      [`${bucketId.method} ${bucketId.url}`, dataPoints] as [string, DataPoint[]]
+    );
+  }, [displayData, mergeEndpoints]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || allEndpoints.length === 0) { return; }
+
+    import("../TestResults/charts").then((charts) => {
       if (chart) {
         chart.destroy();
       }
-
-      let endpointData: [string, DataPoint[]][];
-
-      if (mergeEndpoints) {
-        const groupedMap = new Map<string, DataPoint[]>();
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-        endpointData = Array.from(groupedMap.entries());
-      } else {
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
-        });
+      let currentChart: Chart;
+      switch (chartType) {
+        case "median":
+          currentChart = charts.medianDurationChart(node, allEndpoints);
+          break;
+        case "worst5":
+          currentChart = charts.worst5PercentChart(node, allEndpoints);
+          break;
+        case "error5xx":
+          currentChart = charts.error5xxChart(node, allEndpoints);
+          break;
+        case "allErrors":
+          currentChart = charts.allErrorsChart(node, allEndpoints);
+          break;
       }
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
 
-      import("../TestResults/charts").then((charts) => {
-        let currentChart: Chart;
-        switch (chartType) {
-          case "median":
-            currentChart = charts.medianDurationChart(node, endpointData);
-            break;
-          case "worst5":
-            currentChart = charts.worst5PercentChart(node, endpointData);
-            break;
-          case "error5xx":
-            currentChart = charts.error5xxChart(node, endpointData);
-            break;
-          case "allErrors":
-            currentChart = charts.allErrorsChart(node, endpointData);
-            break;
-        }
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
-    }
-  }, [displayData, mergeEndpoints, chartType]);
+    return () => {
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, [allEndpoints, chartType]);
 
   const toggleDataset = (index: number) => {
     if (chart) {
@@ -527,11 +532,11 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasNodeRef} />
       {chart && chart.data.datasets && (
-        <CUSTOMLEGEND>
+        <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
-            <LEGENDITEM
+            <LegendItem
               key={index}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => toggleDataset(index)}
@@ -541,9 +546,9 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
                 style={{ backgroundColor: dataset.borderColor as string }}
               />
               <span>{dataset.label}</span>
-            </LEGENDITEM>
+            </LegendItem>
           ))}
-        </CUSTOMLEGEND>
+        </CustomLegend>
       )}
     </>
   );
@@ -674,8 +679,8 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
     XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
 
     // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-    const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, -5);
+    const filename = `${fileLabel.toLowerCase().replaceAll(/\s/g, "-")}-${timestamp}.xlsx`;
 
     // Download file
     XLSX.writeFile(workbook, filename);
@@ -683,176 +688,176 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
 
   return (
     <>
-      <DOWNLOADBUTTON onClick={exportToExcel}>
+      <DownloadButton onClick={exportToExcel}>
         Download as Excel
-      </DOWNLOADBUTTON>
-      <COLUMNSELECT className="column-select-container">
-        <label>Show Columns:</label>
-        <DROPDOWNBUTTON onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
+      </DownloadButton>
+      <ColumnSelect className="column-select-container">
+        <label htmlFor={`show-columns-${fileLabel}`}>Show Columns:</label>
+        <DropdownButton id={`show-columns-${fileLabel}`} onClick={() => setDropdownOpen(!dropdownOpen)} type="button">
           <span>{visibleCount} of 14 columns selected</span>
           <span className="arrow">{dropdownOpen ? "▲" : "▼"}</span>
-        </DROPDOWNBUTTON>
-        <DROPDOWNMENU $isOpen={dropdownOpen}>
-          <DROPDOWNITEM>
+        </DropdownButton>
+        <DropdownMenu $isOpen={dropdownOpen}>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.method}
               onChange={() => onToggleColumn("method")}
             />
             Method
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.hostname}
               onChange={() => onToggleColumn("hostname")}
             />
             Hostname
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.path}
               onChange={() => onToggleColumn("path")}
             />
             Path
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.queryString}
               onChange={() => onToggleColumn("queryString")}
             />
             Query String
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.tags}
               onChange={() => onToggleColumn("tags")}
             />
             Tags
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.statusCount}
               onChange={() => onToggleColumn("statusCount")}
             />
             Status Count
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.callCount}
               onChange={() => onToggleColumn("callCount")}
             />
             Call Count
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.p50}
               onChange={() => onToggleColumn("p50")}
             />
             P50
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.p95}
               onChange={() => onToggleColumn("p95")}
             />
             P95
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.p99}
               onChange={() => onToggleColumn("p99")}
             />
             P99
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.min}
               onChange={() => onToggleColumn("min")}
             />
             Min
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.max}
               onChange={() => onToggleColumn("max")}
             />
             Max
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.stddev}
               onChange={() => onToggleColumn("stddev")}
             />
             Std Dev
-          </DROPDOWNITEM>
-          <DROPDOWNITEM>
+          </DropdownItem>
+          <DropdownItem>
             <input
               type="checkbox"
               checked={visibleColumns.time}
               onChange={() => onToggleColumn("time")}
             />
             Time
-          </DROPDOWNITEM>
-        </DROPDOWNMENU>
-      </COLUMNSELECT>
-      <TABLECONTAINER>
-        <DATATABLE>
+          </DropdownItem>
+        </DropdownMenu>
+      </ColumnSelect>
+      <TableContainer>
+        <DataTable>
         <thead>
           <tr>
-            {visibleColumns.method && <TH>method</TH>}
-            {visibleColumns.hostname && <TH>hostname</TH>}
-            {visibleColumns.path && <TH>path</TH>}
-            {visibleColumns.queryString && <TH>queryString</TH>}
-            {visibleColumns.tags && <TH>tags</TH>}
-            {visibleColumns.statusCount && <TH>statusCount</TH>}
-            {visibleColumns.callCount && <TH>callCount</TH>}
-            {visibleColumns.p50 && <TH>p50</TH>}
-            {visibleColumns.p95 && <TH>p95</TH>}
-            {visibleColumns.p99 && <TH>p99</TH>}
-            {visibleColumns.min && <TH>min</TH>}
-            {visibleColumns.max && <TH>max</TH>}
-            {visibleColumns.stddev && <TH>stddev</TH>}
-            {visibleColumns.time && <TH>_time</TH>}
+            {visibleColumns.method && <Th>method</Th>}
+            {visibleColumns.hostname && <Th>hostname</Th>}
+            {visibleColumns.path && <Th>path</Th>}
+            {visibleColumns.queryString && <Th>queryString</Th>}
+            {visibleColumns.tags && <Th>tags</Th>}
+            {visibleColumns.statusCount && <Th>statusCount</Th>}
+            {visibleColumns.callCount && <Th>callCount</Th>}
+            {visibleColumns.p50 && <Th>p50</Th>}
+            {visibleColumns.p95 && <Th>p95</Th>}
+            {visibleColumns.p99 && <Th>p99</Th>}
+            {visibleColumns.min && <Th>min</Th>}
+            {visibleColumns.max && <Th>max</Th>}
+            {visibleColumns.stddev && <Th>stddev</Th>}
+            {visibleColumns.time && <Th>_time</Th>}
           </tr>
         </thead>
         <tbody>
           {tableData.map((row, idx) => (
-            <DATATR key={idx}>
-              {visibleColumns.method && <DATATD>{row.method}</DATATD>}
-              {visibleColumns.hostname && <DATATD title={row.hostname}>{row.hostname}</DATATD>}
-              {visibleColumns.path && <DATATD title={row.path}>{row.path}</DATATD>}
-              {visibleColumns.queryString && <DATATD>{row.queryString}</DATATD>}
-              {visibleColumns.tags && <DATATD title={row.tags}>{row.tags}</DATATD>}
-              {visibleColumns.statusCount && <DATATD>
+            <DataTr key={idx}>
+              {visibleColumns.method && <DataTd>{row.method}</DataTd>}
+              {visibleColumns.hostname && <DataTd title={row.hostname}>{row.hostname}</DataTd>}
+              {visibleColumns.path && <DataTd title={row.path}>{row.path}</DataTd>}
+              {visibleColumns.queryString && <DataTd>{row.queryString}</DataTd>}
+              {visibleColumns.tags && <DataTd title={row.tags}>{row.tags}</DataTd>}
+              {visibleColumns.statusCount && <DataTd>
                 {row.statusCounts.map((sc: any, i: number) => (
                   <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
-              </DATATD>}
-              {visibleColumns.callCount && <DATATD>{row.callCount.toLocaleString()}</DATATD>}
-              {visibleColumns.p50 && <DATATD>{row.p50.toFixed(2)}</DATATD>}
-              {visibleColumns.p95 && <DATATD>{row.p95.toFixed(2)}</DATATD>}
-              {visibleColumns.p99 && <DATATD>{row.p99.toFixed(2)}</DATATD>}
-              {visibleColumns.min && <DATATD>{row.min.toFixed(2)}</DATATD>}
-              {visibleColumns.max && <DATATD>{row.max.toFixed(2)}</DATATD>}
-              {visibleColumns.stddev && <DATATD>{row.stddev.toFixed(2)}</DATATD>}
-              {visibleColumns.time && <DATATD>{row.time.toLocaleString()}</DATATD>}
-            </DATATR>
+              </DataTd>}
+              {visibleColumns.callCount && <DataTd>{row.callCount.toLocaleString()}</DataTd>}
+              {visibleColumns.p50 && <DataTd>{row.p50.toFixed(2)}</DataTd>}
+              {visibleColumns.p95 && <DataTd>{row.p95.toFixed(2)}</DataTd>}
+              {visibleColumns.p99 && <DataTd>{row.p99.toFixed(2)}</DataTd>}
+              {visibleColumns.min && <DataTd>{row.min.toFixed(2)}</DataTd>}
+              {visibleColumns.max && <DataTd>{row.max.toFixed(2)}</DataTd>}
+              {visibleColumns.stddev && <DataTd>{row.stddev.toFixed(2)}</DataTd>}
+              {visibleColumns.time && <DataTd>{row.time.toLocaleString()}</DataTd>}
+            </DataTr>
           ))}
         </tbody>
-      </DATATABLE>
-    </TABLECONTAINER>
+      </DataTable>
+    </TableContainer>
     </>
   );
 };
@@ -943,23 +948,23 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   // Empty state
   if (!baselineData || baselineData.length === 0 || !comparisonData || comparisonData.length === 0) {
     return (
-      <CONTAINER>
+      <Container>
         <H1>Performance Comparison</H1>
         <p style={{ textAlign: "center", color: "#999" }}>
           Select two results files to compare
         </p>
-      </CONTAINER>
+      </Container>
     );
   }
 
   const visibleMetricsCount = Object.values(visibleMetrics).filter(Boolean).length;
 
   return (
-    <CONTAINER>
+    <Container>
       <H1>Performance Comparison</H1>
 
-      <FILTERCONTAINER>
-        <FILTERDROPDOWN>
+      <FilterContainer>
+        <FilterDropdown>
           <label htmlFor="method-filter-compare">Filter by Method:</label>
           <select
             id="method-filter-compare"
@@ -973,9 +978,9 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               </option>
             ))}
           </select>
-        </FILTERDROPDOWN>
+        </FilterDropdown>
 
-        <TOGGLECONTAINER style={{ margin: 0 }}>
+        <ToggleContainer style={{ margin: 0 }}>
           <input
             type="checkbox"
             id="merge-endpoints-compare"
@@ -985,179 +990,179 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           <label htmlFor="merge-endpoints-compare">
             Merge endpoints with different tags
           </label>
-        </TOGGLECONTAINER>
-      </FILTERCONTAINER>
+        </ToggleContainer>
+      </FilterContainer>
 
       <H2>Performance & Error Metrics Comparison</H2>
-      <COMPARISONCHARTSGRID>
-        <CHARTCOLUMN>
+      <ComparisonChartsGrid>
+        <ChartColumn>
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {baselineLabel} - Median Duration
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="median"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {baselineLabel} - Worst 5%
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="worst5"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {baselineLabel} - 5xx Errors
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="error5xx"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {baselineLabel} - All Errors
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredBaselineData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="allErrors"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
-        </CHARTCOLUMN>
+        </ChartColumn>
 
-        <CHARTCOLUMN>
+        <ChartColumn>
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {comparisonLabel} - Median Duration
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="median"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {comparisonLabel} - Worst 5%
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="worst5"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {comparisonLabel} - 5xx Errors
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="error5xx"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {comparisonLabel} - All Errors
             </h3>
-            <QUADPANEL>
+            <QuadPanel>
               <ComparisonChart
                 displayData={filteredComparisonData}
                 mergeEndpoints={mergeEndpoints}
                 chartType="allErrors"
               />
-            </QUADPANEL>
+            </QuadPanel>
           </div>
-        </CHARTCOLUMN>
-      </COMPARISONCHARTSGRID>
+        </ChartColumn>
+      </ComparisonChartsGrid>
 
-      <TABCONTAINER>
-        <TAB $active={activeTab === "endpoint"} onClick={() => setActiveTab("endpoint")}>
+      <TabContainer>
+        <Tab $active={activeTab === "endpoint"} onClick={() => setActiveTab("endpoint")}>
           Endpoint Comparison
-        </TAB>
-        <TAB $active={activeTab === "final"} onClick={() => setActiveTab("final")}>
+        </Tab>
+        <Tab $active={activeTab === "final"} onClick={() => setActiveTab("final")}>
           Final Results Comparison
-        </TAB>
-      </TABCONTAINER>
+        </Tab>
+      </TabContainer>
 
       {activeTab === "endpoint" && (
-        <TABCONTENT>
+        <TabContent>
           <p style={{ textAlign: "center", color: "#999", marginBottom: "1em" }}>
             Per-endpoint metrics comparison (green = improvement, red = regression)
           </p>
-          <COLUMNSELECT className="metric-select-container">
-            <label>Show Metrics:</label>
-            <DROPDOWNBUTTON onClick={() => setMetricsDropdownOpen(!metricsDropdownOpen)} type="button">
+          <ColumnSelect className="metric-select-container">
+            <label htmlFor="metrics-dropdown">Show Metrics:</label>
+            <DropdownButton id="metrics-dropdown" onClick={() => setMetricsDropdownOpen(!metricsDropdownOpen)} type="button">
               <span>{visibleMetricsCount} of 9 metrics selected</span>
               <span className="arrow">{metricsDropdownOpen ? "▲" : "▼"}</span>
-            </DROPDOWNBUTTON>
-            <DROPDOWNMENU $isOpen={metricsDropdownOpen}>
-              <DROPDOWNITEM>
+            </DropdownButton>
+            <DropdownMenu $isOpen={metricsDropdownOpen}>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.calls} onChange={() => toggleMetric("calls")} />
                 Calls
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.avg} onChange={() => toggleMetric("avg")} />
                 Avg Response Time
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.min} onChange={() => toggleMetric("min")} />
                 Min Response Time
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.max} onChange={() => toggleMetric("max")} />
                 Max Response Time
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.stdDev} onChange={() => toggleMetric("stdDev")} />
                 Std Dev
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.p50} onChange={() => toggleMetric("p50")} />
                 P50
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.p90} onChange={() => toggleMetric("p90")} />
                 P90
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.p95} onChange={() => toggleMetric("p95")} />
                 P95
-              </DROPDOWNITEM>
-              <DROPDOWNITEM>
+              </DropdownItem>
+              <DropdownItem>
                 <input type="checkbox" checked={visibleMetrics.p99} onChange={() => toggleMetric("p99")} />
                 P99
-              </DROPDOWNITEM>
-            </DROPDOWNMENU>
-          </COLUMNSELECT>
+              </DropdownItem>
+            </DropdownMenu>
+          </ColumnSelect>
           {(() => {
             // Create a map to match endpoints between baseline and comparison
             const baselineMap = new Map<string, DataPoint[]>();
@@ -1165,7 +1170,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
             // Build baseline map
             for (const [bucketId, dataPoints] of filteredBaselineData) {
-              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              const key = `${bucketId.method}||${bucketId.url}`;
               if (baselineMap.has(key)) {
                 baselineMap.get(key)!.push(...dataPoints);
               } else {
@@ -1175,7 +1180,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
             // Build comparison map
             for (const [bucketId, dataPoints] of filteredComparisonData) {
-              const key = `${bucketId.method}||${bucketId.hostname}||${bucketId.url}`;
+              const key = `${bucketId.method}||${bucketId.url}`;
               if (comparisonMap.has(key)) {
                 comparisonMap.get(key)!.push(...dataPoints);
               } else {
@@ -1187,20 +1192,18 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             const matchedEndpoints: {
               key: string;
               method: string;
-              hostname: string;
-              path: string;
+              url: string;
               baselineData: DataPoint[];
               comparisonData: DataPoint[];
             }[] = [];
 
             for (const [key, baselineEndpointData] of baselineMap.entries()) {
               if (comparisonMap.has(key)) {
-                const [method, hostname, path] = key.split("||");
+                const [method, url] = key.split("||");
                 matchedEndpoints.push({
                   key,
                   method,
-                  hostname,
-                  path,
+                  url,
                   baselineData: baselineEndpointData,
                   comparisonData: comparisonMap.get(key)!
                 });
@@ -1214,43 +1217,43 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               const percent = baselineVal && diff !== null && baselineVal !== 0 ? (diff / baselineVal) * 100 : null;
 
               return (
-                <DATATR key={label}>
-                  <DATATD>{label}</DATATD>
-                  <DATATD>
+                <DataTr key={label}>
+                  <DataTd>{label}</DataTd>
+                  <DataTd>
                     {baselineVal !== null && baselineVal !== undefined
                       ? isCount ? baselineVal.toLocaleString() : `${baselineVal.toFixed(2)}ms`
                       : "N/A"}
-                  </DATATD>
-                  <DATATD>
+                  </DataTd>
+                  <DataTd>
                     {comparisonVal !== null && comparisonVal !== undefined
                       ? isCount ? comparisonVal.toLocaleString() : `${comparisonVal.toFixed(2)}ms`
                       : "N/A"}
-                  </DATATD>
-                  <DATATD>
+                  </DataTd>
+                  <DataTd>
                     {diff !== null ? (
-                      <CHANGEVALUE
+                      <ChangeValue
                         $isPositive={!isCount && diff < 0}
                         $isNegative={!isCount && diff > 0}
                       >
                         {diff > 0 ? "+" : ""}{isCount ? diff.toLocaleString() : `${diff.toFixed(2)}ms`}
                         {percent !== null && ` (${diff > 0 ? "+" : ""}${percent.toFixed(1)}%)`}
-                      </CHANGEVALUE>
+                      </ChangeValue>
                     ) : "N/A"}
-                  </DATATD>
-                </DATATR>
+                  </DataTd>
+                </DataTr>
               );
             };
 
-            return matchedEndpoints.map(({ key, method, hostname, path, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
+            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;
 
               for (const dp of endpointBaselineData) {
-                if (!baselineRTT) {
-                  baselineRTT = dp.rttHistogram.clone();
-                } else {
+                if (baselineRTT) {
                   baselineRTT.add(dp.rttHistogram);
+                } else {
+                  baselineRTT = dp.rttHistogram.clone();
                 }
                 baselineCallCount += Number(dp.rttHistogram.getTotalCount());
               }
@@ -1260,10 +1263,10 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               let comparisonCallCount = 0;
 
               for (const dp of endpointComparisonData) {
-                if (!comparisonRTT) {
-                  comparisonRTT = dp.rttHistogram.clone();
-                } else {
+                if (comparisonRTT) {
                   comparisonRTT.add(dp.rttHistogram);
+                } else {
+                  comparisonRTT = dp.rttHistogram.clone();
                 }
                 comparisonCallCount += Number(dp.rttHistogram.getTotalCount());
               }
@@ -1304,16 +1307,16 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               return (
                 <div key={key} style={{ marginBottom: "3em" }}>
                   <H2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
-                    {method} {hostname}{path}
+                    {method} {url}
                   </H2>
-                  <TABLECONTAINER>
-                    <DATATABLE>
+                  <TableContainer>
+                    <DataTable>
                       <thead>
                         <tr>
-                          <TH>Metric</TH>
-                          <TH title={baselineLabel}>Baseline</TH>
-                          <TH title={comparisonLabel}>Comparison</TH>
-                          <TH>Change</TH>
+                          <Th>Metric</Th>
+                          <Th title={baselineLabel}>Baseline</Th>
+                          <Th title={comparisonLabel}>Comparison</Th>
+                          <Th>Change</Th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1327,19 +1330,19 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                         {visibleMetrics.p95 && renderMetricRow("P95", baselineMetrics?.p95, comparisonMetrics?.p95)}
                         {visibleMetrics.p99 && renderMetricRow("P99", baselineMetrics?.p99, comparisonMetrics?.p99)}
                       </tbody>
-                    </DATATABLE>
-                  </TABLECONTAINER>
+                    </DataTable>
+                  </TableContainer>
                 </div>
               );
             });
           })()}
-        </TABCONTENT>
+        </TabContent>
       )}
 
       {activeTab === "final" && (
-        <TABCONTENT>
-          <COMPARISONCHARTSGRID>
-            <CHARTCOLUMN>
+        <TabContent>
+          <ComparisonChartsGrid>
+            <ChartColumn>
               <H2>{baselineLabel}</H2>
               <FinalResultsTable
                 displayData={filteredBaselineData}
@@ -1347,8 +1350,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                 visibleColumns={visibleColumns}
                 onToggleColumn={toggleColumn}
               />
-            </CHARTCOLUMN>
-            <CHARTCOLUMN>
+            </ChartColumn>
+            <ChartColumn>
               <H2>{comparisonLabel}</H2>
               <FinalResultsTable
                 displayData={filteredComparisonData}
@@ -1356,11 +1359,11 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                 visibleColumns={visibleColumns}
                 onToggleColumn={toggleColumn}
               />
-            </CHARTCOLUMN>
-          </COMPARISONCHARTSGRID>
-        </TABCONTENT>
+            </ChartColumn>
+          </ComparisonChartsGrid>
+        </TabContent>
       )}
-    </CONTAINER>
+    </Container>
   );
 };
 

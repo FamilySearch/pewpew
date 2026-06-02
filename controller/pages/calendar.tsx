@@ -5,7 +5,7 @@ import {
   AuthPermissions,
   PAGE_START_TEST,
   PAGE_START_TEST_FORMAT,
-  PAGE_TEST_HISTORY_FORMAT,
+  PAGE_TEST_STATUS_FORMAT,
   TestManagerError
 } from "../types";
 import { Alert, Danger } from "../components/Alert";
@@ -168,7 +168,7 @@ const CalendarPage = ({ authPermission, scheduledEvents, defaultDate, error: pro
       return undefined;
     }
     const url: string = (arg.event.start && arg.event.start.getTime() < Date.now())
-        ? PAGE_TEST_HISTORY_FORMAT(testId)
+        ? PAGE_TEST_STATUS_FORMAT(testId)
         : PAGE_START_TEST_FORMAT(testId, true);
     // We must use route.push "as" similar to our next/link
     router.push(url, formatPageHref(url))

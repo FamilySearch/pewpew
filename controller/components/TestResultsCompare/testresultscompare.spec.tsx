@@ -227,7 +227,7 @@ describe("TestResultsCompare", () => {
       render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
       fireEvent.click(screen.getByText("Final Results Comparison"));
       // Open the first table's column dropdown so its checkboxes become accessible
-      const [firstColumnBtn] = screen.getAllByRole("button", { name: /of 14 columns selected/ });
+      const firstColumnBtn = document.getElementById("show-columns-Baseline") as HTMLElement;
       fireEvent.click(firstColumnBtn);
       // Scope to the open dropdown container and click the first (Method) checkbox
       const columnContainer = firstColumnBtn.closest(".column-select-container");

@@ -6,7 +6,7 @@ import {
   AuthPermissions,
   EnvironmentVariablesFile,
   PAGE_CALENDAR,
-  PAGE_TEST_HISTORY_FORMAT,
+  PAGE_TEST_STATUS_FORMAT,
   PreviousTestData,
   TestData
 } from "../../types";
@@ -174,8 +174,12 @@ export const StartTestForm = ({
     endDate: new Date(previousTestData?.endDate || defaultDate.getTime() + ONE_WEEK), // Default the end date to one week later
     daysOfWeek: defaultDaysOfWeek,
     allDays: defaultDaysOfWeek.every((dayOfWeek: DayValue) => dayOfWeek.value),
-    queueName: previousTestData?.queueName || queueInitialProps.queueName,
-    pewpewVersion: previousTestData?.version || versionInitalProps.pewpewVersion || latestPewPewVersion,
+    queueName: (previousTestData?.queueName && Object.keys(queueInitialProps.testQueues).includes(previousTestData.queueName))
+      ? previousTestData.queueName
+      : queueInitialProps.queueName,
+    pewpewVersion: (previousTestData?.version && versionInitalProps.pewpewVersions.includes(previousTestData.version))
+      ? previousTestData.version
+      : versionInitalProps.pewpewVersion || latestPewPewVersion,
     environmentVariables: previousTestData?.environmentVariables
       ? Object.entries(previousTestData.environmentVariables).map(([variableName, variableValue]: [string, string | null], index: number) => ({
         // Map these to the placeholder values
@@ -501,7 +505,7 @@ export const StartTestForm = ({
         const calendarUrl = PAGE_CALENDAR + "?defaultDate=" + responseData.startTime;
         await router.push(calendarUrl, formatPageHref(calendarUrl));
       } else {
-        const statusUrl = PAGE_TEST_HISTORY_FORMAT(responseData.testId);
+        const statusUrl = PAGE_TEST_STATUS_FORMAT(responseData.testId);
         await router.push(statusUrl, formatPageHref(statusUrl));
       }
     } catch (error) {
@@ -697,7 +701,7 @@ export const StartTestForm = ({
             lastUpdated: previousTestData?.lastUpdated
           } } />
           <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
-                      href={PAGE_TEST_HISTORY_FORMAT(state.testId)}>Test Status</LinkButton>
+                      href={PAGE_TEST_STATUS_FORMAT(state.testId)}>Test Status</LinkButton>
         </Column>}
       </Row>
       {previousTestData && <Row data-testid="prior-yaml-section">

@@ -25,3 +25,4 @@ testmerge.json
 package-lock.json.scripting
 Cargo.lock.scripting
 CLAUDE.md
+tsconfig.tsbuildinfo

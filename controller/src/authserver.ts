@@ -369,11 +369,25 @@ export async function authApi (req: NextApiRequest, res: NextApiResponse, requir
       return undefined;
     }
 
-    const authPermissions: AuthPermissions = await validateToken(token);
+    let authPermissions: AuthPermissions = await validateToken(token);
     log(`${req.method} ${req.url} authPermissions: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
-    // If it's expired redirect to login
+    // If expired, attempt a silent refresh before giving up
     if (authPermissions.authPermission === AuthPermission.Expired) {
-      res.status(401).json({ message: "Session Expired. Please login again." });
+      const refreshToken: string | undefined = getTokenFromQueryOrHeader(req, REFRESH_COOKIE_NAME);
+      if (refreshToken) {
+        try {
+          const { token: newToken, refreshToken: newRefreshToken, hintToken } = await getTokenFromRefreshToken(refreshToken);
+          setCookiesOnApiResponse(req, res, newToken, newRefreshToken, hintToken);
+          authPermissions = await validateToken(newToken);
+          log(`${req.method} ${req.url} refreshed authPermissions: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
+        } catch (refreshError) {
+          log("Failed to refresh token in authApi", LogLevel.WARN, refreshError);
+        }
+      }
+    }
+    // If still expired after refresh attempt (or no refresh token available), return 401
+    if (authPermissions.authPermission === AuthPermission.Expired) {
+      res.status(401).json({ message: SESSION_EXPIRED_MESSAGE });
       return undefined;
     }
     // If we don't have permissions or the permissions are not greater than requiredPermissions
@@ -445,6 +459,32 @@ export function setCookies (
     ctx.res.setHeader("Set-Cookie", cookies);
   } catch (error: unknown) {
     log("Error setting cookies in header", LogLevel.WARN, error, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
+    throw error;
+  }
+}
+
+export function setCookiesOnApiResponse (
+  req: NextApiRequest,
+  res: NextApiResponse,
+  token: string,
+  refreshToken?: string,
+  hintToken?: string
+): void {
+  const domain: string = getDomain(req);
+  const path: string = getCookiePath(req) || "/";
+  log(`Set cookie to ${token} on ${domain}`, LogLevel.DEBUG);
+  const oneDay: number = 60 * 60 * 24;
+  try {
+    const cookies: string[] = [cookieSerialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
+    if (refreshToken) {
+      cookies.push(cookieSerialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
+    }
+    if (hintToken) {
+      cookies.push(cookieSerialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
+    }
+    res.setHeader("Set-Cookie", cookies);
+  } catch (error: unknown) {
+    log("Error setting cookies on api response", LogLevel.WARN, error, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
     throw error;
   }
 }

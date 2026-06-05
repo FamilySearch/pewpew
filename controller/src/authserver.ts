@@ -379,7 +379,7 @@ export async function authApi (req: NextApiRequest, res: NextApiResponse, requir
           const { token: newToken, refreshToken: newRefreshToken, hintToken } = await getTokenFromRefreshToken(refreshToken);
           setCookiesOnApiResponse(req, res, newToken, newRefreshToken, hintToken);
           authPermissions = await validateToken(newToken);
-          log(`${req.method} ${req.url} refreshed authPermissions: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
+          log(`${req.method} ${req.url} refreshed authPermissions`, LogLevel.DEBUG, { ...authPermissions, token: undefined });
         } catch (refreshError) {
           log("Failed to refresh token in authApi", LogLevel.WARN, refreshError);
         }
@@ -434,6 +434,18 @@ const redirectToLogin = (ctx: GetServerSidePropsContext, error?: any): string =>
   return loginUrl;
 };
 
+function buildAuthCookies (domain: string, path: string, token: string, refreshToken?: string, hintToken?: string): string[] {
+  const oneDay: number = 60 * 60 * 24;
+  const cookies: string[] = [cookieSerialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
+  if (refreshToken) {
+    cookies.push(cookieSerialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
+  }
+  if (hintToken) {
+    cookies.push(cookieSerialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
+  }
+  return cookies;
+}
+
 // This can be called from the server
 export function setCookies (
   { ctx, token, refreshToken, hintToken }: {
@@ -444,19 +456,9 @@ export function setCookies (
   }) {
   const domain: string = getDomain(ctx.req);
   const path: string = getCookiePath(ctx.req) || "/";
-  log(`Set cookie to ${token} on ${domain}`, LogLevel.DEBUG);
-  // server side
-  const oneDay: number = 60 * 60 * 24;
+  log(`Set cookie on ${domain}`, LogLevel.DEBUG);
   try {
-    const cookies: string[] = [cookieSerialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
-    if (refreshToken) {
-      cookies.push(cookieSerialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
-    }
-    if (hintToken) {
-      cookies.push(cookieSerialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
-    }
-    // Set the cookie and then redirect
-    ctx.res.setHeader("Set-Cookie", cookies);
+    ctx.res.setHeader("Set-Cookie", buildAuthCookies(domain, path, token, refreshToken, hintToken));
   } catch (error: unknown) {
     log("Error setting cookies in header", LogLevel.WARN, error, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
     throw error;
@@ -472,17 +474,9 @@ export function setCookiesOnApiResponse (
 ): void {
   const domain: string = getDomain(req);
   const path: string = getCookiePath(req) || "/";
-  log(`Set cookie to ${token} on ${domain}`, LogLevel.DEBUG);
-  const oneDay: number = 60 * 60 * 24;
+  log(`Set cookie on ${domain}`, LogLevel.DEBUG);
   try {
-    const cookies: string[] = [cookieSerialize(AUTH_COOKIE_NAME, token, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS })];
-    if (refreshToken) {
-      cookies.push(cookieSerialize(REFRESH_COOKIE_NAME, refreshToken, { domain, path, maxAge: oneDay * REFRESH_COOKIE_DURATION_DAYS }));
-    }
-    if (hintToken) {
-      cookies.push(cookieSerialize(HINT_COOKIE_NAME, hintToken, { domain, path, maxAge: oneDay * COOKIE_DURATION_DAYS }));
-    }
-    res.setHeader("Set-Cookie", cookies);
+    res.setHeader("Set-Cookie", buildAuthCookies(domain, path, token, refreshToken, hintToken));
   } catch (error: unknown) {
     log("Error setting cookies on api response", LogLevel.WARN, error, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
     throw error;

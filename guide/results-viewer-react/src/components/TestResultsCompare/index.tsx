@@ -13,8 +13,8 @@ import * as XLSX from "xlsx";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { LogLevel, formatError, log } from "../../util/log";
-import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "../TestResults/utils";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "../TestResults/utils";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import styled from "styled-components";
@@ -402,6 +402,52 @@ const DROPDOWNITEM = styled.label`
     height: 14px;
   }
 `;
+
+const SectionHeadingH1 = styled.h1`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const SectionHeadingH2 = styled.h2`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+  e.preventDefault();
+  history.replaceState(null, "", "#" + id);
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
 
 // ============================================================================
 // TypeScript Interfaces
@@ -1251,6 +1297,27 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
     loadData();
   }, [baselineText, comparisonText]);
 
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    if (!state.baselineData?.length || !state.comparisonData?.length) {
+      initialScrollDoneRef.current = false;
+      return;
+    }
+    if (initialScrollDoneRef.current) { return; }
+    initialScrollDoneRef.current = true;
+    const hash = window.location.hash.slice(1);
+    if (!hash) { return; }
+    if (hash === "compare-final-results") {
+      setActiveTab("final");
+    } else if (hash.startsWith("compare-endpoint-") || hash === "compare-overview-charts") {
+      setActiveTab("endpoint");
+    }
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [state.baselineData, state.comparisonData]);
+
   // Extract unique HTTP methods from both datasets
   const availableMethods = useMemo(() => {
     const methods = new Set<string>();
@@ -1368,7 +1435,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
 
       {filteredBaselineData && filteredComparisonData && (
         <>
-          <H1>Performance & Error Metrics Comparison</H1>
+          <div id="compare-overview-charts">
+            <SectionHeadingH1>
+              Performance &amp; Error Metrics Comparison
+              <a href="#compare-overview-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-overview-charts")}>#</a>
+            </SectionHeadingH1>
+          </div>
           <COMPARISONCHARTSGRID>
             <CHARTCOLUMN>
               <H2>{baselineLabel}</H2>
@@ -1421,6 +1493,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
 
           {activeTab === "endpoint" && (
             <TABCONTENT>
+              <div id="compare-endpoint-comparison">
+                <SectionHeadingH2>
+                  Endpoint Comparison
+                  <a href="#compare-endpoint-comparison" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-endpoint-comparison")}>#</a>
+                </SectionHeadingH2>
+              </div>
               <p style={{ textAlign: "center", color: "#999", marginBottom: "1em" }}>
                 Per-endpoint metrics comparison (green = improvement, red = regression)
               </p>
@@ -1508,7 +1586,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
               );
             };
 
-            return matchedEndpoints.map(({ key, method, hostname, path, baselineData, comparisonData }) => {
+            return matchedEndpoints.map(({ key, method, hostname, path, baselineData, comparisonData }, endpointIndex) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;
@@ -1568,11 +1646,13 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
                 comparisonRTT.free();
               }
 
+              const endpointAnchorId = compareEndpointAnchorId(endpointIndex);
               return (
-                <div key={key} style={{ marginBottom: "3em" }}>
-                  <H2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
+                <div key={key} id={endpointAnchorId} style={{ marginBottom: "3em" }}>
+                  <SectionHeadingH2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
                     {method} {hostname}{path}
-                  </H2>
+                    <a href={`#${endpointAnchorId}`} className="anchor-link" onClick={(e) => handleAnchorClick(e, endpointAnchorId)}>#</a>
+                  </SectionHeadingH2>
                   <TABLECONTAINER>
                     <DATATABLE>
                       <thead>
@@ -1605,6 +1685,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
 
           {activeTab === "final" && (
             <TABCONTENT>
+              <div id="compare-final-results">
+                <SectionHeadingH2>
+                  Final Results Comparison
+                  <a href="#compare-final-results" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-final-results")}>#</a>
+                </SectionHeadingH2>
+              </div>
               <COMPARISONCHARTSGRID>
                 <CHARTCOLUMN>
                   <H2>{baselineLabel}</H2>

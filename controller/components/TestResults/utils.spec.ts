@@ -3,7 +3,7 @@ vi.mock("./model", () => ({
   processNewJson: vi.fn(() => [])
 }));
 
-import { comprehensiveSort, dateToString, formatValue, minMaxTime, parseResultsData } from "./utils";
+import { bucketAnchorId, compareEndpointAnchorId, comprehensiveSort, dateToString, formatValue, minMaxTime, parseResultsData } from "./utils";
 import { processJson, processNewJson } from "./model";
 
 describe("utils", () => {
@@ -191,6 +191,42 @@ describe("utils", () => {
     it("returns an empty array when processJson returns no entries", async () => {
       const result = await parseResultsData(JSON.stringify({ buckets: [] }));
       expect(result).toEqual([]);
+    });
+  });
+
+  describe("bucketAnchorId", () => {
+    it("uses _id tag when present", () => {
+      expect(bucketAnchorId({ method: "GET", url: "http://example.com", _id: "3" }, 99)).toBe("endpoint-3");
+    });
+
+    it("uses _id tag of '0' (not falsy-coerced to index)", () => {
+      expect(bucketAnchorId({ method: "GET", url: "http://example.com", _id: "0" }, 5)).toBe("endpoint-0");
+    });
+
+    it("falls back to index when _id is absent", () => {
+      expect(bucketAnchorId({ method: "GET", url: "http://example.com" }, 5)).toBe("endpoint-5");
+    });
+
+    it("falls back to index 0 when _id is absent and index is 0", () => {
+      expect(bucketAnchorId({ method: "POST", url: "http://example.com" }, 0)).toBe("endpoint-0");
+    });
+
+    it("prefixes with 'endpoint-'", () => {
+      expect(bucketAnchorId({ method: "GET", url: "/api", _id: "7" }, 0)).toMatch(/^endpoint-/);
+    });
+  });
+
+  describe("compareEndpointAnchorId", () => {
+    it("generates compare-endpoint-0 for index 0", () => {
+      expect(compareEndpointAnchorId(0)).toBe("compare-endpoint-0");
+    });
+
+    it("generates compare-endpoint-7 for index 7", () => {
+      expect(compareEndpointAnchorId(7)).toBe("compare-endpoint-7");
+    });
+
+    it("prefixes with 'compare-endpoint-'", () => {
+      expect(compareEndpointAnchorId(3)).toMatch(/^compare-endpoint-/);
     });
   });
 });

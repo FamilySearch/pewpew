@@ -1,9 +1,9 @@
 import * as XLSX from "xlsx";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, formatError, log } from "../../util/log";
-import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
+import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
 // Dynamic import for charts to reduce bundle size
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import styled from "styled-components";
@@ -75,6 +75,52 @@ export const TR = styled.tr`
     background: #474747;
   };
 `;
+
+const SectionHeadingH1 = styled.h1`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const SectionHeadingH2 = styled.h2`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+  e.preventDefault();
+  history.replaceState(null, "", "#" + id);
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
 
 export interface TestResultProps {
   resultsText: string;
@@ -352,13 +398,34 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
   //     : { method: getSummaryDisplay({ summaryTagFilter: "", summaryTagValueFilter: "" }), url: "" };
   // }, [state.summaryData, state.filteredData]);
 
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    if (!filteredDisplayData) {
+      initialScrollDoneRef.current = false;
+      return;
+    }
+    if (initialScrollDoneRef.current) { return; }
+    initialScrollDoneRef.current = true;
+    const hash = window.location.hash.slice(1);
+    if (!hash) { return; }
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [filteredDisplayData]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
     <React.Fragment>
       {state.error && <Danger>{state.error}</Danger>}
       {filteredDisplayData !== undefined ? (
         <TIMETAKEN>
-          <h1>Time Taken</h1>
+          <div id="time-taken">
+            <SectionHeadingH1>
+              Time Taken
+              <a href="#time-taken" className="anchor-link" onClick={(e) => handleAnchorClick(e, "time-taken")}>#</a>
+            </SectionHeadingH1>
+          </div>
           <p>
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
@@ -394,14 +461,25 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
             </TOGGLECONTAINER>
           </FILTERCONTAINER>
 
-          <h1>Request Count by Endpoint</h1>
+          <div id="overview-charts">
+            <SectionHeadingH1>
+              Overview Charts
+              <a href="#overview-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "overview-charts")}>#</a>
+            </SectionHeadingH1>
+          </div>
+          <h2>Request Count by Endpoint</h2>
           <OverviewChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
-          <h1>Request Count by Host</h1>
+          <h2>Request Count by Host</h2>
           <HostChart displayData={filteredDisplayData} />
-          <h1>Request Count by Agent</h1>
+          <h2>Request Count by Agent</h2>
           <AgentChart displayData={filteredDisplayData} />
 
-          <h1>Performance & Error Metrics</h1>
+          <div id="performance-metrics">
+            <SectionHeadingH2>
+              Performance &amp; Error Metrics
+              <a href="#performance-metrics" className="anchor-link" onClick={(e) => handleAnchorClick(e, "performance-metrics")}>#</a>
+            </SectionHeadingH2>
+          </div>
           <QUADGRID>
             <QUADPANEL>
               <h3>Median Duration by Path</h3>
@@ -421,7 +499,12 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
             </QUADPANEL>
           </QUADGRID>
 
-          <h1>Final Results</h1>
+          <div id="final-results">
+            <SectionHeadingH1>
+              Final Results
+              <a href="#final-results" className="anchor-link" onClick={(e) => handleAnchorClick(e, "final-results")}>#</a>
+            </SectionHeadingH1>
+          </div>
           <FinalResultsTable displayData={filteredDisplayData} />
         </TIMETAKEN>
       ) : (
@@ -1251,7 +1334,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
   const tableData = useMemo(() => {
     const results: any[] = [];
 
-    for (const [bucketId, dataPoints] of displayData) {
+    for (const [index, [bucketId, dataPoints]] of displayData.entries()) {
       if (dataPoints.length === 0) {continue;}
 
       // Aggregate all datapoints for this endpoint
@@ -1308,6 +1391,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       const tagsString = JSON.stringify(otherTags);
 
       results.push({
+        anchorId: bucketAnchorId(bucketId, index),
         method: bucketId.method,
         hostname,
         path,
@@ -1369,6 +1453,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         <DATATABLE>
         <thead>
           <tr>
+            <TH style={{ width: "24px", padding: "8px 4px" }}></TH>
             <TH>method</TH>
             <TH>hostname</TH>
             <TH>path</TH>
@@ -1387,7 +1472,15 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         </thead>
         <tbody>
           {tableData.map((row, idx) => (
-            <DATATR key={idx}>
+            <DATATR key={idx} id={row.anchorId}>
+              <DATATD style={{ padding: "6px 4px", textAlign: "center" }}>
+                <a
+                  href={`#${row.anchorId}`}
+                  title="Link to this endpoint"
+                  style={{ color: "#666", textDecoration: "none", fontSize: "0.85em" }}
+                  onClick={(e) => handleAnchorClick(e, row.anchorId)}
+                >#</a>
+              </DATATD>
               <DATATD>{row.method}</DATATD>
               <DATATD title={row.hostname}>{row.hostname}</DATATD>
               <DATATD title={row.path}>{row.path}</DATATD>

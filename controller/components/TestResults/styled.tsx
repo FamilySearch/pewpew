@@ -5,9 +5,27 @@ export const EndpointDiv = styled.div`
   padding: 0;
 `;
 
+export const HashAnchorLink = styled.a`
+  margin-left: 0.4em;
+  color: #666;
+  text-decoration: none;
+  font-size: 0.75em;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  &:hover {
+    color: #6a7bb4;
+  }
+`;
+
 export const H3 = styled.h3`
   text-align: left;
   word-break: break-all;
+
+  &:hover ${HashAnchorLink} {
+    opacity: 1;
+  }
 `;
 
 export const EndpointDiv1 = styled.div`

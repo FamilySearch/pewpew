@@ -1,4 +1,4 @@
-import type { ParsedFileEntry } from "./model";
+import type { BucketId, ParsedFileEntry } from "./model";
 
 export interface MinMaxTime {
   startTime?: string;
@@ -127,3 +127,12 @@ export const parseResultsData = async (text: string): Promise<ParsedFileEntry[]>
 export const formatValue = (value: number, unit: string = ""): string => {
   return `${value.toLocaleString()}${unit}`;
 };
+
+/** Generates a stable anchor ID for an endpoint based on its _id tag or fallback index */
+export const bucketAnchorId = (bucketId: BucketId, index: number): string => {
+  const id = bucketId._id !== undefined ? String(bucketId._id) : String(index);
+  return `endpoint-${id}`;
+};
+
+/** Generates an anchor ID for an endpoint comparison section by its index */
+export const compareEndpointAnchorId = (index: number): string => `compare-endpoint-${index}`;

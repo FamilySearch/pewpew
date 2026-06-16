@@ -21,13 +21,14 @@ import {
   EndpointDiv2,
   FlexRow,
   H3,
+  HashAnchorLink,
   RttDiv,
   RttTable,
   StyledUl
 } from "./styled";
 import { HtmlTable, HtmlTd, HtmlTr } from "../Table";
 import { LogLevel, log } from "../../src/log";
-import { MinMaxTime, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
+import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
 import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
@@ -243,6 +244,51 @@ const DownloadButton = styled.button`
   }
 `;
 
+const SectionHeading = styled.h1`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const SectionHeadingH2 = styled.h2`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+  e.preventDefault();
+  history.replaceState(null, "", "#" + id);
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
 
 export interface TestResultProps {
   testData: TestData;
@@ -288,6 +334,7 @@ export interface TestResultState {
 export interface EndpointProps {
   bucketId: BucketId;
   dataPoints: DataPoint[];
+  anchorId: string;
 }
 
 /** Let's us override for Storybook to use static files */
@@ -951,6 +998,22 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [displayData, methodFilter]);
 
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    if (filteredDisplayData === undefined) {
+      initialScrollDoneRef.current = false;
+      return;
+    }
+    if (initialScrollDoneRef.current) { return; }
+    initialScrollDoneRef.current = true;
+    const hash = window.location.hash.slice(1);
+    if (!hash) { return; }
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [filteredDisplayData]);
+
   log("displayData", LogLevel.DEBUG, { displayData: displayData?.length, filteredData: state.filteredData?.length, resultsData: state.resultsData?.length });
   return (
     <React.Fragment>
@@ -978,7 +1041,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         )}
       {filteredDisplayData !== undefined ? (
         <TimeTaken data-testid="results-loaded">
-          <h1>Time Taken</h1>
+          <div id="time-taken">
+            <SectionHeading>
+              Time Taken
+              <a href="#time-taken" className="anchor-link" onClick={(e) => handleAnchorClick(e, "time-taken")}>#</a>
+            </SectionHeading>
+          </div>
           <p>
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
@@ -994,7 +1062,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             baselineLabel={state.compareTest?.testId}
             comparisonLabel={testData.testId}
           />}
-          <h1>Overview charts</h1>
+          <div id="overview-charts">
+            <SectionHeading>
+              Overview charts
+              <a href="#overview-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "overview-charts")}>#</a>
+            </SectionHeading>
+          </div>
           <p>Filter which endpoints are included in the summary:</p>
           <label htmlFor="summaryTagFilter">
             <span>Tag name</span>
@@ -1039,16 +1112,32 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             </ToggleContainer>
           </FilterContainer>
 
-          <h2>Performance & Error Metrics</h2>
+          <div id="performance-metrics">
+            <SectionHeadingH2>
+              Performance &amp; Error Metrics
+              <a href="#performance-metrics" className="anchor-link" onClick={(e) => handleAnchorClick(e, "performance-metrics")}>#</a>
+            </SectionHeadingH2>
+          </div>
           <QuadPanelCharts displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
 
-          <h1>Final Results</h1>
+          <div id="final-results">
+            <SectionHeading>
+              Final Results
+              <a href="#final-results" className="anchor-link" onClick={(e) => handleAnchorClick(e, "final-results")}>#</a>
+            </SectionHeading>
+          </div>
           <FinalResultsTable displayData={filteredDisplayData} />
 
-          <h1>Endpoint Data</h1>
-          {filteredDisplayData.map(([bucketId, dataPoints]) => {
+          <div id="endpoint-data">
+            <SectionHeading>
+              Endpoint Data
+              <a href="#endpoint-data" className="anchor-link" onClick={(e) => handleAnchorClick(e, "endpoint-data")}>#</a>
+            </SectionHeading>
+          </div>
+          {filteredDisplayData.map(([bucketId, dataPoints], index) => {
+            const anchorId = bucketAnchorId(bucketId, index);
             return (
-              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} />
+              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} anchorId={anchorId} />
             );
           })}
         </TimeTaken>
@@ -1068,7 +1157,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
   const tableData = useMemo(() => {
     const results: any[] = [];
 
-    for (const [bucketId, dataPoints] of displayData) {
+    for (const [index, [bucketId, dataPoints]] of displayData.entries()) {
       if (dataPoints.length === 0) { continue; }
 
       // Aggregate all datapoints for this endpoint
@@ -1119,6 +1208,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       const tagsString = JSON.stringify(otherTags);
 
       results.push({
+        anchorId: bucketAnchorId(bucketId, index),
         method: bucketId.method,
         hostname,
         path,
@@ -1183,6 +1273,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         <DataTable>
         <thead>
           <tr>
+            <Th style={{ width: "24px", padding: "8px 4px" }}></Th>
             <Th>method</Th>
             <Th>hostname</Th>
             <Th>path</Th>
@@ -1202,6 +1293,14 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         <tbody>
           {tableData.map((row) => (
             <DataTr key={`${row.method}-${row.hostname}-${row.path}-${row.queryString}-${row.tags}`}>
+              <DataTd style={{ padding: "6px 4px", textAlign: "center" }}>
+                <a
+                  href={`#${row.anchorId}`}
+                  title="Jump to endpoint detail"
+                  style={{ color: "#666", textDecoration: "none", fontSize: "0.85em" }}
+                  onClick={(e) => handleAnchorClick(e, row.anchorId)}
+                >#</a>
+              </DataTd>
               <DataTd>{row.method}</DataTd>
               <DataTd title={row.hostname}>{row.hostname}</DataTd>
               <DataTd title={row.path}>{row.path}</DataTd>
@@ -1296,7 +1395,7 @@ const total = (dataPoints: DataPoint[]) => {
   }
 };
 
-const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
+const Endpoint = React.memo(({ bucketId, dataPoints, anchorId }: EndpointProps) => {
   const [rttButtonDisplay, setRttButtonDisplay] = useState("");
   const [totalButtonDisplay, setTotalButtonDisplay] = useState("");
 
@@ -1369,9 +1468,10 @@ const Endpoint = React.memo(({ bucketId, dataPoints }: EndpointProps) => {
 
   return (
     <React.Fragment>
-      <EndpointDiv>
+      <EndpointDiv id={anchorId}>
         <H3>
           {bucketId.method} {bucketId.url}
+          <HashAnchorLink href={`#${anchorId}`} onClick={(e) => handleAnchorClick(e, anchorId)}>#</HashAnchorLink>
         </H3>
         <StyledUl>
           {Object.entries(bucketId).map(([key, value]) => {

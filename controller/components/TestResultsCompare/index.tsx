@@ -14,6 +14,7 @@ import * as XLSX from "xlsx";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Chart } from "chart.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { compareEndpointAnchorId } from "../TestResults/utils";
 import styled from "styled-components";
 /* eslint-enable sort-imports */
 
@@ -379,6 +380,32 @@ const DropdownItem = styled.label`
     height: 14px;
   }
 `;
+
+const SectionHeading = styled.h2`
+  a.anchor-link {
+    margin-left: 0.4em;
+    color: #666;
+    text-decoration: none;
+    font-size: 0.7em;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &:hover {
+      color: #6a7bb4;
+    }
+  }
+
+  &:hover a.anchor-link {
+    opacity: 1;
+  }
+`;
+
+const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+  e.preventDefault();
+  history.replaceState(null, "", "#" + id);
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
 
 // ============================================================================
 // Shared state shape constants
@@ -901,6 +928,27 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    if (!baselineData?.length || !comparisonData?.length) {
+      initialScrollDoneRef.current = false;
+      return;
+    }
+    if (initialScrollDoneRef.current) { return; }
+    initialScrollDoneRef.current = true;
+    const hash = window.location.hash.slice(1);
+    if (!hash) { return; }
+    if (hash === "compare-final-results") {
+      setActiveTab("final");
+    } else if (hash.startsWith("compare-endpoint-") || hash === "compare-overview-charts") {
+      setActiveTab("endpoint");
+    }
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [baselineData, comparisonData]);
+
   // Extract unique HTTP methods from both datasets
   const availableMethods = useMemo(() => {
     const methods = new Set<string>();
@@ -993,7 +1041,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
         </ToggleContainer>
       </FilterContainer>
 
-      <H2>Performance & Error Metrics Comparison</H2>
+      <div id="compare-overview-charts">
+        <SectionHeading>
+          Performance &amp; Error Metrics Comparison
+          <a href="#compare-overview-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-overview-charts")}>#</a>
+        </SectionHeading>
+      </div>
       <ComparisonChartsGrid>
         <ChartColumn>
           <div>
@@ -1115,6 +1168,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
       {activeTab === "endpoint" && (
         <TabContent>
+          <div id="compare-endpoint-comparison">
+            <SectionHeading>
+              Endpoint Comparison
+              <a href="#compare-endpoint-comparison" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-endpoint-comparison")}>#</a>
+            </SectionHeading>
+          </div>
           <p style={{ textAlign: "center", color: "#999", marginBottom: "1em" }}>
             Per-endpoint metrics comparison (green = improvement, red = regression)
           </p>
@@ -1244,7 +1303,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               );
             };
 
-            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }) => {
+            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }, endpointIndex) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;
@@ -1304,11 +1363,13 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
                 comparisonRTT.free();
               }
 
+              const endpointAnchorId = compareEndpointAnchorId(endpointIndex);
               return (
-                <div key={key} style={{ marginBottom: "3em" }}>
-                  <H2 style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
+                <div key={key} id={endpointAnchorId} style={{ marginBottom: "3em" }}>
+                  <SectionHeading style={{ fontSize: "1.2em", marginBottom: "0.5em" }}>
                     {method} {url}
-                  </H2>
+                    <a href={`#${endpointAnchorId}`} className="anchor-link" onClick={(e) => handleAnchorClick(e, endpointAnchorId)}>#</a>
+                  </SectionHeading>
                   <TableContainer>
                     <DataTable>
                       <thead>
@@ -1341,6 +1402,12 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
 
       {activeTab === "final" && (
         <TabContent>
+          <div id="compare-final-results">
+            <SectionHeading>
+              Final Results Comparison
+              <a href="#compare-final-results" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-final-results")}>#</a>
+            </SectionHeading>
+          </div>
           <ComparisonChartsGrid>
             <ChartColumn>
               <H2>{baselineLabel}</H2>

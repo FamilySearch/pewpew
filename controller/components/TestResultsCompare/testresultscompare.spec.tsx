@@ -149,8 +149,8 @@ describe("TestResultsCompare", () => {
 
     it("shows tab navigation buttons", () => {
       render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
-      expect(screen.getByText("Endpoint Comparison")).toBeInTheDocument();
-      expect(screen.getByText("Final Results Comparison")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Endpoint Comparison" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Final Results Comparison" })).toBeInTheDocument();
     });
 
     it("shows endpoint comparison content by default", () => {

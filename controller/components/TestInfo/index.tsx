@@ -235,11 +235,11 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
                 <DivRight>Download Test Files</DivRight>
                 <ul>
                   {state.downloadFiles.map((downloadFile: string, index: number) =>
-                    <li key={"downloadFile" + index}><LinkButton href={API_DOWNLOAD_FORMAT(testData.testId, downloadFile)} theme={{ buttonFontSize: "1.2rem" } }>{downloadFile}</LinkButton></li>
+                    <li key={"downloadFile" + index}><LinkButton href={API_DOWNLOAD_FORMAT(testData.testId, downloadFile)} theme={{ buttonFontSize: "1.2rem" }} data-testid="download-file-link">{downloadFile}</LinkButton></li>
                   )}
                 </ul>
               </li>
-            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Download Test Files</Button></li>)}
+            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} data-testid="download-files-button">Download Test Files</Button></li>)}
           {testData.lastUpdated && <li key="lastUpdated" style={lastUpdatedStyle}>Last Updated: {new Date(testData.lastUpdated).toLocaleString()}</li>}
         </ul>
       </Div>

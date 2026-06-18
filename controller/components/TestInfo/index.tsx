@@ -5,6 +5,7 @@ import {
   API_SCHEDULE_FORMAT,
   API_STOP,
   API_STOP_FORMAT,
+  AuthPermission,
   PAGE_CALENDAR,
   PAGE_START_TEST_FORMAT,
   PAGE_TEST_UPDATE_FORMAT,
@@ -43,6 +44,7 @@ export interface TestInfoState {
 // What this returns or calls from the parents
 export interface TestInfoProps {
   testData: TestData;
+  authPermission?: AuthPermission;
 }
 
 interface TestInfoStorybookProps extends TestInfoProps {
@@ -58,7 +60,7 @@ interface TestInfoStorybookProps extends TestInfoProps {
   error?: any;
 }
 
-export const TestInfo = ({ testData, ...testInfoProps }: TestInfoStorybookProps) => {
+export const TestInfo = ({ testData, authPermission, ...testInfoProps }: TestInfoStorybookProps) => {
   let doubleClickCheck: boolean = false;
   // The default states coming in from props is only so we can storybook them.
   const defaultState: TestInfoState = {
@@ -208,7 +210,7 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
           {testData.resultsFileLocation && testData.resultsFileLocation.map((resultsLocation: string, index: number) =>
             <li key={"resultsFileLocation" + index}><a href={resultsLocation} target="_blank">S3 Results Url{index > 0 ? ` ${index + 1}` : ""}</a></li>)}
           <li key="testStatus">Status: {testData.status === TestStatus.Created ? "Test Uploaded, Waiting for Agent" : testData.status}</li>
-          {state.downloadFiles && state.downloadFiles.length > 0
+          {(authPermission && authPermission >= AuthPermission.Admin) && (state.downloadFiles && state.downloadFiles.length > 0
             ? <li key={"downloadFiles"}>
                 <DivRight>Download Test Files</DivRight>
                 <ul>
@@ -217,7 +219,7 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
                   )}
                 </ul>
               </li>
-            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Download Test Files</Button></li>}
+            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Download Test Files</Button></li>)}
           {testData.lastUpdated && <li key="lastUpdated" style={lastUpdatedStyle}>Last Updated: {new Date(testData.lastUpdated).toLocaleString()}</li>}
         </ul>
       </Div>

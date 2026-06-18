@@ -204,7 +204,7 @@ const TestStatusPage = ({
     body = <TestStatusSection>
       <TestStatusDiv>
         <TestStatusSection>
-          <TestInfo testData={testData} />
+          <TestInfo testData={testData} authPermission={authPermission} />
         </TestStatusSection>
         {(testData.errors || state.pewpewStdErrors) && <TestStatusSection>
           {testData.errors && <Warning>

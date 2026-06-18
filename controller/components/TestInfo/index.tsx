@@ -61,6 +61,15 @@ interface TestInfoStorybookProps extends TestInfoProps {
   error?: any;
 }
 
+/** Determines if a user can download test files based on their permissions and ownership
+ * If the user is an admin, they can download any test files. If the user is a read-only user,
+ * they can only download their own test files. If the user is a regular user, they cannot
+ * download any test files and the download button is hidden.
+ * @param authPermission The user's authentication permission level.
+ * @param userId The ID of the user making the request.
+ * @param testDataUserId The ID of the user who owns the test data.
+ * @returns True if the user can download the test files, false otherwise.
+*/
 export const canDownloadTestFiles = (
   authPermission: AuthPermission | undefined,
   userId: string | null | undefined,

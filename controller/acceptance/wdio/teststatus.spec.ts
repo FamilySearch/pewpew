@@ -5,7 +5,7 @@ import {
 } from "../../types";
 import { assertNoPageError, getTestData, getTestDataWithResults } from "./util";
 
-describe("GET /test/[testId] (Test Status Page)", () => {
+describe("GET /teststatus (Test Status Page)", () => {
   let testId: string;
   let s3Folder: string;
 
@@ -69,7 +69,7 @@ describe("GET /test/[testId] (Test Status Page)", () => {
     });
 
     it("with ?results=0 should auto-select the first result and load it", async () => {
-      const url = `${PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId)}?results=0`;
+      const url = PAGE_TEST_STATUS_FORMAT({ testId: testDataWithResults!.testId, results: 0 });
       log(`navigating to ${url}`, LogLevel.DEBUG);
       await browser.url(url);
       await assertNoPageError();
@@ -91,7 +91,7 @@ describe("GET /test/[testId] (Test Status Page)", () => {
     });
 
     it("deselecting should remove results= from the URL", async () => {
-      const url = `${PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId)}?results=0`;
+      const url = PAGE_TEST_STATUS_FORMAT({ testId: testDataWithResults!.testId, results: 0 });
       await browser.url(url);
       await assertNoPageError();
       const resultsLoaded = await $("[data-testid='results-loaded']");

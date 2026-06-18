@@ -5,6 +5,7 @@ import {
   AuthPermission,
   AuthPermissions,
   ErrorResponse,
+  PAGE_TEST_STATUS_FORMAT,
   TestData,
   TestListResponse
 } from "../types";
@@ -190,14 +191,14 @@ export const getServerSideProps: GetServerSideProps =
       };
     }
 
-    // Redirect old /?testId= links to the new /test/[testId] page
+    // Redirect old /?testId= links to the /teststatus page
     if (ctx.query?.testId && !Array.isArray(ctx.query.testId)) {
-      const testId = ctx.query.testId;
-      const params = new URLSearchParams();
-      if (typeof ctx.query.results === "string") { params.set("results", ctx.query.results); }
-      if (typeof ctx.query.compare === "string") { params.set("compare", ctx.query.compare); }
-      const queryStr = params.toString();
-      const destination = queryStr ? `/test/${testId}?${queryStr}` : `/test/${testId}`;
+      const resultsStr = typeof ctx.query.results === "string" ? ctx.query.results : "";
+      const destination = formatPageHref(PAGE_TEST_STATUS_FORMAT({
+        testId: ctx.query.testId,
+        results: /^\d+$/.test(resultsStr) ? parseInt(resultsStr, 10) : undefined,
+        compare: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined
+      }));
       return { redirect: { destination, permanent: false } };
     }
 

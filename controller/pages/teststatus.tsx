@@ -4,29 +4,30 @@ import {
   AuthPermission,
   AuthPermissions,
   ErrorResponse,
+  PAGE_TEST_STATUS,
   TestData,
   TestDataResponse,
   TestManagerResponse
-} from "../../types";
-import { Danger, Warning } from "../../components/Alert";
+} from "../types";
+import { Danger, Warning } from "../components/Alert";
 import {
   GetServerSideProps,
   GetServerSidePropsContext,
   GetServerSidePropsResult
 } from "next";
-import { LogLevel, log } from "../../src/log";
+import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
 import React, { JSX, useEffect, useState } from "react";
 import axios, { AxiosError, AxiosResponse } from "axios";
-import { formatError, formatPageHref } from "../../src/clientutil";
-import Div from "../../components/Div";
-import { H1 } from "../../components/Headers";
-import { Layout } from "../../components/Layout";
-import { TestInfo } from "../../components/TestInfo";
-import { TestManager } from "../../src/testmanager";
-import { TestResults } from "../../components/TestResults";
+import { formatError, formatPageHref } from "../src/clientutil";
+import Div from "../components/Div";
+import { H1 } from "../components/Headers";
+import { Layout } from "../components/Layout";
+import { TestInfo } from "../components/TestInfo";
+import { TestManager } from "../src/testmanager";
+import { TestResults } from "../components/TestResults";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
-import { authPage } from "../../src/authserver";
+import { authPage } from "../src/authserver";
 import styled from "styled-components";
 import { useRouter } from "next/router";
 
@@ -84,9 +85,11 @@ const TestStatusPage = ({
   const router = useRouter();
 
   const updateQuery = (changes: Record<string, string | undefined>): void => {
-    const params = new URLSearchParams();
+    const testId = Array.isArray(router.query.testId) ? router.query.testId[0] : router.query.testId;
+    if (!testId) { return; }
+    const params = new URLSearchParams({ testId });
     for (const [k, v] of Object.entries(router.query)) {
-      if (k === "testId") { continue; } // path param, not a query string param
+      if (k === "testId") { continue; }
       if (Array.isArray(v)) {
         v.forEach((val) => params.append(k, val));
       } else if (v !== undefined) {
@@ -100,9 +103,7 @@ const TestStatusPage = ({
         params.delete(k);
       }
     }
-    const queryStr = params.toString();
-    const basePath = router.asPath.split("?")[0];
-    const newUrl = queryStr ? `${basePath}?${queryStr}` : basePath;
+    const newUrl = `${PAGE_TEST_STATUS}?${params.toString()}`;
     log("router.push in updateQuery", LogLevel.DEBUG, { newUrl, pathname: router.pathname, query: router.query, asPath: router.asPath });
     router.push(newUrl, formatPageHref(newUrl), { shallow: true }).catch((error: unknown) => log("router.push error", LogLevel.ERROR, error));
   };
@@ -276,7 +277,7 @@ export const getServerSideProps: GetServerSideProps =
       };
     }
 
-    const testId = ctx.params?.testId;
+    const testId = ctx.query?.testId;
     if (!testId || Array.isArray(testId)) {
       return { redirect: { destination: "/", permanent: false } };
     }

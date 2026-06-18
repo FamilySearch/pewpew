@@ -56,6 +56,7 @@ export interface TestStatusProps {
   testData: TestData | undefined;
   errorLoading: string | undefined;
   authPermission?: AuthPermission;
+  userId?: string | null;
   resultsIndex?: number;
   compareTestId?: string;
 }
@@ -71,6 +72,7 @@ const TestStatusPage = ({
   testData,
   errorLoading,
   authPermission,
+  userId,
   resultsIndex: propsResultsIndex,
   compareTestId: propsCompareTestId
 }: TestStatusProps) => {
@@ -204,7 +206,7 @@ const TestStatusPage = ({
     body = <TestStatusSection>
       <TestStatusDiv>
         <TestStatusSection>
-          <TestInfo testData={testData} authPermission={authPermission} />
+          <TestInfo testData={testData} authPermission={authPermission} userId={userId} />
         </TestStatusSection>
         {(testData.errors || state.pewpewStdErrors) && <TestStatusSection>
           {testData.errors && <Warning>
@@ -295,6 +297,7 @@ export const getServerSideProps: GetServerSideProps =
         testData,
         errorLoading: undefined,
         authPermission: authPermissions.authPermission,
+        userId: authPermissions.userId,
         resultsIndex: !isNaN(resultsParam) ? resultsParam : undefined,
         compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined
       }

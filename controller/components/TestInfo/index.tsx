@@ -45,6 +45,7 @@ export interface TestInfoState {
 export interface TestInfoProps {
   testData: TestData;
   authPermission?: AuthPermission;
+  userId?: string | null;
 }
 
 interface TestInfoStorybookProps extends TestInfoProps {
@@ -60,7 +61,17 @@ interface TestInfoStorybookProps extends TestInfoProps {
   error?: any;
 }
 
-export const TestInfo = ({ testData, authPermission, ...testInfoProps }: TestInfoStorybookProps) => {
+export const canDownloadTestFiles = (
+  authPermission: AuthPermission | undefined,
+  userId: string | null | undefined,
+  testDataUserId: string | undefined
+): boolean => {
+  if (!authPermission || authPermission < AuthPermission.ReadOnly) { return false; }
+  if (authPermission >= AuthPermission.Admin) { return true; }
+  return !!(testDataUserId && userId === testDataUserId);
+};
+
+export const TestInfo = ({ testData, authPermission, userId, ...testInfoProps }: TestInfoStorybookProps) => {
   let doubleClickCheck: boolean = false;
   // The default states coming in from props is only so we can storybook them.
   const defaultState: TestInfoState = {
@@ -210,7 +221,7 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
           {testData.resultsFileLocation && testData.resultsFileLocation.map((resultsLocation: string, index: number) =>
             <li key={"resultsFileLocation" + index}><a href={resultsLocation} target="_blank">S3 Results Url{index > 0 ? ` ${index + 1}` : ""}</a></li>)}
           <li key="testStatus">Status: {testData.status === TestStatus.Created ? "Test Uploaded, Waiting for Agent" : testData.status}</li>
-          {(authPermission && authPermission >= AuthPermission.Admin) && (state.downloadFiles && state.downloadFiles.length > 0
+          {canDownloadTestFiles(authPermission, userId, testData.userId) && (state.downloadFiles && state.downloadFiles.length > 0
             ? <li key={"downloadFiles"}>
                 <DivRight>Download Test Files</DivRight>
                 <ul>

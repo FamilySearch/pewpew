@@ -7,10 +7,10 @@ vi.mock("axios", () => ({
 }));
 vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} }) }));
 
+import { AuthPermission, TestData } from "../../types";
+import TestInfo, { canDownloadTestFiles } from ".";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
-import { TestData } from "../../types";
-import TestInfo from ".";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 
 const baseTestData: TestData = {
@@ -206,11 +206,53 @@ describe("TestInfo Component", () => {
     });
 
     it("shows an error when the download button is clicked and the response is invalid", async () => {
-      render(<TestInfo testData={baseTestData} />);
+      render(<TestInfo testData={baseTestData} authPermission={AuthPermission.Admin} />);
       fireEvent.click(screen.getByText("Download Test Files"));
       await waitFor(() => {
         expect(screen.getByText(/Error:/)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("canDownloadTestFiles", () => {
+    it("returns false when authPermission is undefined", () => {
+      expect(canDownloadTestFiles(undefined, "user@example.com", "user@example.com")).toBe(false);
+    });
+
+    it("returns false when authPermission is Expired", () => {
+      expect(canDownloadTestFiles(AuthPermission.Expired, "user@example.com", "user@example.com")).toBe(false);
+    });
+
+    it("returns false when authPermission is NoAuth", () => {
+      expect(canDownloadTestFiles(AuthPermission.NoAuth, "user@example.com", "user@example.com")).toBe(false);
+    });
+
+    it("returns true for Admin regardless of userId match", () => {
+      expect(canDownloadTestFiles(AuthPermission.Admin, "other@example.com", "user@example.com")).toBe(true);
+    });
+
+    it("returns true for Admin when testDataUserId is undefined", () => {
+      expect(canDownloadTestFiles(AuthPermission.Admin, undefined, undefined)).toBe(true);
+    });
+
+    it("returns true for ReadOnly user when userId matches testDataUserId", () => {
+      expect(canDownloadTestFiles(AuthPermission.ReadOnly, "user@example.com", "user@example.com")).toBe(true);
+    });
+
+    it("returns true for User when userId matches testDataUserId", () => {
+      expect(canDownloadTestFiles(AuthPermission.User, "user@example.com", "user@example.com")).toBe(true);
+    });
+
+    it("returns false for ReadOnly user when userId does not match testDataUserId", () => {
+      expect(canDownloadTestFiles(AuthPermission.ReadOnly, "other@example.com", "user@example.com")).toBe(false);
+    });
+
+    it("returns false when testDataUserId is undefined and user is not Admin", () => {
+      expect(canDownloadTestFiles(AuthPermission.ReadOnly, "user@example.com", undefined)).toBe(false);
+    });
+
+    it("returns false when userId is undefined and user is not Admin", () => {
+      expect(canDownloadTestFiles(AuthPermission.ReadOnly, undefined, "user@example.com")).toBe(false);
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   API_SCHEDULE_FORMAT,
   API_STOP,
   API_STOP_FORMAT,
+  AuthPermission,
   PAGE_CALENDAR,
   PAGE_START_TEST_FORMAT,
   PAGE_TEST_UPDATE_FORMAT,
@@ -43,6 +44,8 @@ export interface TestInfoState {
 // What this returns or calls from the parents
 export interface TestInfoProps {
   testData: TestData;
+  authPermission?: AuthPermission;
+  userId?: string | null;
 }
 
 interface TestInfoStorybookProps extends TestInfoProps {
@@ -58,7 +61,26 @@ interface TestInfoStorybookProps extends TestInfoProps {
   error?: any;
 }
 
-export const TestInfo = ({ testData, ...testInfoProps }: TestInfoStorybookProps) => {
+/** Determines if a user can download test files based on their permissions and ownership
+ * If the user is an admin, they can download any test files. If the user is a read-only user,
+ * they can only download their own test files. If the user is a regular user, they cannot
+ * download any test files and the download button is hidden.
+ * @param authPermission The user's authentication permission level.
+ * @param userId The ID of the user making the request.
+ * @param testDataUserId The ID of the user who owns the test data.
+ * @returns True if the user can download the test files, false otherwise.
+*/
+export const canDownloadTestFiles = (
+  authPermission: AuthPermission | undefined,
+  userId: string | null | undefined,
+  testDataUserId: string | undefined
+): boolean => {
+  if (!authPermission || authPermission < AuthPermission.ReadOnly) { return false; }
+  if (authPermission >= AuthPermission.Admin) { return true; }
+  return !!(testDataUserId && userId === testDataUserId);
+};
+
+export const TestInfo = ({ testData, authPermission, userId, ...testInfoProps }: TestInfoStorybookProps) => {
   let doubleClickCheck: boolean = false;
   // The default states coming in from props is only so we can storybook them.
   const defaultState: TestInfoState = {
@@ -208,16 +230,16 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
           {testData.resultsFileLocation && testData.resultsFileLocation.map((resultsLocation: string, index: number) =>
             <li key={"resultsFileLocation" + index}><a href={resultsLocation} target="_blank">S3 Results Url{index > 0 ? ` ${index + 1}` : ""}</a></li>)}
           <li key="testStatus">Status: {testData.status === TestStatus.Created ? "Test Uploaded, Waiting for Agent" : testData.status}</li>
-          {state.downloadFiles && state.downloadFiles.length > 0
+          {canDownloadTestFiles(authPermission, userId, testData.userId) && (state.downloadFiles && state.downloadFiles.length > 0
             ? <li key={"downloadFiles"}>
                 <DivRight>Download Test Files</DivRight>
                 <ul>
                   {state.downloadFiles.map((downloadFile: string, index: number) =>
-                    <li key={"downloadFile" + index}><LinkButton href={API_DOWNLOAD_FORMAT(testData.testId, downloadFile)} theme={{ buttonFontSize: "1.2rem" } }>{downloadFile}</LinkButton></li>
+                    <li key={"downloadFile" + index}><LinkButton href={API_DOWNLOAD_FORMAT(testData.testId, downloadFile)} theme={{ buttonFontSize: "1.2rem" }} data-testid="download-file-link">{downloadFile}</LinkButton></li>
                   )}
                 </ul>
               </li>
-            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Download Test Files</Button></li>}
+            : <li key={"downloadFiles"}><Button onClick={onDownload} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} data-testid="download-files-button">Download Test Files</Button></li>)}
           {testData.lastUpdated && <li key="lastUpdated" style={lastUpdatedStyle}>Last Updated: {new Date(testData.lastUpdated).toLocaleString()}</li>}
         </ul>
       </Div>

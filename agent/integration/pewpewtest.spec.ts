@@ -9,9 +9,11 @@ import {
   PpaasTestMessage,
   PpaasTestStatus,
   SqsQueueType,
+  StopKillMessageData,
   TestMessage,
   TestStatus,
   TestStatusMessage,
+  UpdateYamlMessageData,
   log,
   logger,
   s3,
@@ -83,7 +85,8 @@ describe("PewPewTest Integration Test", () => {
       errors: [],
       version: "bogus",
       queueName: "bogus",
-      userId: "unittestuser"
+      userId: "unittestuser",
+      changelogs: []
     };
     (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
     try {
@@ -238,11 +241,12 @@ describe("PewPewTest Integration Test", () => {
         log("Test retrieved: " + test!.getYamlFile(), LogLevel.DEBUG);
 
         // Wait 65 seconds (at least one bucket) then send a stop message
+        const stopMessageData: StopKillMessageData = { userId: "stoptest@integration.test" };
         setTimeout(() => {
           const stopMessage = new PpaasS3Message({
             testId: ppaasTestId!,
             messageType: MessageType.StopTest,
-            messageData: undefined
+            messageData: stopMessageData
           });
           stopMessage.send()
           .then((messageId: string | undefined) => log("Stop Test MessageId: " + messageId, LogLevel.DEBUG))
@@ -253,6 +257,11 @@ describe("PewPewTest Integration Test", () => {
         await test!.launch();
         expect(test!.getResultsFile()).to.not.equal(undefined);
         expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+        const stopTestStatus = test!.getTestStatusMessage();
+        expect(stopTestStatus.changelogs, "changelogs should be set").to.not.equal(undefined);
+        expect(stopTestStatus.changelogs, "changelogs should not be empty").to.have.length.greaterThan(0);
+        expect(JSON.stringify(stopTestStatus.changelogs), "changelog message").to.include("StopTest");
+        expect(JSON.stringify(stopTestStatus.changelogs), "changelog userId").to.include(stopMessageData.userId!);
         // Validate S3
         const filename: string = basename(test!.getResultsFile()!);
         const result = await s3.getObject(`${ppaasTestId!.s3Folder}/${filename}`);
@@ -273,6 +282,7 @@ describe("PewPewTest Integration Test", () => {
         expect(test!.getYamlFile()).to.not.equal(undefined);
         expect(test!.getResultsFile()).to.equal(undefined);
         log("Test retrieved: " + test!.getYamlFile(), LogLevel.DEBUG);
+        const updateMessageData: UpdateYamlMessageData = { filename: createTestFilename, userId: "updateyaml@integration.test" };
         // Wait 65 seconds (at least one bucket) then update shorter
         setTimeout(async () => {
           s3File = new PpaasS3File({
@@ -285,7 +295,7 @@ describe("PewPewTest Integration Test", () => {
           const updateMessage = new PpaasS3Message({
             testId: ppaasTestId!,
             messageType: MessageType.UpdateYaml,
-            messageData: createTestFilename
+            messageData: updateMessageData
           });
           updateMessage.send()
           .then((messageId: string | undefined) => log("Update Yaml MessageId: " + messageId, LogLevel.DEBUG))
@@ -296,6 +306,11 @@ describe("PewPewTest Integration Test", () => {
         await test!.launch();
         expect(test!.getResultsFile()).to.not.equal(undefined);
         expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+        const updateTestStatus = test!.getTestStatusMessage();
+        expect(updateTestStatus.changelogs, "changelogs should be set").to.not.equal(undefined);
+        expect(updateTestStatus.changelogs, "changelogs should not be empty").to.have.length.greaterThan(0);
+        expect(JSON.stringify(updateTestStatus.changelogs), "changelog message").to.include("UpdateYaml");
+        expect(JSON.stringify(updateTestStatus.changelogs), "changelog userId").to.include(updateMessageData.userId!);
         // Validate S3
         const filename: string = basename(test!.getResultsFile()!);
         const result = await s3.getObject(`${ppaasTestId!.s3Folder}/${filename}`);

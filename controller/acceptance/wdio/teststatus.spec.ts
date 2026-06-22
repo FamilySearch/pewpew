@@ -5,7 +5,7 @@ import {
 } from "../../types";
 import { assertNoPageError, getTestData, getTestDataWithResults } from "./util";
 
-describe("GET /test/[testId] (Test Status Page)", () => {
+describe("GET /teststatus (Test Status Page)", () => {
   let testId: string;
   let s3Folder: string;
 
@@ -69,7 +69,7 @@ describe("GET /test/[testId] (Test Status Page)", () => {
     });
 
     it("with ?results=0 should auto-select the first result and load it", async () => {
-      const url = `${PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId)}?results=0`;
+      const url = PAGE_TEST_STATUS_FORMAT({ testId: testDataWithResults!.testId, results: 0 });
       log(`navigating to ${url}`, LogLevel.DEBUG);
       await browser.url(url);
       await assertNoPageError();
@@ -91,7 +91,7 @@ describe("GET /test/[testId] (Test Status Page)", () => {
     });
 
     it("deselecting should remove results= from the URL", async () => {
-      const url = `${PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId)}?results=0`;
+      const url = PAGE_TEST_STATUS_FORMAT({ testId: testDataWithResults!.testId, results: 0 });
       await browser.url(url);
       await assertNoPageError();
       const resultsLoaded = await $("[data-testid='results-loaded']");
@@ -103,6 +103,54 @@ describe("GET /test/[testId] (Test Status Page)", () => {
         const currentUrl = await browser.getUrl();
         return !currentUrl.includes("results=");
       }, { timeout: 5000, timeoutMsg: "URL still contains results= after deselecting" });
+    });
+  });
+
+  describe("Download Test Files", () => {
+    it("should show the Download Test Files button when running as admin", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT(testId);
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const downloadButton = $("[data-testid='download-files-button']");
+      await expect(downloadButton).toExist();
+    });
+
+    it("clicking Download Test Files should replace the button with download links", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT(testId);
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      await $("[data-testid='download-files-button']").click();
+      // Button is replaced by a file list once the API responds (at minimum the yaml file is always present)
+      await browser.waitUntil(async () => {
+        return !(await $("[data-testid='download-files-button']").isExisting());
+      }, { timeout: 15000, timeoutMsg: "Expected download-files-button to be replaced by file list" });
+      const links = await $$("[data-testid='download-file-link']");
+      expect(links.length).toBeGreaterThan(0);
+      log("download rendered file links", LogLevel.INFO, { count: links.length, testId });
+    });
+
+    it("download file links should resolve to a valid download endpoint", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT(testId);
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      await $("[data-testid='download-files-button']").click();
+      await browser.waitUntil(async () => {
+        return !(await $("[data-testid='download-files-button']").isExisting());
+      }, { timeout: 15000, timeoutMsg: "Expected download-files-button to be replaced by file list" });
+      const firstLink = await $("[data-testid='download-file-link']");
+      const href = await firstLink.getAttribute("href");
+      expect(href).not.toBeNull();
+      log("navigating to download file link", LogLevel.DEBUG, { href });
+      // Navigate directly to the href — clicking triggers a file download (Content-Disposition: attachment)
+      // which doesn't change the browser URL, so we use browser.url() for a reliable assertion.
+      await browser.url(href!);
+      const bodyText = await $("body").getText();
+      expect(bodyText).not.toContain("Application error");
+      expect(bodyText).not.toContain("Internal Server Error");
+      log("download file link resolved successfully", LogLevel.INFO, { href });
     });
   });
 });

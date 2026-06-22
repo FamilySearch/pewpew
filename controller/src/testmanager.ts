@@ -39,9 +39,11 @@ import {
   PpaasTestId,
   PpaasTestMessage,
   PpaasTestStatus,
+  StopKillMessageData,
   TestMessage,
   TestStatus,
   TestStatusMessage,
+  UpdateYamlMessageData,
   YamlParser,
   log,
   logger,
@@ -1582,10 +1584,14 @@ export abstract class TestManager {
         log(`PUT testId: ${testIdString}. ${yamlFile.originalFilename || yamlFile.filepath} uploaded to S3`, LogLevel.DEBUG, testId);
 
         // Create our message in the communications queue
+        const updateYamlMessageData: UpdateYamlMessageData = {
+          filename: yamlFile.originalFilename || yamlFile.filepath,
+          userId: authPermissions.userId || undefined
+        };
         const ppaasCommunicationsMessage = new PpaasS3Message({
           testId,
           messageType: MessageType.UpdateYaml,
-          messageData: yamlFile.originalFilename || yamlFile.filepath
+          messageData: updateYamlMessageData
         });
         const messageId: string | undefined = await ppaasCommunicationsMessage.send();
         log ("Load Test updated", LogLevel.INFO, { testId, communicationsMessage: ppaasCommunicationsMessage.sanitizedCopy(), messageId, authPermissions: getLogAuthPermissions(authPermissions) });
@@ -1633,10 +1639,11 @@ export abstract class TestManager {
         }
         log(`PUT testId: ${testIdString} found in S3`, LogLevel.DEBUG, testId);
 
+        const stopKillMessageData: StopKillMessageData = { userId: authPermissions.userId || undefined };
         const ppaasCommunicationsMessage = new PpaasS3Message({
           testId,
           messageType: killTest ? MessageType.KillTest : MessageType.StopTest,
-          messageData: undefined
+          messageData: stopKillMessageData
         });
         const messageId: string | undefined = await ppaasCommunicationsMessage.send();
         log ("Load Test stopped", LogLevel.INFO, { testId, communicationsMessage: ppaasCommunicationsMessage.sanitizedCopy(), messageId, authPermissions: getLogAuthPermissions(authPermissions) });

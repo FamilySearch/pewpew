@@ -171,6 +171,7 @@ describe("PpaasTestStatus", () => {
       for (const key in actualTestMessage) {
         expect(JSON.stringify(actualTestMessage[key as keyof TestStatusMessage]), key).to.equal(JSON.stringify(testStatus[key as keyof TestStatusMessage]));
       }
+      expect(JSON.stringify(actualTestMessage.changelogs), "changelogs").to.equal(JSON.stringify(testStatus.changelogs));
       done();
     });
   });

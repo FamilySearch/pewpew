@@ -858,7 +858,8 @@ describe("PewPewTest Create Test", () => {
         errors: [],
         version: "bogus",
         queueName: "bogus",
-        userId: "unittestuser"
+        userId: "unittestuser",
+        changelogs: []
       };
       (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
 
@@ -991,6 +992,10 @@ describe("PewPewTest Create Test", () => {
         await test!.launch();
         expect(test!.getResultsFile()).to.not.equal(undefined);
         expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+        const testStatus = test!.getTestStatusMessage();
+        expect(testStatus.changelogs, "changelogs should be set").to.not.equal(undefined);
+        expect(testStatus.changelogs, "changelogs should not be empty").to.have.length.greaterThan(0);
+        expect(JSON.stringify(testStatus.changelogs), "changelog message").to.include("StopTest");
         done();
       })
       .catch((error) => {
@@ -1032,6 +1037,10 @@ describe("PewPewTest Create Test", () => {
             expect(`${error}`, "test.launch() error").to.include("pewpew exited with code null and signal SIGKILL");
             expect(test!.getResultsFile(), "resultsFile").to.not.equal(undefined);
             expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+            const killTestStatus = test!.getTestStatusMessage();
+            expect(killTestStatus.changelogs, "changelogs should be set").to.not.equal(undefined);
+            expect(killTestStatus.changelogs, "changelogs should not be empty").to.have.length.greaterThan(0);
+            expect(JSON.stringify(killTestStatus.changelogs), "changelog message").to.include("KillTest");
             done();
           } catch (error2) {
             log ("'Retrieve Test and launch, then kill should succeed' error in catch", LogLevel.ERROR, error2);
@@ -1067,7 +1076,7 @@ describe("PewPewTest Create Test", () => {
           const updateMessage = new PpaasS3Message({
             testId: ppaasTestId!,
             messageType: MessageType.UpdateYaml,
-            messageData: createTestFilename
+            messageData: { filename: createTestFilename } as UpdateYamlMessageData
           });
           // .msg
           const s3MessageKey = s3.KEYSPACE_PREFIX + getKeyS3Message(ppaasTestId!);
@@ -1080,6 +1089,10 @@ describe("PewPewTest Create Test", () => {
         await test!.launch();
         expect(test!.getResultsFile()).to.not.equal(undefined);
         expect(Date.now() - startTime, "Actual Run Time").to.be.lessThan(120000);
+        const updateTestStatus = test!.getTestStatusMessage();
+        expect(updateTestStatus.changelogs, "changelogs should be set").to.not.equal(undefined);
+        expect(updateTestStatus.changelogs, "changelogs should not be empty").to.have.length.greaterThan(0);
+        expect(JSON.stringify(updateTestStatus.changelogs), "changelog message").to.include("UpdateYaml");
         done();
       })
       .catch((error) => {

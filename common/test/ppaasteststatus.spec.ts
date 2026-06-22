@@ -50,7 +50,8 @@ describe("PpaasTestStatus", () => {
       errors: ["Test Error"],
       version: PEWPEW_VERSION_LATEST,
       queueName: "unittest",
-      userId: "unittestuser"
+      userId: "unittestuser",
+      changelogs: ["Test Changelog"]
     };
     testFilename = ppaasteststatus.createS3Filename(ppaasTestId);
     testFolder = ppaasTestId.s3Folder;
@@ -263,6 +264,8 @@ describe("PpaasTestStatus", () => {
           expect(emptyTestStatus.ipAddress, "ipAddress").to.equal(testStatus.ipAddress);
           expect(emptyTestStatus.version, "version").to.equal(testStatus.version);
           expect(emptyTestStatus.queueName, "queueName").to.equal(testStatus.queueName);
+          expect(emptyTestStatus.userId, "userId").to.equal(testStatus.userId);
+          expect(JSON.stringify(emptyTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(testStatus.changelogs));
           done();
         }).catch((error) => {
           log("PpaasTestStatus.readStatus error", LogLevel.ERROR, error);

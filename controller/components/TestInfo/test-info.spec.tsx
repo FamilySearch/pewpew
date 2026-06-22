@@ -214,6 +214,35 @@ describe("TestInfo Component", () => {
     });
   });
 
+  describe("download button visibility", () => {
+    const testWithOwner: TestData = { ...baseTestData, userId: "owner@example.com" };
+
+    it("does not render the download button when authPermission is not provided", () => {
+      render(<TestInfo testData={testWithOwner} />);
+      expect(screen.queryByText("Download Test Files")).not.toBeInTheDocument();
+    });
+
+    it("renders the download button for Admin even when userId does not match testData.userId", () => {
+      render(<TestInfo testData={testWithOwner} authPermission={AuthPermission.Admin} userId="other@example.com" />);
+      expect(screen.getByText("Download Test Files")).toBeInTheDocument();
+    });
+
+    it("renders the download button when userId matches testData.userId", () => {
+      render(<TestInfo testData={testWithOwner} authPermission={AuthPermission.User} userId="owner@example.com" />);
+      expect(screen.getByText("Download Test Files")).toBeInTheDocument();
+    });
+
+    it("does not render the download button when userId does not match testData.userId", () => {
+      render(<TestInfo testData={testWithOwner} authPermission={AuthPermission.User} userId="other@example.com" />);
+      expect(screen.queryByText("Download Test Files")).not.toBeInTheDocument();
+    });
+
+    it("does not render the download button when testData has no userId and user is not Admin", () => {
+      render(<TestInfo testData={baseTestData} authPermission={AuthPermission.User} userId="user@example.com" />);
+      expect(screen.queryByText("Download Test Files")).not.toBeInTheDocument();
+    });
+  });
+
   describe("canDownloadTestFiles", () => {
     it("returns false when authPermission is undefined", () => {
       expect(canDownloadTestFiles(undefined, "user@example.com", "user@example.com")).toBe(false);

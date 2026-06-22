@@ -29,6 +29,7 @@ export class PpaasTestStatus implements TestStatusMessage {
   public version?: string;
   public queueName?: string;
   public userId?: string;
+  public changelogs: string[] | undefined;
   protected ppaasTestId: PpaasTestId;
   protected lastModifiedRemote: Date;
   protected url: string | undefined;
@@ -55,6 +56,7 @@ export class PpaasTestStatus implements TestStatusMessage {
     this.version = testStatusMessage.version;
     this.queueName = testStatusMessage.queueName;
     this.userId = testStatusMessage.userId;
+    this.changelogs = testStatusMessage.changelogs;
     this.lastModifiedRemote = new Date(0); // It hasn't been downloaded yet
   }
 
@@ -70,7 +72,8 @@ export class PpaasTestStatus implements TestStatusMessage {
       errors: this.errors,
       version: this.version,
       queueName: this.queueName,
-      userId: this.userId
+      userId: this.userId,
+      changelogs: this.changelogs
     };
     return testStatus;
   }

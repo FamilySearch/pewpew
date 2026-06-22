@@ -51,7 +51,7 @@ export function start (): Application {
           }
           const yamlFile = config.testToRun.getYamlFile();
           const resultsUrl = config.testToRun.getResultsFileS3();
-          await config.testToRun.stop();
+          await config.testToRun.stop(false, "agent /stop api");
           res.status(200).json({ message: "Stop Test successfully called", testId, yamlFile, resultsUrl });
         } else {
           res.status(400).json({ message: "No test currently running" });

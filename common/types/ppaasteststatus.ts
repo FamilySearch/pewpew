@@ -22,4 +22,5 @@ export interface TestStatusMessage {
   version?: string;
   queueName?: string;
   userId?: string;
+  changelogs?: string[];
 }

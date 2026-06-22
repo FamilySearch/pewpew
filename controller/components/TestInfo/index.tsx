@@ -13,8 +13,8 @@ import {
   TestManagerMessage
 } from "../../types";
 import { Button, LinkButton, defaultButtonTheme } from "../LinkButton";
-import { Danger, Success } from "../Alert";
-import { Div, DivRight } from "../Div";
+import { Column, Div, DivRight } from "../Div";
+import { Danger, Info, Success } from "../Alert";
 import { LogLevel, log } from "../../src/log";
 import React, { useState } from "react";
 import axios, { AxiosResponse } from "axios";
@@ -253,6 +253,14 @@ The previous "Stop" will automatically send a "Kill" after a few minutes if pewp
       </Div>
       {state.message && <Success>{state.message}{state.messageId && <><br/>MessageId: {state.messageId}</>}</Success>}
       {state.error && <Danger>Error: {state.error}</Danger>}
+      {testData.changelogs && testData.changelogs.length > 0 && <Info>
+        <Column>
+        Test Activity Log
+        <ul>
+          {testData.changelogs.map((entry: string, index: number) => <li key={"changelog" + index}>{entry}</li>)}
+        </ul>
+        </Column>
+      </Info>}
     </React.Fragment>
   );
 };

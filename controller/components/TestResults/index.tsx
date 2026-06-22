@@ -11,7 +11,6 @@
  * - Individual endpoint details with RTT and status charts
  */
 
-import * as XLSX from "xlsx";
 import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
@@ -26,6 +25,7 @@ import {
   RttTable,
   StyledUl
 } from "./styled";
+import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { HtmlTable, HtmlTd, HtmlTr } from "../Table";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
@@ -1233,8 +1233,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
   }, [displayData]);
 
   const exportToExcel = useCallback(() => {
-    // Prepare data for Excel export
-    const excelData = tableData.map(row => ({
+    const excelData: ExcelResultRow[] = tableData.map(row => ({
       Method: row.method,
       Hostname: row.hostname,
       Path: row.path,
@@ -1250,18 +1249,9 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       StdDev: row.stddev.toFixed(2),
       Time: new Date(row.time).toLocaleString()
     }));
-
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Final Results");
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, -5);
-    const filename = `performance-results-${timestamp}.xlsx`;
-
-    // Download file
-    XLSX.writeFile(workbook, filename);
+    exportResultsToExcel(excelData, `performance-results-${timestamp}.xlsx`, "Final Results")
+    .catch((error) => log("Error exporting to Excel", LogLevel.ERROR, error));
   }, [tableData]);
 
   return (

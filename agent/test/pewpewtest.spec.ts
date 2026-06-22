@@ -67,6 +67,7 @@ class PewPewTestPublicCleanup extends PewPewTest {
   public cleanup (splunkForwarderExtraTime?: number): Promise<void> {
     return super.cleanup(splunkForwarderExtraTime);
   }
+  public get testStatus (): PpaasTestStatus { return this.ppaasTestStatus; }
 }
 
 describe("PewPewTest", () => {
@@ -204,6 +205,53 @@ describe("PewPewTest", () => {
     });
   });
 
+  describe("stop", () => {
+    const ppaasTestId: PpaasTestId = PpaasTestId.makeTestId(BASIC_TEST_FILENAME);
+    let testMessage: PpaasTestMessage;
+
+    before(() => {
+      testMessage = new PpaasTestMessage({
+        testId: ppaasTestId.testId,
+        s3Folder: ppaasTestId.s3Folder,
+        yamlFile: BASIC_TEST_FILENAME,
+        testRunTimeMn: 1,
+        version: PEWPEW_VERSION_LATEST,
+        envVariables: {},
+        restartOnFailure: false,
+        additionalFiles: [],
+        bucketSizeMs: 60000,
+        bypassParser: false
+      });
+    });
+
+    it("stop() without userId should add a StopTest changelog entry", () => {
+      const test = new PewPewTestPublicCleanup(testMessage);
+      test.stop(false).catch(() => { /* no process running */ });
+      expect(test.testStatus.changelogs, "changelogs").to.not.equal(undefined);
+      expect(test.testStatus.changelogs!.length, "changelogs.length").to.equal(1);
+      expect(test.testStatus.changelogs![0], "changelogs[0]").to.include("StopTest");
+      expect(test.testStatus.changelogs![0], "changelogs[0] no userId").to.not.include(" by ");
+    });
+
+    it("stop() with userId should include userId in StopTest changelog entry", () => {
+      const test = new PewPewTestPublicCleanup(testMessage);
+      test.stop(false, "stopuser@example.com").catch(() => { /* no process running */ });
+      expect(test.testStatus.changelogs, "changelogs").to.not.equal(undefined);
+      expect(test.testStatus.changelogs!.length, "changelogs.length").to.equal(1);
+      expect(test.testStatus.changelogs![0], "changelogs[0]").to.include("StopTest");
+      expect(test.testStatus.changelogs![0], "changelogs[0] userId").to.include("stopuser@example.com");
+    });
+
+    it("stop(true) with userId should add a KillTest changelog entry", () => {
+      const test = new PewPewTestPublicCleanup(testMessage);
+      test.stop(true, "killuser@example.com").catch(() => { /* no process running */ });
+      expect(test.testStatus.changelogs, "changelogs").to.not.equal(undefined);
+      expect(test.testStatus.changelogs!.length, "changelogs.length").to.equal(1);
+      expect(test.testStatus.changelogs![0], "changelogs[0]").to.include("KillTest");
+      expect(test.testStatus.changelogs![0], "changelogs[0] userId").to.include("killuser@example.com");
+    });
+  });
+
   describe("copyTestStatus", () => {
     const ppaasTestId: PpaasTestId = PpaasTestId.makeTestId(BASIC_TEST_FILENAME);
     const now = Date.now();
@@ -224,7 +272,8 @@ describe("PewPewTest", () => {
       errors: ["error1"],
       version: "version1",
       queueName: "queue1",
-      userId: "user1"
+      userId: "user1",
+      changelogs: ["changelog1"]
     };
     const fullTestStatusMessageChanged: Required<TestStatusMessage> = {
       startTime: now + 5,
@@ -237,7 +286,8 @@ describe("PewPewTest", () => {
       errors: ["error2", "error3"],
       version: "version2",
       queueName: "queue2",
-      userId: "user2"
+      userId: "user2",
+      changelogs: ["changelog2", "changelog3"]
     };
     const extendedTestStatusMessage: TestStatusMessage = {
       startTime: now + 1,
@@ -263,6 +313,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -284,6 +335,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -305,6 +357,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -326,6 +379,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -347,6 +401,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -368,6 +423,7 @@ describe("PewPewTest", () => {
         expect(ppaasTestStatus.version, "version").to.equal(expectedTestStatusMessage.version);
         expect(ppaasTestStatus.queueName, "queueName").to.equal(expectedTestStatusMessage.queueName);
         expect(ppaasTestStatus.userId, "userId").to.equal(expectedTestStatusMessage.userId);
+        expect(JSON.stringify(ppaasTestStatus.changelogs), "changelogs").to.equal(JSON.stringify(expectedTestStatusMessage.changelogs));
         done();
       } catch (error) {
         done(error);
@@ -404,7 +460,8 @@ describe("PewPewTest", () => {
         errors: [],
         version: "bogus",
         queueName: "bogus",
-        userId: "unittestuser"
+        userId: "unittestuser",
+        changelogs: []
       };
       (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
       try {

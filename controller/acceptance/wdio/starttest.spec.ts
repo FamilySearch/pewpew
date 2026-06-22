@@ -2,7 +2,8 @@ import { LogLevel, log } from "@fs/ppaas-common";
 import {
   PAGE_CALENDAR,
   PAGE_START_TEST,
-  PAGE_START_TEST_FORMAT
+  PAGE_START_TEST_FORMAT,
+  PAGE_TEST_STATUS
 } from "../../types";
 import { assertNoPageError, getTestData } from "./util";
 import path from "path";
@@ -81,12 +82,12 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const url = await browser.getUrl();
-        return /\/test\/\w/.test(url);
-      }, { timeout: 30000, timeoutMsg: "Expected navigation to /test/<testId>" });
+        return url.includes(PAGE_TEST_STATUS) && url.includes("testId=");
+      }, { timeout: 30000, timeoutMsg: "Expected navigation to /teststatus?testId=" });
       await assertNoPageError();
       const envUrl = await browser.getUrl();
-      const envMatch = envUrl.match(/\/test\/(\w+)/);
-      if (envMatch?.[1]) { recentTestId = envMatch[1]; }
+      const envMatch = envUrl.match(/[?&]testId=([^&]+)/);
+      if (envMatch?.[1]) { recentTestId = decodeURIComponent(envMatch[1]); }
       log("basicwithenv with env vars: test submitted successfully", LogLevel.INFO, { recentTestId });
     });
   });
@@ -143,8 +144,8 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const url = await browser.getUrl();
-        return /\/test\/\w/.test(url);
-      }, { timeout: 30000, timeoutMsg: "Expected navigation to /test/<testId>" });
+        return url.includes(PAGE_TEST_STATUS) && url.includes("testId=");
+      }, { timeout: 30000, timeoutMsg: "Expected navigation to /teststatus?testId=" });
       await assertNoPageError();
       log("basicwithfiles with files: test submitted successfully", LogLevel.INFO);
     });
@@ -213,8 +214,8 @@ describe("Start Test Submissions", () => {
       // Should navigate to test history page on success
       await browser.waitUntil(async () => {
         const currentUrl = await browser.getUrl();
-        return /\/test\/\w/.test(currentUrl);
-      }, { timeout: 30000, timeoutMsg: "Expected navigation to test history with testId" });
+        return currentUrl.includes(PAGE_TEST_STATUS) && currentUrl.includes("testId=");
+      }, { timeout: 30000, timeoutMsg: "Expected navigation to /teststatus with testId" });
       await assertNoPageError();
       log("re-run test: test re-submitted successfully", LogLevel.INFO);
     });

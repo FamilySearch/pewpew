@@ -11,6 +11,7 @@ import {
   PAGE_START_TEST,
   PAGE_START_TEST_FORMAT,
   PAGE_TEST_HISTORY,
+  PAGE_TEST_STATUS,
   PAGE_TEST_STATUS_FORMAT,
   PAGE_TEST_UPDATE,
   PAGE_TEST_UPDATE_FORMAT
@@ -96,7 +97,7 @@ describe("Web Page Acceptance Tests", () => {
       expect(html, `s3Folder '${s3Folder}' in results`).to.include(s3Folder);
     });
 
-    it("GET /test/[testId] should respond 200 with test data in the HTML", async () => {
+    it("GET /teststatus should respond 200 with test data in the HTML", async () => {
       const url = integrationUrl + PAGE_TEST_STATUS_FORMAT(testId);
       log(`GET ${url}`, LogLevel.DEBUG);
       const res: AxiosResponse = await fetchNoRedirects(url);
@@ -105,6 +106,28 @@ describe("Web Page Acceptance Tests", () => {
       assertNoPageError(html);
       expect(html, "h1: Check the Test Status").to.include("Check the Test Status");
       expect(html, `testId '${testId}' in page`).to.include(testId);
+    });
+
+    it("with ?testId= should redirect 307 to /teststatus with the testId", async () => {
+      const url = `${integrationUrl}${PAGE_TEST_HISTORY}?testId=${encodeURIComponent(testId)}`;
+      log(`GET ${url}`, LogLevel.DEBUG);
+      const res: AxiosResponse = await fetchNoRedirects(url);
+      expect(res.status, "status").to.equal(307);
+      expect(res.headers.location, "redirect location header").to.not.equal(undefined);
+      expect(res.headers.location, "redirect to /teststatus").to.include(PAGE_TEST_STATUS);
+      expect(res.headers.location, `redirect includes testId '${testId}'`).to.include(encodeURIComponent(testId));
+    });
+
+    it("with ?testId= and results and compare should redirect 307 preserving all params", async () => {
+      const url = `${integrationUrl}${PAGE_TEST_HISTORY}?testId=${encodeURIComponent(testId)}&results=0&compare=${encodeURIComponent(testId)}`;
+      log(`GET ${url}`, LogLevel.DEBUG);
+      const res: AxiosResponse = await fetchNoRedirects(url);
+      expect(res.status, "status").to.equal(307);
+      expect(res.headers.location, "redirect location header").to.not.equal(undefined);
+      expect(res.headers.location, "redirect to /teststatus").to.include(PAGE_TEST_STATUS);
+      expect(res.headers.location, "redirect includes testId").to.include(encodeURIComponent(testId));
+      expect(res.headers.location, "redirect includes results=0").to.include("results=0");
+      expect(res.headers.location, "redirect includes compare").to.include(`compare=${encodeURIComponent(testId)}`);
     });
   });
 

@@ -1,4 +1,5 @@
 import TestInfo, { TestInfoProps } from ".";
+import { AuthPermission } from "../../types/auth";
 import { GlobalStyle } from "../Layout";
 // Must reference the PpaasTestId file directly or we pull in stuff that won't compile on the client
 import { PpaasTestId } from "@fs/ppaas-common/dist/src/ppaastestid";
@@ -102,6 +103,8 @@ const propsWithDownloadFiles: TestInfoStorybookProps = {
       ...fullTest.resultsFileLocation
     ]
   },
+  authPermission: AuthPermission.Admin,
+  userId: "mirabel.madrigal@pewpew.org",
   downloadFiles: [
     "Story.yaml",
     "Story.csv",
@@ -109,6 +112,28 @@ const propsWithDownloadFiles: TestInfoStorybookProps = {
     "app-ppaas-pewpew-basicwithenv20250918T170447046-error.json",
     "stats-basicwithenv20250918T170447046.json"
   ]
+};
+
+const propsWithDownloadButtonAsOwner: TestInfoStorybookProps = {
+  testData: {
+    ...basicTest,
+    status: TestStatus.Running,
+    resultsFileLocation: [...fullTest.resultsFileLocation],
+    userId: fullTest.userId
+  },
+  authPermission: AuthPermission.User,
+  userId: fullTest.userId
+};
+
+const propsWithDownloadButtonHiddenNonOwner: TestInfoStorybookProps = {
+  testData: {
+    ...basicTest,
+    status: TestStatus.Finished,
+    resultsFileLocation: [...fullTest.resultsFileLocation],
+    userId: fullTest.userId
+  },
+  authPermission: AuthPermission.User,
+  userId: "mirabel.madrigal@pewpew.org"
 };
 
 const propsWithStopSuccess: TestInfoStorybookProps = {
@@ -232,6 +257,28 @@ export const WithDownloadFiles = {
   ),
 
   name: "WithDownloadFiles"
+};
+
+export const WithDownloadButtonAsOwner = {
+  render: () => (
+    <React.Fragment>
+      <GlobalStyle />
+      <TestInfo {...propsWithDownloadButtonAsOwner} />
+    </React.Fragment>
+  ),
+
+  name: "WithDownloadButtonAsOwner"
+};
+
+export const WithDownloadButtonHiddenNonOwner = {
+  render: () => (
+    <React.Fragment>
+      <GlobalStyle />
+      <TestInfo {...propsWithDownloadButtonHiddenNonOwner} />
+    </React.Fragment>
+  ),
+
+  name: "WithDownloadButtonHiddenNonOwner"
 };
 
 export const WithSuccess = {

@@ -8,9 +8,11 @@ import {
   PpaasTestId,
   PpaasTestMessage,
   PpaasTestStatus,
+  StopKillMessageData,
   TestMessage,
   TestStatus,
   TestStatusMessage,
+  UpdateYamlMessageData,
   YamlParser,
   ec2,
   log,
@@ -709,9 +711,10 @@ export class PewPewTest {
    * @param killTest {boolean} Optional: If true, a SIGKILL is immediately sent rather than a SIGINT
    * @returns {Promise<void>}
    */
-  public stop (killTest?: boolean): Promise<void> {
+  public stop (killTest?: boolean, userId?: string): Promise<void> {
     this.stopCalled = true;
-    this.ppaasTestStatus.errors = [...(this.ppaasTestStatus.errors || []), `Received ${killTest ? "KillTest" : "StopTest"} message from controller`];
+    const changelogEntry = `Received ${killTest ? "KillTest" : "StopTest"} message from controller${userId ? ` by ${userId}` : ""}`;
+    this.ppaasTestStatus.changelogs = [...(this.ppaasTestStatus.changelogs || []), changelogEntry];
     return killTest ? this.internalKill() : this.internalStop();
   }
 
@@ -941,19 +944,24 @@ export class PewPewTest {
           // Process message and start a test
           try {
             switch (messageToHandle.messageType) {
-              case MessageType.StopTest:
-                this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Stopping test.`, LogLevel.INFO);
+              case MessageType.StopTest: {
+                const stopData = messageToHandle.messageData as StopKillMessageData | undefined;
+                this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Stopping test.`, LogLevel.INFO, { userId: stopData?.userId });
                 // Call the external, not internal stop
-                this.stop().catch(() => { /* logs automatically */ });
+                this.stop(false, stopData?.userId).catch(() => { /* logs automatically */ });
                 this.log(`handleMessage Complete ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle);
                 break;
-                case MessageType.KillTest:
-                  this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Killing test.`, LogLevel.WARN);
-                  this.stop(true).catch(() => { /* logs automatically */ });
-                  this.log(`handleMessage Complete ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle);
+              }
+              case MessageType.KillTest: {
+                const killData = messageToHandle.messageData as StopKillMessageData | undefined;
+                this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Killing test.`, LogLevel.WARN, { userId: killData?.userId });
+                this.stop(true, killData?.userId).catch(() => { /* logs automatically */ });
+                this.log(`handleMessage Complete ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle);
                 break;
-              case MessageType.UpdateYaml:
-                this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Updating Yaml.`, LogLevel.INFO);
+              }
+              case MessageType.UpdateYaml: {
+                const updateData = messageToHandle.messageData as UpdateYamlMessageData | undefined;
+                this.log(`Received ${messageToHandle.messageType} for ${this.testMessage.testId}. Updating Yaml.`, LogLevel.INFO, { userId: updateData?.userId });
                 // Download the new file
                 await this.yamlS3File.download();
                 // Check and edit the new run time
@@ -969,7 +977,6 @@ export class PewPewTest {
                       this.log(`${messageToHandle.messageType}: ${this.getYamlFile()} new testRunTimeMn ${newRuntime}. Updating.`, LogLevel.INFO,
                         { testRunTimeMn: this.testMessage.testRunTimeMn, startTime: this.startTime.getTime(), testEnd: this.testEnd });
                       this.ppaasTestStatus.endTime = this.testEnd;
-                      await this.writeTestStatus();
                     }
                   } catch (error) {
                     const message: string = `Could not parse new yaml file ${this.getYamlFile()}`;
@@ -983,8 +990,12 @@ export class PewPewTest {
                     errorMessage.send().catch((sendError) => this.log("Could not send error communications message to controller", LogLevel.WARN, sendError));
                   }
                 }
+                const updateChangelogEntry = `UpdateYaml received${updateData?.userId ? ` from ${updateData.userId}` : ""} at ${new Date().toISOString()}`;
+                this.ppaasTestStatus.changelogs = [...(this.ppaasTestStatus.changelogs || []), updateChangelogEntry];
+                await this.writeTestStatus();
                 this.log(`handleMessage Complete ${messageToHandle.messageType}`, LogLevel.DEBUG, messageToHandle);
                 break;
+              }
               default:
                 this.log(`The agent cannot handle messages of this type at this time. Removing from queue: ${messageToHandle.messageType}`, LogLevel.WARN, messageToHandle.sanitizedCopy());
                 break;

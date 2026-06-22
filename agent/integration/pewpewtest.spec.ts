@@ -78,7 +78,8 @@ describe("PewPewTest Integration Test", () => {
       errors: [],
       version: "bogus",
       queueName: "bogus",
-      userId: "unittestuser"
+      userId: "unittestuser",
+      changelogs: []
     };
     (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
     try {

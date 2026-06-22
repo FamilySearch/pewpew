@@ -15,3 +15,12 @@ export interface CommunicationsMessage {
   messageType: MessageType;
   messageData: any;
 }
+
+export interface StopKillMessageData {
+  userId?: string;
+}
+
+export interface UpdateYamlMessageData {
+  filename: string;
+  userId?: string;
+}

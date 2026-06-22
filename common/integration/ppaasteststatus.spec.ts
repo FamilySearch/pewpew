@@ -37,7 +37,8 @@ describe("PpaasTestStatus", () => {
       errors: ["Test Error"],
       version: PEWPEW_VERSION_LATEST,
       queueName: "unittest",
-      userId: "unittestuser"
+      userId: "unittestuser",
+      changelogs: ["Test Changelog"]
     };
     ppaasTestWriteStatus = new PpaasTestStatus(ppaasTestId, testStatus);
   });

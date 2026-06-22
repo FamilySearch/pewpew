@@ -224,7 +224,8 @@ describe("PewPewTest", () => {
       errors: ["error1"],
       version: "version1",
       queueName: "queue1",
-      userId: "user1"
+      userId: "user1",
+      changelogs: ["changelog1"]
     };
     const fullTestStatusMessageChanged: Required<TestStatusMessage> = {
       startTime: now + 5,
@@ -237,7 +238,8 @@ describe("PewPewTest", () => {
       errors: ["error2", "error3"],
       version: "version2",
       queueName: "queue2",
-      userId: "user2"
+      userId: "user2",
+      changelogs: ["changelog2", "changelog3"]
     };
     const extendedTestStatusMessage: TestStatusMessage = {
       startTime: now + 1,
@@ -404,7 +406,8 @@ describe("PewPewTest", () => {
         errors: [],
         version: "bogus",
         queueName: "bogus",
-        userId: "unittestuser"
+        userId: "unittestuser",
+        changelogs: []
       };
       (expectedTestStatusMessage as TestStatusMessage).errors = undefined; // Set it back to empty so it can get cleared out
       try {

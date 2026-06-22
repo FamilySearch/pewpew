@@ -57,7 +57,8 @@ const fullTest: Required<TestData> = {
   errors: ["error1", "error2", "error3"],
   version: latestPewPewVersion,
   queueName: "unittest",
-  userId: "bruno.madrigal@pewpew.org"
+  userId: "bruno.madrigal@pewpew.org",
+  changelogs: ["StopTest received from bruno.madrigal@pewpew.org"]
 };
 const props: TestInfoStorybookProps = {
   testData: { ...basicTest, status: TestStatus.Created, lastUpdated: fullTest.lastUpdated }
@@ -142,6 +143,28 @@ const scheduledPastProps: TestInfoStorybookProps = {
     status: TestStatus.Scheduled,
     startTime: Date.now() + 600000,
     endTime: Date.now() + 900000
+  }
+};
+
+const propsWithChangelogs: TestInfoStorybookProps = {
+  testData: {
+    ...fullTest,
+    status: TestStatus.Finished,
+    changelogs: [
+      "Received StopTest message from controller by bruno.madrigal@pewpew.org"
+    ]
+  }
+};
+
+const propsWithMultipleChangelogs: TestInfoStorybookProps = {
+  testData: {
+    ...fullTest,
+    status: TestStatus.Failed,
+    changelogs: [
+      "UpdateYaml received from mirabel.madrigal@pewpew.org at 2026-06-22T14:30:00.000Z",
+      "UpdateYaml received from dolores.madrigal@pewpew.org at 2026-06-22T15:10:00.000Z",
+      "Received KillTest message from controller by antonio.madrigal@pewpew.org"
+    ]
   }
 };
 
@@ -257,3 +280,25 @@ export const ScheduledFuture = () => (
     <TestInfo {...scheduledPastProps} />
   </React.Fragment>
 );
+
+export const WithChangelogs = {
+  render: () => (
+    <React.Fragment>
+      <GlobalStyle />
+      <TestInfo {...propsWithChangelogs} />
+    </React.Fragment>
+  ),
+
+  name: "WithChangelogs"
+};
+
+export const WithMultipleChangelogs = {
+  render: () => (
+    <React.Fragment>
+      <GlobalStyle />
+      <TestInfo {...propsWithMultipleChangelogs} />
+    </React.Fragment>
+  ),
+
+  name: "WithMultipleChangelogs"
+};

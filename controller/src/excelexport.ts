@@ -18,7 +18,7 @@ export interface ExcelResultRow {
   Time: string;
 }
 
-const RESULT_COLUMNS: Column<ExcelResultRow>[] = [
+export const RESULT_COLUMNS: Column<ExcelResultRow>[] = [
   { header: "Method",       cell: (row) => row.Method },
   { header: "Hostname",     cell: (row) => row.Hostname },
   { header: "Path",         cell: (row) => row.Path },
@@ -35,7 +35,9 @@ const RESULT_COLUMNS: Column<ExcelResultRow>[] = [
   { header: "Time",         cell: (row) => row.Time }
 ];
 
-export async function exportResultsToExcel (data: ExcelResultRow[], fileName: string, sheetName: string): Promise<void> {
-  const result = writeXlsxFile<ExcelResultRow>(data, { columns: RESULT_COLUMNS, sheet: sheetName });
+type WriteFn = (data: ExcelResultRow[], options: { columns: Column<ExcelResultRow>[]; sheet: string }) => { toFile: (fileName: string) => Promise<void> };
+
+export async function exportResultsToExcel (data: ExcelResultRow[], fileName: string, sheetName: string, writeFn: WriteFn = writeXlsxFile as unknown as WriteFn): Promise<void> {
+  const result = writeFn(data, { columns: RESULT_COLUMNS, sheet: sheetName });
   await result.toFile(fileName);
 }

@@ -52,7 +52,7 @@ describe("excelexport", () => {
       let receivedColumns: unknown;
       let receivedFileName: string | undefined;
 
-      const mockToFile = async (fileName: string) => { receivedFileName = fileName; };
+      const mockToFile = (fileName: string) => { receivedFileName = fileName; return Promise.resolve(); };
       const mockWriteFn = (data: ExcelResultRow[], options: { columns: unknown; sheet: string }) => {
         receivedData = data;
         receivedColumns = options.columns;
@@ -70,14 +70,14 @@ describe("excelexport", () => {
     });
 
     it("should pass an empty data array without throwing", async () => {
-      const mockToFile = async (_fileName: string) => {};
+      const mockToFile = (_fileName: string) => Promise.resolve();
       const mockWriteFn = (_data: ExcelResultRow[], _options: unknown) => ({ toFile: mockToFile });
 
       await exportResultsToExcel([], "empty.xlsx", "Sheet", mockWriteFn as never);
     });
 
     it("should propagate errors thrown by toFile", async () => {
-      const mockToFile = async (_fileName: string): Promise<void> => { throw new Error("download failed"); };
+      const mockToFile = (_fileName: string): Promise<void> => Promise.reject(new Error("download failed"));
       const mockWriteFn = (_data: ExcelResultRow[], _options: unknown) => ({ toFile: mockToFile });
 
       try {

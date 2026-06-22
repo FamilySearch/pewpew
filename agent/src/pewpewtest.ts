@@ -711,10 +711,11 @@ export class PewPewTest {
    * @param killTest {boolean} Optional: If true, a SIGKILL is immediately sent rather than a SIGINT
    * @returns {Promise<void>}
    */
-  public stop (killTest?: boolean, userId?: string): Promise<void> {
+  public async stop (killTest?: boolean, userId?: string): Promise<void> {
     this.stopCalled = true;
     const changelogEntry = `Received ${killTest ? "KillTest" : "StopTest"} message from controller${userId ? ` by ${userId}` : ""}`;
     this.ppaasTestStatus.changelogs = [...(this.ppaasTestStatus.changelogs || []), changelogEntry];
+    await this.writeTestStatus();
     return killTest ? this.internalKill() : this.internalStop();
   }
 

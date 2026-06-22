@@ -68,6 +68,12 @@
   },
   "overrides": {
     "eslint": "$eslint",
+    "@puppeteer/browsers": "^3.0.4",
+    "serialize-javascript": ">=7.0.4",
+    "postcss": ">=8.5.10",
+    "esbuild": ">=0.28.1",
+    "diff": ">8.0.2",
+    "cookie": "^1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -81,7 +87,7 @@
     "dotenv-flow": "^4.0.1",
     "eslint": "^10.0.0",
     "mocha": "^11.0.0",
-    "npm-run-all2": "^8.0.0",
+    "npm-run-all2": "^9.0.0",
     "rimraf": "^6.0.0",
     "typescript": "^6.0.0"
   }

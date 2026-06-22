@@ -50,8 +50,12 @@ export default async (req: NextApiRequest, res: NextApiResponse<string[] | GetOb
       // If testData has no userId, only admins can download (we cannot verify ownership).
       if (authPermissions.authPermission < AuthPermission.Admin) {
         const testDataResponse = await TestManager.getTest(testId);
+        if (testDataResponse.status >= 300) {
+          log(`Download ownership check: TestManager.getTest failed for testId ${testId} with status ${testDataResponse.status}`, LogLevel.WARN, { testId, file, testDataResponse });
+        }
         const testData = testDataResponse.status < 300 ? (testDataResponse as TestDataResponse).json : undefined;
         if (!testData?.userId || authPermissions.userId !== testData.userId) {
+          log(`Download access denied for userId=${authPermissions.userId} on testId=${testId}: testData.userId=${testData?.userId}`, LogLevel.WARN, { testId, file, userId: authPermissions.userId, testDataUserId: testData?.userId });
           res.status(403).json({ message: "You do not have permission to download these test files" });
           return;
         }

@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-agent",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "Agent Service for running pewpew tests",
   "type": "module",
   "main": "dist/src/app.js",
@@ -28,11 +28,14 @@
   "engines": {
     "node": "24"
   },
+  "overrides": {
+    "serialize-javascript": ">=7.0.4",
+    "cookie": "^1.0.0"
+  },
   "dependencies": {
     "@fs/config-wasm": "*",
     "@fs/ppaas-common": "*",
     "bunyan": "~1.8.0",
-    "dotenv": "^17.0.0",
     "dotenv-flow": "^4.0.1",
     "express": "^5.0.1",
     "rimraf": "^6.0.0",

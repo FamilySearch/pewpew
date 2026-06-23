@@ -9,14 +9,13 @@
  * - Side-by-side Final Results tables
  */
 
-/* eslint-disable sort-imports */
-import * as XLSX from "xlsx";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
-import { Chart } from "chart.js";
+import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
+import { LogLevel, log } from "../../src/log";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Chart } from "chart.js";
 import { compareEndpointAnchorId } from "../TestResults/utils";
 import styled from "styled-components";
-/* eslint-enable sort-imports */
 
 // ============================================================================
 // Styled Components
@@ -682,8 +681,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
   }, [displayData]);
 
   const exportToExcel = useCallback(() => {
-    // Prepare data for Excel export
-    const excelData = tableData.map(row => ({
+    const excelData: ExcelResultRow[] = tableData.map(row => ({
       Method: row.method,
       Hostname: row.hostname,
       Path: row.path,
@@ -699,18 +697,10 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
       StdDev: row.stddev.toFixed(2),
       Time: new Date(row.time).toLocaleString()
     }));
-
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, -5);
     const filename = `${fileLabel.toLowerCase().replaceAll(/\s/g, "-")}-${timestamp}.xlsx`;
-
-    // Download file
-    XLSX.writeFile(workbook, filename);
+    exportResultsToExcel(excelData, filename, fileLabel)
+    .catch((error) => log("Error exporting to Excel", LogLevel.ERROR, error));
   }, [tableData, fileLabel]);
 
   return (

@@ -176,12 +176,13 @@ export function getQueueUrl (sqsQueueType: SqsQueueType, sqsQueueName?: string):
       throw new Error(`No such Queue found = ${sqsQueueName}`);
     }
   } else {
-    if (QUEUE_URL_TEST.size !== 1 || QUEUE_URL_SCALE_IN.size !== 1) {
-      const message = `Only Agents with a single QUEUE_URL_TEST can getQueueUrl() without providing a queue name: QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`;
-      log(message, LogLevel.WARN, QUEUE_URL_TEST);
+    const queueMap = sqsQueueType === SqsQueueType.Scale ? QUEUE_URL_SCALE_IN : QUEUE_URL_TEST;
+    if (queueMap.size !== 1) {
+      const message = `Only Agents with a single queue can getQueueUrl() without providing a queue name: ${sqsQueueType}.size=${queueMap.size}`;
+      log(message, LogLevel.WARN, queueMap);
       throw new Error(message);
     }
-    queueUrl = (sqsQueueType === SqsQueueType.Scale ? QUEUE_URL_SCALE_IN : QUEUE_URL_TEST).values().next().value;
+    queueUrl = queueMap.values().next().value;
   }
   if (queueUrl === undefined) {
     throw new Error(`Could not load queueUrl. Unknown Error for SqsQueueType ${SqsQueueType}, sqsQueueName ${sqsQueueName}`);
@@ -195,14 +196,6 @@ export function getQueueUrl (sqsQueueType: SqsQueueType, sqsQueueName?: string):
  * @returns SQSMessage or undefined
  */
 export async function getNewTestToRun (): Promise<SQSMessage | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_TEST
-  // If you try to call this from a controller (that has multiple queues) we should throw.
-  if (QUEUE_URL_TEST.size !== 1) {
-    const message = `Only Agents with a single QUEUE_URL_TEST can getNewTestsToRun(): QUEUE_URL_TEST.size=${QUEUE_URL_TEST.size}`;
-    log(message, LogLevel.WARN, QUEUE_URL_TEST);
-    throw new Error(message);
-  }
-  const queueUrlTest = QUEUE_URL_TEST.values().next().value;
   const params: ReceiveMessageCommandInput = {
     AttributeNames: [
       "All"
@@ -211,7 +204,7 @@ export async function getNewTestToRun (): Promise<SQSMessage | undefined> {
     MessageAttributeNames: [
         "All"
     ],
-    QueueUrl: queueUrlTest,
+    QueueUrl: getQueueUrl(SqsQueueType.Test),
     VisibilityTimeout: 60,
     WaitTimeSeconds: 20
   };
@@ -224,7 +217,6 @@ export async function getNewTestToRun (): Promise<SQSMessage | undefined> {
  * @returns SQSMessage or undefined
  */
 export async function getCommunicationMessage (): Promise<SQSMessage | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_COMMUNICATION
   const params: ReceiveMessageCommandInput = {
     AttributeNames: [
       "All"
@@ -233,7 +225,7 @@ export async function getCommunicationMessage (): Promise<SQSMessage | undefined
     MessageAttributeNames: [
         "All"
     ],
-    QueueUrl: QUEUE_URL_COMMUNICATION,
+    QueueUrl: getQueueUrl(SqsQueueType.Communications),
     VisibilityTimeout: 20,
     WaitTimeSeconds: 20
   };
@@ -248,15 +240,11 @@ export async function getCommunicationMessage (): Promise<SQSMessage | undefined
  * @returns messageId {string}
  */
 export async function sendNewTestToRun (messageAttributes: Record<string, MessageAttributeValue>, sqsQueueName: string): Promise<string | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_TEST
   const messageKeys = Object.keys(messageAttributes);
   if (messageKeys.length === 0) {
     throw new Error("You must specify at least one Message Attribute");
   }
-  if (!sqsQueueName || !QUEUE_URL_TEST.has(sqsQueueName)) {
-    throw new Error("You must specify a valid sqsQueueName: " + sqsQueueName);
-  }
-  const queueUrlTest: string = QUEUE_URL_TEST.get(sqsQueueName)!;
+  const queueUrlTest: string = getQueueUrl(SqsQueueType.Test, sqsQueueName);
   try {
     const yamlFile: string | undefined = messageKeys.includes("YamlFile") ? messageAttributes["YamlFile"].StringValue : undefined;
     const sqsMessageRequest: SendMessageCommandInput = {
@@ -280,7 +268,6 @@ export async function sendNewTestToRun (messageAttributes: Record<string, Messag
  * @returns messageId {string}
  */
 export async function sendNewCommunicationsMessage (messageAttributes: Record<string, MessageAttributeValue>): Promise<string | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_COMMUNICATION
   const messageKeys = Object.keys(messageAttributes);
   if (messageKeys.length === 0) {
     throw new Error("You must specify at least one Message Attribute");
@@ -290,7 +277,7 @@ export async function sendNewCommunicationsMessage (messageAttributes: Record<st
     const sqsMessageRequest: SendMessageCommandInput = {
       MessageAttributes: messageAttributes,
       MessageBody: message || "Sending Message to the Communications Queue",
-      QueueUrl: QUEUE_URL_COMMUNICATION
+      QueueUrl: getQueueUrl(SqsQueueType.Communications)
     };
     log("sendNewCommunicationsMessage request", LogLevel.DEBUG, Object.assign({}, sqsMessageRequest, { MessageAttributes: undefined }));
     const result: SendMessageCommandOutput = await sendMessage(sqsMessageRequest);
@@ -368,14 +355,6 @@ export async function getQueueAttributesMap (sqsQueueType: SqsQueueType, sqsQueu
  * @returns SQSMessage or undefined
  */
 export async function getTestScalingMessage (): Promise<SQSMessage | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_TEST
-  // If you try to call this from a controller (that has multiple queues) we should throw.
-  if (QUEUE_URL_SCALE_IN.size !== 1) {
-    const message = `Only Agents with a single QUEUE_URL_SCALE_IN can getTestScalingMessage(): QUEUE_URL_SCALE_IN.size=${QUEUE_URL_SCALE_IN.size}`;
-    log(message, LogLevel.WARN, QUEUE_URL_SCALE_IN);
-    throw new Error(message);
-  }
-  const queueUrlScale = QUEUE_URL_SCALE_IN.values().next().value;
   const params: ReceiveMessageCommandInput = {
     AttributeNames: [
       "All"
@@ -384,7 +363,7 @@ export async function getTestScalingMessage (): Promise<SQSMessage | undefined> 
     MessageAttributeNames: [
         "All"
     ],
-    QueueUrl: queueUrlScale,
+    QueueUrl: getQueueUrl(SqsQueueType.Scale),
     VisibilityTimeout: 30,
     WaitTimeSeconds: 5
   };
@@ -398,26 +377,17 @@ export async function getTestScalingMessage (): Promise<SQSMessage | undefined> 
  * @returns messageId {string}
  */
 export async function sendTestScalingMessage (sqsQueueName?: string): Promise<string | undefined> {
-  init(); // We have to call init to populate QUEUE_URL_SCALE_IN
+  const queueUrlScale: string = getQueueUrl(SqsQueueType.Scale, sqsQueueName);
   const messageAttributes: Record<string, MessageAttributeValue> = {
     Scale: {
       DataType: "String",
       StringValue: "test"
     }
   };
-  let queueUrlScale: string = QUEUE_URL_SCALE_IN.values().next().value!;
-  if (QUEUE_URL_SCALE_IN.size !== 1) {
-    if (!sqsQueueName || !QUEUE_URL_SCALE_IN.has(sqsQueueName)) {
-      throw new Error("You must specify a valid sqsQueueName: " + sqsQueueName);
-    }
-    queueUrlScale = QUEUE_URL_SCALE_IN.get(sqsQueueName)!;
-  } else {
-    sqsQueueName = QUEUE_URL_SCALE_IN.keys().next().value!;
-  }
   try {
     const sqsMessageRequest: SendMessageCommandInput = {
       MessageAttributes: messageAttributes,
-      MessageBody: `Sending Message to the ${sqsQueueName} Test Scaling Queue`,
+      MessageBody: `Sending Message to the ${sqsQueueName || "agent"} Test Scaling Queue`,
       QueueUrl: queueUrlScale
     };
     log("sendTestScalingMessage request", LogLevel.DEBUG, sqsMessageRequest);
@@ -515,7 +485,7 @@ export async function deleteMessage (params: DeleteMessageCommandInput): Promise
     callAccessCallback(new Date()); // Update the last timestamp
     return;
   } catch (error: unknown) {
-    log("deleteMessage failed", LogLevel.WARN, error);
+    log("deleteMessage failed", LogLevel.WARN, error, params);
     throw error;
   }
 }
@@ -530,7 +500,7 @@ export async function changeMessageVisibility (params: ChangeMessageVisibilityCo
     callAccessCallback(new Date()); // Update the last timestamp
     return;
   } catch (error: unknown) {
-    log("changeMessageVisibility failed", LogLevel.WARN, error);
+    log("changeMessageVisibility failed", LogLevel.WARN, error, params);
     throw error;
   }
 }
@@ -544,7 +514,7 @@ export async function getQueueAttributes (params: GetQueueAttributesCommandInput
     callAccessCallback(new Date()); // Update the last timestamp
     return result;
   } catch (error: unknown) {
-    log("getQueueAttributes failed", LogLevel.WARN, error);
+    log("getQueueAttributes failed", LogLevel.WARN, error, params);
     throw error;
   }
 }

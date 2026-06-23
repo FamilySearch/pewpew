@@ -56,7 +56,6 @@
     "aws-sdk-client-mock": "^4.0.0",
     "c8": "^11.0.0",
     "chai": "^6.0.0",
-    "dotenv": "^17.0.0",
     "dotenv-flow": "^4.0.1",
     "eslint": "^10.0.0",
     "mocha": "^11.0.0",

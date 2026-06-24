@@ -713,7 +713,7 @@ export class PewPewTest {
    */
   public async stop (killTest?: boolean, userId?: string): Promise<void> {
     this.stopCalled = true;
-    const changelogEntry = `Received ${killTest ? "KillTest" : "StopTest"} message from controller${userId ? ` by ${userId}` : ""}`;
+    const changelogEntry = `Received ${killTest ? "KillTest" : "StopTest"} request${userId ? ` by ${userId}` : ""}`;
     this.ppaasTestStatus.changelogs = [...(this.ppaasTestStatus.changelogs || []), changelogEntry];
     await this.writeTestStatus();
     return killTest ? this.internalKill() : this.internalStop();

@@ -37,7 +37,9 @@ export const RESULT_COLUMNS: Column<ExcelResultRow>[] = [
 
 type WriteFn = (data: ExcelResultRow[], options: { columns: Column<ExcelResultRow>[]; sheet: string }) => { toFile: (fileName: string) => Promise<void> };
 
-export async function exportResultsToExcel (data: ExcelResultRow[], fileName: string, sheetName: string, writeFn: WriteFn = writeXlsxFile as unknown as WriteFn): Promise<void> {
+const defaultWriteFn: WriteFn = (data, options) => writeXlsxFile<ExcelResultRow>(data, options);
+
+export async function exportResultsToExcel (data: ExcelResultRow[], fileName: string, sheetName: string, writeFn: WriteFn = defaultWriteFn): Promise<void> {
   const result = writeFn(data, { columns: RESULT_COLUMNS, sheet: sheetName });
   await result.toFile(fileName);
 }

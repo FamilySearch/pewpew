@@ -188,6 +188,36 @@ const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
   return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
 };
 
+// Collects all DataPoints from displayData grouped by label, then merges each group once.
+// Avoids O(N²) intermediate clones from the incremental merge pattern.
+// The returned DataPoints are owned clones — safe to free after chart creation.
+const groupAndMergeDataPoints = (
+  displayData: ParsedFileEntry[],
+  getLabel: (bucketId: BucketId) => string
+): [string, DataPoint[]][] => {
+  const labelGroups = new Map<string, DataPoint[]>();
+  for (const [bucketId, dataPoints] of displayData) {
+    const label = getLabel(bucketId);
+    if (labelGroups.has(label)) {
+      labelGroups.get(label)!.push(...dataPoints);
+    } else {
+      labelGroups.set(label, [...dataPoints]);
+    }
+  }
+  return Array.from(labelGroups.entries())
+    .map(([label, allDps]) => [label, mergeAllDataPoints(...allDps)] as [string, DataPoint[]]);
+};
+
+// Frees WASM histograms in an array produced by groupAndMergeDataPoints.
+// Call this immediately after the chart is created — Chart.js only keeps extracted numbers.
+const freeMergedHistograms = (mergedData: [string, DataPoint[]][]) => {
+  for (const [, dps] of mergedData) {
+    for (const dp of dps) {
+      try { dp.rttHistogram.free(); } catch { }
+    }
+  }
+};
+
 const getFilteredEndpoints = ({
   resultsData,
   summaryTagFilter,
@@ -767,49 +797,30 @@ const OverviewChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
         overviewChart.destroy();
       }
 
-      let endpointData: [string, DataPoint[]][];
-
       if (mergeEndpoints) {
-        // Group endpoints by method+url, merging data points at same timestamps
-        const groupedMap = new Map<string, DataPoint[]>();
-
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          log(`Endpoint found: ${label}`, LogLevel.DEBUG, {
-            bucketId,
-            dataPointCount: dataPoints.length
-          });
-
-          if (groupedMap.has(label)) {
-            // Merge data points with existing entry (combining counts at same timestamps)
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-            log(`  -> Merged with existing ${label}`, LogLevel.DEBUG);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-
-        endpointData = Array.from(groupedMap.entries());
+        const mergedData = groupAndMergeDataPoints(displayData, b => `${b.method} ${b.url}`);
+        log("Overview chart endpoints (merged)", LogLevel.DEBUG, {
+          originalCount: displayData.length, groupedCount: mergedData.length,
+          labels: mergedData.map(([label]) => label)
+        });
+        import("./charts").then(({ requestCountByEndpoint }) => {
+          const currentChart = requestCountByEndpoint(node, mergedData);
+          setOverviewChart(currentChart);
+          freeMergedHistograms(mergedData);
+        });
       } else {
-        // Use raw data without merging
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
+          [`${bucketId.method} ${bucketId.url}`, dataPoints]
+        );
+        log("Overview chart endpoints", LogLevel.DEBUG, {
+          originalCount: displayData.length, groupedCount: endpointData.length,
+          labels: endpointData.map(([label]) => label)
+        });
+        import("./charts").then(({ requestCountByEndpoint }) => {
+          const currentChart = requestCountByEndpoint(node, endpointData);
+          setOverviewChart(currentChart);
         });
       }
-
-      log("Overview chart endpoints (after grouping)", LogLevel.DEBUG, {
-        originalCount: displayData.length,
-        groupedCount: endpointData.length,
-        labels: endpointData.map(([label]) => label)
-      });
-
-      import("./charts").then(({ requestCountByEndpoint }) => {
-        const currentChart = requestCountByEndpoint(node, endpointData);
-        setOverviewChart(currentChart);
-      });
     }
   }, [displayData, mergeEndpoints]);
 
@@ -829,36 +840,9 @@ const HostChart = ({ displayData }: TableProps) => {
         hostChart.destroy();
       }
 
-      // Always group endpoints by hostname extracted from URL (always merged)
-      const groupedMap = new Map<string, DataPoint[]>();
-
-      for (const [bucketId, dataPoints] of displayData) {
-        // Extract hostname from URL
-        let hostname = bucketId.url;
-        try {
-          const urlObj = new URL(bucketId.url);
-          hostname = urlObj.hostname;
-        } catch {
-          // If URL parsing fails, use the URL as-is
-        }
-
-        log(`Host found: ${hostname}`, LogLevel.DEBUG, {
-          originalUrl: bucketId.url,
-          dataPointCount: dataPoints.length
-        });
-
-        if (groupedMap.has(hostname)) {
-          // Merge data points with existing entry
-          const existing = groupedMap.get(hostname)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(hostname, merged);
-          log(`  -> Merged with existing ${hostname}`, LogLevel.DEBUG);
-        } else {
-          groupedMap.set(hostname, dataPoints);
-        }
-      }
-
-      const hostData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+      const hostData = groupAndMergeDataPoints(displayData, bucketId => {
+        try { return new URL(bucketId.url).hostname; } catch { return bucketId.url; }
+      });
 
       log("Host chart (after grouping)", LogLevel.DEBUG, {
         originalCount: displayData.length,
@@ -869,6 +853,7 @@ const HostChart = ({ displayData }: TableProps) => {
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
         const currentChart = requestCountByEndpoint(node, hostData, mergeAgentColors);
         setHostChart(currentChart);
+        freeMergedHistograms(hostData);
       });
     }
   }, [displayData]);
@@ -963,37 +948,24 @@ const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps
         chart.destroy();
       }
 
-      let endpointData: [string, DataPoint[]][];
-
       if (mergeEndpoints) {
-        // Group by method+url and show p50 (median) response time
-        const groupedMap = new Map<string, DataPoint[]>();
-
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-
-        endpointData = Array.from(groupedMap.entries());
+        const mergedData = groupAndMergeDataPoints(displayData, b => `${b.method} ${b.url}`);
+        import("./charts").then(({ medianDurationChart }) => {
+          const currentChart = medianDurationChart(node, mergedData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
+          freeMergedHistograms(mergedData);
+        });
       } else {
-        // Use raw data without merging
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
+          [`${bucketId.method} ${bucketId.url}`, dataPoints]
+        );
+        import("./charts").then(({ medianDurationChart }) => {
+          const currentChart = medianDurationChart(node, endpointData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
         });
       }
-
-      import("./charts").then(({ medianDurationChart }) => {
-        const currentChart = medianDurationChart(node, endpointData);
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
     }
   }, [displayData, mergeEndpoints]);
 
@@ -1049,37 +1021,24 @@ const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps)
         chart.destroy();
       }
 
-      let endpointData: [string, DataPoint[]][];
-
       if (mergeEndpoints) {
-        // Group by method+url and show p95 (worst 5%) response time
-        const groupedMap = new Map<string, DataPoint[]>();
-
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-
-        endpointData = Array.from(groupedMap.entries());
+        const mergedData = groupAndMergeDataPoints(displayData, b => `${b.method} ${b.url}`);
+        import("./charts").then(({ worst5PercentChart }) => {
+          const currentChart = worst5PercentChart(node, mergedData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
+          freeMergedHistograms(mergedData);
+        });
       } else {
-        // Use raw data without merging
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
+          [`${bucketId.method} ${bucketId.url}`, dataPoints]
+        );
+        import("./charts").then(({ worst5PercentChart }) => {
+          const currentChart = worst5PercentChart(node, endpointData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
         });
       }
-
-      import("./charts").then(({ worst5PercentChart }) => {
-        const currentChart = worst5PercentChart(node, endpointData);
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
     }
   }, [displayData, mergeEndpoints]);
 
@@ -1135,37 +1094,24 @@ const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
         chart.destroy();
       }
 
-      let endpointData: [string, DataPoint[]][];
-
       if (mergeEndpoints) {
-        // Group by method+url and show 5xx error counts
-        const groupedMap = new Map<string, DataPoint[]>();
-
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-
-        endpointData = Array.from(groupedMap.entries());
+        const mergedData = groupAndMergeDataPoints(displayData, b => `${b.method} ${b.url}`);
+        import("./charts").then(({ error5xxChart }) => {
+          const currentChart = error5xxChart(node, mergedData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
+          freeMergedHistograms(mergedData);
+        });
       } else {
-        // Use raw data without merging
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
+          [`${bucketId.method} ${bucketId.url}`, dataPoints]
+        );
+        import("./charts").then(({ error5xxChart }) => {
+          const currentChart = error5xxChart(node, endpointData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
         });
       }
-
-      import("./charts").then(({ error5xxChart }) => {
-        const currentChart = error5xxChart(node, endpointData);
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
     }
   }, [displayData, mergeEndpoints]);
 
@@ -1221,37 +1167,24 @@ const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => 
         chart.destroy();
       }
 
-      let endpointData: [string, DataPoint[]][];
-
       if (mergeEndpoints) {
-        // Group by method+url and show all non-200 status codes
-        const groupedMap = new Map<string, DataPoint[]>();
-
-        for (const [bucketId, dataPoints] of displayData) {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          if (groupedMap.has(label)) {
-            const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
-          } else {
-            groupedMap.set(label, dataPoints);
-          }
-        }
-
-        endpointData = Array.from(groupedMap.entries());
+        const mergedData = groupAndMergeDataPoints(displayData, b => `${b.method} ${b.url}`);
+        import("./charts").then(({ allErrorsChart }) => {
+          const currentChart = allErrorsChart(node, mergedData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
+          freeMergedHistograms(mergedData);
+        });
       } else {
-        // Use raw data without merging
-        endpointData = displayData.map(([bucketId, dataPoints]) => {
-          const label = `${bucketId.method} ${bucketId.url}`;
-          return [label, dataPoints];
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
+          [`${bucketId.method} ${bucketId.url}`, dataPoints]
+        );
+        import("./charts").then(({ allErrorsChart }) => {
+          const currentChart = allErrorsChart(node, endpointData);
+          setChart(currentChart);
+          setHiddenDatasets(new Set());
         });
       }
-
-      import("./charts").then(({ allErrorsChart }) => {
-        const currentChart = allErrorsChart(node, endpointData);
-        setChart(currentChart);
-        setHiddenDatasets(new Set());
-      });
     }
   }, [displayData, mergeEndpoints]);
 

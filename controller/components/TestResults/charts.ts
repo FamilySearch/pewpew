@@ -82,6 +82,158 @@ export const errorColors = [
   "#ffb380"  // Macaroni
 ];
 
+// Tableau-style multi-hue palette for per-agent / per-host / per-test charts
+export const mergeAgentColors = [
+  "#4e79a7", // Blue
+  "#f28e2b", // Orange
+  "#e15759", // Red
+  "#76b7b2", // Teal
+  "#59a14f", // Green
+  "#edc948", // Yellow
+  "#b07aa1", // Purple
+  "#ff9da7", // Pink
+  "#9c755f", // Brown
+  "#bab0ac"  // Grey
+];
+
+/**
+ * Stacked area line chart of request counts per endpoint over time.
+ * Also used (with mergeAgentColors palette) for Request Count by Host/Agent
+ * when data is pre-grouped by the caller.
+ */
+export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][], colorPalette: string[] = colors): Chart {
+  const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: Number(dp.rttHistogram.getTotalCount())
+    }));
+
+    const borderColor = colorPalette[index % colorPalette.length];
+    const backgroundColor = borderColor + "DD";
+
+    return {
+      label: endpointLabel,
+      data,
+      borderColor,
+      backgroundColor,
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: index
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            autoSkip: true,
+            maxTicksLimit: 8,
+            font: { size: 12 }
+          }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute", displayFormats: { minute: "HH:mm" } },
+          ticks: { autoSkip: true, maxTicksLimit: 8, stepSize: 15, font: { size: 12 } }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 10, bottom: 10, left: 12, right: 12 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 12 },
+          bodySpacing: 6,
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${(context.parsed.y || 0).toLocaleString()}`
+          }
+        }
+      }
+    }
+  }) as unknown as Chart;
+}
+
+/**
+ * Stacked area line chart of request counts per agent over time.
+ * Accepts pre-computed plain { time, count } series — no WASM reads in caller.
+ */
+export function requestCountByAgentSeries (
+  el: HTMLCanvasElement,
+  agentSeries: [string, { time: Date; count: number }[]][],
+  colorPalette: string[] = mergeAgentColors
+): Chart {
+  const datasets = agentSeries.map(([label, points], index) => {
+    const borderColor = colorPalette[index % colorPalette.length];
+    const backgroundColor = borderColor + "DD";
+    return {
+      label,
+      data: points.map(p => ({ x: p.time, y: p.count })),
+      borderColor,
+      backgroundColor,
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: index
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: { precision: 0, autoSkip: true, maxTicksLimit: 8, font: { size: 12 } }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute", displayFormats: { minute: "HH:mm" } },
+          ticks: { autoSkip: true, maxTicksLimit: 8, stepSize: 15, font: { size: 12 } }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          padding: { top: 10, bottom: 10, left: 12, right: 12 },
+          titleFont: { size: 13, weight: "bold" },
+          bodyFont: { size: 12 },
+          bodySpacing: 6,
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${(context.parsed.y || 0).toLocaleString()}`
+          }
+        }
+      }
+    }
+  }) as unknown as Chart;
+}
+
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
   const MICROS_TO_MS = 1000;
   const datasets = [

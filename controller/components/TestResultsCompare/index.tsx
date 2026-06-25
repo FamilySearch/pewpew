@@ -470,6 +470,204 @@ const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
 };
 
 // ============================================================================
+// Request Count Chart Components
+// ============================================================================
+
+const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEndpoints: boolean }> = ({ displayData, mergeEndpoints }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const allEndpoints = useMemo((): [string, DataPoint[]][] => {
+    if (mergeEndpoints) {
+      const groupedMap = new Map<string, DataPoint[]>();
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          groupedMap.get(label)!.push(...dataPoints);
+        } else {
+          groupedMap.set(label, [...dataPoints]);
+        }
+      }
+      return Array.from(groupedMap.entries());
+    }
+    return displayData.map(([bucketId, dataPoints]) => [`${bucketId.method} ${bucketId.url}`, dataPoints]);
+  }, [displayData, mergeEndpoints]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || allEndpoints.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ requestCountByEndpoint }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByEndpoint(node, allEndpoints);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [allEndpoints]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
+};
+
+const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displayData }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const hostGroups = useMemo((): [string, DataPoint[]][] => {
+    const grouped = new Map<string, DataPoint[]>();
+    for (const [bucketId, dataPoints] of displayData) {
+      let hostname = bucketId.url;
+      try {
+        hostname = new URL(bucketId.url).hostname;
+      } catch { }
+      if (grouped.has(hostname)) {
+        grouped.get(hostname)!.push(...dataPoints);
+      } else {
+        grouped.set(hostname, [...dataPoints]);
+      }
+    }
+    return Array.from(grouped.entries());
+  }, [displayData]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || hostGroups.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ mergeAgentColors, requestCountByEndpoint }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByEndpoint(node, hostGroups, mergeAgentColors);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [hostGroups]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
+};
+
+const ComparisonRequestCountByFileChart: React.FC<{ displayData: ParsedFileEntry[]; label: string }> = ({ displayData, label }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const fileSeries = useMemo((): [string, { time: Date; count: number }[]][] => {
+    const timeMap = new Map<number, { time: Date; count: number }>();
+    for (const [, dataPoints] of displayData) {
+      for (const dp of dataPoints) {
+        const t = dp.time.getTime();
+        const count = Number(dp.rttHistogram.getTotalCount());
+        const existing = timeMap.get(t);
+        if (existing) {
+          existing.count += count;
+        } else {
+          timeMap.set(t, { time: new Date(t), count });
+        }
+      }
+    }
+    const points = Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+    return [[label, points]];
+  }, [displayData, label]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || fileSeries.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ requestCountByAgentSeries }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByAgentSeries(node, fileSeries);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [fileSeries]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
+};
+
+// ============================================================================
 // Chart Components
 // ============================================================================
 
@@ -1030,6 +1228,55 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           </label>
         </ToggleContainer>
       </FilterContainer>
+
+      <div id="compare-request-count-charts">
+        <SectionHeading>
+          Request Count Overview
+          <a href="#compare-request-count-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-request-count-charts")}>#</a>
+        </SectionHeading>
+      </div>
+      <ComparisonChartsGrid>
+        <ChartColumn>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by Endpoint
+            </h3>
+            <ComparisonRequestCountByEndpointChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by Host
+            </h3>
+            <ComparisonRequestCountByHostChart displayData={filteredBaselineData} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by File
+            </h3>
+            <ComparisonRequestCountByFileChart displayData={filteredBaselineData} label={baselineLabel} />
+          </div>
+        </ChartColumn>
+        <ChartColumn>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by Endpoint
+            </h3>
+            <ComparisonRequestCountByEndpointChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by Host
+            </h3>
+            <ComparisonRequestCountByHostChart displayData={filteredComparisonData} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by File
+            </h3>
+            <ComparisonRequestCountByFileChart displayData={filteredComparisonData} label={comparisonLabel} />
+          </div>
+        </ChartColumn>
+      </ComparisonChartsGrid>
 
       <div id="compare-overview-charts">
         <SectionHeading>

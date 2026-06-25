@@ -106,6 +106,21 @@ export const agentColors = [
   "#b0955f"  // Khaki
 ];
 
+// Distinct multi-hue palette for the "Request Count by Agent" chart in merge view.
+// Uses clearly different hues so individual agents are easy to tell apart at a glance.
+export const mergeAgentColors = [
+  "#4e79a7", // Blue
+  "#f28e2b", // Orange
+  "#e15759", // Red
+  "#76b7b2", // Teal
+  "#59a14f", // Green
+  "#edc948", // Yellow
+  "#b07aa1", // Purple
+  "#ff9da7", // Pink
+  "#9c755f", // Brown
+  "#bab0ac"  // Grey
+];
+
 // Error chart color palette (orange/pink theme for error graphs)
 export const errorColors = [
   "#ff6b6b", // Coral Red
@@ -431,6 +446,69 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
     }
   });
   return totalChart as any as Chart;
+}
+
+/**
+ * Renders a stacked line chart of request counts per agent over time.
+ * Accepts pre-computed per-agent totals (plain numbers) rather than DataPoint
+ * objects, so no WASM histogram cloning is needed in the caller.
+ */
+export function requestCountByAgentSeries (
+  el: HTMLCanvasElement,
+  agentSeries: [string, { time: Date; count: number }[]][],
+  colorPalette: string[] = mergeAgentColors
+): Chart {
+  const datasets = agentSeries.map(([label, points], index) => {
+    const borderColor = colorPalette[index % colorPalette.length];
+    const backgroundColor = borderColor + "DD";
+    return {
+      label,
+      data: points.map(p => ({ x: p.time, y: p.count })),
+      borderColor,
+      backgroundColor,
+      fill: "origin",
+      tension: 0.4,
+      borderWidth: 2,
+      pointRadius: 0,
+      order: index
+    };
+  });
+
+  return new Chart(el, {
+    type: "line",
+    data: { datasets },
+    options: {
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        y: {
+          type: "linear",
+          stacked: true,
+          beginAtZero: true,
+          ticks: { precision: 0, autoSkip: true, maxTicksLimit: 8 },
+          title: { display: false }
+        },
+        x: {
+          type: "time",
+          time: { unit: "minute", displayFormats: { minute: "HH:mm" } },
+          title: { display: false },
+          ticks: { autoSkip: true, maxTicksLimit: 8, stepSize: 15 }
+        }
+      },
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          callbacks: {
+            label: (context) => {
+              const rawValue = context.parsed.y || 0;
+              return `${context.dataset.label}: ${rawValue.toLocaleString()}`;
+            }
+          }
+        }
+      }
+    }
+  }) as any as Chart;
 }
 
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {

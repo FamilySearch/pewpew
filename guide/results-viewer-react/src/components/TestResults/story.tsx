@@ -62,3 +62,8 @@ export const Discovery3Result: StoryFn = () => (
     <TestResults resultsText={statsdiscoverywicffamilybeta20200311T221932362} />
   </React.Fragment>
 );
+
+// Exported for reuse in TestResultsMerge stories
+export { statsdiscoverywicffamilybeta20200311T194618937 as discoveryData1 };
+export { statsdiscoverywicffamilybeta20200311T200153210 as discoveryData2 };
+export { statsdiscoverywicffamilybeta20200311T221932362 as discoveryData3 };

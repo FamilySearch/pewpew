@@ -123,7 +123,11 @@ const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) =
 };
 
 export interface TestResultProps {
-  resultsText: string;
+  resultsText?: string;
+  resultsData?: ParsedFileEntry[];
+  /** Per-agent request totals for merged mode. When provided, the Agent chart
+   *  shows one series per input file instead of deriving agents from BucketId tags. */
+  agentTimeSeries?: [string, { time: Date; count: number }[]][];
 }
 
 export interface TestResultState {
@@ -264,7 +268,7 @@ const DEFAULT_STATE: TestResultState = {
 };
 // const MICROS_TO_MS = 1000;
 
-export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
+export const TestResults = React.memo(({ resultsText, resultsData: propResultsData, agentTimeSeries }: TestResultProps) => {
 
   const [state, setState] = useState(DEFAULT_STATE);
   const [mergeEndpoints, setMergeEndpoints] = useState(false);
@@ -357,8 +361,31 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
   }, []);
 
   useEffect(() => {
-    updateResultsData(resultsText);
+    if (resultsText) {
+      updateResultsData(resultsText);
+    }
   }, [resultsText]);
+
+  useEffect(() => {
+    if (propResultsData) {
+      setState((oldState: TestResultState) => {
+        freeHistograms(oldState.resultsData, oldState.summaryData);
+        const startEndTime: MinMaxTime = minMaxTime(propResultsData);
+        const { summaryTagFilter, summaryTagValueFilter } = oldState;
+        const filteredData = getFilteredEndpoints({ resultsData: propResultsData, summaryTagFilter, summaryTagValueFilter });
+        const summaryData = getSummaryData({ filteredData: filteredData || propResultsData, summaryTagFilter, summaryTagValueFilter });
+        return {
+          ...oldState,
+          defaultMessage: DEFAULT_MESSAGE,
+          resultsData: propResultsData,
+          filteredData,
+          summaryData,
+          error: undefined,
+          minMaxTime: startEndTime
+        };
+      });
+    }
+  }, [propResultsData]);
 
   // Memoized display data to avoid unnecessary recalculations
   const displayData = useMemo(() => {
@@ -472,7 +499,7 @@ export const TestResults = React.memo(({ resultsText }: TestResultProps) => {
           <h2>Request Count by Host</h2>
           <HostChart displayData={filteredDisplayData} />
           <h2>Request Count by Agent</h2>
-          <AgentChart displayData={filteredDisplayData} />
+          <AgentChart displayData={filteredDisplayData} agentTimeSeries={agentTimeSeries} />
 
           <div id="performance-metrics">
             <SectionHeadingH2>
@@ -726,6 +753,11 @@ interface TableProps {
   displayData: ParsedFileEntry[];
 }
 
+interface AgentChartProps {
+  displayData: ParsedFileEntry[];
+  agentTimeSeries?: [string, { time: Date; count: number }[]][];
+}
+
 const OverviewChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
   const [overviewChart, setOverviewChart] = useState<Chart>();
 
@@ -834,8 +866,8 @@ const HostChart = ({ displayData }: TableProps) => {
         hosts: hostData.map(([label]) => label)
       });
 
-      import("./charts").then(({ requestCountByEndpoint, hostColors }) => {
-        const currentChart = requestCountByEndpoint(node, hostData, hostColors);
+      import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
+        const currentChart = requestCountByEndpoint(node, hostData, mergeAgentColors);
         setHostChart(currentChart);
       });
     }
@@ -848,7 +880,7 @@ const HostChart = ({ displayData }: TableProps) => {
   );
 };
 
-const AgentChart = ({ displayData }: TableProps) => {
+const AgentChart = ({ displayData, agentTimeSeries }: AgentChartProps) => {
   const [agentChart, setAgentChart] = useState<Chart>();
 
   const agentCanvas = useCallback((node: HTMLCanvasElement | null) => {
@@ -857,14 +889,20 @@ const AgentChart = ({ displayData }: TableProps) => {
         agentChart.destroy();
       }
 
-      // Always group endpoints by agent/machine (always merged)
+      // When per-agent series are pre-computed (merged mode), use them directly.
+      if (agentTimeSeries && agentTimeSeries.length > 0) {
+        import("./charts").then(({ requestCountByAgentSeries, mergeAgentColors }) => {
+          const currentChart = requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors);
+          setAgentChart(currentChart);
+        });
+        return;
+      }
+
+      // Fallback: group endpoints by agent/machine tag from BucketId (always merged)
       const groupedMap = new Map<string, DataPoint[]>();
 
       for (const [bucketId, dataPoints] of displayData) {
-        // Look for agent information in tags (common fields: agent, host, machine, source)
         let agent: string;
-
-        // Check for agent-related fields in bucketId tags
         if (bucketId.agent) {
           agent = bucketId.agent;
         } else if (bucketId.host) {
@@ -874,7 +912,6 @@ const AgentChart = ({ displayData }: TableProps) => {
         } else if (bucketId.source) {
           agent = bucketId.source;
         } else {
-          // If no agent field, use "All Agents" as a fallback
           agent = "All Agents";
         }
 
@@ -884,7 +921,6 @@ const AgentChart = ({ displayData }: TableProps) => {
         });
 
         if (groupedMap.has(agent)) {
-          // Merge data points with existing entry
           const existing = groupedMap.get(agent)!;
           const merged = mergeAllDataPoints(...existing, ...dataPoints);
           groupedMap.set(agent, merged);
@@ -902,12 +938,12 @@ const AgentChart = ({ displayData }: TableProps) => {
         agents: agentData.map(([label]) => label)
       });
 
-      import("./charts").then(({ requestCountByEndpoint, agentColors }) => {
-        const currentChart = requestCountByEndpoint(node, agentData, agentColors);
+      import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
+        const currentChart = requestCountByEndpoint(node, agentData, mergeAgentColors);
         setAgentChart(currentChart);
       });
     }
-  }, [displayData]);
+  }, [displayData, agentTimeSeries]);
 
   return (
     <OVERVIEWCANVAS>

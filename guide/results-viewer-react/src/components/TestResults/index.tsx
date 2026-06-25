@@ -883,39 +883,12 @@ const AgentChart = ({ displayData, agentTimeSeries }: AgentChartProps) => {
         return;
       }
 
-      // Fallback: group endpoints by agent/machine tag from BucketId (always merged)
-      const groupedMap = new Map<string, DataPoint[]>();
-
-      for (const [bucketId, dataPoints] of displayData) {
-        let agent: string;
-        if (bucketId.agent) {
-          agent = bucketId.agent;
-        } else if (bucketId.host) {
-          agent = bucketId.host;
-        } else if (bucketId.machine) {
-          agent = bucketId.machine;
-        } else if (bucketId.source) {
-          agent = bucketId.source;
-        } else {
-          agent = "All Agents";
-        }
-
-        log(`Agent found: ${agent}`, LogLevel.DEBUG, {
-          bucketId,
-          dataPointCount: dataPoints.length
-        });
-
-        if (groupedMap.has(agent)) {
-          const existing = groupedMap.get(agent)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(agent, merged);
-          log(`  -> Merged with existing ${agent}`, LogLevel.DEBUG);
-        } else {
-          groupedMap.set(agent, dataPoints);
-        }
-      }
-
-      const agentData: [string, DataPoint[]][] = Array.from(groupedMap.entries());
+      // Fallback: group endpoints by agent/machine tag from BucketId (always merged).
+      // Uses groupAndMergeDataPoints (O(N) ref gather + one merge per group) to avoid
+      // the O(N²) WASM clone leak that the old incremental loop caused.
+      const agentData = groupAndMergeDataPoints(displayData, (bucketId) =>
+        bucketId.agent || bucketId.host || bucketId.machine || bucketId.source || "All Agents"
+      );
 
       log("Agent chart (after grouping)", LogLevel.DEBUG, {
         originalCount: displayData.length,
@@ -926,6 +899,7 @@ const AgentChart = ({ displayData, agentTimeSeries }: AgentChartProps) => {
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
         const currentChart = requestCountByEndpoint(node, agentData, mergeAgentColors);
         setAgentChart(currentChart);
+        freeMergedHistograms(agentData);
       });
     }
   }, [displayData, agentTimeSeries]);

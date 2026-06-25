@@ -60,6 +60,7 @@ export interface TestStatusProps {
   resultsIndex?: number;
   compareTestId?: string;
   mergeTestIds?: string[];
+  mergeEndpoints?: boolean;
 }
 
 export interface TestStatusState {
@@ -76,7 +77,8 @@ const TestStatusPage = ({
   userId,
   resultsIndex: propsResultsIndex,
   compareTestId: propsCompareTestId,
-  mergeTestIds: propsMergeTestIds
+  mergeTestIds: propsMergeTestIds,
+  mergeEndpoints: propsMergeEndpoints
 }: TestStatusProps) => {
   const defaultState: TestStatusState = {
     pewpewStdErrors: undefined,
@@ -123,6 +125,10 @@ const TestStatusPage = ({
 
   const handleMergeTestIdsChange = (testIds: string[] | undefined): void => {
     updateQuery({ merge: testIds });
+  };
+
+  const handleMergeEndpointsChange = (checked: boolean): void => {
+    updateQuery({ mergeEndpoints: checked ? "true" : undefined });
   };
 
   const fetchData = async (testId: string) => {
@@ -252,6 +258,9 @@ const TestStatusPage = ({
   const currentMergeTestIds = router.isReady
     ? (Array.isArray(mergeQuery) ? mergeQuery : (typeof mergeQuery === "string" ? [mergeQuery] : undefined))
     : propsMergeTestIds;
+  const currentMergeEndpoints = router.isReady
+    ? router.query.mergeEndpoints === "true"
+    : (propsMergeEndpoints ?? false);
 
   return (
     <Layout authPermission={authPermission}>
@@ -272,6 +281,8 @@ const TestStatusPage = ({
           onCompareTestIdChange={handleCompareTestIdChange}
           initialMergeTestIds={currentMergeTestIds}
           onMergeTestIdsChange={handleMergeTestIdsChange}
+          initialMergeEndpoints={currentMergeEndpoints}
+          onMergeEndpointsChange={handleMergeEndpointsChange}
         />
       </TestResultsContainer>}
     </Layout>
@@ -317,7 +328,8 @@ export const getServerSideProps: GetServerSideProps =
         userId: authPermissions.userId,
         resultsIndex: !isNaN(resultsParam) ? resultsParam : undefined,
         compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined,
-        mergeTestIds
+        mergeTestIds,
+        mergeEndpoints: ctx.query.mergeEndpoints === "true"
       }
     };
   } catch (error) {

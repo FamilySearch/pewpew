@@ -327,6 +327,10 @@ export interface TestResultProps {
   initialMergeTestIds?: string[];
   /** Called when merged test IDs change — used to sync URL query (undefined = cleared) */
   onMergeTestIdsChange?: (testIds: string[] | undefined) => void;
+  /** Initial value for the "Merge endpoints with different tags" checkbox */
+  initialMergeEndpoints?: boolean;
+  /** Called when the merge-endpoints checkbox changes */
+  onMergeEndpointsChange?: (checked: boolean) => void;
 }
 
 export interface TestResultState {
@@ -903,7 +907,7 @@ export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, m
   );
 };
 
-export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, onMergeTestIdsChange }: TestResultProps) => {
+export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, onMergeTestIdsChange, initialMergeEndpoints, onMergeEndpointsChange }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState(() => {
@@ -914,7 +918,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
     return init;
   });
-  const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const compareSearchModalRef = useRef<ModalObject| null>(null);
   useEffectModal(compareSearchModalRef);
@@ -1493,7 +1497,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
                 type="checkbox"
                 id="merge-endpoints"
                 checked={mergeEndpoints}
-                onChange={(e) => setMergeEndpoints(e.target.checked)}
+                onChange={(e) => {
+                  setMergeEndpoints(e.target.checked);
+                  onMergeEndpointsChange?.(e.target.checked);
+                }}
               />
               <label htmlFor="merge-endpoints">
                 Merge endpoints with different tags

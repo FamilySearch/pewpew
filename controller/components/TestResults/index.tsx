@@ -323,6 +323,10 @@ export interface TestResultProps {
   initialCompareTestData?: TestData;
   /** Called when the compare test selection changes (undefined = cleared) */
   onCompareTestIdChange?: (testId: string | undefined) => void;
+  /** Test IDs to auto-merge on mount (from URL query param) */
+  initialMergeTestIds?: string[];
+  /** Called when merged test IDs change — used to sync URL query (undefined = cleared) */
+  onMergeTestIdsChange?: (testIds: string[] | undefined) => void;
 }
 
 export interface TestResultState {
@@ -899,7 +903,7 @@ export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, m
   );
 };
 
-export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange }: TestResultProps) => {
+export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, onMergeTestIdsChange }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState(() => {
@@ -916,6 +920,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   useEffectModal(compareSearchModalRef);
   const mergeSearchModalRef = useRef<ModalObject | null>(null);
   useEffectModal(mergeSearchModalRef);
+  // Keep a ref so onMergeLoad / onClearMerge can call the current callback without
+  // needing it in their useCallback dependency arrays.
+  const onMergeTestIdsChangeRef = useRef(onMergeTestIdsChange);
+  onMergeTestIdsChangeRef.current = onMergeTestIdsChange;
+  const autoMergeTriggeredRef = useRef(false);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -1163,6 +1172,26 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     updateState({ compareTest: compareTestData, compareText, compareData });
   };
 
+  const loadMergeByTestIds = async (testIds: string[]): Promise<void> => {
+    const selectedTests: TestData[] = [];
+    for (const testId of testIds) {
+      try {
+        const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(testId)));
+        const result: TestData | TestManagerError = response.data;
+        if (!("message" in result) && result.resultsFileLocation?.length) {
+          selectedTests.push(result as TestData);
+        } else {
+          log(`loadMergeByTestIds: no results for ${testId}`, LogLevel.WARN);
+        }
+      } catch (error) {
+        log(`loadMergeByTestIds: error fetching ${testId}`, LogLevel.WARN, error);
+      }
+    }
+    if (selectedTests.length > 0) {
+      await onMergeLoad(selectedTests);
+    }
+  };
+
   const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
     event.preventDefault();
     if (doubleClickCheckRef.current) {
@@ -1244,6 +1273,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }
       return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels };
     });
+    // Sync additional testIds (all labels except the current test) to the URL
+    onMergeTestIdsChangeRef.current?.(fileLabels.slice(1));
   }, [state.resultsData, testData.testId]);
 
   const onClearMerge = useCallback(() => {
@@ -1253,6 +1284,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }
       return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [] };
     });
+    onMergeTestIdsChangeRef.current?.(undefined);
   }, []);
 
   useEffect(() => {
@@ -1291,6 +1323,15 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       loadCompareByTestId(initialCompareTestId, initialCompareTestData).catch((error: unknown) => {
         log("Auto-load compare error", LogLevel.WARN, error);
         updateState({ error: formatError(error) });
+      });
+    }
+  }, [state.resultsData]);
+
+  useEffect(() => {
+    if (initialMergeTestIds?.length && state.resultsData && !state.mergedData && !autoMergeTriggeredRef.current) {
+      autoMergeTriggeredRef.current = true;
+      loadMergeByTestIds(initialMergeTestIds).catch((error: unknown) => {
+        log("Auto-load merge error", LogLevel.WARN, error);
       });
     }
   }, [state.resultsData]);

@@ -59,6 +59,7 @@ export interface TestStatusProps {
   userId?: string | null;
   resultsIndex?: number;
   compareTestId?: string;
+  mergeTestIds?: string[];
 }
 
 export interface TestStatusState {
@@ -74,7 +75,8 @@ const TestStatusPage = ({
   authPermission,
   userId,
   resultsIndex: propsResultsIndex,
-  compareTestId: propsCompareTestId
+  compareTestId: propsCompareTestId,
+  mergeTestIds: propsMergeTestIds
 }: TestStatusProps) => {
   const defaultState: TestStatusState = {
     pewpewStdErrors: undefined,
@@ -86,7 +88,7 @@ const TestStatusPage = ({
   const setState = (newState: Partial<TestStatusState>) => setFormData((oldState: TestStatusState) => ({ ...oldState, ...newState}));
   const router = useRouter();
 
-  const updateQuery = (changes: Record<string, string | undefined>): void => {
+  const updateQuery = (changes: Record<string, string | string[] | undefined>): void => {
     const testId = Array.isArray(router.query.testId) ? router.query.testId[0] : router.query.testId;
     if (!testId) { return; }
     const params = new URLSearchParams({ testId });
@@ -99,10 +101,11 @@ const TestStatusPage = ({
       }
     }
     for (const [k, v] of Object.entries(changes)) {
-      if (v !== undefined) {
+      params.delete(k);
+      if (Array.isArray(v)) {
+        v.forEach((val) => params.append(k, val));
+      } else if (v !== undefined) {
         params.set(k, v);
-      } else {
-        params.delete(k);
       }
     }
     const newUrl = `${PAGE_TEST_STATUS}?${params.toString()}`;
@@ -116,6 +119,10 @@ const TestStatusPage = ({
 
   const handleCompareTestIdChange = (testId: string | undefined): void => {
     updateQuery({ compare: testId });
+  };
+
+  const handleMergeTestIdsChange = (testIds: string[] | undefined): void => {
+    updateQuery({ merge: testIds });
   };
 
   const fetchData = async (testId: string) => {
@@ -241,6 +248,10 @@ const TestStatusPage = ({
   const resultsN = /^\d+$/.test(resultsStr) ? parseInt(resultsStr, 10) : NaN;
   const currentResultsIndex = router.isReady ? (isNaN(resultsN) ? undefined : resultsN) : propsResultsIndex;
   const currentCompareTestId = router.isReady ? (typeof router.query.compare === "string" ? router.query.compare : undefined) : propsCompareTestId;
+  const mergeQuery = router.query.merge;
+  const currentMergeTestIds = router.isReady
+    ? (Array.isArray(mergeQuery) ? mergeQuery : (typeof mergeQuery === "string" ? [mergeQuery] : undefined))
+    : propsMergeTestIds;
 
   return (
     <Layout authPermission={authPermission}>
@@ -259,6 +270,8 @@ const TestStatusPage = ({
           onResultsIndexChange={handleResultsIndexChange}
           initialCompareTestId={currentCompareTestId}
           onCompareTestIdChange={handleCompareTestIdChange}
+          initialMergeTestIds={currentMergeTestIds}
+          onMergeTestIdsChange={handleMergeTestIdsChange}
         />
       </TestResultsContainer>}
     </Layout>
@@ -292,6 +305,10 @@ export const getServerSideProps: GetServerSideProps =
 
     const resultsQueryStr = typeof ctx.query.results === "string" ? ctx.query.results : "";
     const resultsParam = /^\d+$/.test(resultsQueryStr) ? parseInt(resultsQueryStr, 10) : NaN;
+    const mergeQuery = ctx.query.merge;
+    const mergeTestIds = Array.isArray(mergeQuery)
+      ? mergeQuery
+      : (typeof mergeQuery === "string" ? [mergeQuery] : undefined);
     return {
       props: {
         testData,
@@ -299,7 +316,8 @@ export const getServerSideProps: GetServerSideProps =
         authPermission: authPermissions.authPermission,
         userId: authPermissions.userId,
         resultsIndex: !isNaN(resultsParam) ? resultsParam : undefined,
-        compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined
+        compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined,
+        mergeTestIds
       }
     };
   } catch (error) {

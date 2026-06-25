@@ -517,42 +517,49 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   const [error5xxHidden, setError5xxHidden] = useState<Set<number>>(new Set());
   const [allErrorsHidden, setAllErrorsHidden] = useState<Set<number>>(new Set());
 
-  // Process data based on mergeEndpoints flag
+  // Process data based on mergeEndpoints flag.
+  // When merging, collect all DataPoints per label first (O(N) references),
+  // then merge once per group — avoids O(N²) intermediate WASM histogram clones.
   const allEndpoints = useMemo(() => {
-    let endpointData: [string, DataPoint[]][];
-
     if (mergeEndpoints) {
-      // Group endpoints by method+url, merging data points at same timestamps
-      const groupedMap = new Map<string, DataPoint[]>();
-
+      const labelGroups = new Map<string, DataPoint[]>();
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
-
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          groupedMap.set(label, mergeAllDataPoints(...existing, ...dataPoints));
+        if (labelGroups.has(label)) {
+          labelGroups.get(label)!.push(...dataPoints);
         } else {
-          groupedMap.set(label, dataPoints);
+          labelGroups.set(label, [...dataPoints]);
         }
       }
-
-      endpointData = Array.from(groupedMap.entries());
-    } else {
-      // Use raw data - create label with all tags
-      endpointData = displayData.map(([bucketId, dataPoints]) => {
-        const tagList = Object.entries(bucketId)
-          .filter(([key]) => key !== "method" && key !== "url")
-          .map(([key, value]) => `${key}:${value}`)
-          .join(" ");
-        const label = tagList
-          ? `${bucketId.method} ${bucketId.url} [${tagList}]`
-          : `${bucketId.method} ${bucketId.url}`;
-        return [label, dataPoints];
-      });
+      return Array.from(labelGroups.entries())
+        .map(([label, allDps]) => [label, mergeAllDataPoints(...allDps)] as [string, DataPoint[]]);
     }
-
-    return endpointData;
+    // Use raw data — create label with all tags
+    return displayData.map(([bucketId, dataPoints]) => {
+      const tagList = Object.entries(bucketId)
+        .filter(([key]) => key !== "method" && key !== "url")
+        .map(([key, value]) => `${key}:${value}`)
+        .join(" ");
+      const label = tagList
+        ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+        : `${bucketId.method} ${bucketId.url}`;
+      return [label, dataPoints] as [string, DataPoint[]];
+    });
   }, [displayData, mergeEndpoints]);
+
+  // Free merged WASM histograms when allEndpoints is recomputed or the component
+  // unmounts. Chart.js extracts scalar values synchronously during chart creation
+  // and does not retain references to DataPoints afterward.
+  useEffect(() => {
+    if (!mergeEndpoints) { return; }
+    return () => {
+      for (const [, dps] of allEndpoints) {
+        for (const dp of dps) {
+          try { dp.rttHistogram.free(); } catch { }
+        }
+      }
+    };
+  }, [allEndpoints, mergeEndpoints]);
 
   // Create stable key for data points
   const dataKey = useMemo(() =>

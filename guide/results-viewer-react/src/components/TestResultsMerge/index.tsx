@@ -6,6 +6,12 @@ import { detectOverlap, mergeResults } from "../TestResults/merge";
 import { TestResults } from "../TestResults";
 import { parseResultsData } from "../TestResults/utils";
 
+const freeParsedEntries = (data: ParsedFileEntry[] | undefined) => {
+  for (const [, dps] of (data || [])) {
+    for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
+  }
+};
+
 type AgentTimeSeries = [string, { time: Date; count: number }[]][];
 
 interface TestResultsMergeProps {
@@ -24,7 +30,7 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
   useEffect(() => {
     const loadData = async () => {
       if (fileTexts.length < 2) {
-        setMergedData(undefined);
+        setMergedData(prev => { freeParsedEntries(prev); return undefined; });
         setAgentTimeSeries([]);
         setNoOverlap(false);
         return;
@@ -63,9 +69,11 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
         setAgentTimeSeries(computed);
 
         const merged = mergeResults(allParsed);
+        // Free source histograms — mergeResults cloned what it needed
+        for (const fileData of allParsed) { freeParsedEntries(fileData); }
         log("TestResultsMerge merged", LogLevel.DEBUG, { endpointCount: merged.length });
 
-        setMergedData(merged);
+        setMergedData(prev => { freeParsedEntries(prev); return merged; });
       } catch (err) {
         log("TestResultsMerge error", LogLevel.ERROR, err);
         setError(formatError(err));

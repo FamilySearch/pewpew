@@ -516,8 +516,10 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
         const grouped = new Map<string, DataPoint[]>();
         for (const [bucketId, dataPoints] of displayData) {
           const label = `${bucketId.method} ${bucketId.url}`;
-          if (grouped.has(label)) { grouped.get(label)!.push(...dataPoints); }
-          else { grouped.set(label, [...dataPoints]); }
+          if (grouped.has(label)) {
+            const existing = grouped.get(label)!;
+            for (const dp of dataPoints) { existing.push(dp); }
+          } else { grouped.set(label, dataPoints.slice()); }
         }
         endpointData = Array.from(grouped.entries());
       } else {

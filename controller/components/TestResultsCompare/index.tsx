@@ -601,28 +601,16 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
   );
 };
 
-const ComparisonRequestCountByFileChart: React.FC<{ displayData: ParsedFileEntry[]; label: string }> = ({ displayData, label }) => {
+const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; count: number }[]; label: string }> = ({ timeSeries, label }) => {
   const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
   const [chart, setChart] = useState<Chart>();
   const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
 
-  const fileSeries = useMemo((): [string, { time: Date; count: number }[]][] => {
-    const timeMap = new Map<number, { time: Date; count: number }>();
-    for (const [, dataPoints] of displayData) {
-      for (const dp of dataPoints) {
-        const t = dp.time.getTime();
-        const count = Number(dp.rttHistogram.getTotalCount());
-        const existing = timeMap.get(t);
-        if (existing) {
-          existing.count += count;
-        } else {
-          timeMap.set(t, { time: new Date(t), count });
-        }
-      }
-    }
-    const points = Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
-    return [[label, points]];
-  }, [displayData, label]);
+  // timeSeries is pre-computed by the parent (no WASM calls here)
+  const fileSeries = useMemo((): [string, { time: Date; count: number }[]][] =>
+    [[label, timeSeries]],
+    [label, timeSeries]
+  );
 
   useEffect(() => {
     const node = canvasNodeRef.current;
@@ -1181,6 +1169,39 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [comparisonData, methodFilter]);
 
+  // Pre-compute request-count time series for each side so ComparisonRequestCountByFileChart
+  // receives plain data and never needs to call getTotalCount() (a WASM boundary crossing)
+  // during its own useMemo.
+  const baselineTimeSeries = useMemo((): { time: Date; count: number }[] => {
+    if (!filteredBaselineData) { return []; }
+    const timeMap = new Map<number, { time: Date; count: number }>();
+    for (const [, dataPoints] of filteredBaselineData) {
+      for (const dp of dataPoints) {
+        const t = dp.time.getTime();
+        const count = Number(dp.rttHistogram.getTotalCount());
+        const existing = timeMap.get(t);
+        if (existing) { existing.count += count; }
+        else { timeMap.set(t, { time: new Date(t), count }); }
+      }
+    }
+    return Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+  }, [filteredBaselineData]);
+
+  const comparisonTimeSeries = useMemo((): { time: Date; count: number }[] => {
+    if (!filteredComparisonData) { return []; }
+    const timeMap = new Map<number, { time: Date; count: number }>();
+    for (const [, dataPoints] of filteredComparisonData) {
+      for (const dp of dataPoints) {
+        const t = dp.time.getTime();
+        const count = Number(dp.rttHistogram.getTotalCount());
+        const existing = timeMap.get(t);
+        if (existing) { existing.count += count; }
+        else { timeMap.set(t, { time: new Date(t), count }); }
+      }
+    }
+    return Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+  }, [filteredComparisonData]);
+
   // Empty state
   if (!baselineData || baselineData.length === 0 || !comparisonData || comparisonData.length === 0) {
     return (
@@ -1253,7 +1274,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {baselineLabel} - Request Count by File
             </h3>
-            <ComparisonRequestCountByFileChart displayData={filteredBaselineData} label={baselineLabel} />
+            <ComparisonRequestCountByFileChart timeSeries={baselineTimeSeries} label={baselineLabel} />
           </div>
         </ChartColumn>
         <ChartColumn>
@@ -1273,7 +1294,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
               {comparisonLabel} - Request Count by File
             </h3>
-            <ComparisonRequestCountByFileChart displayData={filteredComparisonData} label={comparisonLabel} />
+            <ComparisonRequestCountByFileChart timeSeries={comparisonTimeSeries} label={comparisonLabel} />
           </div>
         </ChartColumn>
       </ComparisonChartsGrid>

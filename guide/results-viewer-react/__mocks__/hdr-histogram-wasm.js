@@ -39,6 +39,10 @@ export class HDRHistogram {
     return cloned;
   }
 
+  toBase64() {
+    return "HIST_MOCK_BASE64";
+  }
+
   free() {
     // No-op for mock
   }

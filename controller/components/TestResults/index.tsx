@@ -920,6 +920,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   });
   const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
+  const [endpointDataExpanded, setEndpointDataExpanded] = useState(false);
   const compareSearchModalRef = useRef<ModalObject| null>(null);
   useEffectModal(compareSearchModalRef);
   const mergeSearchModalRef = useRef<ModalObject | null>(null);
@@ -1536,16 +1537,28 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 
           <div id="endpoint-data">
             <SectionHeading>
+              <button
+                onClick={() => setEndpointDataExpanded((prev) => !prev)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8em", padding: "0 0.3em 0 0", verticalAlign: "middle", color: "inherit" }}
+                aria-expanded={endpointDataExpanded}
+                aria-controls="endpoint-data-content"
+              >
+                {endpointDataExpanded ? "▼" : "▶"}
+              </button>
               Endpoint Data
               <a href="#endpoint-data" className="anchor-link" onClick={(e) => handleAnchorClick(e, "endpoint-data")}>#</a>
             </SectionHeading>
           </div>
-          {filteredDisplayData.map(([bucketId, dataPoints], index) => {
-            const anchorId = bucketAnchorId(bucketId, index);
-            return (
-              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} anchorId={anchorId} />
-            );
-          })}
+          {endpointDataExpanded && (
+            <div id="endpoint-data-content">
+              {filteredDisplayData.map(([bucketId, dataPoints], index) => {
+                const anchorId = bucketAnchorId(bucketId, index);
+                return (
+                  <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} anchorId={anchorId} />
+                );
+              })}
+            </div>
+          )}
         </TimeTaken>
       ) : (
         <h4>{state.defaultMessage}</h4>
@@ -1801,9 +1814,10 @@ const Endpoint = React.memo(({ bucketId, dataPoints, anchorId }: EndpointProps) 
   // Memoize totalResults calculation to avoid recalculation on every render
   const totalResults = useMemo(() => total(dataPoints), [dataPoints]);
 
-  // Create stable key for dataPoints to determine when charts need recreation
+  // Create stable key for dataPoints to determine when charts need recreation.
+  // dp.time is a plain JS Date, so this avoids N WASM calls per render per endpoint.
   const dataPointsKey = useMemo(() =>
-    dataPoints.map(dp => `${dp.time}-${dp.rttHistogram.getTotalCount()}`).join(","),
+    dataPoints.map(dp => dp.time.getTime()).join(","),
     [dataPoints]
   );
 

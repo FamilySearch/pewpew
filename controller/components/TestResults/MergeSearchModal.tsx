@@ -74,6 +74,16 @@ const SelectedCount = styled.p`
   font-size: 13px;
 `;
 
+const HintBlock = styled.p`
+  margin: 0 0 1em 0;
+  padding: 0.6em 0.8em 0.6em 1.2em;
+  border-left: 3px solid #6a7bb4;
+  background-color: #1e2030;
+  border-radius: 0 4px 4px 0;
+  color: #aaa;
+  font-size: 13px;
+`;
+
 /** Fully-fetched TestData, or null if the test has no results file */
 type FullTestData = TestData | null;
 
@@ -233,6 +243,7 @@ export const MergeSearchModal = forwardRef<ModalObject, MergeSearchModalProps>(
                 {isSearching ? "Searching…" : "Search"}
               </Button>
             </SearchRow>
+            <HintBlock>Search by S3 Key Path, not TestId</HintBlock>
 
             {searchError && (
               <p style={{ color: "#e15759", marginBottom: "1em", fontSize: "13px" }}>

@@ -166,6 +166,15 @@ export const MergeSearchModal = forwardRef<ModalObject, MergeSearchModalProps>(
       if (!term) { return; }
       setIsSearching(true);
       setSearchError(undefined);
+      // Evict fetchedTests entries that are not selected so the map doesn't grow unboundedly
+      // across multiple searches. Selected entries are preserved so their data stays available.
+      setFetchedTests((prev) => {
+        const next = new Map<string, FullTestData>();
+        for (const [testId, data] of prev) {
+          if (selectedTests.has(testId)) { next.set(testId, data); }
+        }
+        return next.size === prev.size ? prev : next;
+      });
       try {
         const response: AxiosResponse = await axios.get(formatPageHref(API_SEARCH_FORMAT(term)));
         if (Array.isArray(response.data)) {
@@ -181,7 +190,7 @@ export const MergeSearchModal = forwardRef<ModalObject, MergeSearchModalProps>(
       } finally {
         setIsSearching(false);
       }
-    }, [searchText, currentTestId]);
+    }, [searchText, currentTestId, selectedTests]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") { handleSearch(); }

@@ -30,11 +30,11 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew/tree/master/lib/config-wasm#readme",
   "overrides": {
-    "eslint": "^10.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "eslint": "$eslint",
+    "react": "$react",
+    "react-dom": "$react-dom",
+    "@types/react": "$@types/react",
+    "@types/react-dom": "$@types/react-dom"
   },
   "dependencies": {
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
@@ -52,7 +52,7 @@
     "react-transition-group": "^4.4.5",
     "styled-components": "^6.0.0",
     "swagger2openapi": "^7.0.8",
-    "xlsx": "^0.18.5"
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.12",

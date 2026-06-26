@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "./utils";
@@ -6,6 +5,7 @@ import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResults
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
+import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
 
 const TIMETAKEN = styled.div`
@@ -1355,7 +1355,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
     return results;
   }, [displayData]);
 
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = useCallback(async () => {
     // Prepare data for Excel export
     const excelData = tableData.map(row => ({
       Method: row.method,
@@ -1374,17 +1374,9 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       Time: new Date(row.time).toLocaleString()
     }));
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Final Results");
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
     const filename = `performance-results-${timestamp}.xlsx`;
-
-    // Download file
-    XLSX.writeFile(workbook, filename);
+    await exportResultsToExcel(excelData, filename, "Final Results");
   }, [tableData]);
 
   return (

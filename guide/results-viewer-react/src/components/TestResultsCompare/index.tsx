@@ -9,7 +9,6 @@
  * - Responsive two-column grid layout
  */
 
-import * as XLSX from "xlsx";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { LogLevel, formatError, log } from "../../util/log";
@@ -17,6 +16,7 @@ import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime, par
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
+import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
 
 // ============================================================================
@@ -1146,7 +1146,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
     return results;
   }, [displayData]);
 
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = useCallback(async () => {
     // Prepare data for Excel export
     const excelData = tableData.map(row => ({
       Method: row.method,
@@ -1165,17 +1165,9 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       Time: new Date(row.time).toLocaleString()
     }));
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
     const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
-
-    // Download file
-    XLSX.writeFile(workbook, filename);
+    await exportResultsToExcel(excelData, filename, fileLabel);
   }, [tableData, fileLabel]);
 
   return (

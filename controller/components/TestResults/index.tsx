@@ -1824,11 +1824,13 @@ const Endpoint = React.memo(({ bucketId, dataPoints, anchorId }: EndpointProps) 
   const totalResults = useMemo(() => total(dataPoints), [dataPoints]);
 
   // Create stable key for dataPoints to determine when charts need recreation.
-  // dp.time is a plain JS Date, so this avoids N WASM calls per render per endpoint.
-  const dataPointsKey = useMemo(() =>
-    dataPoints.map(dp => dp.time.getTime()).join(","),
-    [dataPoints]
-  );
+  // O(1): count + first/last timestamps captures all real data changes without
+  // a O(N) join over every bucket, which matters when many endpoints expand at once.
+  const dataPointsKey = useMemo(() => {
+    const first = dataPoints[0]?.time.getTime() ?? 0;
+    const last = dataPoints[dataPoints.length - 1]?.time.getTime() ?? 0;
+    return `${dataPoints.length}-${first}-${last}`;
+  }, [dataPoints]);
 
   const toggleChart = (chart: Chart) => {
     const chartConfig = chart.config.options?.scales?.y;

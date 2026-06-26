@@ -996,6 +996,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           compareText: undefined,
           compareData: undefined,
           mergedData: undefined,
+          mergedAgentTimeSeries: [],
           mergedTestIds: [],
           error: undefined,
           minMaxTime: startEndTime
@@ -1038,6 +1039,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           compareText: undefined,
           compareData: undefined,
           mergedData: undefined,
+          mergedAgentTimeSeries: [],
           mergedTestIds: [],
           error: undefined,
           minMaxTime: undefined

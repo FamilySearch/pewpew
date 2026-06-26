@@ -1,8 +1,8 @@
+import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Danger, Warning } from "../Alert";
 import { LogLevel, formatError, log } from "../../util/log";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { detectOverlap, mergeResults } from "../TestResults/merge";
-import { ParsedFileEntry } from "../TestResults/model";
 import { TestResults } from "../TestResults";
 import { parseResultsData } from "../TestResults/utils";
 
@@ -19,6 +19,7 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [noOverlap, setNoOverlap] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -77,6 +78,65 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
     loadData();
   }, [fileTexts]);
 
+  const downloadMergedResults = useCallback(() => {
+    if (!mergedData) { return; }
+    setIsDownloading(true);
+    try {
+      const lines: string[] = [];
+      const bucketSize = mergedData[0]?.[1]?.[0]?.duration ?? 60;
+
+      // Header
+      lines.push(JSON.stringify({ test: "merged", bin: "merged", bucketSize }));
+
+      // One tags entry per endpoint — use sequential index (not _id) to match the time entry keys
+      mergedData.forEach(([bucketId]: [BucketId, DataPoint[]], i: number) => {
+        lines.push(JSON.stringify({ index: i, tags: { ...bucketId } }));
+      });
+
+      // Collect all timestamps across all endpoints, keyed by sequential index string
+      const timeMap = new Map<number, Map<string, DataPoint>>();
+      mergedData.forEach(([, dataPoints]: [BucketId, DataPoint[]], i: number) => {
+        const key = String(i);
+        for (const dp of dataPoints) {
+          const t = Math.round(dp.time.getTime() / 1000);
+          if (!timeMap.has(t)) { timeMap.set(t, new Map()); }
+          timeMap.get(t)!.set(key, dp);
+        }
+      });
+
+      // One time-bucket entry per timestamp
+      for (const [time, endpointMap] of Array.from(timeMap.entries()).sort(([a], [b]) => a - b)) {
+        const entries: Record<string, unknown> = {};
+        for (const [id, dp] of endpointMap) {
+          const entry: Record<string, unknown> = {
+            rttHistogram: dp.rttHistogram.toBase64(),
+            statusCounts: dp.statusCounts,
+            testErrors: dp.testErrors
+          };
+          if (dp.requestTimeouts > 0) {
+            entry.requestTimeouts = dp.requestTimeouts;
+          }
+          entries[id] = entry;
+        }
+        lines.push(JSON.stringify({ time, entries }));
+      }
+
+      const blob = new Blob([lines.join("\n")], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "stats-merged.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      log("downloadMergedResults error", LogLevel.ERROR, err);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [mergedData]);
+
   if (loading) {
     return <p>Merging results from {fileTexts.length} files...</p>;
   }
@@ -92,6 +152,15 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
   return (
     <>
       <p style={{ textAlign: "left" }}>Merged from {filenames.length} files: {filenames.join(", ")}</p>
+      <p>
+        <button
+          onClick={downloadMergedResults}
+          disabled={isDownloading}
+          style={{ cursor: isDownloading ? "wait" : "pointer" }}
+        >
+          {isDownloading ? "Downloading…" : "Download Combined Results File"}
+        </button>
+      </p>
       {noOverlap && (
         <Warning>
           Warning: No overlapping time buckets found between these files. These may be from different test runs rather than concurrent agents.

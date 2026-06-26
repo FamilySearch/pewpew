@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { detectOverlap, mergeResults } from "../../TestResults/merge";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ParsedFileEntry } from "../../TestResults/model";
 import React from "react";
 import { TestResultsMerge } from "../index";
@@ -257,6 +257,70 @@ describe("TestResultsMerge", () => {
       expect(screen.getByTestId("overlap-warning")).toHaveTextContent(
         /No overlapping time buckets/
       );
+    });
+  });
+
+  describe("Download button", () => {
+    beforeEach(() => {
+      // Assign to the existing URL class rather than replacing it, so new URL() still works
+      global.URL.createObjectURL = jest.fn(() => "blob:mock-url");
+      global.URL.revokeObjectURL = jest.fn();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it("shows a download button after successful merge", async () => {
+      mockParseResultsData.mockResolvedValue([]);
+      mockMergeResults.mockReturnValue([]);
+
+      render(
+        <TestResultsMerge
+          fileTexts={["data1", "data2"]}
+          filenames={["a.json", "b.json"]}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Download Combined Results File" })).toBeInTheDocument();
+      });
+    });
+
+    it("triggers file download when download button is clicked", async () => {
+      mockParseResultsData.mockResolvedValue([]);
+      mockMergeResults.mockReturnValue([]);
+
+      render(
+        <TestResultsMerge
+          fileTexts={["data1", "data2"]}
+          filenames={["a.json", "b.json"]}
+        />
+      );
+
+      // Wait for render to complete before setting up body spies
+      const btn = await screen.findByRole("button", { name: "Download Combined Results File" });
+
+      const clickSpy = jest.fn();
+      const appendSpy = jest.spyOn(document.body, "appendChild").mockImplementation((node) => {
+        if (node instanceof HTMLAnchorElement) { node.click = clickSpy; }
+        return node as ChildNode;
+      });
+      const removeSpy = jest.spyOn(document.body, "removeChild").mockImplementation((node) => node as ChildNode);
+
+      fireEvent.click(btn);
+
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      expect(clickSpy).toHaveBeenCalled();
+      expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+
+      appendSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+
+    it("does not show download button when no data is loaded", () => {
+      render(<TestResultsMerge fileTexts={[]} filenames={[]} />);
+      expect(screen.queryByRole("button", { name: "Download Combined Results File" })).not.toBeInTheDocument();
     });
   });
 

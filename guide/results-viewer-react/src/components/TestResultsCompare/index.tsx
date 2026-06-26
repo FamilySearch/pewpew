@@ -485,7 +485,7 @@ interface TestResultsCompareState {
  * @param dataPoints - Variable number of DataPoint arrays to merge
  * @returns Merged and sorted DataPoint array
  */
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -697,13 +697,13 @@ const ComparisonMedianChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -783,13 +783,13 @@ const ComparisonWorst5Chart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -869,13 +869,13 @@ const ComparisonError5xxChart: React.FC<{ displayData: ParsedFileEntry[]; mergeE
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -955,13 +955,13 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;

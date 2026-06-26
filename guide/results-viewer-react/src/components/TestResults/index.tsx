@@ -173,7 +173,7 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
   log("freeHistograms finished", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
 };
 
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -199,13 +199,14 @@ const groupAndMergeDataPoints = (
   for (const [bucketId, dataPoints] of displayData) {
     const label = getLabel(bucketId);
     if (labelGroups.has(label)) {
-      labelGroups.get(label)!.push(...dataPoints);
+      const existing = labelGroups.get(label)!;
+      for (const dp of dataPoints) { existing.push(dp); }
     } else {
-      labelGroups.set(label, [...dataPoints]);
+      labelGroups.set(label, dataPoints.slice());
     }
   }
   return Array.from(labelGroups.entries())
-    .map(([label, allDps]) => [label, mergeAllDataPoints(...allDps)] as [string, DataPoint[]]);
+    .map(([label, allDps]) => [label, mergeAllDataPoints(allDps)] as [string, DataPoint[]]);
 };
 
 // Frees WASM histograms in an array produced by groupAndMergeDataPoints.
@@ -276,7 +277,7 @@ const getSummaryData = ({
     for (const [, dataPoints] of filteredData) {
       allDataPoints.push(...dataPoints);
     }
-    const dataPoints = mergeAllDataPoints(...allDataPoints);
+    const dataPoints = mergeAllDataPoints(allDataPoints);
     const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
     const tags = { method: summary, url: "" };
     summaryData = [tags, dataPoints];

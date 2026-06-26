@@ -325,6 +325,8 @@ export interface TestResultProps {
   onCompareTestIdChange?: (testId: string | undefined) => void;
   /** Test IDs to auto-merge on mount (from URL query param) */
   initialMergeTestIds?: string[];
+  /** Pre-fetched TestData for each merge target. Skips API fetches when set (used in Storybook). */
+  initialMergeTestData?: TestData[];
   /** Called when merged test IDs change — used to sync URL query (undefined = cleared) */
   onMergeTestIdsChange?: (testIds: string[] | undefined) => void;
   /** Initial value for the "Merge endpoints with different tags" checkbox */
@@ -907,7 +909,7 @@ export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, m
   );
 };
 
-export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, onMergeTestIdsChange, initialMergeEndpoints, onMergeEndpointsChange }: TestResultProps) => {
+export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, initialMergeTestData, onMergeTestIdsChange, initialMergeEndpoints, onMergeEndpointsChange }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState(() => {
@@ -1335,7 +1337,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   useEffect(() => {
     if (initialMergeTestIds?.length && state.resultsData && !state.mergedData && !autoMergeTriggeredRef.current) {
       autoMergeTriggeredRef.current = true;
-      loadMergeByTestIds(initialMergeTestIds).catch((error: unknown) => {
+      const load = initialMergeTestData?.length
+        ? onMergeLoad(initialMergeTestData)
+        : loadMergeByTestIds(initialMergeTestIds);
+      load.catch((error: unknown) => {
         log("Auto-load merge error", LogLevel.WARN, error);
       });
     }

@@ -500,19 +500,23 @@ const getSummaryData = ({
   summaryTagFilter: string,
   summaryTagValueFilter: string
 }): ParsedFileEntry | undefined => {
-  let summaryData: ParsedFileEntry | undefined;
-  let summary: string = "";
-  if (filteredData && filteredData.length > 0) {
-    const allDataPoints = [];
-    for (const [, dataPoints] of filteredData) {
-      allDataPoints.push(...dataPoints);
+  if (!filteredData || filteredData.length === 0) { return undefined; }
+  // Merge directly over the nested structure — avoids building an intermediate flat array
+  // and then spreading it as rest args (both O(N) extra allocations).
+  const combinedData = new Map<number, DataPoint>();
+  for (const [, dataPoints] of filteredData) {
+    for (const dp of dataPoints) {
+      const existing = combinedData.get(Number(dp.time));
+      if (existing) {
+        existing.mergeInto(dp);
+      } else {
+        combinedData.set(Number(dp.time), dp.clone());
+      }
     }
-    const dataPoints = mergeAllDataPoints(...allDataPoints);
-    summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
-    const tags = { method: summary, url: "" };
-    summaryData = [tags, dataPoints];
   }
-  return summaryData;
+  const mergedPoints = [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+  const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+  return [{ method: summary, url: "" }, mergedPoints];
 };
 
 // Constants moved outside component to avoid recreation on every render

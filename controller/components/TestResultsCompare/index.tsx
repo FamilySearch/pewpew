@@ -454,7 +454,7 @@ export interface TestResultsCompareProps {
 // Helper Functions
 // ============================================================================
 
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -484,9 +484,10 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
         if (groupedMap.has(label)) {
-          groupedMap.get(label)!.push(...dataPoints);
+          const existing = groupedMap.get(label)!;
+          for (const dp of dataPoints) { existing.push(dp); }
         } else {
-          groupedMap.set(label, [...dataPoints]);
+          groupedMap.set(label, dataPoints.slice());
         }
       }
       return Array.from(groupedMap.entries());
@@ -672,18 +673,21 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   const allEndpoints = useMemo(() => {
     if (mergeEndpoints) {
+      // Accumulate all DataPoints per label first, then merge once per label.
+      // The old pattern (mergeAllDataPoints inside the loop) was O(N²) WASM calls
+      // and leaked intermediate cloned histograms on every iteration.
       const groupedMap = new Map<string, DataPoint[]>();
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
         if (groupedMap.has(label)) {
           const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
+          for (const dp of dataPoints) { existing.push(dp); }
         } else {
-          groupedMap.set(label, dataPoints);
+          groupedMap.set(label, dataPoints.slice());
         }
       }
-      return Array.from(groupedMap.entries());
+      return Array.from(groupedMap.entries())
+        .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
     }
     return displayData.map(([bucketId, dataPoints]) =>
       [`${bucketId.method} ${bucketId.url}`, dataPoints] as [string, DataPoint[]]

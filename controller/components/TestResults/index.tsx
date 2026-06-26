@@ -414,13 +414,14 @@ const groupAndMergeByLabel = (
   for (const [bucketId, dataPoints] of displayData) {
     const label = getLabel(bucketId);
     if (labelGroups.has(label)) {
-      labelGroups.get(label)!.push(...dataPoints);
+      const existing = labelGroups.get(label)!;
+      for (const dp of dataPoints) { existing.push(dp); }
     } else {
-      labelGroups.set(label, [...dataPoints]);
+      labelGroups.set(label, dataPoints.slice());
     }
   }
   return Array.from(labelGroups.entries())
-    .map(([label, allDps]) => [label, mergeAllDataPoints(...allDps)] as [string, DataPoint[]]);
+    .map(([label, allDps]) => [label, mergeAllDataPoints(allDps)] as [string, DataPoint[]]);
 };
 
 const freeGroupedHistograms = (groupedData: [string, DataPoint[]][]) => {
@@ -431,7 +432,7 @@ const freeGroupedHistograms = (groupedData: [string, DataPoint[]][]) => {
   }
 };
 
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -775,13 +776,14 @@ export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, m
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
         if (labelGroups.has(label)) {
-          labelGroups.get(label)!.push(...dataPoints);
+          const existing = labelGroups.get(label)!;
+          for (const dp of dataPoints) { existing.push(dp); }
         } else {
-          labelGroups.set(label, [...dataPoints]);
+          labelGroups.set(label, dataPoints.slice());
         }
       }
       return Array.from(labelGroups.entries())
-        .map(([label, allDps]) => [label, mergeAllDataPoints(...allDps)] as [string, DataPoint[]]);
+        .map(([label, allDps]) => [label, mergeAllDataPoints(allDps)] as [string, DataPoint[]]);
     }
     // Use raw data — create label with all tags
     return displayData.map(([bucketId, dataPoints]) => {

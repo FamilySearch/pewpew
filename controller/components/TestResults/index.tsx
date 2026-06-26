@@ -1581,7 +1581,7 @@ export interface TableProps {
   displayData: ParsedFileEntry[];
 }
 
-export const FinalResultsTable = ({ displayData }: TableProps) => {
+export const FinalResultsTable = React.memo(({ displayData }: TableProps) => {
   const tableData = useMemo(() => {
     const results: any[] = [];
 
@@ -1744,7 +1744,7 @@ export const FinalResultsTable = ({ displayData }: TableProps) => {
     </TableContainer>
     </>
   );
-};
+});
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }

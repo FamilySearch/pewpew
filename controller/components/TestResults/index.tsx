@@ -401,6 +401,12 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
   log("freeHistograms finished", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
 };
 
+export const freeParsedEntries = (data: ParsedFileEntry[] | undefined) => {
+  for (const [, dps] of (data || [])) {
+    for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
+  }
+};
+
 /**
  * Groups displayData by a label function, then merges DataPoints within each group
  * using one mergeAllDataPoints call per group (O(N) references, no intermediate clones).
@@ -972,9 +978,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         // Free the old ones
         freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
         // Free merged data — new base results invalidate the merge
-        for (const [, dps] of (oldState.mergedData || [])) {
-          for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
-        }
+        freeParsedEntries(oldState.mergedData);
 
         const startEndTime: MinMaxTime = minMaxTime(resultsData);
         const { summaryTagFilter, summaryTagValueFilter } = oldState;
@@ -1021,9 +1025,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       setState((oldState: TestResultState) => {
         // Free the old data
         freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
-        for (const [, dps] of (oldState.mergedData || [])) {
-          for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
-        }
+        freeParsedEntries(oldState.mergedData);
         return {
           ...oldState,
           defaultMessage: defaultMessage(),
@@ -1273,17 +1275,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     const merged = mergeResults(allParsed);
 
     // Free the intermediate parsed data from selected tests — mergeResults cloned what it needed
-    for (let i = 1; i < allParsed.length; i++) {
-      for (const [, dps] of allParsed[i]) {
-        for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
-      }
-    }
+    for (let i = 1; i < allParsed.length; i++) { freeParsedEntries(allParsed[i]); }
 
     setState((old) => {
       // Free the previous merged data before replacing it
-      for (const [, dps] of (old.mergedData || [])) {
-        for (const dp of dps) { try { dp.rttHistogram.free(); } catch { } }
-      }
+      freeParsedEntries(old.mergedData);
       return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels };
     });
     // Sync additional testIds (all labels except the current test) to the URL
@@ -1292,9 +1288,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 
   const onClearMerge = useCallback(() => {
     setState((old) => {
-      for (const [, dps] of (old.mergedData || [])) {
-        for (const dp of dps) { try { dp.rttHistogram.free(); } catch { } }
-      }
+      freeParsedEntries(old.mergedData);
       return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [] };
     });
     onMergeTestIdsChangeRef.current?.(undefined);

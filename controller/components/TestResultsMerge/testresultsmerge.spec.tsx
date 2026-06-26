@@ -60,7 +60,8 @@ vi.mock("../TestResults", () => ({
   HostChart: () => <div data-testid="host-chart" />,
   AgentChart: () => <div data-testid="agent-chart" />,
   QuadPanelCharts: () => <div data-testid="quad-panel-charts" />,
-  FinalResultsTable: () => <div data-testid="final-results-table" />
+  FinalResultsTable: () => <div data-testid="final-results-table" />,
+  freeParsedEntries: vi.fn()
 }));
 vi.mock("../Alert", () => ({
   Danger: ({ children }: { children: React.ReactNode }) => (

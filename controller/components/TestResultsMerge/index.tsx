@@ -1,4 +1,4 @@
-import { AgentChart, FinalResultsTable, HostChart, OverviewChart, QuadPanelCharts } from "../TestResults";
+import { AgentChart, FinalResultsTable, HostChart, OverviewChart, QuadPanelCharts, freeParsedEntries } from "../TestResults";
 import { Danger, Warning } from "../Alert";
 import { LogLevel, log } from "../../src/log";
 import { MinMaxTime, minMaxTime, parseResultsData } from "../TestResults/utils";
@@ -81,11 +81,7 @@ export const TestResultsMerge = React.memo(({ fileTexts, filenames }: TestResult
         log("TestResultsMerge merged", LogLevel.DEBUG, { endpointCount: merged.length });
 
         // Free intermediate parsed data — mergeResults cloned what it needed
-        for (const fileData of allParsed) {
-          for (const [, dps] of fileData) {
-            for (const dp of dps) { try { dp.rttHistogram.free(); } catch { } }
-          }
-        }
+        for (const fileData of allParsed) { freeParsedEntries(fileData); }
 
         const times = minMaxTime(merged);
         setStartEndTime(times);

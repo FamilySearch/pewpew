@@ -1,5 +1,9 @@
 import type { Meta, StoryFn } from "@storybook/react";
-import { discoveryData1, discoveryData2, discoveryData3 } from "../TestResults/story";
+import {
+  statsdiscoverywicffamilybeta20200311T194618937 as discoveryData1,
+  statsdiscoverywicffamilybeta20200311T200153210 as discoveryData2,
+  statsdiscoverywicffamilybeta20200311T221932362 as discoveryData3
+} from "../TestResults/storyData";
 import { GlobalStyle } from "../Global";
 import React from "react";
 import { TestResultsMerge } from ".";

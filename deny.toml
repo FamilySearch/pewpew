@@ -16,6 +16,7 @@ version = 2
 yanked = "warn"
 ignore = [
     # "RUSTSEC-2024-0421",
+    "RUSTSEC-2026-0105", # core2 unmaintained, pulled in by memchr, no safe upgrade available
 ]
 
 [licenses]

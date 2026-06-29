@@ -5,8 +5,8 @@ import {
   PewPewProvider,
   PewPewVars
 } from "../../util/yamlwriter";
+import { dump } from "js-yaml";
 import { saveAs } from "file-saver";
-import yaml from "js-yaml";
 
 export interface PewPewYamlFile {
   vars?: Record<string, string>;
@@ -146,7 +146,7 @@ export const createYamlJson = ({ urls, patterns, vars, providers, loggers }: Omi
 export function createYamlString ({ urls, patterns, vars, providers, loggers }: Omit<WriteFileParam, "filename">): string {
   const myYaml: PewPewYamlFile = createYamlJson({ urls, patterns, vars, providers, loggers });
   // This line parses everything into a Yaml format
-  const yamlString = yaml.dump(JSON.parse(JSON.stringify(myYaml)));
+  const yamlString = dump(JSON.parse(JSON.stringify(myYaml)));
 
   // Here we put everything into an array and then filter out all single quotation marks ' from array
   // (This is necessary in order to solve a problem in the yaml.safeDump function that add quotes around things like ${PEAK_LOAD})

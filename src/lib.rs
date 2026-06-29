@@ -781,13 +781,11 @@ fn create_config_watcher(
     debug!("{{\"create_config_watcher spawn_blocking start");
     spawn_blocking(move || {
         debug!("{{\"create_config_watcher spawn_blocking enter");
-        let mut stream_counter = 1;
-        for _ in block_on_stream(stream) {
+        for (stream_counter, _) in (1usize..).zip(block_on_stream(stream)) {
             debug!(
                 "{{\"create_config_watcher block_on_stream: {}",
                 stream_counter
             );
-            stream_counter += 1;
             let modified = match file.metadata() {
                 Ok(m) => match m.modified() {
                     Ok(m) => m,

@@ -1505,10 +1505,8 @@ impl Replace {
 
     fn replace(value: &mut json::Value, needle: &str, replacer: &str) {
         match value {
-            json::Value::String(s) => {
-                if s.contains(needle) {
-                    *s = s.replace(needle, replacer);
-                }
+            json::Value::String(s) if s.contains(needle) => {
+                *s = s.replace(needle, replacer);
             }
             json::Value::Array(a) => {
                 for el in a {

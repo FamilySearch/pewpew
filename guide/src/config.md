@@ -46,5 +46,9 @@ endpoints:
     peak_load: 15hps
 ```
 
-## Har to Yaml Converter
-If you are attempting to load test a specific web page or the resources on a web page, you can use the [Har to Yaml Converter](./results-viewer-react/yaml.html). First you need to create a [Har File](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the page load, then use the [Converter](./results-viewer-react/yaml.html) to generate a Yaml Config file.
+## Yaml Creator
+The [Yaml Creator](./results-viewer-react/yaml.html) provides a UI for generating a Pewpew config file. There are three ways to use it:
+
+- **HAR file** — A HAR file captures all network requests made by your browser during a page load. If you are load testing a specific web page or its resources, [capture a HAR file](https://docs.microsoft.com/en-us/azure/azure-portal/capture-browser-trace) from the page and import it into the Yaml Creator to automatically generate a config file from the recorded requests.
+- **Swagger / OpenAPI file** — Import a [Swagger / OpenAPI file](https://swagger.io/specification/) (2.x or 3.x) to generate a config file from the API specification.
+- **Manual UI** — Build a config file from scratch using the Yaml Creator's form-based interface, with no import file required.

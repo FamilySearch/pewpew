@@ -33,6 +33,7 @@ vi.mock("chart.js", () => {
   }
   const chartFn: any = MockChart;
   chartFn.register = vi.fn();
+  chartFn.getChart = vi.fn(() => null);
   chartFn.defaults = { plugins: { legend: {} } };
   return {
     Chart: chartFn,

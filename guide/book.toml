@@ -1,6 +1,5 @@
 [book]
 authors = []
-multilingual = false
 src = "src"
 
 [output.html]

@@ -9,7 +9,6 @@
  * - Responsive two-column grid layout
  */
 
-import * as XLSX from "xlsx";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { LogLevel, formatError, log } from "../../util/log";
@@ -17,6 +16,7 @@ import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime, par
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
+import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
 
 // ============================================================================
@@ -485,7 +485,7 @@ interface TestResultsCompareState {
  * @param dataPoints - Variable number of DataPoint arrays to merge
  * @returns Merged and sorted DataPoint array
  */
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -498,6 +498,179 @@ const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
   }
 
   return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+};
+
+// ============================================================================
+// Request Count Chart Components
+// ============================================================================
+
+const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEndpoints: boolean }> = ({ displayData, mergeEndpoints }) => {
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) { chart.destroy(); }
+      let endpointData: [string, DataPoint[]][];
+      if (mergeEndpoints) {
+        const grouped = new Map<string, DataPoint[]>();
+        for (const [bucketId, dataPoints] of displayData) {
+          const label = `${bucketId.method} ${bucketId.url}`;
+          if (grouped.has(label)) {
+            const existing = grouped.get(label)!;
+            for (const dp of dataPoints) { existing.push(dp); }
+          } else { grouped.set(label, dataPoints.slice()); }
+        }
+        endpointData = Array.from(grouped.entries());
+      } else {
+        endpointData = displayData.map(([bucketId, dataPoints]) => [`${bucketId.method} ${bucketId.url}`, dataPoints]);
+      }
+      import("../TestResults/charts").then(({ requestCountByEndpoint }) => {
+        const currentChart = requestCountByEndpoint(node, endpointData);
+        setChart(currentChart);
+        setHiddenDatasets(new Set());
+      });
+    }
+  }, [displayData, mergeEndpoints]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
+};
+
+const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displayData }) => {
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) { chart.destroy(); }
+      const grouped = new Map<string, DataPoint[]>();
+      for (const [bucketId, dataPoints] of displayData) {
+        let hostname = bucketId.url;
+        try { hostname = new URL(bucketId.url).hostname; } catch { }
+        if (grouped.has(hostname)) { grouped.get(hostname)!.push(...dataPoints); }
+        else { grouped.set(hostname, [...dataPoints]); }
+      }
+      const hostGroups = Array.from(grouped.entries()) as [string, DataPoint[]][];
+      import("../TestResults/charts").then(({ mergeAgentColors, requestCountByEndpoint }) => {
+        const currentChart = requestCountByEndpoint(node, hostGroups, mergeAgentColors);
+        setChart(currentChart);
+        setHiddenDatasets(new Set());
+      });
+    }
+  }, [displayData]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
+};
+
+const ComparisonRequestCountByFileChart: React.FC<{ displayData: ParsedFileEntry[]; label: string }> = ({ displayData, label }) => {
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (chart) { chart.destroy(); }
+      const timeMap = new Map<number, { time: Date; count: number }>();
+      for (const [, dataPoints] of displayData) {
+        for (const dp of dataPoints) {
+          const t = dp.time.getTime();
+          const count = Number(dp.rttHistogram.getTotalCount());
+          const existing = timeMap.get(t);
+          if (existing) { existing.count += count; }
+          else { timeMap.set(t, { time: new Date(t), count }); }
+        }
+      }
+      const points = Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+      const fileSeries: [string, { time: Date; count: number }[]][] = [[label, points]];
+      import("../TestResults/charts").then(({ requestCountByAgentSeries }) => {
+        const currentChart = requestCountByAgentSeries(node, fileSeries);
+        setChart(currentChart);
+        setHiddenDatasets(new Set());
+      });
+    }
+  }, [displayData, label]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <>
+      <canvas ref={canvasRef} />
+      {chart && chart.data.datasets && (
+        <CUSTOMLEGEND>
+          {chart.data.datasets.map((dataset, index) => (
+            <LEGENDITEM key={index} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LEGENDITEM>
+          ))}
+        </CUSTOMLEGEND>
+      )}
+    </>
+  );
 };
 
 // ============================================================================
@@ -526,13 +699,13 @@ const ComparisonMedianChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -612,13 +785,13 @@ const ComparisonWorst5Chart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -698,13 +871,13 @@ const ComparisonError5xxChart: React.FC<{ displayData: ParsedFileEntry[]; mergeE
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -784,13 +957,13 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
           const label = `${bucketId.method} ${bucketId.url}`;
           if (groupedMap.has(label)) {
             const existing = groupedMap.get(label)!;
-            const merged = mergeAllDataPoints(...existing, ...dataPoints);
-            groupedMap.set(label, merged);
+            for (const dp of dataPoints) { existing.push(dp); }
           } else {
-            groupedMap.set(label, dataPoints);
+            groupedMap.set(label, dataPoints.slice());
           }
         }
-        endpointData = Array.from(groupedMap.entries());
+        endpointData = Array.from(groupedMap.entries())
+          .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
       } else {
         endpointData = displayData.map(([bucketId, dataPoints]) => {
           const label = `${bucketId.method} ${bucketId.url}`;
@@ -975,7 +1148,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
     return results;
   }, [displayData]);
 
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = useCallback(async () => {
     // Prepare data for Excel export
     const excelData = tableData.map(row => ({
       Method: row.method,
@@ -994,17 +1167,9 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       Time: new Date(row.time).toLocaleString()
     }));
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, fileLabel);
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
     const filename = `${fileLabel.toLowerCase().replace(/\s/g, "-")}-${timestamp}.xlsx`;
-
-    // Download file
-    XLSX.writeFile(workbook, filename);
+    await exportResultsToExcel(excelData, filename, fileLabel);
   }, [tableData, fileLabel]);
 
   return (
@@ -1435,6 +1600,45 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = React.memo(
 
       {filteredBaselineData && filteredComparisonData && (
         <>
+          <div id="compare-request-count-charts">
+            <SectionHeadingH1>
+              Request Count Overview
+              <a href="#compare-request-count-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-request-count-charts")}>#</a>
+            </SectionHeadingH1>
+          </div>
+          <COMPARISONCHARTSGRID>
+            <CHARTCOLUMN>
+              <H2>{baselineLabel}</H2>
+              <QUADPANEL>
+                <h3>Request Count by Endpoint</h3>
+                <ComparisonRequestCountByEndpointChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
+              </QUADPANEL>
+              <QUADPANEL>
+                <h3>Request Count by Host</h3>
+                <ComparisonRequestCountByHostChart displayData={filteredBaselineData} />
+              </QUADPANEL>
+              <QUADPANEL>
+                <h3>Request Count by File</h3>
+                <ComparisonRequestCountByFileChart displayData={filteredBaselineData} label={baselineLabel} />
+              </QUADPANEL>
+            </CHARTCOLUMN>
+            <CHARTCOLUMN>
+              <H2>{comparisonLabel}</H2>
+              <QUADPANEL>
+                <h3>Request Count by Endpoint</h3>
+                <ComparisonRequestCountByEndpointChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
+              </QUADPANEL>
+              <QUADPANEL>
+                <h3>Request Count by Host</h3>
+                <ComparisonRequestCountByHostChart displayData={filteredComparisonData} />
+              </QUADPANEL>
+              <QUADPANEL>
+                <h3>Request Count by File</h3>
+                <ComparisonRequestCountByFileChart displayData={filteredComparisonData} label={comparisonLabel} />
+              </QUADPANEL>
+            </CHARTCOLUMN>
+          </COMPARISONCHARTSGRID>
+
           <div id="compare-overview-charts">
             <SectionHeadingH1>
               Performance &amp; Error Metrics Comparison

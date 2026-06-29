@@ -108,8 +108,8 @@ impl Config {
         let mut provider_files = self
             .0
             .providers
-            .iter()
-            .filter_map(|(_, v)| {
+            .values()
+            .filter_map(|v| {
                 if let Provider::File(f) = v {
                     Some(f.path.as_str().into())
                 } else {

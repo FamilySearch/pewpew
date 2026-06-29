@@ -810,9 +810,16 @@ const OverviewChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
           freeMergedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         log("Overview chart endpoints", LogLevel.DEBUG, {
           originalCount: displayData.length, groupedCount: endpointData.length,
           labels: endpointData.map(([label]) => label)
@@ -932,9 +939,16 @@ const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps
           freeMergedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         import("./charts").then(({ medianDurationChart }) => {
           const currentChart = medianDurationChart(node, endpointData);
           setChart(currentChart);
@@ -1005,9 +1019,16 @@ const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps)
           freeMergedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         import("./charts").then(({ worst5PercentChart }) => {
           const currentChart = worst5PercentChart(node, endpointData);
           setChart(currentChart);
@@ -1078,9 +1099,16 @@ const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
           freeMergedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         import("./charts").then(({ error5xxChart }) => {
           const currentChart = error5xxChart(node, endpointData);
           setChart(currentChart);
@@ -1151,9 +1179,16 @@ const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => 
           freeMergedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         import("./charts").then(({ allErrorsChart }) => {
           const currentChart = allErrorsChart(node, endpointData);
           setChart(currentChart);

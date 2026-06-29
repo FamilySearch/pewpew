@@ -567,7 +567,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenD
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LegendItem
-              key={dataset.label || index}
+              key={`${dataset.label}-${index}`}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => onToggleDataset(index)}
             >
@@ -601,9 +601,16 @@ export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, merge
           freeGroupedHistograms(mergedData);
         });
       } else {
-        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) =>
-          [`${bucketId.method} ${bucketId.url}`, dataPoints]
-        );
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
         import("./charts").then(({ requestCountByEndpoint }) => {
           setOverviewChart(requestCountByEndpoint(node, endpointData));
         });
@@ -742,7 +749,7 @@ const FullWidthChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LegendItem
-              key={dataset.label || index}
+              key={`${dataset.label}-${index}`}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => onToggleDataset(index)}
             >

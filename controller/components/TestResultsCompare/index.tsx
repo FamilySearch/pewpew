@@ -527,7 +527,7 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
-            <LegendItem key={dataset.label} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
               <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
               <span>{dataset.label}</span>
             </LegendItem>
@@ -591,7 +591,7 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
-            <LegendItem key={dataset.label} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
               <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
               <span>{dataset.label}</span>
             </LegendItem>
@@ -645,7 +645,7 @@ const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; co
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
-            <LegendItem key={dataset.label} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
               <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
               <span>{dataset.label}</span>
             </LegendItem>
@@ -753,7 +753,7 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LegendItem
-              key={dataset.label}
+              key={`${dataset.label}-${index}`}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => toggleDataset(index)}
             >

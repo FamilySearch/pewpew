@@ -102,6 +102,7 @@ export const mergeAgentColors = [
  * when data is pre-grouped by the caller.
  */
 export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][], colorPalette: string[] = colors): Chart {
+  Chart.getChart(el)?.destroy();
   const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     const data = dataPoints.map(dp => ({
       x: dp.time,
@@ -178,6 +179,7 @@ export function requestCountByAgentSeries (
   agentSeries: [string, { time: Date; count: number }[]][],
   colorPalette: string[] = mergeAgentColors
 ): Chart {
+  Chart.getChart(el)?.destroy();
   const datasets = agentSeries.map(([label, points], index) => {
     const borderColor = colorPalette[index % colorPalette.length];
     const backgroundColor = borderColor + "DD";
@@ -235,6 +237,7 @@ export function requestCountByAgentSeries (
 }
 
 export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
+  Chart.getChart(el)?.destroy();
   const MICROS_TO_MS = 1000;
   const datasets = [
     "avg",
@@ -413,6 +416,7 @@ class ChartDataSets {
 }
 
 export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
+  Chart.getChart(el)?.destroy();
   const chartDataSets = new ChartDataSets();
   for (const dp of dataPoints) {
     const x = dp.time;
@@ -507,6 +511,7 @@ const afterBuildTicks = (chart: any) => {
 
 // Quad Panel Charts for polished dashboard
 export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  Chart.getChart(el)?.destroy();
   const MICROS_TO_MS = 1000;
   const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     const data = dataPoints.map(dp => ({
@@ -607,6 +612,7 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
 }
 
 export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  Chart.getChart(el)?.destroy();
   const MICROS_TO_MS = 1000;
   const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     const data = dataPoints.map(dp => ({
@@ -707,6 +713,7 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
 }
 
 export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  Chart.getChart(el)?.destroy();
   // Build datasets - one for each status code + endpoint combination
   const datasets: any[] = [];
   let colorIndex = 0;
@@ -823,6 +830,7 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
 }
 
 export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, DataPoint[]][]): Chart {
+  Chart.getChart(el)?.destroy();
   // Build datasets - one for each status code + endpoint combination
   const datasets: any[] = [];
   let colorIndex = 0;

@@ -1,5 +1,6 @@
 import type { Meta, StoryFn } from "@storybook/react";
 import {
+  deepZoomMultiTagResult,
   statsdiscoverywicffamilybeta20200311T194618937,
   statsdiscoverywicffamilybeta20200311T200153210,
   statsdiscoverywicffamilybeta20200311T221932362
@@ -61,3 +62,14 @@ export const Discovery3Result: StoryFn = () => (
     <TestResults resultsText={statsdiscoverywicffamilybeta20200311T221932362} />
   </React.Fragment>
 );
+
+export const DeepZoomMultiTagResult: StoryFn = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults resultsText={deepZoomMultiTagResult} />
+  </React.Fragment>
+);
+
+DeepZoomMultiTagResult.story = {
+  name: "DeepZoom Multi-Tag Result (same URL, different tags)"
+};

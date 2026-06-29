@@ -1,6 +1,6 @@
 // Add version banner to top of every page
 (function() {
-  const content = document.querySelector('#content main');
+  const content = document.querySelector('#mdbook-content main') || document.querySelector('#content main');
   if (content) {
     // Calculate path to preview/ directory from current location
     // Handles both /pewpew/introduction.html and /introduction.html cases

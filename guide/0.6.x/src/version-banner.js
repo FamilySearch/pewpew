@@ -1,6 +1,6 @@
 // Add version banner to top of every page
 (function() {
-  const content = document.querySelector('#content main');
+  const content = document.querySelector('#mdbook-content main') || document.querySelector('#content main');
   if (content) {
     // Get the pathname and extract just the part after any base path
     // This handles cases like /pewpew/preview/foo.html or just /preview/foo.html

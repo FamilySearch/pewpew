@@ -6,10 +6,10 @@ import {
   PewPewVars,
   PewPewVersion
 } from "../../util/yamlwriter";
+import { dump } from "js-yaml";
 import { load_test_yaml_from_js as loadTestYamlFromJs } from "@fs/config-gen";
 import { log } from "../../util/log";
 import { saveAs } from "file-saver";
-import yaml from "js-yaml";
 
 
 export interface PewPewYamlFile {
@@ -169,11 +169,11 @@ export function createYamlString ({ urls, patterns, vars, providers, loggers, ve
   // For 0.6.x, use config-gen WASM (supports expression syntax)
   if (version === "0.5.x") {
     log("Using js-yaml for 0.5.x");
-    return yaml.dump(myYaml, {
+    return dump(myYaml, {
       indent: 2,
       lineWidth: -1, // Don't wrap lines
       noRefs: true,  // Don't use anchors/references
-      quotingType: "\"",
+      // quotingType: "\"",
       forceQuotes: false
     });
   } else {

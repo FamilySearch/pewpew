@@ -47,6 +47,24 @@ const discoveryRun2: TestData = {
   status: TestStatus.Finished
 };
 
+// Concurrent agent versions — timestamps shifted so all three runs overlap
+// (same shifts used in TestResultsMerge/story.tsx)
+const agentRun2Concurrent: TestData = {
+  testId: "discoverywicffamilybeta20200311T200153210",
+  s3Folder: "discoverywicffamilybeta/20200311T200153210",
+  resultsFileLocation: ["test-results/stats-discoverywicffamilybeta20200311T200153210-agent.json"],
+  startTime: 1583956035000,
+  status: TestStatus.Finished
+};
+
+const agentRun3Concurrent: TestData = {
+  testId: "discoverywicffamilybeta20200311T221932362",
+  s3Folder: "discoverywicffamilybeta/20200311T221932362",
+  resultsFileLocation: ["test-results/stats-discoverywicffamilybeta20200311T221932362-agent.json"],
+  startTime: 1583956035000,
+  status: TestStatus.Finished
+};
+
 const multipleResults: TestData = {
   testId: "discoverywicffamilybeta20200311T221932362",
   s3Folder: "discoverywicffamilybeta/20200311T221932362",
@@ -116,6 +134,30 @@ export const _1ResultSelectedWithCompare = () => (
       initialResultsIndex={0}
       initialCompareTestId={discoveryRun1.testId}
       initialCompareTestData={discoveryRun1}
+    />
+  </React.Fragment>
+);
+
+export const _1ResultSelectedWith1Merge = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults
+      testData={discoveryRun1}
+      initialResultsIndex={0}
+      initialMergeTestIds={[agentRun2Concurrent.testId]}
+      initialMergeTestData={[agentRun2Concurrent]}
+    />
+  </React.Fragment>
+);
+
+export const _1ResultSelectedWith2Merge = () => (
+  <React.Fragment>
+    <GlobalStyle />
+    <TestResults
+      testData={discoveryRun1}
+      initialResultsIndex={0}
+      initialMergeTestIds={[agentRun2Concurrent.testId, agentRun3Concurrent.testId]}
+      initialMergeTestData={[agentRun2Concurrent, agentRun3Concurrent]}
     />
   </React.Fragment>
 );

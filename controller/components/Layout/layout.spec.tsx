@@ -23,7 +23,7 @@ describe("Layout Component", () => {
     expect(screen.getByText("Hello World")).toBeInTheDocument();
   });
 
-  it("renders nav links for New Test, Test History, Calendar, Yaml Writer", () => {
+  it("renders nav links for New Test, Test History, Calendar, Yaml Creator", () => {
     render(
       <Layout authPermission={AuthPermission.User}>
         <span>content</span>
@@ -33,7 +33,7 @@ describe("Layout Component", () => {
     expect(screen.getByTestId("nav-test-history")).toBeInTheDocument();
     expect(screen.getByTestId("nav-calendar")).toBeInTheDocument();
     expect(screen.getByTestId("nav-logout")).toBeInTheDocument();
-    expect(screen.getByText("Yaml Writer")).toBeInTheDocument();
+    expect(screen.getByText("Yaml Creator")).toBeInTheDocument();
   });
 
   it("hides admin link when authPermission is not Admin", () => {

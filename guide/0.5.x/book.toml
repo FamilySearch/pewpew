@@ -1,9 +1,7 @@
 [book]
 title = "Pewpew Guide"
 authors = []
-multilingual = false
 src = "src"
-build-dir = "book"
 
 [output.html]
 no-section-label = true

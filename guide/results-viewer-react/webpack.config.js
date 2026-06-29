@@ -12,6 +12,7 @@ const htmlWebpackPlugins = pages.map((page) => new HTMLWebpackPlugin({
   inject: "head",
   filename: `${page}.html`,
   chunks: [page],
+  favicon: "./src/favicon.ico",
 }))
 
 module.exports = {
@@ -44,6 +45,9 @@ module.exports = {
       path: require.resolve('path-browserify'),
       url: false,
     },
+  },
+  watchOptions: {
+    ignored: /node_modules/,
   },
   plugins: [
     ...htmlWebpackPlugins,

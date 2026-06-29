@@ -61,10 +61,10 @@ interface TestInfoStorybookProps extends TestInfoProps {
   error?: any;
 }
 
-/** Determines if a user can download test files based on their permissions and ownership
- * If the user is an admin, they can download any test files. If the user is a read-only user,
- * they can only download their own test files. If the user is a regular user, they cannot
- * download any test files and the download button is hidden.
+/** Determines if a user can download test files based on their permissions and ownership.
+ * Admins can download any test files. Non-admin users (User or ReadOnly) can download
+ * test files they own (when userId matches testDataUserId). Users without at least
+ * ReadOnly permission cannot download any test files.
  * @param authPermission The user's authentication permission level.
  * @param userId The ID of the user making the request.
  * @param testDataUserId The ID of the user who owns the test data.

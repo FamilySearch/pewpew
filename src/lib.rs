@@ -823,7 +823,7 @@ fn create_config_watcher(
     debug!("{{\"create_config_watcher spawn_blocking start");
     spawn_blocking(move || {
         debug!("{{\"create_config_watcher spawn_blocking enter");
-        for (stream_counter, _) in (1..).zip(block_on_stream(stream)) {
+        for (stream_counter, _) in (1usize..).zip(block_on_stream(stream)) {
             debug!(
                 "{{\"create_config_watcher block_on_stream: {}",
                 stream_counter

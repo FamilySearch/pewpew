@@ -4,6 +4,7 @@ import { GlobalStyle, ScreenWidthDiv } from "./components/Global";
 import { LogLevel, log } from "./util/log";
 import { TestResults } from "./components/TestResults";
 import { TestResultsCompare } from "./components/TestResultsCompare";
+import { TestResultsMerge } from "./components/TestResultsMerge";
 import styled from "styled-components";
 
 const DropzoneDiv = styled(ScreenWidthDiv)`
@@ -55,6 +56,42 @@ const ComparisonContainer = styled.div`
   margin: 2em 0;
 `;
 
+const MergeDropzoneWrapper = styled.div`
+  margin: 2em 0;
+`;
+
+const MergeFileList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 1em 0;
+  text-align: left;
+`;
+
+const MergeFileItem = styled.li`
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding: 0.5em;
+  background-color: rgba(40, 167, 69, 0.1);
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  margin-bottom: 0.5em;
+  color: rgb(242, 241, 239);
+`;
+
+const RemoveButton = styled.button`
+  background: none;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.1em 0.5em;
+  margin-left: auto;
+  &:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+  }
+`;
+
 const ComparisonDropzone = styled.div`
   flex: 1;
   padding: 2em;
@@ -82,13 +119,15 @@ interface FileData {
 }
 
 interface ResultsViewierState {
-  mode: "single" | "compare";
+  mode: "single" | "compare" | "merge";
   // Single mode
   filename: string | undefined;
   fileContents: string | undefined;
   // Compare mode
   baselineFile: FileData | undefined;
   comparisonFile: FileData | undefined;
+  // Merge mode
+  mergeFiles: FileData[];
   error: string | undefined;
 }
 
@@ -99,19 +138,21 @@ export const ResultsViewer = () => {
     fileContents: undefined,
     baselineFile: undefined,
     comparisonFile: undefined,
+    mergeFiles: [],
     error: undefined
   };
   const [state, setState] = React.useState(defaultState);
   const updateState = (newState: Partial<ResultsViewierState>) =>
     setState((oldState: ResultsViewierState): ResultsViewierState => ({ ...oldState, ...newState }));
 
-  const setMode = (mode: "single" | "compare") => {
+  const setMode = (mode: "single" | "compare" | "merge") => {
     updateState({
       mode,
       filename: undefined,
       fileContents: undefined,
       baselineFile: undefined,
       comparisonFile: undefined,
+      mergeFiles: [],
       error: undefined
     });
   };
@@ -179,6 +220,54 @@ export const ResultsViewer = () => {
       }
     }
   };
+  const onDropMergeFiles = async (filelist: File[]) => {
+    updateState({ error: undefined });
+    log("merge filelist", LogLevel.DEBUG, filelist);
+
+    if (!filelist || filelist.length === 0) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      filelist.map(async (file) => {
+        const contents = await readFile(file);
+        if (!contents) {
+          throw new Error(`${file.name} was empty or unreadable`);
+        }
+        return { filename: file.name, contents } as FileData;
+      })
+    );
+
+    const succeeded: FileData[] = [];
+    const errors: string[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        succeeded.push(result.value);
+      } else {
+        errors.push(`${result.reason}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      updateState({ error: errors.join("; ") });
+    }
+
+    if (succeeded.length > 0) {
+      setState((oldState) => ({
+        ...oldState,
+        mergeFiles: [...oldState.mergeFiles, ...succeeded]
+      }));
+      log("merge files loaded", LogLevel.DEBUG, { count: succeeded.length });
+    }
+  };
+
+  const removeMergeFile = (index: number) => {
+    setState((oldState) => ({
+      ...oldState,
+      mergeFiles: oldState.mergeFiles.filter((_, i) => i !== index)
+    }));
+  };
+
   const renderSingleMode = () => {
     const DivSwap = state.fileContents ? ScreenWidthDiv : DropzoneDiv;
 
@@ -273,6 +362,57 @@ export const ResultsViewer = () => {
     );
   };
 
+  const renderMergeMode = () => {
+    const { mergeFiles } = state;
+    const hasEnoughFiles = mergeFiles.length >= 2;
+
+    return (
+      <>
+        <h1>Merge Results</h1>
+        <p>Upload results files from multiple agents to merge them into a single view.</p>
+
+        <MergeDropzoneWrapper>
+          {mergeFiles.length > 0 && (
+            <MergeFileList>
+              {mergeFiles.map((f, i) => (
+                <MergeFileItem key={`${f.filename}-${i}`}>
+                  <span>✓ {f.filename}</span>
+                  <RemoveButton onClick={() => removeMergeFile(i)}>Remove</RemoveButton>
+                </MergeFileItem>
+              ))}
+            </MergeFileList>
+          )}
+
+          <Dropzone onDrop={onDropMergeFiles} multiple={true}>
+            {({ getRootProps, getInputProps }: {
+              getRootProps: (props?: DropzoneRootProps) => DropzoneRootProps;
+              getInputProps: (props?: DropzoneInputProps) => DropzoneInputProps;
+            }) => (
+              <ComparisonDropzone {...getRootProps()}>
+                <input {...getInputProps()} />
+                {mergeFiles.length === 0
+                  ? <p>Drop results files here, or click to select (select multiple at once or drop repeatedly)</p>
+                  : <p>Drop more files to add them to the merge ({mergeFiles.length} file{mergeFiles.length !== 1 ? "s" : ""} loaded)</p>
+                }
+              </ComparisonDropzone>
+            )}
+          </Dropzone>
+        </MergeDropzoneWrapper>
+
+        {hasEnoughFiles && (
+          <TestResultsMerge
+            fileTexts={mergeFiles.map((f) => f.contents)}
+            filenames={mergeFiles.map((f) => f.filename)}
+          />
+        )}
+
+        {!hasEnoughFiles && mergeFiles.length === 1 && (
+          <p>Upload at least one more file to merge.</p>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
       <GlobalStyle />
@@ -290,11 +430,19 @@ export const ResultsViewer = () => {
         >
           Compare Results
         </ModeButton>
+        <ModeButton
+          $active={state.mode === "merge"}
+          onClick={() => setMode("merge")}
+        >
+          Merge Results
+        </ModeButton>
       </ModeToggle>
 
       {state.error && <h1>Error: {state.error}</h1>}
 
-      {state.mode === "single" ? renderSingleMode() : renderCompareMode()}
+      {state.mode === "single" && renderSingleMode()}
+      {state.mode === "compare" && renderCompareMode()}
+      {state.mode === "merge" && renderMergeMode()}
     </>
   );
 };

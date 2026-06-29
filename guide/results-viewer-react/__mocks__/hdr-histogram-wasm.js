@@ -1,4 +1,54 @@
 // Mock HDR Histogram for testing
+
+export class HDRHistogram {
+  constructor(_base64, _logLevel) {
+    this._count = BigInt(0);
+  }
+
+  getTotalCount() {
+    return this._count;
+  }
+
+  getValueAtPercentile(_percentile) {
+    return BigInt(0);
+  }
+
+  getMinNonZeroValue() {
+    return BigInt(0);
+  }
+
+  getMaxValue() {
+    return BigInt(0);
+  }
+
+  getMean() {
+    return 0;
+  }
+
+  getStdDeviation() {
+    return 0;
+  }
+
+  add(other) {
+    this._count += other._count;
+  }
+
+  clone() {
+    const cloned = new HDRHistogram();
+    cloned._count = this._count;
+    return cloned;
+  }
+
+  toBase64() {
+    return "HIST_MOCK_BASE64";
+  }
+
+  free() {
+    // No-op for mock
+  }
+}
+
+// Legacy export kept for backwards compatibility with existing tests
 export class Histogram {
   constructor() {
     this.values = [];
@@ -9,7 +59,7 @@ export class Histogram {
   }
 
   getValueAtPercentile(percentile) {
-    if (this.values.length === 0) return 0;
+    if (this.values.length === 0) { return 0; }
     const index = Math.floor((percentile / 100) * this.values.length);
     return this.values[index] || 0;
   }
@@ -23,7 +73,7 @@ export class Histogram {
   }
 
   getMean() {
-    if (this.values.length === 0) return 0;
+    if (this.values.length === 0) { return 0; }
     return this.values.reduce((a, b) => a + b, 0) / this.values.length;
   }
 
@@ -45,5 +95,6 @@ export class Histogram {
 }
 
 export default {
+  HDRHistogram,
   Histogram
 };

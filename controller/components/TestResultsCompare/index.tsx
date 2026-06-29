@@ -454,7 +454,7 @@ export interface TestResultsCompareProps {
 // Helper Functions
 // ============================================================================
 
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -467,6 +467,193 @@ const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
   }
 
   return [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+};
+
+// ============================================================================
+// Request Count Chart Components
+// ============================================================================
+
+const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEndpoints: boolean }> = ({ displayData, mergeEndpoints }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const allEndpoints = useMemo((): [string, DataPoint[]][] => {
+    if (mergeEndpoints) {
+      const groupedMap = new Map<string, DataPoint[]>();
+      for (const [bucketId, dataPoints] of displayData) {
+        const label = `${bucketId.method} ${bucketId.url}`;
+        if (groupedMap.has(label)) {
+          const existing = groupedMap.get(label)!;
+          for (const dp of dataPoints) { existing.push(dp); }
+        } else {
+          groupedMap.set(label, dataPoints.slice());
+        }
+      }
+      return Array.from(groupedMap.entries());
+    }
+    return displayData.map(([bucketId, dataPoints]) => [`${bucketId.method} ${bucketId.url}`, dataPoints]);
+  }, [displayData, mergeEndpoints]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || allEndpoints.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ requestCountByEndpoint }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByEndpoint(node, allEndpoints);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [allEndpoints]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
+};
+
+const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displayData }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const hostGroups = useMemo((): [string, DataPoint[]][] => {
+    const grouped = new Map<string, DataPoint[]>();
+    for (const [bucketId, dataPoints] of displayData) {
+      let hostname = bucketId.url;
+      try {
+        hostname = new URL(bucketId.url).hostname;
+      } catch { }
+      if (grouped.has(hostname)) {
+        grouped.get(hostname)!.push(...dataPoints);
+      } else {
+        grouped.set(hostname, [...dataPoints]);
+      }
+    }
+    return Array.from(grouped.entries());
+  }, [displayData]);
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || hostGroups.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ mergeAgentColors, requestCountByEndpoint }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByEndpoint(node, hostGroups, mergeAgentColors);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [hostGroups]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
+};
+
+const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; count: number }[]; label: string }> = ({ timeSeries, label }) => {
+  const canvasNodeRef = useRef<HTMLCanvasElement | null>(null);
+  const [chart, setChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  // timeSeries is pre-computed by the parent (no WASM calls here)
+  const fileSeries = useMemo((): [string, { time: Date; count: number }[]][] =>
+    [[label, timeSeries]],
+    [label, timeSeries]
+  );
+
+  useEffect(() => {
+    const node = canvasNodeRef.current;
+    if (!node || fileSeries.length === 0) { return; }
+    let currentChart: Chart;
+    import("../TestResults/charts").then(({ requestCountByAgentSeries }) => {
+      if (chart) { chart.destroy(); }
+      currentChart = requestCountByAgentSeries(node, fileSeries);
+      setChart(currentChart);
+      setHiddenDatasets(new Set());
+    });
+    return () => { if (currentChart) { currentChart.destroy(); } };
+  }, [fileSeries]);
+
+  const toggleDataset = (index: number) => {
+    if (chart) {
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = !meta.hidden;
+      chart.update();
+      setHiddenDatasets(prev => {
+        const next = new Set(prev);
+        if (meta.hidden) { next.add(index); } else { next.delete(index); }
+        return next;
+      });
+    }
+  };
+
+  return (
+    <QuadPanel>
+      <canvas ref={canvasNodeRef} />
+      {chart && chart.data.datasets && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem key={`${dataset.label}-${index}`} $hidden={hiddenDatasets.has(index)} onClick={() => toggleDataset(index)}>
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor as string }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </QuadPanel>
+  );
 };
 
 // ============================================================================
@@ -486,18 +673,21 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   const allEndpoints = useMemo(() => {
     if (mergeEndpoints) {
+      // Accumulate all DataPoints per label first, then merge once per label.
+      // The old pattern (mergeAllDataPoints inside the loop) was O(N²) WASM calls
+      // and leaked intermediate cloned histograms on every iteration.
       const groupedMap = new Map<string, DataPoint[]>();
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
         if (groupedMap.has(label)) {
           const existing = groupedMap.get(label)!;
-          const merged = mergeAllDataPoints(...existing, ...dataPoints);
-          groupedMap.set(label, merged);
+          for (const dp of dataPoints) { existing.push(dp); }
         } else {
-          groupedMap.set(label, dataPoints);
+          groupedMap.set(label, dataPoints.slice());
         }
       }
-      return Array.from(groupedMap.entries());
+      return Array.from(groupedMap.entries())
+        .map(([label, dps]) => [label, mergeAllDataPoints(dps)] as [string, DataPoint[]]);
     }
     return displayData.map(([bucketId, dataPoints]) =>
       [`${bucketId.method} ${bucketId.url}`, dataPoints] as [string, DataPoint[]]
@@ -563,7 +753,7 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LegendItem
-              key={index}
+              key={`${dataset.label}-${index}`}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => toggleDataset(index)}
             >
@@ -658,6 +848,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
       const tagsString = JSON.stringify(otherTags);
 
       results.push({
+        rowKey: `${bucketId.method}-${hostname}-${path}-${queryString}-${tagsString}`,
         method: bucketId.method,
         hostname,
         path,
@@ -850,16 +1041,16 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
           </tr>
         </thead>
         <tbody>
-          {tableData.map((row, idx) => (
-            <DataTr key={idx}>
+          {tableData.map((row) => (
+            <DataTr key={row.rowKey}>
               {visibleColumns.method && <DataTd>{row.method}</DataTd>}
               {visibleColumns.hostname && <DataTd title={row.hostname}>{row.hostname}</DataTd>}
               {visibleColumns.path && <DataTd title={row.path}>{row.path}</DataTd>}
               {visibleColumns.queryString && <DataTd>{row.queryString}</DataTd>}
               {visibleColumns.tags && <DataTd title={row.tags}>{row.tags}</DataTd>}
               {visibleColumns.statusCount && <DataTd>
-                {row.statusCounts.map((sc: any, i: number) => (
-                  <div key={i}>{sc.status}: {sc.count.toLocaleString()}</div>
+                {row.statusCounts.map((sc: any) => (
+                  <div key={sc.status}>{sc.status}: {sc.count.toLocaleString()}</div>
                 ))}
               </DataTd>}
               {visibleColumns.callCount && <DataTd>{row.callCount.toLocaleString()}</DataTd>}
@@ -983,6 +1174,39 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [comparisonData, methodFilter]);
 
+  // Pre-compute request-count time series for each side so ComparisonRequestCountByFileChart
+  // receives plain data and never needs to call getTotalCount() (a WASM boundary crossing)
+  // during its own useMemo.
+  const baselineTimeSeries = useMemo((): { time: Date; count: number }[] => {
+    if (!filteredBaselineData) { return []; }
+    const timeMap = new Map<number, { time: Date; count: number }>();
+    for (const [, dataPoints] of filteredBaselineData) {
+      for (const dp of dataPoints) {
+        const t = dp.time.getTime();
+        const count = Number(dp.rttHistogram.getTotalCount());
+        const existing = timeMap.get(t);
+        if (existing) { existing.count += count; }
+        else { timeMap.set(t, { time: new Date(t), count }); }
+      }
+    }
+    return Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+  }, [filteredBaselineData]);
+
+  const comparisonTimeSeries = useMemo((): { time: Date; count: number }[] => {
+    if (!filteredComparisonData) { return []; }
+    const timeMap = new Map<number, { time: Date; count: number }>();
+    for (const [, dataPoints] of filteredComparisonData) {
+      for (const dp of dataPoints) {
+        const t = dp.time.getTime();
+        const count = Number(dp.rttHistogram.getTotalCount());
+        const existing = timeMap.get(t);
+        if (existing) { existing.count += count; }
+        else { timeMap.set(t, { time: new Date(t), count }); }
+      }
+    }
+    return Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+  }, [filteredComparisonData]);
+
   // Empty state
   if (!baselineData || baselineData.length === 0 || !comparisonData || comparisonData.length === 0) {
     return (
@@ -1030,6 +1254,55 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           </label>
         </ToggleContainer>
       </FilterContainer>
+
+      <div id="compare-request-count-charts">
+        <SectionHeading>
+          Request Count Overview
+          <a href="#compare-request-count-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "compare-request-count-charts")}>#</a>
+        </SectionHeading>
+      </div>
+      <ComparisonChartsGrid>
+        <ChartColumn>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by Endpoint
+            </h3>
+            <ComparisonRequestCountByEndpointChart displayData={filteredBaselineData} mergeEndpoints={mergeEndpoints} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by Host
+            </h3>
+            <ComparisonRequestCountByHostChart displayData={filteredBaselineData} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {baselineLabel} - Request Count by File
+            </h3>
+            <ComparisonRequestCountByFileChart timeSeries={baselineTimeSeries} label={baselineLabel} />
+          </div>
+        </ChartColumn>
+        <ChartColumn>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by Endpoint
+            </h3>
+            <ComparisonRequestCountByEndpointChart displayData={filteredComparisonData} mergeEndpoints={mergeEndpoints} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by Host
+            </h3>
+            <ComparisonRequestCountByHostChart displayData={filteredComparisonData} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>
+              {comparisonLabel} - Request Count by File
+            </h3>
+            <ComparisonRequestCountByFileChart timeSeries={comparisonTimeSeries} label={comparisonLabel} />
+          </div>
+        </ChartColumn>
+      </ComparisonChartsGrid>
 
       <div id="compare-overview-charts">
         <SectionHeading>

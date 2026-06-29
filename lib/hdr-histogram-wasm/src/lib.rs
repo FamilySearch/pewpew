@@ -1,6 +1,7 @@
 #![allow(clippy::all)]
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
-use hdrhistogram::{serialization::Deserializer, Histogram};
+use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
+use hdrhistogram::Histogram;
 use log::LevelFilter;
 use std::str::FromStr;
 use wasm_bindgen::{prelude::wasm_bindgen, throw_str, JsValue, UnwrapThrowExt};
@@ -97,6 +98,16 @@ impl HDRHistogram {
     #[wasm_bindgen(js_name = getMaxValue)]
     pub fn max(&self) -> u64 {
         self.0.max()
+    }
+
+    #[wasm_bindgen(js_name = toBase64)]
+    pub fn to_base64(&self) -> Result<String, JsValue> {
+        let mut serializer = V2Serializer::new();
+        let mut buf: Vec<u8> = Vec::new();
+        serializer
+            .serialize(&self.0, &mut buf)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(STANDARD_NO_PAD.encode(&buf))
     }
 
     #[wasm_bindgen]

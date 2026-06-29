@@ -15,6 +15,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 yanked = "warn"
 ignore = [
+    "RUSTSEC-2026-0105", # core2 unmaintained, pulled in by memchr, no safe upgrade available
     "RUSTSEC-2024-0388", # Need to find replacement for derivative
     "RUSTSEC-2024-0436", # Need to find replacement for paste
 ]

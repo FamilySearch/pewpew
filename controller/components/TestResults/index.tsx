@@ -36,8 +36,10 @@ import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
+import { MergeSearchModal } from "./MergeSearchModal";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import { mergeResults } from "./merge";
 import styled from "styled-components";
 
 const TimeTaken = styled.div`
@@ -79,6 +81,25 @@ const QuadPanel = styled.div`
   canvas {
     width: 100% !important;
     height: 270px !important;
+  }
+`;
+
+const FullWidthPanel = styled.div`
+  position: relative;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  padding: 1em;
+  margin-bottom: 1.5em;
+
+  h3 {
+    margin: 0 0 0.5em 0;
+    font-size: 14px;
+    color: #ccc;
+  }
+
+  canvas {
+    width: 100% !important;
+    height: 260px !important;
   }
 `;
 
@@ -302,6 +323,16 @@ export interface TestResultProps {
   initialCompareTestData?: TestData;
   /** Called when the compare test selection changes (undefined = cleared) */
   onCompareTestIdChange?: (testId: string | undefined) => void;
+  /** Test IDs to auto-merge on mount (from URL query param) */
+  initialMergeTestIds?: string[];
+  /** Pre-fetched TestData for each merge target. Skips API fetches when set (used in Storybook). */
+  initialMergeTestData?: TestData[];
+  /** Called when merged test IDs change — used to sync URL query (undefined = cleared) */
+  onMergeTestIdsChange?: (testIds: string[] | undefined) => void;
+  /** Initial value for the "Merge endpoints with different tags" checkbox */
+  initialMergeEndpoints?: boolean;
+  /** Called when the merge-endpoints checkbox changes */
+  onMergeEndpointsChange?: (checked: boolean) => void;
 }
 
 export interface TestResultState {
@@ -326,6 +357,12 @@ export interface TestResultState {
   compareText: string | undefined;
   /** Parsed data for comparison */
   compareData: ParsedFileEntry[] | undefined;
+  /** Merged data from multiple tests — when set, replaces the single-test view */
+  mergedData: ParsedFileEntry[] | undefined;
+  /** Per-file total request counts for the AgentChart when mergedData is active */
+  mergedAgentTimeSeries: [string, { time: Date; count: number }[]][];
+  /** IDs of the additional tests included in the merge (for the status label) */
+  mergedTestIds: string[];
   minMaxTime: MinMaxTime | undefined;
   error: string | undefined;
 }
@@ -364,7 +401,44 @@ const freeHistograms = (resultsData: ParsedFileEntry[] | undefined, summaryData:
   log("freeHistograms finished", LogLevel.DEBUG, { resultsData: resultsData?.length || -1, summaryData: summaryData !== undefined ? 1 : 0 });
 };
 
-const mergeAllDataPoints = (...dataPoints: DataPoint[]): DataPoint[] => {
+export const freeParsedEntries = (data: ParsedFileEntry[] | undefined) => {
+  for (const [, dps] of (data || [])) {
+    for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
+  }
+};
+
+/**
+ * Groups displayData by a label function, then merges DataPoints within each group
+ * using one mergeAllDataPoints call per group (O(N) references, no intermediate clones).
+ * The returned DataPoints are clones — call freeGroupedHistograms after chart creation.
+ */
+const groupAndMergeByLabel = (
+  displayData: ParsedFileEntry[],
+  getLabel: (bucketId: BucketId) => string
+): [string, DataPoint[]][] => {
+  const labelGroups = new Map<string, DataPoint[]>();
+  for (const [bucketId, dataPoints] of displayData) {
+    const label = getLabel(bucketId);
+    if (labelGroups.has(label)) {
+      const existing = labelGroups.get(label)!;
+      for (const dp of dataPoints) { existing.push(dp); }
+    } else {
+      labelGroups.set(label, dataPoints.slice());
+    }
+  }
+  return Array.from(labelGroups.entries())
+    .map(([label, allDps]) => [label, mergeAllDataPoints(allDps)] as [string, DataPoint[]]);
+};
+
+const freeGroupedHistograms = (groupedData: [string, DataPoint[]][]) => {
+  for (const [, dps] of groupedData) {
+    for (const dp of dps) {
+      try { dp.rttHistogram.free(); } catch { }
+    }
+  }
+};
+
+const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
 
   for (const dp of dataPoints) {
@@ -433,19 +507,23 @@ const getSummaryData = ({
   summaryTagFilter: string,
   summaryTagValueFilter: string
 }): ParsedFileEntry | undefined => {
-  let summaryData: ParsedFileEntry | undefined;
-  let summary: string = "";
-  if (filteredData && filteredData.length > 0) {
-    const allDataPoints = [];
-    for (const [, dataPoints] of filteredData) {
-      allDataPoints.push(...dataPoints);
+  if (!filteredData || filteredData.length === 0) { return undefined; }
+  // Merge directly over the nested structure — avoids building an intermediate flat array
+  // and then spreading it as rest args (both O(N) extra allocations).
+  const combinedData = new Map<number, DataPoint>();
+  for (const [, dataPoints] of filteredData) {
+    for (const dp of dataPoints) {
+      const existing = combinedData.get(Number(dp.time));
+      if (existing) {
+        existing.mergeInto(dp);
+      } else {
+        combinedData.set(Number(dp.time), dp.clone());
+      }
     }
-    const dataPoints = mergeAllDataPoints(...allDataPoints);
-    summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
-    const tags = { method: summary, url: "" };
-    summaryData = [tags, dataPoints];
   }
-  return summaryData;
+  const mergedPoints = [...combinedData.values()].sort((a, b) => Number(a.time) - Number(b.time));
+  const summary = getSummaryDisplay({ summaryTagFilter, summaryTagValueFilter });
+  return [{ method: summary, url: "" }, mergedPoints];
 };
 
 // Constants moved outside component to avoid recreation on every render
@@ -463,6 +541,9 @@ const DEFAULT_STATE: TestResultState = {
   compareTest: undefined,
   compareText: undefined,
   compareData: undefined,
+  mergedData: undefined,
+  mergedAgentTimeSeries: [],
+  mergedTestIds: [],
   minMaxTime: undefined,
   error: undefined
 };
@@ -486,7 +567,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenD
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
             <LegendItem
-              key={dataset.label || index}
+              key={`${dataset.label}-${index}`}
               $hidden={hiddenDatasets.has(index)}
               onClick={() => onToggleDataset(index)}
             >
@@ -500,13 +581,195 @@ const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenD
   );
 };
 
+interface OverviewChartProps {
+  displayData: ParsedFileEntry[];
+  mergeEndpoints: boolean;
+}
+
+export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, mergeEndpoints }) => {
+  const [overviewChart, setOverviewChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const overviewCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (overviewChart) { overviewChart.destroy(); }
+
+      if (mergeEndpoints) {
+        const mergedData = groupAndMergeByLabel(displayData, (b) => `${b.method} ${b.url}`);
+        import("./charts").then(({ requestCountByEndpoint }) => {
+          setOverviewChart(requestCountByEndpoint(node, mergedData));
+          freeGroupedHistograms(mergedData);
+        });
+      } else {
+        const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
+          const tagList = Object.entries(bucketId)
+            .filter(([key]) => key !== "method" && key !== "url")
+            .map(([key, value]) => `${key}:${value}`)
+            .join(" ");
+          const label = tagList
+            ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+            : `${bucketId.method} ${bucketId.url}`;
+          return [label, dataPoints];
+        });
+        import("./charts").then(({ requestCountByEndpoint }) => {
+          setOverviewChart(requestCountByEndpoint(node, endpointData));
+        });
+      }
+    }
+  }, [displayData, mergeEndpoints]);
+
+  const onToggleDataset = useCallback((index: number) => {
+    if (!overviewChart) { return; }
+    const meta = overviewChart.getDatasetMeta(index);
+    meta.hidden = !meta.hidden;
+    overviewChart.update();
+    setHiddenDatasets((prev) => {
+      const next = new Set(prev);
+      if (meta.hidden) { next.add(index); } else { next.delete(index); }
+      return next;
+    });
+  }, [overviewChart]);
+
+  return (
+    <FullWidthChartPanel
+      title="Request Count by Endpoint"
+      chartRef={overviewCanvas}
+      chart={overviewChart}
+      hiddenDatasets={hiddenDatasets}
+      onToggleDataset={onToggleDataset}
+    />
+  );
+};
+
+export const HostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displayData }) => {
+  const [hostChart, setHostChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const hostCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (hostChart) { hostChart.destroy(); }
+
+      const hostData = groupAndMergeByLabel(displayData, (bucketId) => {
+        try { return new URL(bucketId.url).hostname; } catch { return bucketId.url; }
+      });
+
+      import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
+        setHostChart(requestCountByEndpoint(node, hostData, mergeAgentColors));
+        freeGroupedHistograms(hostData);
+      });
+    }
+  }, [displayData]);
+
+  const onToggleDataset = useCallback((index: number) => {
+    if (!hostChart) { return; }
+    const meta = hostChart.getDatasetMeta(index);
+    meta.hidden = !meta.hidden;
+    hostChart.update();
+    setHiddenDatasets((prev) => {
+      const next = new Set(prev);
+      if (meta.hidden) { next.add(index); } else { next.delete(index); }
+      return next;
+    });
+  }, [hostChart]);
+
+  return (
+    <FullWidthChartPanel
+      title="Request Count by Host"
+      chartRef={hostCanvas}
+      chart={hostChart}
+      hiddenDatasets={hiddenDatasets}
+      onToggleDataset={onToggleDataset}
+    />
+  );
+};
+
+export interface AgentChartProps {
+  displayData: ParsedFileEntry[];
+  agentTimeSeries?: [string, { time: Date; count: number }[]][];
+}
+
+export const AgentChart: React.FC<AgentChartProps> = ({ displayData, agentTimeSeries }) => {
+  const [agentChart, setAgentChart] = useState<Chart>();
+  const [hiddenDatasets, setHiddenDatasets] = useState<Set<number>>(new Set());
+
+  const agentCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    if (node) {
+      if (agentChart) { agentChart.destroy(); }
+
+      if (agentTimeSeries && agentTimeSeries.length > 0) {
+        import("./charts").then(({ requestCountByAgentSeries, mergeAgentColors }) => {
+          setAgentChart(requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors));
+        });
+        return;
+      }
+
+      // Fallback: group by agent/host/machine/source tag from BucketId.
+      // Uses groupAndMergeByLabel (O(N) gather + one merge per group) to avoid
+      // the O(N²) clone leak that an incremental loop would cause.
+      const agentData = groupAndMergeByLabel(displayData, (bucketId) =>
+        bucketId.agent || bucketId.host || bucketId.machine || bucketId.source || "All Agents"
+      );
+
+      import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
+        setAgentChart(requestCountByEndpoint(node, agentData, mergeAgentColors));
+        freeGroupedHistograms(agentData);
+      });
+    }
+  }, [displayData, agentTimeSeries]);
+
+  const onToggleDataset = useCallback((index: number) => {
+    if (!agentChart) { return; }
+    const meta = agentChart.getDatasetMeta(index);
+    meta.hidden = !meta.hidden;
+    agentChart.update();
+    setHiddenDatasets((prev) => {
+      const next = new Set(prev);
+      if (meta.hidden) { next.add(index); } else { next.delete(index); }
+      return next;
+    });
+  }, [agentChart]);
+
+  return (
+    <FullWidthChartPanel
+      title="Request Count by Agent"
+      chartRef={agentCanvas}
+      chart={agentChart}
+      hiddenDatasets={hiddenDatasets}
+      onToggleDataset={onToggleDataset}
+    />
+  );
+};
+
+const FullWidthChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenDatasets, onToggleDataset }) => {
+  return (
+    <FullWidthPanel>
+      <h3>{title}</h3>
+      <canvas ref={chartRef} />
+      {chart && chart.data.datasets && chart.data.datasets.length > 0 && (
+        <CustomLegend>
+          {chart.data.datasets.map((dataset: any, index: number) => (
+            <LegendItem
+              key={`${dataset.label}-${index}`}
+              $hidden={hiddenDatasets.has(index)}
+              onClick={() => onToggleDataset(index)}
+            >
+              <span className="color-box" style={{ backgroundColor: dataset.borderColor }} />
+              <span>{dataset.label}</span>
+            </LegendItem>
+          ))}
+        </CustomLegend>
+      )}
+    </FullWidthPanel>
+  );
+};
+
 // Quad Panel Charts Component
 interface QuadPanelChartsProps {
   displayData: ParsedFileEntry[];
   mergeEndpoints: boolean;
 }
 
-const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEndpoints }) => {
+export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEndpoints }) => {
   const [medianChart, setMedianChart] = useState<Chart>();
   const [worst5Chart, setWorst5Chart] = useState<Chart>();
   const [error5xxChartState, setError5xxChartState] = useState<Chart>();
@@ -517,42 +780,50 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   const [error5xxHidden, setError5xxHidden] = useState<Set<number>>(new Set());
   const [allErrorsHidden, setAllErrorsHidden] = useState<Set<number>>(new Set());
 
-  // Process data based on mergeEndpoints flag
+  // Process data based on mergeEndpoints flag.
+  // When merging, collect all DataPoints per label first (O(N) references),
+  // then merge once per group — avoids O(N²) intermediate WASM histogram clones.
   const allEndpoints = useMemo(() => {
-    let endpointData: [string, DataPoint[]][];
-
     if (mergeEndpoints) {
-      // Group endpoints by method+url, merging data points at same timestamps
-      const groupedMap = new Map<string, DataPoint[]>();
-
+      const labelGroups = new Map<string, DataPoint[]>();
       for (const [bucketId, dataPoints] of displayData) {
         const label = `${bucketId.method} ${bucketId.url}`;
-
-        if (groupedMap.has(label)) {
-          const existing = groupedMap.get(label)!;
-          groupedMap.set(label, mergeAllDataPoints(...existing, ...dataPoints));
+        if (labelGroups.has(label)) {
+          const existing = labelGroups.get(label)!;
+          for (const dp of dataPoints) { existing.push(dp); }
         } else {
-          groupedMap.set(label, dataPoints);
+          labelGroups.set(label, dataPoints.slice());
         }
       }
-
-      endpointData = Array.from(groupedMap.entries());
-    } else {
-      // Use raw data - create label with all tags
-      endpointData = displayData.map(([bucketId, dataPoints]) => {
-        const tagList = Object.entries(bucketId)
-          .filter(([key]) => key !== "method" && key !== "url")
-          .map(([key, value]) => `${key}:${value}`)
-          .join(" ");
-        const label = tagList
-          ? `${bucketId.method} ${bucketId.url} [${tagList}]`
-          : `${bucketId.method} ${bucketId.url}`;
-        return [label, dataPoints];
-      });
+      return Array.from(labelGroups.entries())
+        .map(([label, allDps]) => [label, mergeAllDataPoints(allDps)] as [string, DataPoint[]]);
     }
-
-    return endpointData;
+    // Use raw data — create label with all tags
+    return displayData.map(([bucketId, dataPoints]) => {
+      const tagList = Object.entries(bucketId)
+        .filter(([key]) => key !== "method" && key !== "url")
+        .map(([key, value]) => `${key}:${value}`)
+        .join(" ");
+      const label = tagList
+        ? `${bucketId.method} ${bucketId.url} [${tagList}]`
+        : `${bucketId.method} ${bucketId.url}`;
+      return [label, dataPoints] as [string, DataPoint[]];
+    });
   }, [displayData, mergeEndpoints]);
+
+  // Free merged WASM histograms when allEndpoints is recomputed or the component
+  // unmounts. Chart.js extracts scalar values synchronously during chart creation
+  // and does not retain references to DataPoints afterward.
+  useEffect(() => {
+    if (!mergeEndpoints) { return; }
+    return () => {
+      for (const [, dps] of allEndpoints) {
+        for (const dp of dps) {
+          try { dp.rttHistogram.free(); } catch { }
+        }
+      }
+    };
+  }, [allEndpoints, mergeEndpoints]);
 
   // Create stable key for data points
   const dataKey = useMemo(() =>
@@ -657,7 +928,7 @@ const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, mergeEnd
   );
 };
 
-export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange }: TestResultProps) => {
+export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, initialMergeTestData, onMergeTestIdsChange, initialMergeEndpoints, onMergeEndpointsChange }: TestResultProps) => {
   const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
 
   const [state, setState] = useState(() => {
@@ -668,10 +939,18 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
     return init;
   });
-  const [mergeEndpoints, setMergeEndpoints] = useState(false);
+  const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
+  const [endpointDataExpanded, setEndpointDataExpanded] = useState(false);
   const compareSearchModalRef = useRef<ModalObject| null>(null);
   useEffectModal(compareSearchModalRef);
+  const mergeSearchModalRef = useRef<ModalObject | null>(null);
+  useEffectModal(mergeSearchModalRef);
+  // Keep a ref so onMergeLoad / onClearMerge can call the current callback without
+  // needing it in their useCallback dependency arrays.
+  const onMergeTestIdsChangeRef = useRef(onMergeTestIdsChange);
+  onMergeTestIdsChangeRef.current = onMergeTestIdsChange;
+  const autoMergeTriggeredRef = useRef(false);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -705,6 +984,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       setState((oldState: TestResultState) => {
         // Free the old ones
         freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
+        // Free merged data — new base results invalidate the merge
+        freeParsedEntries(oldState.mergedData);
 
         const startEndTime: MinMaxTime = minMaxTime(resultsData);
         const { summaryTagFilter, summaryTagValueFilter } = oldState;
@@ -721,6 +1002,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           compareTest: undefined,
           compareText: undefined,
           compareData: undefined,
+          mergedData: undefined,
+          mergedAgentTimeSeries: [],
+          mergedTestIds: [],
           error: undefined,
           minMaxTime: startEndTime
         };
@@ -749,6 +1033,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       setState((oldState: TestResultState) => {
         // Free the old data
         freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
+        freeParsedEntries(oldState.mergedData);
         return {
           ...oldState,
           defaultMessage: defaultMessage(),
@@ -760,6 +1045,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           compareTest: undefined,
           compareText: undefined,
           compareData: undefined,
+          mergedData: undefined,
+          mergedAgentTimeSeries: [],
+          mergedTestIds: [],
           error: undefined,
           minMaxTime: undefined
         };
@@ -908,6 +1196,26 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     updateState({ compareTest: compareTestData, compareText, compareData });
   };
 
+  const loadMergeByTestIds = async (testIds: string[]): Promise<void> => {
+    const selectedTests: TestData[] = [];
+    for (const testId of testIds) {
+      try {
+        const response: AxiosResponse = await axios.get(formatPageHref(API_TEST_FORMAT(testId)));
+        const result: TestData | TestManagerError = response.data;
+        if (!("message" in result) && result.resultsFileLocation?.length) {
+          selectedTests.push(result as TestData);
+        } else {
+          log(`loadMergeByTestIds: no results for ${testId}`, LogLevel.WARN);
+        }
+      } catch (error) {
+        log(`loadMergeByTestIds: error fetching ${testId}`, LogLevel.WARN, error);
+      }
+    }
+    if (selectedTests.length > 0) {
+      await onMergeLoad(selectedTests);
+    }
+  };
+
   const onPriorTestLoad = async (event: React.MouseEvent<HTMLButtonElement>, compareTest: TestData) => {
     event.preventDefault();
     if (doubleClickCheckRef.current) {
@@ -927,6 +1235,73 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       doubleClickCheckRef.current = false;
     }
   };
+
+  const onMergeSearch = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (mergeSearchModalRef.current) {
+      mergeSearchModalRef.current.openModal();
+    }
+  };
+
+  const onMergeLoad = useCallback(async (selectedTests: TestData[]): Promise<void> => {
+    if (!state.resultsData) { return; }
+
+    const allParsed: ParsedFileEntry[][] = [state.resultsData];
+    const fileLabels: string[] = [testData.testId];
+
+    for (const test of selectedTests) {
+      const s3ResultPath = test.resultsFileLocation?.[0];
+      if (!s3ResultPath) {
+        log(`onMergeLoad: no resultsFileLocation for ${test.testId}`, LogLevel.WARN);
+        continue;
+      }
+      try {
+        const text = await fetchResults(s3ResultPath);
+        const parsed = await parseResultsData(text);
+        allParsed.push(parsed);
+        fileLabels.push(test.testId);
+      } catch (error) {
+        log(`onMergeLoad: error loading ${test.testId}`, LogLevel.WARN, error);
+      }
+    }
+
+    // Compute per-file request count time series before merging (mergeResults loses file identity)
+    const agentTimeSeries: [string, { time: Date; count: number }[]][] = allParsed.map((fileData, i) => {
+      const timeMap = new Map<number, { time: Date; count: number }>();
+      for (const [, dataPoints] of fileData) {
+        for (const dp of dataPoints) {
+          const t = dp.time.getTime();
+          const count = Number(dp.rttHistogram.getTotalCount());
+          const existing = timeMap.get(t);
+          if (existing) { existing.count += count; }
+          else { timeMap.set(t, { time: new Date(t), count }); }
+        }
+      }
+      const points = Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+      return [fileLabels[i] ?? `Agent ${i + 1}`, points];
+    });
+
+    const merged = mergeResults(allParsed);
+
+    // Free the intermediate parsed data from selected tests — mergeResults cloned what it needed
+    for (let i = 1; i < allParsed.length; i++) { freeParsedEntries(allParsed[i]); }
+
+    setState((old) => {
+      // Free the previous merged data before replacing it
+      freeParsedEntries(old.mergedData);
+      return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels };
+    });
+    // Sync additional testIds (all labels except the current test) to the URL
+    onMergeTestIdsChangeRef.current?.(fileLabels.slice(1));
+  }, [state.resultsData, testData.testId]);
+
+  const onClearMerge = useCallback(() => {
+    setState((old) => {
+      freeParsedEntries(old.mergedData);
+      return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [] };
+    });
+    onMergeTestIdsChangeRef.current?.(undefined);
+  }, []);
 
   useEffect(() => {
     import("chartjs-adapter-date-fns")
@@ -968,10 +1343,23 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
   }, [state.resultsData]);
 
-  // Memoized display data to avoid unnecessary recalculations
+  useEffect(() => {
+    if (initialMergeTestIds?.length && state.resultsData && !state.mergedData && !autoMergeTriggeredRef.current) {
+      autoMergeTriggeredRef.current = true;
+      const load = initialMergeTestData?.length
+        ? onMergeLoad(initialMergeTestData)
+        : loadMergeByTestIds(initialMergeTestIds);
+      load.catch((error: unknown) => {
+        log("Auto-load merge error", LogLevel.WARN, error);
+      });
+    }
+  }, [state.resultsData]);
+
+  // Memoized display data to avoid unnecessary recalculations.
+  // mergedData takes precedence — when set it replaces the single-test view.
   const displayData = useMemo(() => {
-    return state.filteredData || state.resultsData;
-  }, [state.filteredData, state.resultsData]);
+    return state.mergedData || state.filteredData || state.resultsData;
+  }, [state.mergedData, state.filteredData, state.resultsData]);
 
   // Extract unique HTTP methods from displayData
   const availableMethods = useMemo(() => {
@@ -1051,9 +1439,29 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             {state.minMaxTime?.startTime} to {state.minMaxTime?.endTime}
           </p>
           <p>Total time: {state.minMaxTime?.deltaTime}</p>
-          <p>Compare results with: <Button onClick={onPriorTestSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}} >Prior Test</Button></p>
+          <p>
+            Compare results with: <Button onClick={onPriorTestSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}}>Prior Test</Button>
+            {" "}
+            <Button onClick={onMergeSearch} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}}>Merge Results</Button>
+            {state.mergedData && (
+              <>
+                {" "}
+                <Button onClick={onClearMerge} theme={{...defaultButtonTheme, buttonFontSize: "1.2rem"}}>Clear Merge</Button>
+                <span style={{ marginLeft: "0.8em", fontSize: "0.9em", color: "#76b7b2" }}>
+                  Merged view: {state.mergedTestIds.join(", ")}
+                </span>
+              </>
+            )}
+          </p>
           {/* This is the compare search modal */}
           <TestsListModal ref={compareSearchModalRef} tests={state.compareTests} onClick={onPriorTestLoad} />
+          {/* This is the merge results search modal */}
+          <MergeSearchModal
+            ref={mergeSearchModalRef}
+            defaultSearchText={testData.s3Folder.split("/")[0]}
+            currentTestId={testData.testId}
+            onMerge={onMergeLoad}
+          />
           {/* This is the compare test UI. We want it above the normal results */}
           {state.resultsData && state.compareTest && state.compareData === undefined && <H3>Loading Results {state.compareTest?.testId} for Comparison</H3>}
           {state.resultsData && state.compareData && <TestResultsCompare
@@ -1104,13 +1512,26 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
                 type="checkbox"
                 id="merge-endpoints"
                 checked={mergeEndpoints}
-                onChange={(e) => setMergeEndpoints(e.target.checked)}
+                onChange={(e) => {
+                  setMergeEndpoints(e.target.checked);
+                  onMergeEndpointsChange?.(e.target.checked);
+                }}
               />
               <label htmlFor="merge-endpoints">
                 Merge endpoints with different tags
               </label>
             </ToggleContainer>
           </FilterContainer>
+
+          <div id="request-count-charts">
+            <SectionHeadingH2>
+              Request Count Overview
+              <a href="#request-count-charts" className="anchor-link" onClick={(e) => handleAnchorClick(e, "request-count-charts")}>#</a>
+            </SectionHeadingH2>
+          </div>
+          <OverviewChart displayData={filteredDisplayData} mergeEndpoints={mergeEndpoints} />
+          <HostChart displayData={filteredDisplayData} />
+          <AgentChart displayData={filteredDisplayData} agentTimeSeries={state.mergedAgentTimeSeries.length > 0 ? state.mergedAgentTimeSeries : undefined} />
 
           <div id="performance-metrics">
             <SectionHeadingH2>
@@ -1130,16 +1551,28 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 
           <div id="endpoint-data">
             <SectionHeading>
+              <button
+                onClick={() => setEndpointDataExpanded((prev) => !prev)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8em", padding: "0 0.3em 0 0", verticalAlign: "middle", color: "inherit" }}
+                aria-expanded={endpointDataExpanded}
+                aria-controls="endpoint-data-content"
+              >
+                {endpointDataExpanded ? "▼" : "▶"}
+              </button>
               Endpoint Data
               <a href="#endpoint-data" className="anchor-link" onClick={(e) => handleAnchorClick(e, "endpoint-data")}>#</a>
             </SectionHeading>
           </div>
-          {filteredDisplayData.map(([bucketId, dataPoints], index) => {
-            const anchorId = bucketAnchorId(bucketId, index);
-            return (
-              <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} anchorId={anchorId} />
-            );
-          })}
+          {endpointDataExpanded && (
+            <div id="endpoint-data-content">
+              {filteredDisplayData.map(([bucketId, dataPoints], index) => {
+                const anchorId = bucketAnchorId(bucketId, index);
+                return (
+                  <Endpoint key={JSON.stringify(bucketId)} bucketId={bucketId} dataPoints={dataPoints} anchorId={anchorId} />
+                );
+              })}
+            </div>
+          )}
         </TimeTaken>
       ) : (
         <h4>{state.defaultMessage}</h4>
@@ -1149,11 +1582,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 });
 
 // Final Results Table Component (without Excel export)
-interface TableProps {
+export interface TableProps {
   displayData: ParsedFileEntry[];
 }
 
-const FinalResultsTable = ({ displayData }: TableProps) => {
+export const FinalResultsTable = React.memo(({ displayData }: TableProps) => {
   const tableData = useMemo(() => {
     const results: any[] = [];
 
@@ -1316,7 +1749,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
     </TableContainer>
     </>
   );
-};
+});
 
 const total = (dataPoints: DataPoint[]) => {
   if (dataPoints.length === 0) { return undefined; }
@@ -1395,11 +1828,14 @@ const Endpoint = React.memo(({ bucketId, dataPoints, anchorId }: EndpointProps) 
   // Memoize totalResults calculation to avoid recalculation on every render
   const totalResults = useMemo(() => total(dataPoints), [dataPoints]);
 
-  // Create stable key for dataPoints to determine when charts need recreation
-  const dataPointsKey = useMemo(() =>
-    dataPoints.map(dp => `${dp.time}-${dp.rttHistogram.getTotalCount()}`).join(","),
-    [dataPoints]
-  );
+  // Create stable key for dataPoints to determine when charts need recreation.
+  // O(1): count + first/last timestamps captures all real data changes without
+  // a O(N) join over every bucket, which matters when many endpoints expand at once.
+  const dataPointsKey = useMemo(() => {
+    const first = dataPoints[0]?.time.getTime() ?? 0;
+    const last = dataPoints[dataPoints.length - 1]?.time.getTime() ?? 0;
+    return `${dataPoints.length}-${first}-${last}`;
+  }, [dataPoints]);
 
   const toggleChart = (chart: Chart) => {
     const chartConfig = chart.config.options?.scales?.y;

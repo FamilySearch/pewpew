@@ -594,12 +594,12 @@ export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, merge
     if (node) {
       if (overviewChart) { overviewChart.destroy(); }
 
+      let cancelled = false;
       if (mergeEndpoints) {
         const mergedData = groupAndMergeByLabel(displayData, (b) => `${b.method} ${b.url}`);
         import("./charts").then(({ requestCountByEndpoint }) => {
-          setOverviewChart(requestCountByEndpoint(node, mergedData));
-          freeGroupedHistograms(mergedData);
-        });
+          if (!cancelled && node.isConnected) { setOverviewChart(requestCountByEndpoint(node, mergedData)); }
+        }).finally(() => { freeGroupedHistograms(mergedData); });
       } else {
         const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
           const tagList = Object.entries(bucketId)
@@ -612,9 +612,10 @@ export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, merge
           return [label, dataPoints];
         });
         import("./charts").then(({ requestCountByEndpoint }) => {
-          setOverviewChart(requestCountByEndpoint(node, endpointData));
+          if (!cancelled && node.isConnected) { setOverviewChart(requestCountByEndpoint(node, endpointData)); }
         });
       }
+      return () => { cancelled = true; };
     }
   }, [displayData, mergeEndpoints]);
 
@@ -653,10 +654,11 @@ export const HostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displa
         try { return new URL(bucketId.url).hostname; } catch { return bucketId.url; }
       });
 
+      let cancelled = false;
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
-        setHostChart(requestCountByEndpoint(node, hostData, mergeAgentColors));
-        freeGroupedHistograms(hostData);
-      });
+        if (!cancelled && node.isConnected) { setHostChart(requestCountByEndpoint(node, hostData, mergeAgentColors)); }
+      }).finally(() => { freeGroupedHistograms(hostData); });
+      return () => { cancelled = true; };
     }
   }, [displayData]);
 
@@ -696,11 +698,12 @@ export const AgentChart: React.FC<AgentChartProps> = ({ displayData, agentTimeSe
     if (node) {
       if (agentChart) { agentChart.destroy(); }
 
+      let cancelled = false;
       if (agentTimeSeries && agentTimeSeries.length > 0) {
         import("./charts").then(({ requestCountByAgentSeries, mergeAgentColors }) => {
-          setAgentChart(requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors));
+          if (!cancelled && node.isConnected) { setAgentChart(requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors)); }
         });
-        return;
+        return () => { cancelled = true; };
       }
 
       // Fallback: group by agent/host/machine/source tag from BucketId.
@@ -711,9 +714,9 @@ export const AgentChart: React.FC<AgentChartProps> = ({ displayData, agentTimeSe
       );
 
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
-        setAgentChart(requestCountByEndpoint(node, agentData, mergeAgentColors));
-        freeGroupedHistograms(agentData);
-      });
+        if (!cancelled && node.isConnected) { setAgentChart(requestCountByEndpoint(node, agentData, mergeAgentColors)); }
+      }).finally(() => { freeGroupedHistograms(agentData); });
+      return () => { cancelled = true; };
     }
   }, [displayData, agentTimeSeries]);
 
@@ -1296,9 +1299,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     for (const parsed of allParsed) { freeParsedEntries(parsed); }
 
     setState((old) => {
-      // Free the previous merged data before replacing it
       freeParsedEntries(old.mergedData);
-      return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels };
+      freeHistograms(undefined, old.summaryData, undefined);
+      const mergedTime = minMaxTime(merged);
+      const mergedSummary = getSummaryData({ filteredData: merged, summaryTagFilter: old.summaryTagFilter, summaryTagValueFilter: old.summaryTagValueFilter });
+      return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels, minMaxTime: mergedTime, summaryData: mergedSummary };
     });
     // Sync additional testIds (all labels except the current test) to the URL
     onMergeTestIdsChangeRef.current?.(fileLabels.slice(1));
@@ -1307,7 +1312,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const onClearMerge = useCallback(() => {
     setState((old) => {
       freeParsedEntries(old.mergedData);
-      return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [] };
+      freeHistograms(undefined, old.summaryData, undefined);
+      const restoredTime = old.resultsData ? minMaxTime(old.resultsData) : undefined;
+      const restoredSummary = getSummaryData({ filteredData: old.filteredData || old.resultsData, summaryTagFilter: old.summaryTagFilter, summaryTagValueFilter: old.summaryTagValueFilter });
+      return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [], minMaxTime: restoredTime, summaryData: restoredSummary };
     });
     onMergeTestIdsChangeRef.current?.(undefined);
   }, []);

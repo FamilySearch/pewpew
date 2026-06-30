@@ -239,7 +239,7 @@ function asBucketEntry (b: unknown): BucketEntry | Error {
   }
   if (!Array.isArray(b[1])) {
     return new Error(
-      `expected second value in bucket entry array to be an array bug got: ${JSON.stringify(
+      `expected second value in bucket entry array to be an array but got: ${JSON.stringify(
         b[1]
       )}`
     );

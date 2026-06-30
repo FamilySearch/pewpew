@@ -39,6 +39,10 @@ function createBucketKey (bucketId: BucketId): string {
  * For each endpoint bucket: DataPoints at the same timestamp are merged (histograms
  * combined, status counts summed). Endpoints present in only some files are included.
  */
+export function cloneParsedEntries (entries: ParsedFileEntry[]): ParsedFileEntry[] {
+  return entries.map(([bucketId, dataPoints]) => [bucketId, dataPoints.map((dp) => dp.clone())] as ParsedFileEntry);
+}
+
 export function mergeResults (resultsArray: ParsedFileEntry[][]): ParsedFileEntry[] {
   const bucketMap = new Map<string, [BucketId, Map<number, DataPoint>]>();
 

@@ -33,13 +33,13 @@ import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
+import { cloneParsedEntries, detectOverlap, mergeResults } from "./merge";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import { MergeSearchModal } from "./MergeSearchModal";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
-import { mergeResults } from "./merge";
 import styled from "styled-components";
 
 const TimeTaken = styled.div`
@@ -1246,7 +1246,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const onMergeLoad = useCallback(async (selectedTests: TestData[]): Promise<void> => {
     if (!state.resultsData) { return; }
 
-    const allParsed: ParsedFileEntry[][] = [state.resultsData];
+    // Clone base data before any await — prevents use-after-free if resultsData is freed
+    // by a concurrent reload or clear while we fetch additional agents' results.
+    const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(state.resultsData)];
     const fileLabels: string[] = [testData.testId];
 
     for (const test of selectedTests) {
@@ -1262,6 +1264,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         fileLabels.push(test.testId);
       } catch (error) {
         log(`onMergeLoad: error loading ${test.testId}`, LogLevel.WARN, error);
+      }
+    }
+
+    if (!detectOverlap(allParsed)) {
+      if (!window.confirm("The selected tests don't appear to share any time buckets — they may not be concurrent agent runs. Merge anyway?")) {
+        for (const parsed of allParsed) { freeParsedEntries(parsed); }
+        return;
       }
     }
 
@@ -1283,8 +1292,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 
     const merged = mergeResults(allParsed);
 
-    // Free the intermediate parsed data from selected tests — mergeResults cloned what it needed
-    for (let i = 1; i < allParsed.length; i++) { freeParsedEntries(allParsed[i]); }
+    // Free all parsed data (including the base clone at [0]) — mergeResults cloned what it needed
+    for (const parsed of allParsed) { freeParsedEntries(parsed); }
 
     setState((old) => {
       // Free the previous merged data before replacing it

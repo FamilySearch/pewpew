@@ -1246,7 +1246,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
   };
 
-  const onMergeLoad = useCallback(async (selectedTests: TestData[]): Promise<void> => {
+  const onMergeLoad = useCallback(async (selectedTests: TestData[], userInitiated: boolean = true): Promise<void> => {
     if (!state.resultsData) { return; }
 
     // Clone base data before any await — prevents use-after-free if resultsData is freed
@@ -1270,7 +1270,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }
     }
 
-    if (!detectOverlap(allParsed)) {
+    if (userInitiated && !detectOverlap(allParsed)) {
       if (!window.confirm("The selected tests don't appear to share any time buckets — they may not be concurrent agent runs. Merge anyway?")) {
         for (const parsed of allParsed) { freeParsedEntries(parsed); }
         return;
@@ -1364,7 +1364,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     if (initialMergeTestIds?.length && state.resultsData && !state.mergedData && !autoMergeTriggeredRef.current) {
       autoMergeTriggeredRef.current = true;
       const load = initialMergeTestData?.length
-        ? onMergeLoad(initialMergeTestData)
+        ? onMergeLoad(initialMergeTestData, false)
         : loadMergeByTestIds(initialMergeTestIds);
       load.catch((error: unknown) => {
         log("Auto-load merge error", LogLevel.WARN, error);

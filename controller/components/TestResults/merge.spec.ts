@@ -10,7 +10,7 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
 });
 
 import { DataPoint, ParsedFileEntry } from "./model";
-import { detectOverlap, mergeResults } from "./merge";
+import { cloneParsedEntries, detectOverlap, mergeResults } from "./merge";
 
 function makeDataPoint (timeSec: number, statusCounts: Record<string, number> = { "200": 1 }): DataPoint {
   return new DataPoint({
@@ -57,6 +57,37 @@ describe("detectOverlap", () => {
     const file2: ParsedFileEntry[] = [[GET_ENDPOINT, [makeDataPoint(2000)]]];
     const file3: ParsedFileEntry[] = [[GET_ENDPOINT, [makeDataPoint(2000)]]];
     expect(detectOverlap([file1, file2, file3])).toBe(false);
+  });
+});
+
+describe("cloneParsedEntries", () => {
+  it("returns DataPoints with independent histograms, statusCounts, and testErrors", () => {
+    const dp = makeDataPoint(1000, { "200": 1 });
+    const file: ParsedFileEntry[] = [[GET_ENDPOINT, [dp]]];
+    const [, clonedPoints] = cloneParsedEntries(file)[0];
+    const clonedDp = clonedPoints[0];
+
+    expect(clonedDp).not.toBe(dp);
+    expect(clonedDp.rttHistogram).not.toBe(dp.rttHistogram);
+    expect(clonedDp.statusCounts).not.toBe(dp.statusCounts);
+    expect(clonedDp.testErrors).not.toBe(dp.testErrors);
+
+    // Mutating the clone must not affect the source
+    clonedDp.statusCounts["200"] = 999;
+    clonedDp.rttHistogram.free();
+    expect(dp.statusCounts["200"]).toBe(1);
+    expect(dp.rttHistogram.free).not.toHaveBeenCalled();
+  });
+
+  it("preserves bucket identity and values before mutation", () => {
+    const dp = makeDataPoint(1000, { "200": 3 });
+    const file: ParsedFileEntry[] = [[GET_ENDPOINT, [dp]]];
+    const [bucketId, clonedPoints] = cloneParsedEntries(file)[0];
+
+    expect(bucketId).toBe(GET_ENDPOINT);
+    expect(clonedPoints).toHaveLength(1);
+    expect(clonedPoints[0].statusCounts).toEqual({ "200": 3 });
+    expect(clonedPoints[0].time.getTime()).toBe(dp.time.getTime());
   });
 });
 

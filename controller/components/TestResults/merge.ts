@@ -31,6 +31,11 @@ function createBucketKey (bucketId: BucketId): string {
   return JSON.stringify(sortedEntries);
 }
 
+// Deep-clones parsed entries so callers can safely free/mutate the source without affecting the clone.
+export function cloneParsedEntries (entries: ParsedFileEntry[]): ParsedFileEntry[] {
+  return entries.map(([bucketId, dataPoints]) => [bucketId, dataPoints.map((dp) => dp.clone())] as ParsedFileEntry);
+}
+
 /**
  * Merges N sets of parsed results into a single unified result set.
  * Used when a test is spread across multiple agents — each agent produces its own

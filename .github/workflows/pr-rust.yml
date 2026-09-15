@@ -18,8 +18,58 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: cargo test --all -- --skip providers::tests::range_provider_works --skip providers::tests::literals_provider_works
-      - run: cargo test --lib providers::tests::range_provider_works -- --test-threads=1  # Must run serially due to spawn_blocking contention
-      - run: cargo test --lib providers::tests::literals_provider_works -- --test-threads=1  # Must run serially due to spawn_blocking contention
+        timeout-minutes: 20
+      # These two intermittently hang, most often on macos. Three layers guard them, because no
+      # single one covers every case:
+      #   1. each test wraps its body in a tokio::time::timeout, so a hang inside the test fails
+      #      fast and names the case rather than blocking;
+      #   2. the retry loop below re-runs a failed attempt up to 3 times, since the failure is rare
+      #      and not reproducible on demand (about 1 in 2000 locally on linux);
+      #   3. `timeout-minutes` is the backstop. It is enforced by the runner rather than the shell,
+      #      so unlike `timeout` it works on all three OSes -- macos has no GNU timeout and neither
+      #      does Windows. It is what catches a wedge at runtime shutdown, after the test body has
+      #      already returned and the in-test timeout can no longer fire.
+      # `shell: bash` is explicit so the loop is identical on windows-latest.
+      - name: providers::tests::range_provider_works
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::attempt $attempt"
+            out=$(cargo test --lib providers::tests::range_provider_works -- --exact --test-threads=1 2>&1)
+            rc=$?
+            echo "$out"
+            echo "::endgroup::"
+            if [ $rc -eq 0 ]; then
+              # A filter that matches nothing also exits 0 ("0 passed; ... filtered out"), so a
+              # rename would silently turn this step into a no-op. Require that it actually ran.
+              if echo "$out" | grep -q "1 passed"; then exit 0; fi
+              echo "ERROR: the filter matched no test -- has it been renamed or moved?"
+              exit 1
+            fi
+            echo "attempt $attempt failed"
+          done
+          exit 1
+      - name: providers::tests::literals_provider_works
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::attempt $attempt"
+            out=$(cargo test --lib providers::tests::literals_provider_works -- --exact --test-threads=1 2>&1)
+            rc=$?
+            echo "$out"
+            echo "::endgroup::"
+            if [ $rc -eq 0 ]; then
+              # A filter that matches nothing also exits 0 ("0 passed; ... filtered out"), so a
+              # rename would silently turn this step into a no-op. Require that it actually ran.
+              if echo "$out" | grep -q "1 passed"; then exit 0; fi
+              echo "ERROR: the filter matched no test -- has it been renamed or moved?"
+              exit 1
+            fi
+            echo "attempt $attempt failed"
+          done
+          exit 1
 
   fmt:
     name: Rustfmt

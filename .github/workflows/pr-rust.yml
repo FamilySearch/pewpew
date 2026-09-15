@@ -34,41 +34,55 @@ jobs:
         shell: bash
         timeout-minutes: 5
         run: |
+          # Actions runs this with `-e`, so the cargo invocation has to sit inside an `if`
+          # condition -- a bare `out=$(...)` assignment would abort the whole step on the first
+          # failure instead of retrying.
           for attempt in 1 2 3; do
             echo "::group::attempt $attempt"
-            out=$(cargo test --lib providers::tests::range_provider_works -- --exact --test-threads=1 2>&1)
-            rc=$?
+            if out=$(cargo test --lib providers::tests::range_provider_works -- --exact --test-threads=1 2>&1); then
+              rc=0
+            else
+              rc=$?
+            fi
             echo "$out"
             echo "::endgroup::"
-            if [ $rc -eq 0 ]; then
+            if [ "$rc" -eq 0 ]; then
               # A filter that matches nothing also exits 0 ("0 passed; ... filtered out"), so a
               # rename would silently turn this step into a no-op. Require that it actually ran.
               if echo "$out" | grep -q "1 passed"; then exit 0; fi
               echo "ERROR: the filter matched no test -- has it been renamed or moved?"
               exit 1
             fi
-            echo "attempt $attempt failed"
+            echo "attempt $attempt failed with exit code $rc"
           done
+          echo "all 3 attempts failed"
           exit 1
       - name: providers::tests::literals_provider_works
         shell: bash
         timeout-minutes: 5
         run: |
+          # Actions runs this with `-e`, so the cargo invocation has to sit inside an `if`
+          # condition -- a bare `out=$(...)` assignment would abort the whole step on the first
+          # failure instead of retrying.
           for attempt in 1 2 3; do
             echo "::group::attempt $attempt"
-            out=$(cargo test --lib providers::tests::literals_provider_works -- --exact --test-threads=1 2>&1)
-            rc=$?
+            if out=$(cargo test --lib providers::tests::literals_provider_works -- --exact --test-threads=1 2>&1); then
+              rc=0
+            else
+              rc=$?
+            fi
             echo "$out"
             echo "::endgroup::"
-            if [ $rc -eq 0 ]; then
+            if [ "$rc" -eq 0 ]; then
               # A filter that matches nothing also exits 0 ("0 passed; ... filtered out"), so a
               # rename would silently turn this step into a no-op. Require that it actually ran.
               if echo "$out" | grep -q "1 passed"; then exit 0; fi
               echo "ERROR: the filter matched no test -- has it been renamed or moved?"
               exit 1
             fi
-            echo "attempt $attempt failed"
+            echo "attempt $attempt failed with exit code $rc"
           done
+          echo "all 3 attempts failed"
           exit 1
 
   fmt:

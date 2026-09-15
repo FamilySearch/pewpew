@@ -84,6 +84,10 @@ Encode a string with the given encoding.
   body: username=${username}&password=${encode(password, "form-urlencoded")}&grant_type=password
 ```
 
+Only the password is encoded above because it is the field that carries special characters in
+practice. The same treatment applies to **any** dynamic value in a form body or query string --
+`${username}` above would split the body just as readily if a username contained an `&`.
+
 If the value is also scrubbed out of a logger, remember to encode it there too, or the encoded value will no longer match and will be logged in the clear:
 
 ```yaml

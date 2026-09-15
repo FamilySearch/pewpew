@@ -192,6 +192,9 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET.add(b'%').add(b'/
 /// question mark (?), and curly brackets ({), (}), forward slash (/), colon (:), semi-colon (;),
 /// equality (=), at (@), backslash (\\), square brackets ([), (]), caret (\^), and pipe (|) are
 /// encoded.
+///
+/// No `encode()` encoding maps to this set directly. It is the spec-correct userinfo set, kept as
+/// the base for [`USERINFO_SAFE_ENCODE_SET`] and [`COMPONENT_ENCODE_SET`] below.
 const USERINFO_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET
     .add(b'/')
     .add(b':')
@@ -1898,7 +1901,7 @@ mod tests {
                 encoding,
                 encoded
             );
-            // A body built with this value still parses as the four parameters it should.
+            // A body built with this value still parses as the three parameters it should.
             let body = format!("username=user&password={}&grant_type=password", encoded);
             let parsed: Vec<(&str, &str)> = body
                 .split('&')

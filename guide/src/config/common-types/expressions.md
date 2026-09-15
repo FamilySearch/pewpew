@@ -74,7 +74,7 @@ Encode a string with the given encoding.
 
 **Example**: with the value `foo=bar` from a provider named `baz`, then the template `https://localhost/abc?${encode(baz, "percent-userinfo"}` would resolve to `https://localhost/abc?foo%3Dbar`.
 
-**Encoding a value into a query string or a form body**: use `"percent-userinfo"`, `"percent-component"` or `"form-urlencoded"`. These are the only encodings that encode an ampersand (`&`), which would otherwise split the value into extra parameters, and a plus (`+`), which would otherwise be decoded as a space. `"percent-query"`, `"percent"` and `"percent-path"` do **not** encode either, because they follow the URL spec sets for the parts of a URL where those characters are not special.
+**Encoding a value into a query string or a form body**: use `"percent-userinfo"`, `"percent-component"` or `"form-urlencoded"`. These encode an ampersand (`&`), which would otherwise split the value into extra parameters, and a plus (`+`), which would otherwise be decoded as a space. `"non-alphanumeric"` encodes both as well, but escapes far more than is necessary. `"percent-query"`, `"percent"` and `"percent-path"` do **not** encode either, because they follow the URL spec sets for the parts of a URL where those characters are not special.
 
 ```yaml
 - method: POST
@@ -89,6 +89,8 @@ If the value is also scrubbed out of a logger, remember to encode it there too, 
 ```yaml
 loggers:
   httpErrors:
+    to: stdout
+    where: response.status >= 400
     select:
       requestBody: replace(encode(password, "form-urlencoded"), request.body, "******")
 ```

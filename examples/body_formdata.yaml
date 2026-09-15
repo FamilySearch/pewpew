@@ -1,5 +1,6 @@
 # Run this file with the test-server, then specify the PORT as a parameter to this try or run script.
-# This file also requires a PASSWORD environment variable. Any value will work and the the password will be scrubbed from the logs.
+# The password var below contains special characters to show that they are percent-encoded into
+# the form body, and that the scrub in the logger masks it with the same encoding applied.
 
 # This version will always put in new sessions and slowly replace the old ones
 
@@ -33,7 +34,6 @@ endpoints:
       test:
         select:
           ts: epoch("ms")
-          response: request.body
+          response: replace(encode(password, "form-urlencoded"), request.body, "******")
           token: match(response.body, "token=(?P<token>[a-zA-Z0-9-]+)").token
-    on_demand: true
 

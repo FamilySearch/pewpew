@@ -212,7 +212,8 @@ const USERINFO_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET
 /// for the thing it is most often used for in pewpew configs: interpolating a value into a query
 /// string or an `application/x-www-form-urlencoded` body. An ampersand in the value silently splits
 /// it into extra parameters, and a plus is decoded as a space. Both are encoded here so that
-/// `encode(value, "percent-userinfo")` is safe in those positions.
+/// `encode(value, "percent-userinfo")` is safe in those positions, as long as the value does not
+/// itself contain a percent sequence -- `%` is deliberately left unencoded (see below).
 ///
 /// This is a deliberate deviation from the URL spec. For a fully spec-correct set, which also
 /// encodes `%`, `$` and `,`, use the `"percent-component"` encoding instead.

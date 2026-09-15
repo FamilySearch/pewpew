@@ -320,201 +320,219 @@ mod tests {
 
     #[test]
     fn range_provider_works() {
+        // These two tests have intermittently hung in CI, most often on macos. Wrap the body in a
+        // timeout so a hang fails fast with a clear message instead of blocking the job until it is
+        // cancelled by hand. The test takes well under a second -- almost all of which is the fixed
+        // sleeps below, which do not stretch on a slower machine -- so this is ~50x headroom.
+        const TEST_TIMEOUT: Duration = Duration::from_secs(30);
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            let range_params = r#"
+            time::timeout(TEST_TIMEOUT, async {
+                let range_params = r#"
                 start: 0
                 end: 20
             "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works1".to_string(),
-                None,
-            );
-            let expect: Vec<_> = (0..=20).collect();
+                let range_params =
+                    config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+                let p = range(
+                    range_params.into(),
+                    &"range_provider_works1".to_string(),
+                    None,
+                );
+                let expect: Vec<_> = (0..=20).collect();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
+                let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
 
-            assert_eq!(values, expect, "first");
+                assert_eq!(values, expect, "first");
 
-            let range_params = r#"
+                let range_params = r#"
                 start: 0
                 end: 20
                 step: 2
             "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works2".to_string(),
-                None,
-            );
+                let range_params =
+                    config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+                let p = range(
+                    range_params.into(),
+                    &"range_provider_works2".to_string(),
+                    None,
+                );
 
-            let expect: Vec<_> = (0..=20).step_by(2).collect();
+                let expect: Vec<_> = (0..=20).step_by(2).collect();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
+                let values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
 
-            assert_eq!(values, expect, "second");
+                assert_eq!(values, expect, "second");
 
-            let range_params = r#"
+                let range_params = r#"
                     start: 0
                     end: 20
                     repeat: true
                 "#;
-            let range_params =
-                config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
-            let p = range(
-                range_params.into(),
-                &"range_provider_works3".to_string(),
-                None,
-            );
+                let range_params =
+                    config::RangeProviderPreProcessed::from_yaml_str(range_params).unwrap();
+                let p = range(
+                    range_params.into(),
+                    &"range_provider_works3".to_string(),
+                    None,
+                );
 
-            let expect: Vec<_> = (0..=20).cycle().take(100).collect();
+                let expect: Vec<_> = (0..=20).cycle().take(100).collect();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+                let values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
-            // Give the spawned task time to complete and thread pool to drain before runtime shutdown
-            time::sleep(Duration::from_millis(200)).await;
+                // Give the spawned task time to complete and thread pool to drain before runtime shutdown
+                time::sleep(Duration::from_millis(200)).await;
 
-            assert_eq!(values, expect, "third");
+                assert_eq!(values, expect, "third");
 
-            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
-            time::sleep(Duration::from_millis(100)).await;
+                // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+                time::sleep(Duration::from_millis(100)).await;
+            })
+            .await
+            .expect("test hung: a provider stream never completed");
         });
     }
 
     #[test]
     fn literals_provider_works() {
+        // These two tests have intermittently hung in CI, most often on macos. Wrap the body in a
+        // timeout so a hang fails fast with a clear message instead of blocking the job until it is
+        // cancelled by hand. The test takes well under a second -- almost all of which is the fixed
+        // sleeps below, which do not stretch on a slower machine -- so this is ~50x headroom.
+        const TEST_TIMEOUT: Duration = Duration::from_secs(30);
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            let jsons = vec![json!(1), json!(2), json!(3)];
-            let lwo = config::ListWithOptions {
-                values: jsons.clone(),
-                repeat: false,
-                random: false,
-                unique: false,
-            };
+            time::timeout(TEST_TIMEOUT, async {
+                let jsons = vec![json!(1), json!(2), json!(3)];
+                let lwo = config::ListWithOptions {
+                    values: jsons.clone(),
+                    repeat: false,
+                    random: false,
+                    unique: false,
+                };
 
-            let p = list(lwo.into(), &"literals_provider_works1".to_string(), None);
-            let expect = jsons.clone();
+                let p = list(lwo.into(), &"literals_provider_works1".to_string(), None);
+                let expect = jsons.clone();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let values: Vec<_> = rx.collect().await;
+                let values: Vec<_> = rx.collect().await;
 
-            assert_eq!(values, expect, "first");
+                assert_eq!(values, expect, "first");
 
-            let lwo = config::ListWithOptions {
-                values: jsons.clone(),
-                repeat: false,
-                random: true,
-                unique: false,
-            };
+                let lwo = config::ListWithOptions {
+                    values: jsons.clone(),
+                    repeat: false,
+                    random: true,
+                    unique: false,
+                };
 
-            let p = list(lwo.into(), &"literals_provider_works2".to_string(), None);
-            let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
+                let p = list(lwo.into(), &"literals_provider_works2".to_string(), None);
+                let mut expect: Vec<_> = jsons.iter().map(|j| j.as_u64().unwrap()).collect();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let mut values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
+                let mut values: Vec<_> = rx.map(|j| j.as_u64().unwrap()).collect().await;
 
-            expect.sort_unstable();
-            values.sort_unstable();
+                expect.sort_unstable();
+                values.sort_unstable();
 
-            assert_eq!(values, expect, "second");
+                assert_eq!(values, expect, "second");
 
-            let lwo = config::ListWithOptions {
-                values: jsons.clone(),
-                repeat: true,
-                random: false,
-                unique: false,
-            };
+                let lwo = config::ListWithOptions {
+                    values: jsons.clone(),
+                    repeat: true,
+                    random: false,
+                    unique: false,
+                };
 
-            let p = list(lwo.into(), &"literals_provider_works3".to_string(), None);
-            let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
+                let p = list(lwo.into(), &"literals_provider_works3".to_string(), None);
+                let expect: Vec<_> = jsons.clone().into_iter().cycle().take(100).collect();
 
-            let Provider { rx, tx, .. } = p;
-            // Drop the tx reference so we don't get infinite streams
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                // Drop the tx reference so we don't get infinite streams
+                drop(tx);
 
-            let values: Vec<_> = rx.take(100).collect().await;
+                let values: Vec<_> = rx.take(100).collect().await;
 
-            // Give the spawned task time to complete before moving to next test
-            time::sleep(Duration::from_millis(200)).await;
+                // Give the spawned task time to complete before moving to next test
+                time::sleep(Duration::from_millis(200)).await;
 
-            assert_eq!(values, expect, "third");
+                assert_eq!(values, expect, "third");
 
-            let lwo = config::ListWithOptions {
-                values: jsons.clone(),
-                repeat: true,
-                random: true,
-                unique: false,
-            };
+                let lwo = config::ListWithOptions {
+                    values: jsons.clone(),
+                    repeat: true,
+                    random: true,
+                    unique: false,
+                };
 
-            let p = list(lwo.into(), &"literals_provider_works4".to_string(), None);
-            let mut expect: Vec<_> = jsons
-                .iter()
-                .cycle()
-                .take(100)
-                .map(|j| j.as_u64().unwrap())
-                .collect();
+                let p = list(lwo.into(), &"literals_provider_works4".to_string(), None);
+                let mut expect: Vec<_> = jsons
+                    .iter()
+                    .cycle()
+                    .take(100)
+                    .map(|j| j.as_u64().unwrap())
+                    .collect();
 
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let mut values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
+                let mut values: Vec<_> = rx.take(100).map(|j| j.as_u64().unwrap()).collect().await;
 
-            // Give the spawned task time to complete and thread pool to drain before moving to next test
-            time::sleep(Duration::from_millis(200)).await;
+                // Give the spawned task time to complete and thread pool to drain before moving to next test
+                time::sleep(Duration::from_millis(200)).await;
 
-            assert_ne!(values, expect, "fourth");
+                assert_ne!(values, expect, "fourth");
 
-            expect.sort_unstable();
-            expect.dedup();
-            values.sort_unstable();
-            values.dedup();
+                expect.sort_unstable();
+                expect.dedup();
+                values.sort_unstable();
+                values.dedup();
 
-            assert_eq!(values, expect, "fifth");
+                assert_eq!(values, expect, "fifth");
 
-            let lwo = config::ListWithOptions {
-                // be sure to keep the number of values <= the default buffer size used for a static list
-                // or this test will fail
-                values: vec![json!(1), json!(2), json!(1), json!(2), json!(1)],
-                repeat: false,
-                random: false,
-                unique: true,
-            };
+                let lwo = config::ListWithOptions {
+                    // be sure to keep the number of values <= the default buffer size used for a static list
+                    // or this test will fail
+                    values: vec![json!(1), json!(2), json!(1), json!(2), json!(1)],
+                    repeat: false,
+                    random: false,
+                    unique: true,
+                };
 
-            let p = list(lwo.into(), &"literals_provider_works5".to_string(), None);
-            let Provider { rx, tx, .. } = p;
-            drop(tx);
+                let p = list(lwo.into(), &"literals_provider_works5".to_string(), None);
+                let Provider { rx, tx, .. } = p;
+                drop(tx);
 
-            let expect: Vec<_> = vec![json!(1), json!(2)];
+                let expect: Vec<_> = vec![json!(1), json!(2)];
 
-            // add a short delay to give the literals `prime_tx` enough time to complete
-            time::sleep(Duration::from_millis(50)).await;
+                // add a short delay to give the literals `prime_tx` enough time to complete
+                time::sleep(Duration::from_millis(50)).await;
 
-            let values: Vec<_> = rx.collect().await;
+                let values: Vec<_> = rx.collect().await;
 
-            // NOTE: if this test causes issues in CI, remove it as there are enough other tests covering
-            // unique providers
-            assert_eq!(values, expect, "sixth");
+                // NOTE: if this test causes issues in CI, remove it as there are enough other tests covering
+                // unique providers
+                assert_eq!(values, expect, "sixth");
 
-            // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
-            time::sleep(Duration::from_millis(100)).await;
+                // Extra cleanup time before test ends to ensure spawn_blocking tasks fully complete
+                time::sleep(Duration::from_millis(100)).await;
+            })
+            .await
+            .expect("test hung: a provider stream never completed");
         });
     }
 

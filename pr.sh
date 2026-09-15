@@ -64,7 +64,7 @@ kill $TEST_SERVER_PID 2>/dev/null || true
 echo "✅ Examples testing complete - PASSED"
 
 # cargo install cargo-deny
-cargo deny check --hide-inclusion-graph license sources advisories
+cargo deny check --hide-inclusion-graph licenses sources advisories
 
 CWD=$(pwd)
 

@@ -151,6 +151,8 @@ enum Encoding {
     Percent,
     PercentPath,
     PercentUserinfo,
+    PercentComponent,
+    FormUrlencoded,
     NonAlphanumeric,
 }
 
@@ -201,6 +203,46 @@ const USERINFO_ENCODE_SET: &AsciiSet = &DEFAULT_ENCODE_SET
     .add(b']')
     .add(b'^')
     .add(b'|');
+/// The set actually used by the `"percent-userinfo"` encoding.
+///
+/// The WHATWG userinfo set above does not encode ampersand (&) or plus (+), which makes it unsafe
+/// for the thing it is most often used for in pewpew configs: interpolating a value into a query
+/// string or an `application/x-www-form-urlencoded` body. An ampersand in the value silently splits
+/// it into extra parameters, and a plus is decoded as a space. Both are encoded here so that
+/// `encode(value, "percent-userinfo")` is safe in those positions.
+///
+/// This is a deliberate deviation from the URL spec. For a fully spec-correct set, which also
+/// encodes `%`, `$` and `,`, use the `"percent-component"` encoding instead.
+const USERINFO_SAFE_ENCODE_SET: &AsciiSet = &USERINFO_ENCODE_SET.add(b'&').add(b'+');
+/// This encode set is used for a component of a URL, such as a single query string value.
+///
+/// Aside from the special characters defined in the
+/// [userinfo set](constant.USERINFO_ENCODE_SET.html), dollar sign ($), percent sign (%),
+/// ampersand (&), plus (+), and comma (,) are encoded. This matches the WHATWG
+/// [component percent-encode set](https://url.spec.whatwg.org/#component-percent-encode-set),
+/// and is the closest equivalent to JavaScript's `encodeURIComponent`.
+const COMPONENT_ENCODE_SET: &AsciiSet = &USERINFO_ENCODE_SET
+    .add(b'$')
+    .add(b'%')
+    .add(b'&')
+    .add(b'+')
+    .add(b',');
+/// This encode set is used for a value in an `application/x-www-form-urlencoded` body.
+///
+/// Aside from the special characters defined in the
+/// [component set](constant.COMPONENT_ENCODE_SET.html), exclamation mark (!), single quote ('),
+/// parentheses ((), ()), and tilde (~) are encoded. This matches the WHATWG
+/// [urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set).
+///
+/// Note that the WHATWG serializer represents a space as a plus (+) whereas this set percent-encodes
+/// it as `%20`. Both decode back to a space, since a form decoder percent-decodes after replacing
+/// any plus with a space.
+const FORM_URLENCODED_ENCODE_SET: &AsciiSet = &COMPONENT_ENCODE_SET
+    .add(b'!')
+    .add(b'\'')
+    .add(b'(')
+    .add(b')')
+    .add(b'~');
 
 impl Encoding {
     fn encode(self, d: &json::Value) -> String {
@@ -220,7 +262,13 @@ impl Encoding {
                 percent_encoding::utf8_percent_encode(&s, PATH_SEGMENT_ENCODE_SET).to_string()
             }
             Encoding::PercentUserinfo => {
-                percent_encoding::utf8_percent_encode(&s, USERINFO_ENCODE_SET).to_string()
+                percent_encoding::utf8_percent_encode(&s, USERINFO_SAFE_ENCODE_SET).to_string()
+            }
+            Encoding::PercentComponent => {
+                percent_encoding::utf8_percent_encode(&s, COMPONENT_ENCODE_SET).to_string()
+            }
+            Encoding::FormUrlencoded => {
+                percent_encoding::utf8_percent_encode(&s, FORM_URLENCODED_ENCODE_SET).to_string()
             }
             Encoding::NonAlphanumeric => {
                 percent_encoding::utf8_percent_encode(&s, percent_encoding::NON_ALPHANUMERIC)
@@ -237,6 +285,8 @@ impl Encoding {
             "percent" => Ok(Encoding::Percent),
             "percent-path" => Ok(Encoding::PercentPath),
             "percent-userinfo" => Ok(Encoding::PercentUserinfo),
+            "percent-component" => Ok(Encoding::PercentComponent),
+            "form-urlencoded" => Ok(Encoding::FormUrlencoded),
             "non-alphanumeric" => Ok(Encoding::NonAlphanumeric),
             _ => Err(ExecutingExpressionError::InvalidFunctionArguments("encode", marker).into()),
         }
@@ -1818,6 +1868,59 @@ mod tests {
         }
     }
 
+    // PERF-4580: a password containing an ampersand silently split an
+    // `application/x-www-form-urlencoded` body into extra parameters, because none of the
+    // encodings encoded `&`. Only `non-alphanumeric` did, which is why configs worked around it
+    // by hand-writing `%26`.
+    #[test]
+    fn encode_is_safe_for_form_urlencoded_bodies() {
+        let password = "pa&ss+wo rd";
+        // The encodings meant for a value inside a query string or a form body.
+        for encoding in ["percent-userinfo", "percent-component", "form-urlencoded"] {
+            let encoded = match Encode::new(
+                vec![j!(password).into(), j!(encoding).into()],
+                create_marker(),
+            )
+            .unwrap()
+            {
+                Either::B(json::Value::String(s)) => s,
+                other => panic!("`{}` did not fold to a string: {:?}", encoding, other),
+            };
+            assert!(
+                !encoded.contains('&'),
+                "`{}` left a bare `&` in {:?}, which splits the body",
+                encoding,
+                encoded
+            );
+            assert!(
+                !encoded.contains('+'),
+                "`{}` left a bare `+` in {:?}, which decodes as a space",
+                encoding,
+                encoded
+            );
+            // A body built with this value still parses as the four parameters it should.
+            let body = format!("username=user&password={}&grant_type=password", encoded);
+            let parsed: Vec<(&str, &str)> = body
+                .split('&')
+                .map(|pair| pair.split_once('=').expect("every pair has an ="))
+                .collect();
+            assert_eq!(
+                parsed.len(),
+                3,
+                "`{}` produced {} params instead of 3 from {:?}",
+                encoding,
+                parsed.len(),
+                body
+            );
+            // And the value round-trips back to the original password.
+            let plus_decoded = parsed[1].1.replace('+', " ");
+            let decoded = percent_encoding::percent_decode_str(&plus_decoded)
+                .decode_utf8()
+                .expect("encoded value is valid utf8");
+            assert_eq!(decoded, password, "`{}` did not round-trip", encoding);
+        }
+    }
+
     #[test]
     fn encode_eval() {
         // constructor args, eval_arg, expect
@@ -1846,6 +1949,23 @@ mod tests {
                 vec![j!("asd 123~").into(), j!("non-alphanumeric").into()],
                 None,
                 j!("asd%20123%7E"),
+            ),
+            // PERF-4580: an ampersand or plus in a value must not leak through the
+            // encodings used for query string and form body values.
+            (
+                vec![j!("pass&word+1").into(), j!("percent-userinfo").into()],
+                None,
+                j!("pass%26word%2B1"),
+            ),
+            (
+                vec![j!("pass&word+1%$,").into(), j!("percent-component").into()],
+                None,
+                j!("pass%26word%2B1%25%24%2C"),
+            ),
+            (
+                vec![j!("pass&word+1!'()~").into(), j!("form-urlencoded").into()],
+                None,
+                j!("pass%26word%2B1%21%27%28%29%7E"),
             ),
             (
                 vec!["a".into(), j!("percent-path").into()],

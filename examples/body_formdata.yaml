@@ -6,7 +6,7 @@
 vars:
   port: ${PORT}
   username: test-user
-  password: test-password
+  password: 'test-&pass+word' # The & and + show that special characters are encoded, not passed through
   dev_key: dev-key-001
 
 load_pattern:
@@ -25,7 +25,9 @@ endpoints:
     headers:
       Accept-Language: en-us
       Content-Type: application/x-www-form-urlencoded
-    body: username=${username}&password=${password}&grant_type=password&client_id=${dev_key}&token=abcd-1234-efgh
+    # Any value interpolated into a form body must be encoded, or an & in the value splits it
+    # into extra parameters and a + is decoded as a space.
+    body: username=${username}&password=${encode(password, "form-urlencoded")}&grant_type=password&client_id=${dev_key}&token=abcd-1234-efgh
     peak_load: 1hps
     logs:
       test:

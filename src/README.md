@@ -24,12 +24,22 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 
 ## Changelog
 ### v0.5.16
-- PERF-4580 Fix `encode()` not escaping `&` or `+`
+- [Bump bytes from 1.11.0 to 1.11.1](https://github.com/FamilySearch/pewpew/pull/361)
+- [Bump rand from 0.9.2 to 0.9.3](https://github.com/FamilySearch/pewpew/pull/369)
+- [Bump openssl from 0.10.75 to 0.10.78](https://github.com/FamilySearch/pewpew/pull/371)
+- [Bump openssl from 0.10.78 to 0.10.79](https://github.com/FamilySearch/pewpew/pull/375)
+- [Bump openssl from 0.10.79 to 0.10.80](https://github.com/FamilySearch/pewpew/pull/383)
+- [PERF-4580 Fix `encode()` not escaping `&` or `+`](https://github.com/FamilySearch/pewpew/pull/405)
   - **Behavior change**: `encode(value, "percent-userinfo")` now also encodes `&` and `+`. Neither was encoded before, so a value containing an `&` silently split an `application/x-www-form-urlencoded` body or a query string into extra parameters, and a `+` was decoded as a space. This affects every existing caller of `"percent-userinfo"`; the output is now correctly escaped where it previously was not. `%` is still not encoded, so prefer `"percent-component"` or `"form-urlencoded"` for a value that may itself contain a percent sequence.
   - Added a new `encode()` option `"percent-component"`, matching the [component percent-encode set](https://url.spec.whatwg.org/#component-percent-encode-set). It encodes everything `"percent-userinfo"` does plus `%`, `$` and `,`, and is the closest equivalent to JavaScript's `encodeURIComponent`.
   - Added a new `encode()` option `"form-urlencoded"`, matching the [urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set), for values interpolated into an `application/x-www-form-urlencoded` body.
   - `"percent-query"`, `"percent"` and `"percent-path"` are unchanged, and still do not encode `&` or `+`, since those characters are not special in the parts of a URL those sets describe.
   - Note that if an encoded value is also scrubbed from a logger with `replace()`, the needle must be encoded the same way or the value will be logged in the clear.
+- [Fix clippy question_mark lint and two RUSTSEC advisories](https://github.com/FamilySearch/pewpew/pull/406)
+  - Fixed [RUSTSEC-2026-0221](https://rustsec.org/advisories/RUSTSEC-2026-0221), `event-listener` allows `!Send` tags to cross thread boundaries via `StackSlot` (unsound); 5.4.1 to 5.4.2
+  - Fixed [RUSTSEC-2026-0258](https://rustsec.org/advisories/RUSTSEC-2026-0258), `h2` unbounded empty DATA frames (vulnerability); 0.4.13 to 0.4.19
+  - Replaced an `if let ... else { return None }` block in the csv_reader repeat path with the `?` operator, which rustc 1.98 flags via `clippy::question_mark`. Behavior is unchanged.
+  - Updated `cargo deny check` to use `licenses` rather than the removed singular `license` argument
 
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)

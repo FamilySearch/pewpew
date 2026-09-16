@@ -131,14 +131,11 @@ impl Iterator for CsvReader {
             (Err(e), _) => return Some(Err(e.into())),
             (Ok(false), false) => return None,
             (Ok(false), true) => {
-                if let Some(pos) = self.positions.first() {
-                    if let Err(e) = self.reader.seek(pos.clone()) {
-                        return Some(Err(e.into()));
-                    }
-                    return self.next();
-                } else {
-                    return None;
+                let pos = self.positions.first()?;
+                if let Err(e) = self.reader.seek(pos.clone()) {
+                    return Some(Err(e.into()));
                 }
+                return self.next();
             }
             _ => (),
         }

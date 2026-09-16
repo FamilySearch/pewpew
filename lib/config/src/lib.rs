@@ -12,7 +12,7 @@ use from_yaml::{Nullable, ParseResult, TupleVec, YamlDecoder, YamlEvent};
 use http::Method;
 use rand::{
     distr::{Distribution, Uniform},
-    Rng,
+    RngExt,
 };
 use regex::Regex;
 use select_parser::ValueOrExpression;

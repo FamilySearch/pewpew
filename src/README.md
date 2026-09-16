@@ -23,6 +23,14 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ```
 
 ## Changelog
+### v0.5.16
+- PERF-4580 Fix `encode()` not escaping `&` or `+`
+  - **Behavior change**: `encode(value, "percent-userinfo")` now also encodes `&` and `+`. Neither was encoded before, so a value containing an `&` silently split an `application/x-www-form-urlencoded` body or a query string into extra parameters, and a `+` was decoded as a space. This affects every existing caller of `"percent-userinfo"`; the output is now correctly escaped where it previously was not. `%` is still not encoded, so prefer `"percent-component"` or `"form-urlencoded"` for a value that may itself contain a percent sequence.
+  - Added a new `encode()` option `"percent-component"`, matching the [component percent-encode set](https://url.spec.whatwg.org/#component-percent-encode-set). It encodes everything `"percent-userinfo"` does plus `%`, `$` and `,`, and is the closest equivalent to JavaScript's `encodeURIComponent`.
+  - Added a new `encode()` option `"form-urlencoded"`, matching the [urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set), for values interpolated into an `application/x-www-form-urlencoded` body.
+  - `"percent-query"`, `"percent"` and `"percent-path"` are unchanged, and still do not encode `&` or `+`, since those characters are not special in the parts of a URL those sets describe.
+  - Note that if an encoded value is also scrubbed from a logger with `replace()`, the needle must be encoded the same way or the value will be logged in the clear.
+
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)
 - [Update lib.rs](https://github.com/FamilySearch/pewpew/pull/342)

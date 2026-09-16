@@ -67,10 +67,37 @@ Encode a string with the given encoding.
 - `"percent-query"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>` and `<` (space, doublequote, hash, greater than, and less than).
 - `"percent"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{` and `}` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace and close curly brace).
 - `"percent-path"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `%` and `/` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, percent and forward slash).
-- `"percent-userinfo"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, and `|` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret and pipe).<br/><br/>
-- `"non-alphanumeric"` - Non-Alphanumeric encodes every ASCII character that is not an ASCII letter or digit.
+- `"percent-userinfo"` - Percent encodes every ASCII character less than hexidecimal 20 and greater than 7E in addition to ` `, `"`, `#`, `>`, `<`, `` ` ``, `?`, `{`, `}`, `/`, `:`, `;`, `=`, `@`, `\`, `[`, `]`, `^`, `|`, `&`, and `+` (space, doublequote, hash, greater than, less than, backtick, question mark, open curly brace, close curly brace, forward slash, colon, semi-colon, equal sign, at sign, backslash, open square bracket, close square bracket, caret, pipe, ampersand and plus).
+- `"percent-component"` - Everything `"percent-userinfo"` encodes, in addition to `%`, `$` and `,` (percent, dollar sign and comma). This matches the [component percent-encode set](https://url.spec.whatwg.org/#component-percent-encode-set) from the URL spec, and is the closest equivalent to JavaScript's `encodeURIComponent`.
+- `"form-urlencoded"` - Everything `"percent-component"` encodes, in addition to `!`, `'`, `(`, `)` and `~` (exclamation mark, single quote, open parenthesis, close parenthesis and tilde). This matches the [urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set) from the URL spec. Note that a space is encoded as `%20` rather than as `+`; both decode back to a space.
+- `"non-alphanumeric"` - Non-Alphanumeric encodes every ASCII character that is not an ASCII letter or digit.<br/><br/>
 
 **Example**: with the value `foo=bar` from a provider named `baz`, then the template `https://localhost/abc?${encode(baz, "percent-userinfo"}` would resolve to `https://localhost/abc?foo%3Dbar`.
+
+**Encoding a value into a query string or a form body**: use `"percent-userinfo"`, `"percent-component"` or `"form-urlencoded"`. These encode an ampersand (`&`), which would otherwise split the value into extra parameters, and a plus (`+`), which would otherwise be decoded as a space. `"non-alphanumeric"` encodes both as well, but escapes far more than is necessary. `"percent-query"`, `"percent"` and `"percent-path"` do **not** encode either, because they follow the URL spec sets for the parts of a URL where those characters are not special. Note that `"percent-userinfo"` does not encode `%`, so prefer `"percent-component"` or `"form-urlencoded"` for a value that may itself contain a percent sequence.
+
+```yaml
+- method: POST
+  url: https://localhost/oauth2/v3/token
+  headers:
+    Content-Type: application/x-www-form-urlencoded
+  body: username=${username}&password=${encode(password, "form-urlencoded")}&grant_type=password
+```
+
+Only the password is encoded above because it is the field that carries special characters in
+practice. The same treatment applies to **any** dynamic value in a form body or query string --
+`${username}` above would split the body just as readily if a username contained an `&`.
+
+If the value is also scrubbed out of a logger, remember to encode it there too, or the encoded value will no longer match and will be logged in the clear:
+
+```yaml
+loggers:
+  httpErrors:
+    to: stdout
+    where: response.status >= 400
+    select:
+      requestBody: replace(encode(password, "form-urlencoded"), request.body, "******")
+```
 
 </td>
 </tr>

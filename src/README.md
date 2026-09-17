@@ -40,6 +40,13 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
   - Fixed [RUSTSEC-2026-0258](https://rustsec.org/advisories/RUSTSEC-2026-0258), `h2` unbounded empty DATA frames (vulnerability); 0.4.13 to 0.4.19
   - Replaced an `if let ... else { return None }` block in the csv_reader repeat path with the `?` operator, which rustc 1.98 flags via `clippy::question_mark`. Behavior is unchanged.
   - Updated `cargo deny check` to use `licenses` rather than the removed singular `license` argument
+- [Update rust dependencies 2026-09-16](https://github.com/FamilySearch/pewpew/pull/409)
+  - Updated Cargo lock file to latest -- 176 packages within existing semver ranges
+  - Dropped the yanked `core2` crate, which `cargo deny` had been reporting on every run, and removed its now-stale `RUSTSEC-2026-0105` ignore from `deny.toml`
+  - Updated rand to 0.10 -- upstream renamed the `Rng` trait to `RngExt`
+  - Updated yaml-rust2 to 0.13, base64 to 0.23, itertools to 0.15, brotli to 9 and brotli-decompressor to 6
+  - Updated config-wasm to getrandom 0.4 to match what rand 0.10 requires, and removed the `getrandom_backend` rustflag that getrandom 0.4 no longer honors
+  - Vendored OpenSSL moved from 3.5.4 to 3.6.3. It is statically linked into every released binary via the `vendored` feature, and has always tracked transitively rather than being pinned
 
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)

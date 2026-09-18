@@ -18,7 +18,7 @@ name = "test-server"
 path = "src/bin/test_server.rs"
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 body_reader = { path = "./lib/body_reader" }
 bytes = "1"
 channel = { path = "./lib/channel" }
@@ -37,11 +37,11 @@ hyper = { version = "1", features = ["client", "http1", "http2"] }
 hyper-tls = "0.6"
 hyper-util = { version = "0.1", features = ["tokio", "client", "http1", "http2"] }
 http-body-util = "0.1"
-itertools = "0.14"
+itertools = "0.15"
 mod_interval = { path = "./lib/mod_interval" }
 native-tls = "0.2"
 once_cell = "1.17.1"
-rand = "0.9"
+rand = "0.10"
 regex = "1"
 select_any = { path = "./lib/select_any" }
 serde = { version = "1.0", features = ["derive"] }

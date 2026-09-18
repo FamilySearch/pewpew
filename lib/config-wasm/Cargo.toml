@@ -16,8 +16,11 @@ serde-wasm-bindgen = "0.6"
 # https://github.com/tkaitchuck/aHash/issues/95#issuecomment-1937448134
 # https://github.com/rustwasm/wasm-bindgen/pull/3031#issuecomment-1442610289
 wasm-bindgen = { version = "0.2" }
-# https://docs.rs/getrandom/0.3.3/getrandom/#webassembly-support
-# See the root .cargo/config.toml for the `getrandom_backend` cfg flag.
-getrandom = { version = "0.3", features = ["wasm_js"] }
+# https://docs.rs/getrandom/0.4.3/getrandom/#webassembly-support
+# Must track the getrandom major that rand pulls in, or the wasm32 build fails with
+# "The wasm32/64-unknown-unknown are not supported by default". The `wasm_js` feature
+# below is what enables the backend -- getrandom 0.4 removed the
+# `--cfg getrandom_backend="wasm_js"` arm that 0.3 needed, so there is no rustflag.
+getrandom = { version = "0.4", features = ["wasm_js"] }
 log = "0.4"
 wasm-logger = "0.2"

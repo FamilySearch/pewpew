@@ -498,14 +498,16 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
   useEffect(() => {
     const node = canvasNodeRef.current;
     if (!node || allEndpoints.length === 0) { return; }
+    let cancelled = false;
     let currentChart: Chart;
     import("../TestResults/charts").then(({ requestCountByEndpoint }) => {
+      if (cancelled) { return; }
       if (chart) { chart.destroy(); }
       currentChart = requestCountByEndpoint(node, allEndpoints);
       setChart(currentChart);
       setHiddenDatasets(new Set());
     });
-    return () => { if (currentChart) { currentChart.destroy(); } };
+    return () => { cancelled = true; if (currentChart) { currentChart.destroy(); } };
   }, [allEndpoints]);
 
   const toggleDataset = (index: number) => {
@@ -562,14 +564,16 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
   useEffect(() => {
     const node = canvasNodeRef.current;
     if (!node || hostGroups.length === 0) { return; }
+    let cancelled = false;
     let currentChart: Chart;
     import("../TestResults/charts").then(({ mergeAgentColors, requestCountByEndpoint }) => {
+      if (cancelled) { return; }
       if (chart) { chart.destroy(); }
       currentChart = requestCountByEndpoint(node, hostGroups, mergeAgentColors);
       setChart(currentChart);
       setHiddenDatasets(new Set());
     });
-    return () => { if (currentChart) { currentChart.destroy(); } };
+    return () => { cancelled = true; if (currentChart) { currentChart.destroy(); } };
   }, [hostGroups]);
 
   const toggleDataset = (index: number) => {
@@ -616,14 +620,16 @@ const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; co
   useEffect(() => {
     const node = canvasNodeRef.current;
     if (!node || fileSeries.length === 0) { return; }
+    let cancelled = false;
     let currentChart: Chart;
     import("../TestResults/charts").then(({ requestCountByAgentSeries }) => {
+      if (cancelled) { return; }
       if (chart) { chart.destroy(); }
       currentChart = requestCountByAgentSeries(node, fileSeries);
       setChart(currentChart);
       setHiddenDatasets(new Set());
     });
-    return () => { if (currentChart) { currentChart.destroy(); } };
+    return () => { cancelled = true; if (currentChart) { currentChart.destroy(); } };
   }, [fileSeries]);
 
   const toggleDataset = (index: number) => {

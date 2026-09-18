@@ -16,8 +16,9 @@ serde-wasm-bindgen = "0.6"
 # https://github.com/tkaitchuck/aHash/issues/95#issuecomment-1937448134
 # https://github.com/rustwasm/wasm-bindgen/pull/3031#issuecomment-1442610289
 wasm-bindgen = { workspace = true }
-# https://docs.rs/getrandom/0.3.3/getrandom/#webassembly-support
-# See the root .cargo/config.toml for the `getrandom_backend` cfg flag.
-getrandom = { workspace = true, features = ["wasm_js"] }
+# Both getrandom majors in the wasm tree need their backend enabled here; see the comment in
+# the root [workspace.dependencies] for which dependency pulls in which.
+getrandom = { workspace = true }
+getrandom_03 = { workspace = true }
 log.workspace = true
 wasm-logger.workspace = true

@@ -222,12 +222,14 @@ jobs:
         run: |
           # remove the leading "v" for subsequent usage
           version=${VERSION/v/}
-          # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
+          # Patch the ROOT Cargo.toml, not the crate's. The wasm crates use `version.workspace = true`,
+          # so the only version to replace is the one in [workspace.package], and running this in the
+          # crate directory silently matched nothing -- every wasm asset shipped the previous
+          # release's version (v0.6.1-preview6 published a config-wasm package.json saying 0.6.0).
           cp Cargo.toml Cargo2.toml
           sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
           echo "version = $version"
           echo "Cargo $(grep "^version =" Cargo.toml )"
-        working-directory: ${{env.working-directory}}
 
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup target add wasm32-unknown-unknown --toolchain stable
@@ -302,12 +304,14 @@ jobs:
         run: |
           # remove the leading "v" for subsequent usage
           version=${VERSION/v/}
-          # replace the version value in Cargo.toml with the tag version (so we don't need to create extraneous commits for every preview version)
+          # Patch the ROOT Cargo.toml, not the crate's. The wasm crates use `version.workspace = true`,
+          # so the only version to replace is the one in [workspace.package], and running this in the
+          # crate directory silently matched nothing -- every wasm asset shipped the previous
+          # release's version (v0.6.1-preview6 published a config-wasm package.json saying 0.6.0).
           cp Cargo.toml Cargo2.toml
           sed "0,/^version = \".*\"/s//version = \"$version\"/" Cargo2.toml > Cargo.toml
           echo "version = $version"
           echo "Cargo $(grep "^version =" Cargo.toml )"
-        working-directory: ${{env.working-directory}}
 
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup target add wasm32-unknown-unknown --toolchain stable

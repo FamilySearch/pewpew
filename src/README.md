@@ -23,6 +23,30 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 ```
 
 ## Changelog
+### v0.6.2
+- [Merge master into 0.6.0-scripting-dev](https://github.com/FamilySearch/pewpew/pull/410)
+  - Brings the v0.5.16 changes below into the scripting line. See the v0.5.16 section for the full
+    detail on each; the scripting-specific notes are here.
+  - `encode()` gained the `"percent-component"` and `"form-urlencoded"` options, and
+    `"percent-userinfo"` now encodes `&` and `+`. The encode sets live in `lib/config/src/shared/encode.rs`
+    on this branch, so both the legacy (`configv1`) and scripting (`configv2`) parsers get the fix.
+  - **Behavior change**: every existing caller of `encode(value, "percent-userinfo")` now gets `&` and
+    `+` escaped where they previously passed through. `%` is still not encoded, so prefer
+    `"percent-component"` or `"form-urlencoded"` for a value that may itself contain a percent sequence.
+  - Updated rust dependencies to match master: rand 0.10, yaml-rust2 0.13, base64 0.23, itertools 0.15,
+    brotli 9 and brotli-decompressor 6. Also picked up `event-listener` 5.4.2 and `h2` 0.4.19 for the
+    two RUSTSEC advisories master fixed in #406, and `spin` 0.10.1 to clear a yanked-crate warning.
+  - The wasm builds now carry **two** getrandom majors, each needing its own opt-in: 0.4 (what rand
+    0.10 pulls in, enabled by the `wasm_js` feature alone) and 0.3 (what `boa_engine` 0.21 ->
+    rand 0.9 pulls in, which needs the `wasm_js` feature *and* the `getrandom_backend` rustflag).
+    Unlike master, this branch therefore keeps `lib/config-wasm/.cargo/config.toml` and
+    `lib/config-gen/.cargo/config.toml`, and adds a renamed `getrandom_03` dependency so the 0.3
+    copy gets its feature. Both can be dropped once boa moves off rand 0.9.
+  - Dropped the stale `RUSTSEC-2026-0105` (`core2`) ignore from `deny.toml`.
+  - Wrapped `providers::tests::range_provider_works` and `providers::tests::list_provider_works` in a
+    30s timeout so a CI hang fails fast, and pointed the pr-rust workflow's retry loop at
+    `list_provider_works` (master calls that test `literals_provider_works`).
+
 ### v0.6.1
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
   - Fixed [Try script never exits on long provider chains](https://github.com/FamilySearch/pewpew/issues/123)
@@ -61,6 +85,31 @@ Changes:
   - Known issues in the config-updater:
   - Expressions in vars will not wrap environment variables in the expected `${e:VAR}`
   - vars in `logs` and `provides` will not have the prepended `_v.` before the var name.
+
+### v0.5.16
+- [Bump bytes from 1.11.0 to 1.11.1](https://github.com/FamilySearch/pewpew/pull/361)
+- [Bump rand from 0.9.2 to 0.9.3](https://github.com/FamilySearch/pewpew/pull/369)
+- [Bump openssl from 0.10.75 to 0.10.78](https://github.com/FamilySearch/pewpew/pull/371)
+- [Bump openssl from 0.10.78 to 0.10.79](https://github.com/FamilySearch/pewpew/pull/375)
+- [Bump openssl from 0.10.79 to 0.10.80](https://github.com/FamilySearch/pewpew/pull/383)
+- [PERF-4580 Fix `encode()` not escaping `&` or `+`](https://github.com/FamilySearch/pewpew/pull/405)
+  - **Behavior change**: `encode(value, "percent-userinfo")` now also encodes `&` and `+`. Neither was encoded before, so a value containing an `&` silently split an `application/x-www-form-urlencoded` body or a query string into extra parameters, and a `+` was decoded as a space. This affects every existing caller of `"percent-userinfo"`; the output is now correctly escaped where it previously was not. `%` is still not encoded, so prefer `"percent-component"` or `"form-urlencoded"` for a value that may itself contain a percent sequence.
+  - Added a new `encode()` option `"percent-component"`, matching the [component percent-encode set](https://url.spec.whatwg.org/#component-percent-encode-set). It encodes everything `"percent-userinfo"` does plus `%`, `$` and `,`, and is the closest equivalent to JavaScript's `encodeURIComponent`.
+  - Added a new `encode()` option `"form-urlencoded"`, matching the [urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set), for values interpolated into an `application/x-www-form-urlencoded` body.
+  - `"percent-query"`, `"percent"` and `"percent-path"` are unchanged, and still do not encode `&` or `+`, since those characters are not special in the parts of a URL those sets describe.
+  - Note that if an encoded value is also scrubbed from a logger with `replace()`, the needle must be encoded the same way or the value will be logged in the clear.
+- [Fix clippy question_mark lint and two RUSTSEC advisories](https://github.com/FamilySearch/pewpew/pull/406)
+  - Fixed [RUSTSEC-2026-0221](https://rustsec.org/advisories/RUSTSEC-2026-0221), `event-listener` allows `!Send` tags to cross thread boundaries via `StackSlot` (unsound); 5.4.1 to 5.4.2
+  - Fixed [RUSTSEC-2026-0258](https://rustsec.org/advisories/RUSTSEC-2026-0258), `h2` unbounded empty DATA frames (vulnerability); 0.4.13 to 0.4.19
+  - Replaced an `if let ... else { return None }` block in the csv_reader repeat path with the `?` operator, which rustc 1.98 flags via `clippy::question_mark`. Behavior is unchanged.
+  - Updated `cargo deny check` to use `licenses` rather than the removed singular `license` argument
+- [Update rust dependencies 2026-09-16](https://github.com/FamilySearch/pewpew/pull/409)
+  - Updated Cargo lock file to latest -- 176 packages within existing semver ranges
+  - Dropped the yanked `core2` crate, which `cargo deny` had been reporting on every run, and removed its now-stale `RUSTSEC-2026-0105` ignore from `deny.toml`
+  - Updated rand to 0.10 -- upstream renamed the `Rng` trait to `RngExt`
+  - Updated yaml-rust2 to 0.13, base64 to 0.23, itertools to 0.15, brotli to 9 and brotli-decompressor to 6
+  - Updated config-wasm to getrandom 0.4 to match what rand 0.10 requires, and removed the `getrandom_backend` rustflag that getrandom 0.4 no longer honors
+  - Vendored OpenSSL moved from 3.5.4 to 3.6.3. It is statically linked into every released binary via the `vendored` feature, and has always tracked transitively rather than being pinned
 
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)

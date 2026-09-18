@@ -24,7 +24,7 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
 
 ## Changelog
 ### v0.6.2
-- [Merge master into 0.6.0-scripting-dev](https://github.com/FamilySearch/pewpew/pull/PRNUM)
+- [Merge master into 0.6.0-scripting-dev](https://github.com/FamilySearch/pewpew/pull/410)
   - Brings the v0.5.16 changes below into the scripting line. See the v0.5.16 section for the full
     detail on each; the scripting-specific notes are here.
   - `encode()` gained the `"percent-component"` and `"form-urlencoded"` options, and
@@ -85,6 +85,7 @@ Changes:
   - Known issues in the config-updater:
   - Expressions in vars will not wrap environment variables in the expected `${e:VAR}`
   - vars in `logs` and `provides` will not have the prepended `_v.` before the var name.
+
 ### v0.5.16
 - [Bump bytes from 1.11.0 to 1.11.1](https://github.com/FamilySearch/pewpew/pull/361)
 - [Bump rand from 0.9.2 to 0.9.3](https://github.com/FamilySearch/pewpew/pull/369)

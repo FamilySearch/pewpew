@@ -760,7 +760,7 @@ impl std::fmt::Display for Value {
                 if p.rest.is_empty() {
                     match &p.start {
                         PathStart::Ident(i) => write!(f, "{i}"),
-                        PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
+                        PathStart::FunctionCall(func) => write!(f, "{}", func.convert_to_v2()),
                         PathStart::Value(v) => write!(f, "{v}"),
                     }
                 } else {
@@ -774,7 +774,7 @@ impl std::fmt::Display for Value {
                     match &p.start {
                         PathStart::Ident(i) => write!(f, "{i}.{rest}"),
                         PathStart::FunctionCall(func) => {
-                            write!(f, "{}.{}", &func.convert_to_v2(), rest)
+                            write!(f, "{}.{}", func.convert_to_v2(), rest)
                         }
                         PathStart::Value(v) => write!(f, "{v}.{rest}"),
                     }
@@ -921,7 +921,7 @@ impl std::fmt::Display for PathStart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             PathStart::Ident(i) => write!(f, "{i}"),
-            PathStart::FunctionCall(func) => write!(f, "{}", &func.convert_to_v2()),
+            PathStart::FunctionCall(func) => write!(f, "{}", func.convert_to_v2()),
             PathStart::Value(v) => write!(f, "{v}"),
         }
     }
@@ -2774,7 +2774,6 @@ pub mod template_convert {
                             match *path {
                                 Path {
                                     start: PathStart::Ident(ident_path),
-                                    rest: _,
                                     ..
                                 } => if segments.is_empty() {
                                     Segment::SingleSource(ident_path)
@@ -2786,7 +2785,6 @@ pub mod template_convert {
                                 },
                                 Path {
                                     start: PathStart::FunctionCall(function_call),
-                                    rest: _,
                                     ..
                                 } => {
                                         log::debug!("template expression function {function_call:?}");

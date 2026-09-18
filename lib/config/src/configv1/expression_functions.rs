@@ -1901,6 +1901,59 @@ mod tests {
         }
     }
 
+    // PERF-4580: a password containing an ampersand silently split an
+    // `application/x-www-form-urlencoded` body into extra parameters, because none of the
+    // encodings encoded `&`. Only `non-alphanumeric` did, which is why configs worked around it
+    // by hand-writing `%26`.
+    #[test]
+    fn encode_is_safe_for_form_urlencoded_bodies() {
+        let password = "pa&ss+wo rd";
+        // The encodings meant for a value inside a query string or a form body.
+        for encoding in ["percent-userinfo", "percent-component", "form-urlencoded"] {
+            let encoded = match Encode::new(
+                vec![j!(password).into(), j!(encoding).into()],
+                create_marker(),
+            )
+            .unwrap()
+            {
+                Either::B(json::Value::String(s)) => s,
+                other => panic!("`{}` did not fold to a string: {:?}", encoding, other),
+            };
+            assert!(
+                !encoded.contains('&'),
+                "`{}` left a bare `&` in {:?}, which splits the body",
+                encoding,
+                encoded
+            );
+            assert!(
+                !encoded.contains('+'),
+                "`{}` left a bare `+` in {:?}, which decodes as a space",
+                encoding,
+                encoded
+            );
+            // A body built with this value still parses as the three parameters it should.
+            let body = format!("username=user&password={}&grant_type=password", encoded);
+            let parsed: Vec<(&str, &str)> = body
+                .split('&')
+                .map(|pair| pair.split_once('=').expect("every pair has an ="))
+                .collect();
+            assert_eq!(
+                parsed.len(),
+                3,
+                "`{}` produced {} params instead of 3 from {:?}",
+                encoding,
+                parsed.len(),
+                body
+            );
+            // And the value round-trips back to the original password.
+            let plus_decoded = parsed[1].1.replace('+', " ");
+            let decoded = percent_encoding::percent_decode_str(&plus_decoded)
+                .decode_utf8()
+                .expect("encoded value is valid utf8");
+            assert_eq!(decoded, password, "`{}` did not round-trip", encoding);
+        }
+    }
+
     #[test]
     fn encode_eval() {
         // constructor args, eval_arg, expect
@@ -1929,6 +1982,23 @@ mod tests {
                 vec![j!("asd 123~").into(), j!("non-alphanumeric").into()],
                 None,
                 j!("asd%20123%7E"),
+            ),
+            // PERF-4580: an ampersand or plus in a value must not leak through the
+            // encodings used for query string and form body values.
+            (
+                vec![j!("pass&word+1").into(), j!("percent-userinfo").into()],
+                None,
+                j!("pass%26word%2B1"),
+            ),
+            (
+                vec![j!("pass&word+1%$,").into(), j!("percent-component").into()],
+                None,
+                j!("pass%26word%2B1%25%24%2C"),
+            ),
+            (
+                vec![j!("pass&word+1!'()~").into(), j!("form-urlencoded").into()],
+                None,
+                j!("pass%26word%2B1%21%27%28%29%7E"),
             ),
             (
                 vec!["a".into(), j!("percent-path").into()],

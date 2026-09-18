@@ -484,6 +484,55 @@ mod tests {
         );
     }
 
+    /// A value interpolated into a query string or an `application/x-www-form-urlencoded` body
+    /// must not be able to introduce a new parameter, and must not decode back to something other
+    /// than itself. `&` would split the value in two and `+` would come back as a space.
+    #[test]
+    fn encode_fn_is_safe_for_form_urlencoded_bodies() {
+        let mut ctx: Context = super::builtins::get_default_context();
+        let mut eval = |s: &str| {
+            ctx.eval(Source::from_bytes(s))
+                .unwrap()
+                .as_string()
+                .unwrap()
+                .to_std_string_escaped()
+        };
+
+        for encoding in ["percent-userinfo", "percent-component", "form-urlencoded"] {
+            let encoded = eval(&format!(r#"encode("pass&word+1", "{encoding}")"#));
+            assert_eq!(
+                encoded, "pass%26word%2B1",
+                "{encoding} must encode both & and +"
+            );
+        }
+
+        // Only the two spec-correct sets encode `%`, so only they are safe for a value that
+        // already contains a percent sequence.
+        assert_eq!(
+            eval(r#"encode("100%", "percent-userinfo")"#),
+            "100%",
+            "percent-userinfo deliberately leaves % alone"
+        );
+        for encoding in ["percent-component", "form-urlencoded"] {
+            assert_eq!(
+                eval(&format!(r#"encode("100%", "{encoding}")"#)),
+                "100%25",
+                "{encoding} must encode %"
+            );
+        }
+
+        // form-urlencoded additionally escapes the sub-delims that a strict form decoder may treat
+        // as reserved.
+        assert_eq!(
+            eval(r#"encode("a!b'c(d)e~f", "percent-component")"#),
+            "a!b'c(d)e~f"
+        );
+        assert_eq!(
+            eval(r#"encode("a!b'c(d)e~f", "form-urlencoded")"#),
+            "a%21b%27c%28d%29e%7Ef"
+        );
+    }
+
     #[test]
     fn epoch_fn() {
         let mut ctx: Context = super::builtins::get_default_context();
@@ -778,7 +827,7 @@ mod builtins {
 
     use crate::shared::{encode::Encoding, Epoch};
     use helper::{AnyAsString, AnyNull, NumType, OrNull};
-    use rand::{rng, Rng};
+    use rand::{rng, RngExt};
     use regex::Regex;
     use scripting_macros::boa_fn;
     use serde_json::Value as SJV;

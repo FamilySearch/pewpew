@@ -33,13 +33,13 @@ import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
+import { cloneParsedEntries, detectOverlap, mergeResults } from "./merge";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import { MergeSearchModal } from "./MergeSearchModal";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
-import { mergeResults } from "./merge";
 import styled from "styled-components";
 
 const TimeTaken = styled.div`
@@ -594,12 +594,12 @@ export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, merge
     if (node) {
       if (overviewChart) { overviewChart.destroy(); }
 
+      let cancelled = false;
       if (mergeEndpoints) {
         const mergedData = groupAndMergeByLabel(displayData, (b) => `${b.method} ${b.url}`);
         import("./charts").then(({ requestCountByEndpoint }) => {
-          setOverviewChart(requestCountByEndpoint(node, mergedData));
-          freeGroupedHistograms(mergedData);
-        });
+          if (!cancelled && node.isConnected) { setOverviewChart(requestCountByEndpoint(node, mergedData)); }
+        }).finally(() => { freeGroupedHistograms(mergedData); });
       } else {
         const endpointData: [string, DataPoint[]][] = displayData.map(([bucketId, dataPoints]) => {
           const tagList = Object.entries(bucketId)
@@ -612,9 +612,10 @@ export const OverviewChart: React.FC<OverviewChartProps> = ({ displayData, merge
           return [label, dataPoints];
         });
         import("./charts").then(({ requestCountByEndpoint }) => {
-          setOverviewChart(requestCountByEndpoint(node, endpointData));
+          if (!cancelled && node.isConnected) { setOverviewChart(requestCountByEndpoint(node, endpointData)); }
         });
       }
+      return () => { cancelled = true; };
     }
   }, [displayData, mergeEndpoints]);
 
@@ -653,10 +654,11 @@ export const HostChart: React.FC<{ displayData: ParsedFileEntry[] }> = ({ displa
         try { return new URL(bucketId.url).hostname; } catch { return bucketId.url; }
       });
 
+      let cancelled = false;
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
-        setHostChart(requestCountByEndpoint(node, hostData, mergeAgentColors));
-        freeGroupedHistograms(hostData);
-      });
+        if (!cancelled && node.isConnected) { setHostChart(requestCountByEndpoint(node, hostData, mergeAgentColors)); }
+      }).finally(() => { freeGroupedHistograms(hostData); });
+      return () => { cancelled = true; };
     }
   }, [displayData]);
 
@@ -696,11 +698,12 @@ export const AgentChart: React.FC<AgentChartProps> = ({ displayData, agentTimeSe
     if (node) {
       if (agentChart) { agentChart.destroy(); }
 
+      let cancelled = false;
       if (agentTimeSeries && agentTimeSeries.length > 0) {
         import("./charts").then(({ requestCountByAgentSeries, mergeAgentColors }) => {
-          setAgentChart(requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors));
+          if (!cancelled && node.isConnected) { setAgentChart(requestCountByAgentSeries(node, agentTimeSeries, mergeAgentColors)); }
         });
-        return;
+        return () => { cancelled = true; };
       }
 
       // Fallback: group by agent/host/machine/source tag from BucketId.
@@ -711,9 +714,9 @@ export const AgentChart: React.FC<AgentChartProps> = ({ displayData, agentTimeSe
       );
 
       import("./charts").then(({ requestCountByEndpoint, mergeAgentColors }) => {
-        setAgentChart(requestCountByEndpoint(node, agentData, mergeAgentColors));
-        freeGroupedHistograms(agentData);
-      });
+        if (!cancelled && node.isConnected) { setAgentChart(requestCountByEndpoint(node, agentData, mergeAgentColors)); }
+      }).finally(() => { freeGroupedHistograms(agentData); });
+      return () => { cancelled = true; };
     }
   }, [displayData, agentTimeSeries]);
 
@@ -1243,10 +1246,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
   };
 
-  const onMergeLoad = useCallback(async (selectedTests: TestData[]): Promise<void> => {
+  const onMergeLoad = useCallback(async (selectedTests: TestData[], userInitiated: boolean = true): Promise<void> => {
     if (!state.resultsData) { return; }
 
-    const allParsed: ParsedFileEntry[][] = [state.resultsData];
+    // Clone base data before any await — prevents use-after-free if resultsData is freed
+    // by a concurrent reload or clear while we fetch additional agents' results.
+    const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(state.resultsData)];
     const fileLabels: string[] = [testData.testId];
 
     for (const test of selectedTests) {
@@ -1262,6 +1267,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         fileLabels.push(test.testId);
       } catch (error) {
         log(`onMergeLoad: error loading ${test.testId}`, LogLevel.WARN, error);
+      }
+    }
+
+    if (userInitiated && !detectOverlap(allParsed)) {
+      if (!window.confirm("The selected tests don't appear to share any time buckets — they may not be concurrent agent runs. Merge anyway?")) {
+        for (const parsed of allParsed) { freeParsedEntries(parsed); }
+        return;
       }
     }
 
@@ -1283,13 +1295,15 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
 
     const merged = mergeResults(allParsed);
 
-    // Free the intermediate parsed data from selected tests — mergeResults cloned what it needed
-    for (let i = 1; i < allParsed.length; i++) { freeParsedEntries(allParsed[i]); }
+    // Free all parsed data (including the base clone at [0]) — mergeResults cloned what it needed
+    for (const parsed of allParsed) { freeParsedEntries(parsed); }
 
     setState((old) => {
-      // Free the previous merged data before replacing it
       freeParsedEntries(old.mergedData);
-      return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels };
+      freeHistograms(undefined, old.summaryData, undefined);
+      const mergedTime = minMaxTime(merged);
+      const mergedSummary = getSummaryData({ filteredData: merged, summaryTagFilter: old.summaryTagFilter, summaryTagValueFilter: old.summaryTagValueFilter });
+      return { ...old, mergedData: merged, mergedAgentTimeSeries: agentTimeSeries, mergedTestIds: fileLabels, minMaxTime: mergedTime, summaryData: mergedSummary };
     });
     // Sync additional testIds (all labels except the current test) to the URL
     onMergeTestIdsChangeRef.current?.(fileLabels.slice(1));
@@ -1298,7 +1312,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const onClearMerge = useCallback(() => {
     setState((old) => {
       freeParsedEntries(old.mergedData);
-      return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [] };
+      freeHistograms(undefined, old.summaryData, undefined);
+      const restoredTime = old.resultsData ? minMaxTime(old.resultsData) : undefined;
+      const restoredSummary = getSummaryData({ filteredData: old.filteredData || old.resultsData, summaryTagFilter: old.summaryTagFilter, summaryTagValueFilter: old.summaryTagValueFilter });
+      return { ...old, mergedData: undefined, mergedAgentTimeSeries: [], mergedTestIds: [], minMaxTime: restoredTime, summaryData: restoredSummary };
     });
     onMergeTestIdsChangeRef.current?.(undefined);
   }, []);
@@ -1347,7 +1364,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     if (initialMergeTestIds?.length && state.resultsData && !state.mergedData && !autoMergeTriggeredRef.current) {
       autoMergeTriggeredRef.current = true;
       const load = initialMergeTestData?.length
-        ? onMergeLoad(initialMergeTestData)
+        ? onMergeLoad(initialMergeTestData, false)
         : loadMergeByTestIds(initialMergeTestIds);
       load.catch((error: unknown) => {
         log("Auto-load merge error", LogLevel.WARN, error);

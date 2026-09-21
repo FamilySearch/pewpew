@@ -46,7 +46,7 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
   - Wrapped `providers::tests::range_provider_works` and `providers::tests::list_provider_works` in a
     30s timeout so a CI hang fails fast, and pointed the pr-rust workflow's retry loop at
     `list_provider_works` (master calls that test `literals_provider_works`).
-- [Update rust dependencies scripting 2026-09-21](https://github.com/FamilySearch/pewpew/pull/PRNUM)
+- [Update rust dependencies scripting 2026-09-21](https://github.com/FamilySearch/pewpew/pull/411)
   - Updated the Cargo lock file to latest -- 198 crates updated, 22 added and 43 removed. That is
     the whole PR; the plain `cargo update` accounted for 183/14/43 of it and the manifest bumps
     below moved the rest

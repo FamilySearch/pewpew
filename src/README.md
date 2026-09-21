@@ -47,8 +47,9 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
     30s timeout so a CI hang fails fast, and pointed the pr-rust workflow's retry loop at
     `list_provider_works` (master calls that test `literals_provider_works`).
 - [Update rust dependencies scripting 2026-09-21](https://github.com/FamilySearch/pewpew/pull/PRNUM)
-  - Updated the Cargo lock file to latest -- 183 packages updated, 14 added, 43 removed, all within
-    the existing semver ranges
+  - Updated the Cargo lock file to latest -- 198 crates updated, 22 added and 43 removed. That is
+    the whole PR; the plain `cargo update` accounted for 183/14/43 of it and the manifest bumps
+    below moved the rest
   - Vendored OpenSSL moved from 3.5.4 to 3.6.3, catching this branch up to what master shipped in
     [#409](https://github.com/FamilySearch/pewpew/pull/409). The merge in #410 was based on the
     scripting lock file, so it was still on 3.5.4

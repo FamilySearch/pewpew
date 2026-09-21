@@ -103,6 +103,7 @@ license = "Apache 2.0"
 
 [workspace.dependencies]
 base64 = "0.23"
+boa_engine = "0.22"
 bytes = "1"
 config = { path = "./lib/config" }
 ether = { path = "./lib/either" }

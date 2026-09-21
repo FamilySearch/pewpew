@@ -10,9 +10,11 @@ use thiserror::Error;
 /// fail because only the native and opaque representations existed. Fall back to the error's own
 /// `Display` so an engine error still reports its message rather than being swallowed.
 pub(crate) fn js_error_to_value(err: JsError, ctx: &mut Context) -> JsValue {
-    let fallback = err.to_string();
+    // `into_opaque` hands the original error back in `Err`, so the `Display` fallback is only
+    // formatted for the rare engine-error arm. Doing it eagerly would walk the shadow-stack
+    // backtrace and allocate on every JS error, and expression errors can fire per request.
     err.into_opaque(ctx)
-        .unwrap_or_else(|_| JsValue::from(JsString::from(fallback.as_str())))
+        .unwrap_or_else(|e| JsValue::from(JsString::from(e.to_string().as_str())))
 }
 
 #[derive(Debug, Error, Clone)]

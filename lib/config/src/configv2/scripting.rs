@@ -29,6 +29,29 @@ use zip_all::zip_all_map;
 
 pub(crate) use lib_src::{set_source, LibSrc};
 
+/// Serializes the tests that touch the process-global JS lib source.
+///
+/// [`set_source`] writes a `static`, and `LoadTest::from_yaml` calls it unconditionally --
+/// including with `None` for a config that declares no `lib_src`. Any two tests running
+/// concurrently can therefore clobber each other's source in between the write and the evaluation
+/// that reads it back.
+///
+/// This replaces a one-second `thread::sleep` that sat at the top of the two tests that noticed
+/// the problem. Those sleeps never staggered anything -- both slept for the same duration -- they
+/// just usually let each test finish before the other was scheduled, which stopped holding under
+/// the load of a full `cargo test --all`.
+#[cfg(test)]
+static LIB_SRC_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Acquires [`LIB_SRC_TEST_LOCK`], ignoring poisoning.
+///
+/// A panic in one test would otherwise poison the mutex and cascade into every other test that
+/// touches the global, turning a single real failure into a screenful of misleading ones.
+#[cfg(test)]
+pub(crate) fn lock_lib_src_for_test() -> std::sync::MutexGuard<'static, ()> {
+    LIB_SRC_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 pub type ProviderStreamStream<Ar, E> =
     Box<dyn Stream<Item = Result<(serde_json::Value, Vec<Ar>), E>> + Send + Unpin + 'static>;
 
@@ -753,8 +776,7 @@ mod tests {
 
     #[test]
     fn custom_js() {
-        // sleep is to prevent collision issues with the test in the scripting module
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let _lib_src_guard = super::lock_lib_src_for_test();
 
         super::set_source(Some(LibSrc::Extern(Arc::from(PathBuf::from(
             "./tests/test_custom.js",

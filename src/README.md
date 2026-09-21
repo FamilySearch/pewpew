@@ -46,6 +46,43 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
   - Wrapped `providers::tests::range_provider_works` and `providers::tests::list_provider_works` in a
     30s timeout so a CI hang fails fast, and pointed the pr-rust workflow's retry loop at
     `list_provider_works` (master calls that test `literals_provider_works`).
+- [Update rust dependencies scripting 2026-09-21](https://github.com/FamilySearch/pewpew/pull/PRNUM)
+  - Updated the Cargo lock file to latest -- 183 packages updated, 14 added, 43 removed, all within
+    the existing semver ranges
+  - Vendored OpenSSL moved from 3.5.4 to 3.6.3, catching this branch up to what master shipped in
+    [#409](https://github.com/FamilySearch/pewpew/pull/409). The merge in #410 was based on the
+    scripting lock file, so it was still on 3.5.4
+  - Dropped the yanked `spin` crate entirely, along with a duplicate `windows-sys` 0.60 and its
+    `windows-targets` 0.53 support crates (10 in total, leaving only `windows-sys` 0.61),
+    tracing-subscriber, the nom 7 copy and the sha2/digest chain
+  - Updated tokio to 1.53, hyper to 1.11, wasm-bindgen to 0.2.128 and web-sys to 0.3.105
+  - Updated boa_engine, boa_gc and boa_parser to 0.22
+    - **Breaking API change**: `JsError::to_opaque` is now `into_opaque` and returns
+      `JsResult<JsValue>` rather than a `JsValue`. boa 0.22 added an `Engine` error representation
+      (runtime limits such as recursion depth) that has no JS object form, so the conversion can
+      fail; 0.21 could not fail because only the native and opaque representations existed. All
+      call sites now go through one helper that falls back to the error's own `Display`, so an
+      engine error reports its message instead of being swallowed.
+    - **wasm fix**: boa 0.22 also gained a `Clock` whose default calls `std::time::Instant::now()`,
+      which panics with "time not implemented on this platform" on `wasm32-unknown-unknown`. The
+      wasm build still succeeds -- this only surfaces when the engine runs. `lib/config` now enables
+      boa's `js` feature for wasm32 only, which swaps in `web-time` (backed by `performance.now()`);
+      native keeps the std clock.
+    - boa 0.22 moved to rand 0.10, which **supersedes the getrandom workaround #410 added**: the
+      renamed `getrandom_03` dependency is gone, and `lib/config-wasm/.cargo/config.toml` and
+      `lib/config-gen/.cargo/config.toml` are deleted. getrandom 0.4 is now the only major in the
+      wasm tree, and the `getrandom_backend` rustflag those files carried is no longer needed.
+    - `paste` left the dependency tree with this upgrade, so its `RUSTSEC-2024-0436` ignore is gone
+      from `deny.toml` -- `cargo deny` had started reporting it as `advisory-not-detected`. The
+      `derivative` ignore (`RUSTSEC-2024-0388`) remains.
+  - Updated phf to 0.14 and syn to 3.0, both of which deduplicate a crate the tree carried twice.
+    syn 1 and 2 remain via `derivative`, `derive_more` and `dynify`, which are transitive
+    proc-macros we do not control
+  - Fixed a race between the tests that share the process-global JS lib source. `set_source` writes
+    a static and `LoadTest::from_yaml` calls it unconditionally, so concurrent tests could clobber
+    each other; the previous guard was a one-second `thread::sleep` in each of the two tests that
+    had noticed. Replaced with a test-only mutex held by every test that writes the global, which
+    also removes two seconds from each run of the config test suite
 
 ### v0.6.1
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)

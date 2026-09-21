@@ -127,15 +127,9 @@ tokio = "1"
 url = "2"
 zip_all = { path = "./lib/zip_all" }
 # https://docs.rs/getrandom/0.4.3/getrandom/#webassembly-support
-# Two majors are in the wasm tree at once and each needs its own opt-in, or the wasm32 build
-# fails to compile getrandom:
-#   0.4 -- what rand 0.10 pulls in. The `wasm_js` feature alone enables the backend; getrandom
-#          0.4 dropped the `--cfg getrandom_backend="wasm_js"` arm, so no rustflag applies.
-#   0.3 -- what boa_engine 0.21 -> rand 0.9 -> rand_core 0.9 pulls in. It needs BOTH the
-#          `wasm_js` feature and the `getrandom_backend` rustflag, which is why
-#          lib/config-wasm/.cargo/config.toml and lib/config-gen/.cargo/config.toml still exist.
-#          Drop the renamed dependency and both rustflag files once boa moves off rand 0.9.
+# The `wasm_js` feature is what enables the wasm32 backend; getrandom 0.4 dropped the
+# `--cfg getrandom_backend="wasm_js"` arm that 0.3 required, so no rustflag is needed.
+# boa_engine 0.22 moved to rand 0.10, so 0.4 is now the only major in the wasm tree.
 getrandom = { version = "0.4", features = ["wasm_js"] }
-getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 wasm-bindgen = "0.2.87"
 wasm-logger = "0.2"

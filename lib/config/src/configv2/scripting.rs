@@ -1,5 +1,7 @@
 use super::{
-    error::{CreateExprError, EvalExprError, EvalExprErrorInner, IntoStreamError},
+    error::{
+        js_error_to_value, CreateExprError, EvalExprError, EvalExprErrorInner, IntoStreamError,
+    },
     templating::{False, Segment, TemplateType, True},
 };
 use crate::make_send::MakeSend;
@@ -193,7 +195,7 @@ pub fn eval_direct(code: &str) -> Result<String, EvalExprError> {
         .eval(Source::from_bytes(code))
         .map_err(|err| {
             EvalExprErrorInner::ExecutionError(
-                err.to_opaque(context).display().to_string(),
+                js_error_to_value(err, context).display().to_string(),
                 code.to_string(),
             )
         })
@@ -235,7 +237,7 @@ impl EvalExpr {
             ctx: MakeSend::try_new::<CreateExprError, _>(|| {
                 let mut ctx = builtins::get_default_context();
                 ctx.eval(Source::from_bytes(script.as_bytes()))
-                    .map_err(|err| CreateExprError::fn_err(err.to_opaque(&mut ctx)))?;
+                    .map_err(|err| CreateExprError::fn_err(js_error_to_value(err, &mut ctx)))?;
                 let efn = ctx
                     .eval(Source::from_bytes("____eval".as_bytes()))
                     .ok()
@@ -313,7 +315,9 @@ impl EvalExpr {
             .into_iter()
             .map(|(n, (v, ar))| {
                 JsValue::from_json(&v, ctx)
-                    .map_err(|err| EvalExprErrorInner::InvalidJsonFromProvider(err.to_opaque(ctx)))
+                    .map_err(|err| {
+                        EvalExprErrorInner::InvalidJsonFromProvider(js_error_to_value(err, ctx))
+                    })
                     .map(|v| (n, (v, ar)))
             })
             .collect::<Result<_, _>>()?;
@@ -338,13 +342,13 @@ impl EvalExpr {
                     })
                     .map_err(|err| {
                         EvalExprErrorInner::ExecutionError(
-                            err.to_opaque(ctx).display().to_string(),
+                            js_error_to_value(err, ctx).display().to_string(),
                             script.to_string(),
                         )
                     })?,
                 ctx,
             )
-            .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))?,
+            .map_err(|err| EvalExprErrorInner::InvalidResultJson(js_error_to_value(err, ctx)))?,
             values.into_iter().flat_map(|v| v.1 .1).collect_vec(),
         ))
     }
@@ -391,7 +395,7 @@ impl EvalExpr {
 
 #[cfg(test)]
 mod tests {
-    use super::LibSrc;
+    use super::{js_error_to_value, LibSrc};
     use boa_engine::{object::builtins::JsArray, Context, JsValue, Source};
     use std::{path::PathBuf, sync::Arc};
 
@@ -689,7 +693,7 @@ mod tests {
         let mut ctx: Context = super::builtins::get_default_context();
         let caps = ctx.eval(Source::from_bytes(
             r#"match("<html>\n<body>\nHello, Jean! Today's date is 2038-01-19. So glad you made it!\n</body>\n</html>", "Hello, (?P<name>\\w+).*(?P<y>\\d{4})-(?P<m>\\d{2})-(?P<d>\\d{2})")"#
-        )).map_err(|js| js.to_opaque(&mut ctx).display().to_string()).unwrap();
+        )).map_err(|js| js_error_to_value(js, &mut ctx).display().to_string()).unwrap();
         // https://github.com/boa-dev/boa/issues/3923
         // Starting in 0.17, to_json removes any integer/integer strings from the object. purge_undefined doesn't
         // let caps = caps.to_json(&mut ctx).unwrap();
@@ -713,7 +717,7 @@ mod tests {
             .eval(Source::from_bytes(
                 r#"json_path({"a": [{"c": 1}, {"c": 2}], "b": null}, "$.a.*.c")"#,
             ))
-            .map_err(|js| js.to_opaque(&mut ctx).display().to_string())
+            .map_err(|js| js_error_to_value(js, &mut ctx).display().to_string())
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
@@ -723,7 +727,7 @@ mod tests {
             .eval(Source::from_bytes(
                 r#"json_path({"a": [{"c": 56}, {"c": 88}], "b": null}, "$.a.*.c")"#,
             ))
-            .map_err(|js| js.to_opaque(&mut ctx).display().to_string())
+            .map_err(|js| js_error_to_value(js, &mut ctx).display().to_string())
             .unwrap()
             .to_json(&mut ctx)
             .unwrap();
@@ -761,13 +765,13 @@ mod tests {
 
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"foo_custom({x: 55})"#))
-                .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
+                .map_err(|e| js_error_to_value(e, &mut ctx).display().to_string())
                 .unwrap(),
             JsValue::new(55)
         );
         assert_eq!(
             ctx.eval(Source::from_bytes(r#"foo_custom({y: 55})"#))
-                .map_err(|e| e.to_opaque(&mut ctx).display().to_string())
+                .map_err(|e| js_error_to_value(e, &mut ctx).display().to_string())
                 .unwrap(),
             JsValue::new(2)
         );
@@ -797,7 +801,7 @@ pub fn get_default_context() -> Context {
                 // change after the first time.
                 log::error!(
                     "error inserting custom js: {}",
-                    e.to_opaque(&mut ctx).display()
+                    js_error_to_value(e, &mut ctx).display()
                 );
                 builtins::get_default_context()
             }

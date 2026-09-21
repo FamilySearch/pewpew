@@ -1,7 +1,19 @@
-use boa_engine::JsValue;
+use boa_engine::{Context, JsError, JsString, JsValue};
 use boa_parser::Error as ParseError;
 use std::{error::Error as SError, io, sync::Arc};
 use thiserror::Error;
+
+/// Render a [`JsError`] as a [`JsValue`] for reporting.
+///
+/// boa 0.22 added an `Engine` error representation (runtime limits such as recursion depth) that
+/// has no JS object form, which made `JsError::into_opaque` fallible; 0.21's `to_opaque` could not
+/// fail because only the native and opaque representations existed. Fall back to the error's own
+/// `Display` so an engine error still reports its message rather than being swallowed.
+pub(crate) fn js_error_to_value(err: JsError, ctx: &mut Context) -> JsValue {
+    let fallback = err.to_string();
+    err.into_opaque(ctx)
+        .unwrap_or_else(|_| JsValue::from(JsString::from(fallback.as_str())))
+}
 
 #[derive(Debug, Error, Clone)]
 pub enum LoadTestGenError {

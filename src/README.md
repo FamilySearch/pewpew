@@ -84,6 +84,14 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
     each other; the previous guard was a one-second `thread::sleep` in each of the two tests that
     had noticed. Replaced with a test-only mutex held by every test that writes the global, which
     also removes two seconds from each run of the config test suite
+  - Merged master to pick up [#412](https://github.com/FamilySearch/pewpew/pull/412): two races in
+    `lib/channel` that could stall a provider stream permanently, or end it early and silently
+    discard values that were already queued. The channel code is shared with master, so both
+    applied here equally -- see the v0.5.16 section for the full detail. The dependency updates
+    above are what exposed the first of them: boa 0.22 shifted the timing enough that
+    `providers::tests::range_provider_works` and `providers::tests::list_provider_works` hung on
+    every CI run for this branch, where they had only been an occasional flake before. `pr-rust.yml`
+    no longer splits those two tests out or retries them, since the hang they worked around is fixed.
 
 ### v0.6.1
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
@@ -148,6 +156,11 @@ Changes:
   - Updated yaml-rust2 to 0.13, base64 to 0.23, itertools to 0.15, brotli to 9 and brotli-decompressor to 6
   - Updated config-wasm to getrandom 0.4 to match what rand 0.10 requires, and removed the `getrandom_backend` rustflag that getrandom 0.4 no longer honors
   - Vendored OpenSSL moved from 3.5.4 to 3.6.3. It is statically linked into every released binary via the `vendored` feature, and has always tracked transitively rather than being pinned
+- [Fix lost wakeups in the channel Sender and Receiver](https://github.com/FamilySearch/pewpew/pull/412)
+  - **Bug fix**: a provider stream could stop permanently -- never yielding another value and never ending. `Event::notify` only wakes listeners that are already registered, and both `Receiver::poll_next` and `Sender::poll_ready` checked their condition *before* registering one, so a notification arriving in that window was dropped and the task parked forever. Four things can land in it: a send, the last sender dropping, a receiver draining the channel, and the last receiver dropping. Both now re-check after registering.
+  - In a load test the symptom was a provider that quietly stopped feeding its endpoints, with nothing to surface it. In CI it showed up as `providers::tests::range_provider_works` and `providers::tests::literals_provider_works` hanging -- consistently on macOS, sometimes Windows, rarely Linux. The failure is sensitive to core count, which is why the faster runners saw it least.
+  - Those two tests no longer need the `--skip` flags, the separate steps and the 3-attempt retry loop that `pr-rust.yml` carried to work around the hang, so all of that is removed and they run inline with the rest of the suite again. The `tokio::time::timeout` wrappers inside the tests are kept, so any recurrence fails fast and names the test.
+  - **Bug fix**: a second, separate race could make a provider stream end early and silently discard values that were already queued. `poll_next` read the queue and the sender count as two separate steps, so a source that pushed its last values and finished in between left the receiver acting on a stale "empty" reading next to a fresh "no senders" one -- it reported the stream as ended and dropped what was queued. Nothing can be added once the sender count reaches zero, so the queue is now re-read before ending the stream. This one lost data rather than hanging, so it had no timeout or retry to surface it.
 
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)

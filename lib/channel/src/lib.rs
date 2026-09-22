@@ -673,10 +673,19 @@ impl<T: Serialize> Stream for Receiver<T> {
                     continue;
                 }
                 if self.channel.sender_count() == 0 {
-                    // The last sender dropped in the window and `len()` just told us the queue
-                    // is empty, so the stream is finished. Return directly instead of looping:
-                    // another `recv()` here would find the queue empty and emit a second
-                    // OnDemand notification within this one poll.
+                    // The `len()` above is already stale by this point -- a sender can enqueue
+                    // and then drop in between, which is the same silent-data-loss shape as the
+                    // check further up. Re-read the queue now that the count has been observed
+                    // as zero. That read is authoritative in a way the earlier one was not: the
+                    // count is loaded Acquire against the Release in `Sender::drop`, so every
+                    // push made before the last sender went away is visible here, and no
+                    // further push is possible.
+                    if self.channel.len() > 0 {
+                        // Loop so `recv()` returns the value; that path returns `Some` and so
+                        // does not notify OnDemand again.
+                        self.listener = None;
+                        continue;
+                    }
                     debug!(
                         "Receiver:poll_next channel {}, Poll::Ready(None), sender dropped while registering",
                         self.channel.name

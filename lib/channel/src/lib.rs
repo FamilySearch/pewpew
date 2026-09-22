@@ -632,6 +632,19 @@ impl<T: Serialize> Stream for Receiver<T> {
                 self.listener = None;
                 return Poll::Ready(msg);
             } else if self.channel.sender_count() == 0 {
+                // A sender can push and then drop between the `recv()` above and this count
+                // read, so an empty queue here may already be stale. Ending the stream on that
+                // stale reading silently discards whatever was queued in between. No sender can
+                // add anything once the count is zero, so one re-check is authoritative.
+                // `len()` is used rather than `recv()` to avoid a second OnDemand notification.
+                if self.channel.len() > 0 {
+                    debug!(
+                        "Receiver:poll_next channel {}, sender_count 0 but queue non-empty, re-reading",
+                        self.channel.name
+                    );
+                    self.listener = None;
+                    continue;
+                }
                 debug!(
                     "Receiver:poll_next channel {}, Poll::Ready(None), sender_count: 0",
                     self.channel.name

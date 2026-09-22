@@ -666,9 +666,23 @@ impl<T: Serialize> Stream for Receiver<T> {
                 // `len()` and `sender_count()` are used rather than `recv()` because `recv()`
                 // notifies an OnDemand receiver when it finds the queue empty, and that side
                 // effect has to stay at one per poll.
-                if self.channel.len() > 0 || self.channel.sender_count() == 0 {
+                if self.channel.len() > 0 {
+                    // A value landed in the window. Loop so `recv()` returns it -- that path
+                    // returns `Some` and so does not notify OnDemand again.
                     self.listener = None;
                     continue;
+                }
+                if self.channel.sender_count() == 0 {
+                    // The last sender dropped in the window and `len()` just told us the queue
+                    // is empty, so the stream is finished. Return directly instead of looping:
+                    // another `recv()` here would find the queue empty and emit a second
+                    // OnDemand notification within this one poll.
+                    debug!(
+                        "Receiver:poll_next channel {}, Poll::Ready(None), sender dropped while registering",
+                        self.channel.name
+                    );
+                    self.listener = None;
+                    return Poll::Ready(None);
                 }
             }
         }

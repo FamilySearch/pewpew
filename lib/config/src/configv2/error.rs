@@ -1,7 +1,30 @@
-use boa_engine::JsValue;
+use boa_engine::{Context, JsError, JsNativeError, JsValue};
 use boa_parser::Error as ParseError;
 use std::{error::Error as SError, io, sync::Arc};
 use thiserror::Error;
+
+/// Render a [`JsError`] as a [`JsValue`] for reporting.
+///
+/// boa 0.22 added an `Engine` error representation (runtime limits such as recursion depth) that
+/// has no JS object form, which made `JsError::into_opaque` fallible; 0.21's `to_opaque` could not
+/// fail because only the native and opaque representations existed. Fall back to the error's own
+/// `Display` so an engine error still reports its message rather than being swallowed.
+pub(crate) fn js_error_to_value(err: JsError, ctx: &mut Context) -> JsValue {
+    // `into_opaque` hands the original error back in `Err`, so the fallback below is only built
+    // for the rare engine-error arm. Doing it eagerly would walk the shadow-stack backtrace and
+    // allocate on every JS error, and expression errors can fire per request.
+    match err.into_opaque(ctx) {
+        Ok(value) => value,
+        // Wrap the text in an `Error` rather than handing back a primitive string. Every caller
+        // renders this with `JsValue::display()`, which formats a primitive string through
+        // `{:?}` -- a runtime-limit message would come out quoted and escaped. An `Error` object
+        // renders as `Name: message`, like every other error the callers report.
+        Err(engine_err) => JsNativeError::error()
+            .with_message(engine_err.to_string())
+            .into_opaque(ctx)
+            .into(),
+    }
+}
 
 #[derive(Debug, Error, Clone)]
 pub enum LoadTestGenError {
@@ -148,5 +171,89 @@ impl QueryGenError {
 impl From<ParseError> for QueryGenError {
     fn from(value: ParseError) -> Self {
         Self::ParseError(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::js_error_to_value;
+    use boa_engine::{
+        error::{EngineError, RuntimeLimitError},
+        js_string, Context, JsError, JsNativeError, JsValue, Source,
+    };
+
+    /// The ordinary path: a native error converts to its opaque form and renders as
+    /// `Name: message`, unquoted.
+    #[test]
+    fn js_error_to_value_renders_a_native_error_plainly() {
+        let ctx = &mut Context::default();
+        let err: JsError = JsNativeError::typ().with_message("bad argument").into();
+
+        let rendered = js_error_to_value(err, ctx).display().to_string();
+
+        assert!(
+            rendered.starts_with("TypeError: bad argument"),
+            "got {rendered}"
+        );
+    }
+
+    /// An error thrown from JS is already opaque, so it converts rather than falling back.
+    #[test]
+    fn js_error_to_value_renders_a_thrown_error_plainly() {
+        let ctx = &mut Context::default();
+        let err = ctx
+            .eval(Source::from_bytes(
+                r#"throw new RangeError("out of range")"#,
+            ))
+            .expect_err("the script throws");
+
+        let rendered = js_error_to_value(err, ctx).display().to_string();
+
+        assert!(
+            rendered.starts_with("RangeError: out of range"),
+            "got {rendered}"
+        );
+    }
+
+    /// The fallback path, and the reason it wraps the text in an `Error`.
+    ///
+    /// boa 0.22's engine errors (runtime limits) have no JS object form, so `into_opaque` hands
+    /// the error back rather than converting it. Handing back a primitive `JsString` instead
+    /// would be rendered by `display()` through `{:?}`, producing a quoted and escaped literal
+    /// where every other error reports as `Name: message`.
+    #[test]
+    fn js_error_to_value_renders_an_engine_error_plainly() {
+        let ctx = &mut Context::default();
+        let err: JsError = EngineError::RuntimeLimit(RuntimeLimitError::Recursion).into();
+        // Precondition: this is the arm `into_opaque` cannot convert.
+        assert!(
+            err.clone().into_opaque(ctx).is_err(),
+            "expected the engine-error arm"
+        );
+
+        let rendered = js_error_to_value(err, ctx).display().to_string();
+
+        assert!(
+            rendered.starts_with("Error: "),
+            "expected an Error object rendering, got {rendered}"
+        );
+        assert!(
+            rendered.contains("recursive calls"),
+            "the underlying message should survive, got {rendered}"
+        );
+
+        // What the rejected alternative would have produced, so this stays a guard rather than
+        // a description: a primitive string renders quoted.
+        let as_primitive = JsValue::from(js_string!("Error: some engine failure"))
+            .display()
+            .to_string();
+        assert!(
+            as_primitive.starts_with('"'),
+            "a primitive string should render quoted, got {as_primitive}"
+        );
+        assert!(
+            !rendered.starts_with('"'),
+            "the fallback must not render as a quoted literal, got {rendered}"
+        );
     }
 }

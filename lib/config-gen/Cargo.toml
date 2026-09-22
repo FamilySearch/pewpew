@@ -17,7 +17,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 wasm-bindgen.workspace = true
 getrandom.workspace = true
-getrandom_03.workspace = true
 log.workspace = true
 wasm-logger.workspace = true
 

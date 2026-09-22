@@ -472,6 +472,14 @@ impl<T: Serialize> Sink<T> for Sender<T> {
             } else if self.listener.is_none() {
                 debug!("poll_ready {} create listener", self.name());
                 self.listener = Some(self.channel.sender_listen());
+                // Same lost-notification window as `Receiver::poll_next`. Either a receiver
+                // draining the channel (`notify_sender`) or the last receiver dropping
+                // (`notify_all_senders`) can land between the checks above and this
+                // `sender_listen()`, so re-check both now that we are registered.
+                if self.channel.len() < self.channel.limit() || self.no_receivers() {
+                    self.listener = None;
+                    continue;
+                }
             }
         }
     }
@@ -624,6 +632,19 @@ impl<T: Serialize> Stream for Receiver<T> {
                 self.listener = None;
                 return Poll::Ready(msg);
             } else if self.channel.sender_count() == 0 {
+                // A sender can push and then drop between the `recv()` above and this count
+                // read, so an empty queue here may already be stale. Ending the stream on that
+                // stale reading silently discards whatever was queued in between. No sender can
+                // add anything once the count is zero, so one re-check is authoritative.
+                // `len()` is used rather than `recv()` to avoid a second OnDemand notification.
+                if self.channel.len() > 0 {
+                    debug!(
+                        "Receiver:poll_next channel {}, sender_count 0 but queue non-empty, re-reading",
+                        self.channel.name
+                    );
+                    self.listener = None;
+                    continue;
+                }
                 debug!(
                     "Receiver:poll_next channel {}, Poll::Ready(None), sender_count: 0",
                     self.channel.name
@@ -636,6 +657,42 @@ impl<T: Serialize> Stream for Receiver<T> {
                     self.channel.name
                 );
                 self.listener = Some(self.channel.receiver_listen());
+                // `notify` only wakes listeners that are already registered, so anything that
+                // happens between the checks above and this `receiver_listen()` has its
+                // notification dropped and would park this receiver forever. Two things can
+                // land in that window: a send (`notify_receiver`), or the last sender dropping
+                // (`notify_all_receivers`). Re-check both now that we are registered.
+                //
+                // `len()` and `sender_count()` are used rather than `recv()` because `recv()`
+                // notifies an OnDemand receiver when it finds the queue empty, and that side
+                // effect has to stay at one per poll.
+                if self.channel.len() > 0 {
+                    // A value landed in the window. Loop so `recv()` returns it -- that path
+                    // returns `Some` and so does not notify OnDemand again.
+                    self.listener = None;
+                    continue;
+                }
+                if self.channel.sender_count() == 0 {
+                    // The `len()` above is already stale by this point -- a sender can enqueue
+                    // and then drop in between, which is the same silent-data-loss shape as the
+                    // check further up. Re-read the queue now that the count has been observed
+                    // as zero. That read is authoritative in a way the earlier one was not: the
+                    // count is loaded Acquire against the Release in `Sender::drop`, so every
+                    // push made before the last sender went away is visible here, and no
+                    // further push is possible.
+                    if self.channel.len() > 0 {
+                        // Loop so `recv()` returns the value; that path returns `Some` and so
+                        // does not notify OnDemand again.
+                        self.listener = None;
+                        continue;
+                    }
+                    debug!(
+                        "Receiver:poll_next channel {}, Poll::Ready(None), sender dropped while registering",
+                        self.channel.name
+                    );
+                    self.listener = None;
+                    return Poll::Ready(None);
+                }
             }
         }
     }

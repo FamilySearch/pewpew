@@ -21,7 +21,7 @@ use std::{
 };
 
 use crate::{
-    error::{EvalExprError, EvalExprErrorInner, QueryGenError},
+    error::{js_error_to_value, EvalExprError, EvalExprErrorInner, QueryGenError},
     make_send::MakeSend,
     templating::{Bool, False, True},
 };
@@ -244,7 +244,7 @@ fn compile(src: &str, ctx: &mut Context) -> Result<Script, QueryGenError> {
     use boa_engine::Source;
 
     Script::parse(Source::from_bytes(src.as_bytes()), None, ctx)
-        .map_err(|err| QueryGenError::js_compile(err.to_opaque(ctx)))
+        .map_err(|err| QueryGenError::js_compile(js_error_to_value(err, ctx)))
 }
 
 fn get_context() -> RefCell<Context> {
@@ -290,7 +290,7 @@ impl QueryInner {
                 .map(|fe| {
                     fe.evaluate(ctx).map_err(|err| {
                         ExecutionError(
-                            err.to_opaque(ctx).display().to_string(),
+                            js_error_to_value(err, ctx).display().to_string(),
                             "in query for_each".to_string(),
                         )
                     })
@@ -302,21 +302,21 @@ impl QueryInner {
                         if o.is_array() {
                             let a = JsArray::from_object(o).map_err(|err| {
                                 ExecutionError(
-                                    err.to_opaque(ctx).display().to_string(),
+                                    js_error_to_value(err, ctx).display().to_string(),
                                     "in query for_each".to_string(),
                                 )
                             })?;
                             let mut vd = VecDeque::with_capacity(a.length(ctx).unwrap() as usize);
                             while a.length(ctx).map_err(|err| {
                                 ExecutionError(
-                                    err.to_opaque(ctx).display().to_string(),
+                                    js_error_to_value(err, ctx).display().to_string(),
                                     "in query for_each".to_string(),
                                 )
                             })? > 0
                             {
                                 let v = a.pop(ctx).map_err(|err| {
                                     ExecutionError(
-                                        err.to_opaque(ctx).display().to_string(),
+                                        js_error_to_value(err, ctx).display().to_string(),
                                         "in query for_each".to_string(),
                                     )
                                 })?;
@@ -363,7 +363,7 @@ impl QueryInner {
                         Ok(w.evaluate(ctx)
                             .map_err(|err| {
                                 ExecutionError(
-                                    err.to_opaque(ctx).display().to_string(),
+                                    js_error_to_value(err, ctx).display().to_string(),
                                     "in query where clause".to_string(),
                                 )
                             })?
@@ -372,7 +372,7 @@ impl QueryInner {
                     .then(|| {
                         self.select.select(ctx).map_err(|err| {
                             ExecutionError(
-                                err.to_opaque(ctx).display().to_string(),
+                                js_error_to_value(err, ctx).display().to_string(),
                                 "in query select".to_string(),
                             )
                         })
@@ -383,8 +383,9 @@ impl QueryInner {
             .flatten()
             .map(|x| {
                 x.and_then(|v| {
-                    purge_undefined(&v, ctx)
-                        .map_err(|err| EvalExprErrorInner::InvalidResultJson(err.to_opaque(ctx)))
+                    purge_undefined(&v, ctx).map_err(|err| {
+                        EvalExprErrorInner::InvalidResultJson(js_error_to_value(err, ctx))
+                    })
                 })
             })
             .collect_vec()

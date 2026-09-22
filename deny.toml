@@ -16,7 +16,6 @@ version = 2
 yanked = "warn"
 ignore = [
     "RUSTSEC-2024-0388", # Need to find replacement for derivative
-    "RUSTSEC-2024-0436", # Need to find replacement for paste
 ]
 
 [licenses]

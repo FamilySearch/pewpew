@@ -490,6 +490,7 @@ mod tests {
 
     #[test]
     fn empty() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         "#;
         let err = LoadTest::from_yaml(input, empty_path(), &BTreeMap::new()).unwrap_err();
@@ -499,6 +500,7 @@ mod tests {
 
     #[test]
     fn basic_no_endpoints() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         config:
           client: {}
@@ -525,6 +527,7 @@ mod tests {
 
     #[test]
     fn basic() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         config:
           client: {}
@@ -547,6 +550,7 @@ mod tests {
 
     #[test]
     fn error_missing_load_pattern() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         config:
           client: {}
@@ -608,6 +612,7 @@ mod tests {
 
     #[test]
     fn error_missing_peak_load() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         config:
           client: {}
@@ -667,6 +672,7 @@ mod tests {
 
     #[test]
     fn get_test_duration() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         use std::time::Duration;
         let input = r#"
         endpoints:
@@ -721,8 +727,7 @@ mod tests {
 
     #[test]
     fn with_custom_js() {
-        // sleep is to prevent collision issues with the test in the scripting module
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
 
         let input = r#"
         lib_src: !inline |
@@ -773,6 +778,7 @@ mod tests {
 
     #[test]
     fn serialize() {
+        let _lib_src_guard = scripting::lock_lib_src_for_test();
         let input = r#"
         providers:
           l: !list []

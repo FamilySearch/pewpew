@@ -46,6 +46,52 @@ C:\vcpkg> set VCPKGRS_DYNAMIC=1 (or simply set it as your environment variable)
   - Wrapped `providers::tests::range_provider_works` and `providers::tests::list_provider_works` in a
     30s timeout so a CI hang fails fast, and pointed the pr-rust workflow's retry loop at
     `list_provider_works` (master calls that test `literals_provider_works`).
+- [Update rust dependencies scripting 2026-09-21](https://github.com/FamilySearch/pewpew/pull/411)
+  - Updated the Cargo lock file to latest -- 198 crates updated, 22 added and 43 removed. That is
+    the whole PR; the plain `cargo update` accounted for 183/14/43 of it and the manifest bumps
+    below moved the rest
+  - Vendored OpenSSL moved from 3.5.4 to 3.6.3, catching this branch up to what master shipped in
+    [#409](https://github.com/FamilySearch/pewpew/pull/409). The merge in #410 was based on the
+    scripting lock file, so it was still on 3.5.4
+  - Dropped the yanked `spin` crate entirely, along with a duplicate `windows-sys` 0.60 and its
+    `windows-targets` 0.53 support crates (10 in total, leaving only `windows-sys` 0.61),
+    tracing-subscriber, the nom 7 copy and the sha2/digest chain
+  - Updated tokio to 1.53, hyper to 1.11, wasm-bindgen to 0.2.128 and web-sys to 0.3.105
+  - Updated boa_engine, boa_gc and boa_parser to 0.22
+    - **Breaking API change**: `JsError::to_opaque` is now `into_opaque` and returns
+      `JsResult<JsValue>` rather than a `JsValue`. boa 0.22 added an `Engine` error representation
+      (runtime limits such as recursion depth) that has no JS object form, so the conversion can
+      fail; 0.21 could not fail because only the native and opaque representations existed. All
+      call sites now go through one helper that falls back to the error's own `Display`, so an
+      engine error reports its message instead of being swallowed.
+    - **wasm fix**: boa 0.22 also gained a `Clock` whose default calls `std::time::Instant::now()`,
+      which panics with "time not implemented on this platform" on `wasm32-unknown-unknown`. The
+      wasm build still succeeds -- this only surfaces when the engine runs. `lib/config` now enables
+      boa's `js` feature for wasm32 only, which swaps in `web-time` (backed by `performance.now()`);
+      native keeps the std clock.
+    - boa 0.22 moved to rand 0.10, which **supersedes the getrandom workaround #410 added**: the
+      renamed `getrandom_03` dependency is gone, and `lib/config-wasm/.cargo/config.toml` and
+      `lib/config-gen/.cargo/config.toml` are deleted. getrandom 0.4 is now the only major in the
+      wasm tree, and the `getrandom_backend` rustflag those files carried is no longer needed.
+    - `paste` left the dependency tree with this upgrade, so its `RUSTSEC-2024-0436` ignore is gone
+      from `deny.toml` -- `cargo deny` had started reporting it as `advisory-not-detected`. The
+      `derivative` ignore (`RUSTSEC-2024-0388`) remains.
+  - Updated phf to 0.14 and syn to 3.0, both of which deduplicate a crate the tree carried twice.
+    syn 1 and 2 remain via `derivative`, `derive_more` and `dynify`, which are transitive
+    proc-macros we do not control
+  - Fixed a race between the tests that share the process-global JS lib source. `set_source` writes
+    a static and `LoadTest::from_yaml` calls it unconditionally, so concurrent tests could clobber
+    each other; the previous guard was a one-second `thread::sleep` in each of the two tests that
+    had noticed. Replaced with a test-only mutex held by every test that writes the global, which
+    also removes two seconds from each run of the config test suite
+  - Merged master to pick up [#412](https://github.com/FamilySearch/pewpew/pull/412): two races in
+    `lib/channel` that could stall a provider stream permanently, or end it early and silently
+    discard values that were already queued. The channel code is shared with master, so both
+    applied here equally -- see the v0.5.16 section for the full detail. The dependency updates
+    above are what exposed the first of them: boa 0.22 shifted the timing enough that
+    `providers::tests::range_provider_works` and `providers::tests::list_provider_works` hung on
+    every CI run for this branch, where they had only been an occasional flake before. `pr-rust.yml`
+    no longer splits those two tests out or retries them, since the hang they worked around is fixed.
 
 ### v0.6.1
 - [Fix try script hang](https://github.com/FamilySearch/pewpew/pull/347)
@@ -110,6 +156,11 @@ Changes:
   - Updated yaml-rust2 to 0.13, base64 to 0.23, itertools to 0.15, brotli to 9 and brotli-decompressor to 6
   - Updated config-wasm to getrandom 0.4 to match what rand 0.10 requires, and removed the `getrandom_backend` rustflag that getrandom 0.4 no longer honors
   - Vendored OpenSSL moved from 3.5.4 to 3.6.3. It is statically linked into every released binary via the `vendored` feature, and has always tracked transitively rather than being pinned
+- [Fix lost wakeups in the channel Sender and Receiver](https://github.com/FamilySearch/pewpew/pull/412)
+  - **Bug fix**: a provider stream could stop permanently -- never yielding another value and never ending. `Event::notify` only wakes listeners that are already registered, and both `Receiver::poll_next` and `Sender::poll_ready` checked their condition *before* registering one, so a notification arriving in that window was dropped and the task parked forever. Four things can land in it: a send, the last sender dropping, a receiver draining the channel, and the last receiver dropping. Both now re-check after registering.
+  - In a load test the symptom was a provider that quietly stopped feeding its endpoints, with nothing to surface it. In CI it showed up as `providers::tests::range_provider_works` and `providers::tests::literals_provider_works` hanging -- consistently on macOS, sometimes Windows, rarely Linux. The failure is sensitive to core count, which is why the faster runners saw it least.
+  - Those two tests no longer need the `--skip` flags, the separate steps and the 3-attempt retry loop that `pr-rust.yml` carried to work around the hang, so all of that is removed and they run inline with the rest of the suite again. The `tokio::time::timeout` wrappers inside the tests are kept, so any recurrence fails fast and names the test.
+  - **Bug fix**: a second, separate race could make a provider stream end early and silently discard values that were already queued. `poll_next` read the queue and the sender count as two separate steps, so a source that pushed its last values and finished in between left the receiver acting on a stale "empty" reading next to a fresh "no senders" one -- it reported the stream as ended and dropped what was queued. Nothing can be added once the sender count reaches zero, so the queue is now re-read before ending the stream. This one lost data rather than hanging, so it had no timeout or retry to surface it.
 
 ### v0.5.15
 - [Bump slab from 0.4.10 to 0.4.11](https://github.com/FamilySearch/pewpew/pull/327)

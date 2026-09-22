@@ -472,6 +472,14 @@ impl<T: Serialize> Sink<T> for Sender<T> {
             } else if self.listener.is_none() {
                 debug!("poll_ready {} create listener", self.name());
                 self.listener = Some(self.channel.sender_listen());
+                // Same lost-notification window as `Receiver::poll_next`. Either a receiver
+                // draining the channel (`notify_sender`) or the last receiver dropping
+                // (`notify_all_senders`) can land between the checks above and this
+                // `sender_listen()`, so re-check both now that we are registered.
+                if self.channel.len() < self.channel.limit() || self.no_receivers() {
+                    self.listener = None;
+                    continue;
+                }
             }
         }
     }
@@ -636,6 +644,19 @@ impl<T: Serialize> Stream for Receiver<T> {
                     self.channel.name
                 );
                 self.listener = Some(self.channel.receiver_listen());
+                // `notify` only wakes listeners that are already registered, so anything that
+                // happens between the checks above and this `receiver_listen()` has its
+                // notification dropped and would park this receiver forever. Two things can
+                // land in that window: a send (`notify_receiver`), or the last sender dropping
+                // (`notify_all_receivers`). Re-check both now that we are registered.
+                //
+                // `len()` and `sender_count()` are used rather than `recv()` because `recv()`
+                // notifies an OnDemand receiver when it finds the queue empty, and that side
+                // effect has to stay at one per poll.
+                if self.channel.len() > 0 || self.channel.sender_count() == 0 {
+                    self.listener = None;
+                    continue;
+                }
             }
         }
     }

@@ -78,6 +78,13 @@ safe-outputs:
       - "guide/results-viewer-react/**/*.json"
       - "eslint.config.*"
       - "tsconfig*.json"
+      # Dotfile configs. Globs skip dotfiles by default, so `**/*.json` does not
+      # reach these - and mocha, c8, babel and storybook majors live in them.
+      - "**/.mocharc*"
+      - "**/.c8rc*"
+      - "**/.babelrc*"
+      - "controller/.storybook/**"
+      - "guide/results-viewer-react/.storybook/**"
     excluded-files:
       - ".github/**"          # the automation itself, and the agent's own scratch in .github/aw/
       - "**/.npmrc"           # the registry is not the agent's to move

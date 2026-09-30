@@ -15,6 +15,9 @@ const compat = new FlatCompat({
 
 export default [{
   "ignores": [
+    // Dependency-update automation (.github/scripts/*.mjs, .github/aw/): plain
+    // Node scripts outside every tsconfig project, so typed linting cannot parse them.
+    ".github/**",
     "guide",
     "lib",
     "**/coverage/**",

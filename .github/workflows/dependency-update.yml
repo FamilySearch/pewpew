@@ -1,0 +1,157 @@
+# Monthly node dependency update - the deterministic half (no AI in it).
+#
+# For every npm project listed in .github/dependency-update.json: install from
+# the committed lockfile, update every dependency to the newest version its
+# declared range allows, `npm audit fix` inside those same ranges, run that
+# project's validate command, and survey what the ranges hold back. Then open
+# `update-node-dependencies-<date>`: READY if everything validated and nothing
+# is out of range; otherwise a DRAFT with the repair agent
+# (dependency-agent.md) dispatched at it to bisect a red validation and/or take
+# the out-of-range majors with whatever code changes they need.
+#
+# The Rust toolchain is here because the WebAssembly packages are build
+# outputs the root workspace cannot install without - see
+# .github/scripts/dep-test-env.sh. The two lib/**/tests npm projects are not
+# covered: they are gated by pr-rust.yml and belong to the Rust update.
+name: Update node dependencies
+
+on:
+  schedule:
+    # Every Monday 14:00 UTC (07:00/08:00 US Mountain). GitHub ORs day-of-month
+    # with day-of-week, so `0 14 1-7 * 1` is NOT "the first Monday" - the gate
+    # step below is. Other Mondays end as a five-second skipped run.
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+# Two runs would race over the same update-node-dependencies-<date> branch.
+concurrency:
+  group: update-node-dependencies
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # push the update branch
+  pull-requests: write   # open / update the pull request
+  actions: write         # dispatch the repair agent
+
+jobs:
+  update:
+    name: Update node dependencies
+    runs-on: ubuntu-latest
+    # The wasm build, four installs and two validate runs take about ten
+    # minutes; anything past an hour is a hang.
+    timeout-minutes: 60
+    steps:
+      - name: Gate - only the first Monday of the month (dispatch always runs)
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "dispatched by hand - running"
+          elif [ "$(date -u +%-d)" -le 7 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "first Monday of the month - running"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "not the first Monday of the month - skipping"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          fetch-depth: 0   # publish counts commits on a rerun's existing branch
+
+      - name: Add Node.js toolchain
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Prepare the runner (Rust, wasm-pack, wasm packages, controller .env)
+        if: steps.gate.outputs.run == 'true'
+        run: bash .github/scripts/dep-test-env.sh
+
+      - name: Update every project within its declared ranges
+        if: steps.gate.outputs.run == 'true'
+        id: update
+        run: |
+          set -euo pipefail
+          CFG=.github/dependency-update.json
+          HAS_UPDATES=false; UPDATE_COUNT=0; MAJORS_COUNT=0; LOCKFILES=""
+          : > "$RUNNER_TEMP/projects.txt"
+          while IFS= read -r p; do
+            slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
+            echo "::group::$p - npm ci"
+            (cd "$p" && npm ci --ignore-scripts)
+            echo "::endgroup::"
+            echo "::group::$p - update"
+            PR_BODY_FILE="$RUNNER_TEMP/body-$slug.md" REPORT_FILE="$RUNNER_TEMP/report-$slug.json" \
+              node .github/scripts/dependency-update.mjs --project "$p"
+            echo "::endgroup::"
+            r="$RUNNER_TEMP/report-$slug.json"
+            echo "$p|$slug" >> "$RUNNER_TEMP/projects.txt"
+            if [ "$(jq -r .hasChanges "$r")" = "true" ]; then
+              HAS_UPDATES=true
+              UPDATE_COUNT=$(( UPDATE_COUNT + $(jq '.updated|length' "$r") ))
+              LOCKFILES="${LOCKFILES}${p}/package-lock.json"$'\n'
+            fi
+            MAJORS_COUNT=$(( MAJORS_COUNT + $(jq '.agentCandidates' "$r") ))
+          done < <(jq -r '.projects[].path' "$CFG")
+          {
+            echo "has_updates=$HAS_UPDATES"; echo "update_count=$UPDATE_COUNT"; echo "majors_count=$MAJORS_COUNT"
+            echo "lockfiles<<EOF_LOCK"; printf '%s' "$LOCKFILES"; echo "EOF_LOCK"
+          } >> "$GITHUB_OUTPUT"
+          echo "has_updates=$HAS_UPDATES update_count=$UPDATE_COUNT majors_count=$MAJORS_COUNT"
+
+      # Each project's validate command comes from the config through an
+      # environment file, never interpolated into this YAML. A project whose
+      # lockfile did not change is not re-validated: nothing moved there.
+      - name: Validate every project whose lockfile changed
+        if: steps.gate.outputs.run == 'true' && steps.update.outputs.has_updates == 'true'
+        id: validate
+        run: |
+          set -uo pipefail
+          OVERALL=success
+          : > "$RUNNER_TEMP/validation.md"
+          while IFS='|' read -r p slug; do
+            r="$RUNNER_TEMP/report-$slug.json"
+            [ "$(jq -r .hasChanges "$r")" = "true" ] || { echo "- \`$p\`: lockfile unchanged, not re-validated" >> "$RUNNER_TEMP/validation.md"; continue; }
+            cmd=$(jq -r .validate "$r")
+            echo "::group::$p - validate: $cmd"
+            if (cd "$p" && bash -euo pipefail -c "$cmd"); then
+              echo "::endgroup::"; echo "- \`$p\`: \`$cmd\` **passed**" >> "$RUNNER_TEMP/validation.md"
+            else
+              echo "::endgroup::"; echo "::error::$p: validate failed: $cmd"
+              echo "- \`$p\`: \`$cmd\` **FAILED**" >> "$RUNNER_TEMP/validation.md"; OVERALL=failure
+            fi
+          done < "$RUNNER_TEMP/projects.txt"
+          echo "validation=$OVERALL" >> "$GITHUB_OUTPUT"
+          echo "validation=$OVERALL"
+
+      - name: Assemble the pull request body
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          BODY="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "Monthly node dependency update. In-range updates and \`npm audit fix\` are applied here without judgment; everything a declared range holds back is listed per project for the repair agent."
+            echo ""
+            echo "Only \`package-lock.json\` files change in this commit. Any \`package.json\`, code or version changes come from the repair agent in a later commit on this branch, explained in its comment."
+            while IFS='|' read -r p slug; do
+              echo ""; echo "### Project: \`$p\`"; echo ""
+              cat "$RUNNER_TEMP/body-$slug.md"
+            done < "$RUNNER_TEMP/projects.txt"
+          } > "$BODY"
+          echo "pr_body=$BODY" >> "$GITHUB_ENV"
+
+      - name: Publish - ready PR, or draft PR plus repair-agent hand-off
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_UPDATES: ${{ steps.update.outputs.has_updates }}
+          UPDATE_COUNT: ${{ steps.update.outputs.update_count }}
+          MAJORS_COUNT: ${{ steps.update.outputs.majors_count }}
+          LOCKFILES: ${{ steps.update.outputs.lockfiles }}
+          VALIDATION: ${{ steps.validate.outputs.validation || 'skipped' }}
+          VALIDATION_DETAILS_FILE: ${{ runner.temp }}/validation.md
+          PR_BODY_FILE: ${{ env.pr_body }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          REPAIR_WORKFLOW: dependency-agent.lock.yml
+          LABELS: dependencies,javascript
+        run: bash .github/scripts/dep-publish.sh

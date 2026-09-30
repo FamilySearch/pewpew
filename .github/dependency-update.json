@@ -1,0 +1,17 @@
+{
+  "$comment": "Read by .github/workflows/dependency-update.yml and by the repair agent (dependency-agent.md). `projects` lists every npm project the monthly update covers; each `validate` mirrors what that project's PR workflow runs. The two lib/**/tests projects are deliberately absent: they are gated by pr-rust.yml behind a wasm-pack build and belong to the Rust update. `holdMajors` names dependency majors the agent must NOT take, with the reason; anything else out of range is fair game for it.",
+  "projects": [
+    {
+      "path": ".",
+      "validate": "npm run build:react && DOWNLOAD_PEWPEW=true NODE_ENV=test npm test"
+    },
+    {
+      "path": "guide/results-viewer-react",
+      "validate": "npm run linterror && NODE_ENV=test npm test && npm run build"
+    }
+  ],
+  "holdMajors": {
+    "expect-webdriverio": "webdriverio 9 pins the expect-webdriverio peer range; v7 breaks the wdio suite",
+    "cookie": "other dependents require the old major and an override breaks them"
+  }
+}

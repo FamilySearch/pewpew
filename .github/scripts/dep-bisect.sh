@@ -11,9 +11,10 @@
 # trial state that didn't match what actually failed (audit fix never
 # replayed), and a fix that could silently vanish from the final lockfile.
 # That is the standard defect taxonomy for an untested loop. This script is
-# the fix: the algorithm now executes and is unit-tested
-# (.github/tests/dep-bisect.test.sh), instead of being re-stated in prose
-# every time a new edge case is found.
+# the fix: the algorithm now executes, instead of being re-stated in prose
+# every time a new edge case is found. Its unit tests live with the original in
+# fs-eng/perfqa-update and were not copied here; the cwd-aware change made in
+# this copy (GIT_PREFIX) was verified by hand from a subdirectory.
 #
 # Scope: this script runs ONLY after an in-range update + audit fix has
 # already been applied and the validate command has failed on it. It does not

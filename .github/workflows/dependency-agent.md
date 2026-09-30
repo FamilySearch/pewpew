@@ -36,7 +36,8 @@ engine:
 
 # The pre-agent steps validate two projects (about 2.5 and 3.5 minutes each on
 # a cold runner after a one-minute wasm build), then a red project gets a
-# bisect with a 3000 s budget. What is left is the agent's.
+# bisect with an 1800 s budget (per red project; set in
+# shared/dependency-update.md). What is left is the agent's.
 timeout-minutes: 150
 inlined-imports: true
 imports:
@@ -85,7 +86,10 @@ safe-outputs:
       - "Cargo.lock"
     protected-files:
       policy: blocked
-      exclude: [package-lock.json, guide/results-viewer-react/package-lock.json]
+      # package.json is in gh-aw's DEFAULT protected list, matched by basename and
+      # checked separately from allowed-files - without this every manifest push
+      # (range bumps, version bumps) is refused whole and Phase B cannot land.
+      exclude: [package.json, package-lock.json, guide/results-viewer-react/package-lock.json]
     if-no-changes: warn
 ---
 

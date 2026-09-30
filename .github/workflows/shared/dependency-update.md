@@ -409,11 +409,13 @@ Always, in this order:
    - **Held** (from `holdMajors`): just the list, with the config's reasons.
    - **Not attempted this month**, if you ran out of time.
    - **Version**: what you bumped, from -> to, patch or minor and why.
-   - **Validation**: each touched project's command and that it passed.
+   - **Validation**: each project's command and its final result.
    Copy versions and reasons from the reports rather than paraphrasing them.
-3. `mark_pull_request_as_ready_for_review` - if and only if every touched
-   project's final validation was green. A draft you could not make green
-   stays a draft, with the comment saying exactly where it stands.
+3. `mark_pull_request_as_ready_for_review` - if and only if **every listed
+   project** ended green: each one you touched passed its final validation,
+   each one you did not touch had `headValidates: true`, and no project was
+   skipped (`baseline-red`, missing or aborted bisect). A draft you could not
+   make green stays a draft, with the comment saying exactly where it stands.
 
 A documented Not taken is a successful run. A range change that "works"
 because a peer was forced, or a version bump to a new major of this repo's own

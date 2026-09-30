@@ -3,7 +3,7 @@
   "projects": [
     {
       "path": ".",
-      "validate": "npm run build:react && DOWNLOAD_PEWPEW=true NODE_ENV=test npm test"
+      "validate": "npm run build:common && npm run build:react && DOWNLOAD_PEWPEW=true NODE_ENV=test npm test"
     },
     {
       "path": "guide/results-viewer-react",

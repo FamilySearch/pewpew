@@ -25,6 +25,19 @@
 #                                                      body says which files need
 #                                                      a human
 #   PR for this branch exists (same-day rerun)      -> edit it, re-sync draft/ready
+#   master has commits touching .github/workflows/  -> in Actions: refuse before
+#   that the target does not                           merging, print the local
+#                                                      command, exit 1 (see below);
+#                                                      run locally: proceed, no agent
+#
+# Workflow files: GitHub refuses a push made with the job's GITHUB_TOKEN when
+# any commit reachable from the pushed ref and not already on the target
+# changes .github/workflows/ (`permissions:` has no `workflows` key). The
+# sync agent's push is refused the same way. So a batch carrying a workflow
+# change is forwarded from a developer machine, whose credentials can push
+# workflow files - the same script, run locally; the command is printed in
+# the log and the step summary. Once that batch is on the target, automated
+# runs work again.
 #
 # Required env:
 #   TARGET_BRANCH, GITHUB_REPOSITORY, GH_TOKEN
@@ -34,7 +47,8 @@
 #   the merge - the harness points it at `true`), REPAIR_WORKFLOW
 #   (sync-scripting-agent.lock.yml; empty disables the hand-off), LABELS
 #   (scripting-sync), GIT_REMOTE (origin), GITHUB_SERVER_URL, GITHUB_RUN_ID,
-#   GITHUB_OUTPUT, GITHUB_STEP_SUMMARY, RUNNER_TEMP
+#   GITHUB_OUTPUT, GITHUB_STEP_SUMMARY, RUNNER_TEMP, GITHUB_ACTIONS (true in
+#   Actions; anything else is a local run)
 set -euo pipefail
 
 : "${TARGET_BRANCH:?TARGET_BRANCH is required}"
@@ -55,8 +69,55 @@ finish_empty() { out has_changes false; out conflicts 0; out source_commits "${1
 RUN_URL=""
 [ -z "${GITHUB_RUN_ID:-}" ] || RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+IN_ACTIONS=false; [ "${GITHUB_ACTIONS:-}" = "true" ] && IN_ACTIONS=true
+# What "dirty" means after npm and validate. Locally a clone's untracked
+# clutter (test output, stats files) is the developer's business.
+STATUS_ARGS=(--porcelain); [ "$IN_ACTIONS" = true ] || STATUS_ARGS=(--porcelain --untracked-files=no)
+
+# Only in Actions: run locally, the merge is yours and so is the identity.
+if [ "$IN_ACTIONS" = true ]; then
+  git config user.name "github-actions[bot]"
+  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+fi
+
+# The merge branch is cut with `checkout -B` and conflicts are staged with
+# `git add -u`; uncommitted work would be swept into it or lost.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "::error::The working tree has uncommitted changes - commit or stash them first:" >&2
+  git status --porcelain --untracked-files=no >&2
+  exit 1
+fi
+
+# The command that does this same run from a developer machine. Printed when
+# Actions cannot push the result (workflow files - see the header).
+local_command() {
+  cat <<CMD
+cd <your clone of ${GITHUB_REPOSITORY}> && git checkout ${SOURCE_BRANCH} && git pull && \\
+  TARGET_BRANCH=${TARGET_BRANCH} GITHUB_REPOSITORY=${GITHUB_REPOSITORY} GH_TOKEN="\$(gh auth token)" \\
+  bash .github/scripts/sync-scripting.sh
+CMD
+}
+print_local_command() { # print_local_command <reason>
+  local cmd; cmd=$(local_command)
+  echo "::error title=Run this sync locally::$1"
+  {
+    echo
+    echo "################################################################################"
+    echo "##  RUN THIS LOCALLY - the job token cannot push this merge"
+    echo "##"
+    echo "##  $1"
+    echo "##  Copy and run (the lines between the rules):"
+    echo "--------------------------------------------------------------------------------"
+    printf '%s\n' "$cmd"
+    echo "--------------------------------------------------------------------------------"
+    echo "##  Needs Rust + wasm-pack (dep-test-env.sh installs them) and a clean tree."
+    echo "################################################################################"
+    echo
+  } >&2
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    { echo "## Run this sync locally"; echo; echo "$1"; echo; echo '```bash'; printf '%s\n' "$cmd"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
 
 # Both tips, with the history behind them: a shallow checkout has no merge
 # base and git would merge the two branches as unrelated.
@@ -74,6 +135,18 @@ if [ "$PENDING" -eq 0 ]; then
   summary "Up to date: every commit on \`${SOURCE_BRANCH}\` is already on \`${TARGET_BRANCH}\`. No pull request."
   finish_empty 0
   exit 0
+fi
+
+# Workflow-file changes in this batch: Actions cannot push them (header).
+WORKFLOW_COMMITS=$(git log --no-merges --format='%h %s' "${TGT}..${SRC}" -- .github/workflows/)
+if [ -n "$WORKFLOW_COMMITS" ]; then
+  echo "This batch changes workflow files:"; printf '%s\n' "$WORKFLOW_COMMITS" | sed 's/^/  /'
+  if [ "$IN_ACTIONS" = true ]; then
+    print_local_command "$(printf '%s' "$WORKFLOW_COMMITS" | grep -c .) commit(s) on ${SOURCE_BRANCH} change .github/workflows/, and GITHUB_TOKEN cannot push workflow files. Nothing was merged or pushed."
+    finish_empty "$PENDING"
+    exit 1
+  fi
+  echo "Running locally - your credentials push them. The sync agent is not dispatched for this batch: its push would be refused the same way."
 fi
 
 TODAY=$(date -u +%F)
@@ -127,7 +200,8 @@ Lockfile conflicts resolved by taking ${SOURCE_BRANCH}'s copy; re-resolved from 
     # the working copy as-is and clears the unmerged state, which is what lets
     # this commit exist. The agent (or a human) resolves them on the branch.
     N=$(printf '%s\n' "$CONFLICTS" | grep -c . || true)
-    git add -A
+    # -u: every tracked path, unmerged ones included; never an untracked file.
+    git add -u
     git commit -q --no-verify -m "Merge ${SOURCE_BRANCH} into ${TARGET_BRANCH}
 
 ${N} file(s) carry unresolved conflict markers:
@@ -174,8 +248,8 @@ if [ -z "$CONFLICTS" ]; then
       git commit -q --no-verify -m "Re-resolve the lockfiles after merging ${SOURCE_BRANCH}"
     fi
     # npm must not have touched anything else (build outputs are gitignored).
-    if [ -n "$(git status --porcelain)" ]; then
-      echo "::error::npm install left the tree dirty beyond the lockfiles:" >&2; git status --porcelain >&2; exit 1
+    if [ -n "$(git status "${STATUS_ARGS[@]}")" ]; then
+      echo "::error::npm install left the tree dirty beyond the lockfiles:" >&2; git status "${STATUS_ARGS[@]}" >&2; exit 1
     fi
 
     if [ "$VALIDATION" = success ]; then
@@ -193,8 +267,8 @@ if [ -z "$CONFLICTS" ]; then
       done < <(jq -r '.projects[].path' "$CONFIG")
       # A validate command that edits tracked files would leave the PR's tree
       # and its commits out of step; refuse rather than publish.
-      if [ -n "$(git status --porcelain)" ]; then
-        echo "::error::a validate command modified tracked files - they must be read-only:" >&2; git status --porcelain >&2; exit 1
+      if [ -n "$(git status "${STATUS_ARGS[@]}")" ]; then
+        echo "::error::a validate command modified tracked files - they must be read-only:" >&2; git status "${STATUS_ARGS[@]}" >&2; exit 1
       fi
     fi
   else
@@ -209,7 +283,7 @@ if [ -n "$CONFLICTS" ] || [ "$VALIDATION" != "success" ]; then
   DRAFT=true
   # The agent is only useful when it can run: no Rust or .github conflicts
   # (it could not build or push them) and a wasm build that succeeds.
-  if [ -z "$HUMAN_CONFLICTS" ] && [ "$VALIDATION" != "wasm-build-failed" ] && [ -n "$REPAIR_WORKFLOW" ]; then
+  if [ -z "$HUMAN_CONFLICTS" ] && [ -z "$WORKFLOW_COMMITS" ] && [ "$VALIDATION" != "wasm-build-failed" ] && [ -n "$REPAIR_WORKFLOW" ]; then
     NEEDS_AGENT=true
   fi
 fi
@@ -257,6 +331,11 @@ BODY="$TMP/sync-pr-body.md"
     wasm-build-failed) echo "**The wasm packages do not build from the merged tree** (\`${TEST_ENV_SCRIPT}\`) - the Rust side of this merge needs a human before anything on the Node side can be validated. Opened as a draft; the sync agent is not dispatched."; [ -z "$RUN_URL" ] || echo "Output: [workflow run](${RUN_URL})." ;;
     *) echo "Not run - conflicts first." ;;
   esac
+  if [ -n "$WORKFLOW_COMMITS" ]; then
+    echo; echo "## Workflow files"; echo
+    echo "This batch changes \`.github/workflows/\`, which the Actions job token cannot push, so it was run from a developer machine and the sync agent was not dispatched (its push would be refused the same way). Anything left in draft is resolved locally on this branch:"
+    echo; printf '%s\n' "$WORKFLOW_COMMITS" | sed 's/^/- /'
+  fi
   if [ "$NEEDS_AGENT" = true ]; then
     echo; echo "## Sync agent"; echo
     echo "Dispatched at this PR. It resolves the conflict markers (\`${SOURCE_BRANCH}\`'s change in \`${TARGET_BRANCH}\`'s shape; lockfiles regenerated, never hand-merged), fixes what the merge broke in lint, types or tests, re-validates every project, pushes one commit, comments here with what it did per file, and marks this ready only when the tree is green. Rust files and \`.github/\` are outside its fence."
@@ -275,7 +354,15 @@ if git fetch -q "$GIT_REMOTE" "$BRANCH" 2>/dev/null; then
     SUPERSEDED_UNKNOWN=1
   fi
 fi
-git push -q --force "$GIT_REMOTE" "$BRANCH"
+if ! git push -q --force "$GIT_REMOTE" "$BRANCH" 2>"$TMP/push.err"; then
+  cat "$TMP/push.err" >&2
+  if grep -qi 'workflow' "$TMP/push.err"; then
+    print_local_command "The push of $BRANCH was refused for workflow files (see git's message above)."
+  else
+    echo "::error::Could not push $BRANCH - see git's message above." >&2
+  fi
+  exit 1
+fi
 
 DRAFT_ARGS=(); [ "$DRAFT" = false ] || DRAFT_ARGS=(--draft)
 EXISTING_PR=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
@@ -326,6 +413,6 @@ if [ "$NEEDS_AGENT" = true ]; then
     summary "Agent could NOT be dispatched - #$PR_NUMBER needs a human."
   fi
 elif [ "$DRAFT" = true ]; then
-  summary "Draft left for a human (Rust/.github conflicts or a wasm build failure) - the sync agent is not dispatched for these."
+  summary "Draft left for a human (Rust/.github conflicts, workflow files in the batch, or a wasm build failure) - the sync agent is not dispatched for these."
 fi
 out repair_dispatched "$REPAIR_DISPATCHED"

@@ -14,6 +14,12 @@
 # under .github/ are left for a human - the branches have diverged
 # structurally there and the agent could neither build nor push them.
 #
+# A batch whose master commits change .github/workflows/ cannot be pushed with
+# the job token (GITHUB_TOKEN has no `workflows` permission): the run fails
+# before merging and prints the command that does the same sync from a
+# developer machine. Lockfile-only batches - the monthly update - are
+# unaffected.
+#
 # Runs on demand, and after anything on master changes a lockfile - which is
 # how the monthly node dependency update reaches the scripting branch.
 name: Sync master into scripting

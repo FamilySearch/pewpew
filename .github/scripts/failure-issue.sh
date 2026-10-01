@@ -20,7 +20,8 @@
 # Optional env:
 #   ISSUE_TITLE (`<workflow> is failing`), ISSUE_LABEL (automation-failure),
 #   AUTOMATION_LOG ($RUNNER_TEMP/automation.log - the steps tee into it; its
-#   ::error:: lines and tail go into the issue), FAILURE_NOTE
+#   ::error:: lines go into the issue - never raw output, which GitHub has not
+#   secret-masked), FAILURE_NOTE
 #   ($RUNNER_TEMP/failure-note.md - markdown a script left for the human, e.g.
 #   the command to run a sync locally), GITHUB_WORKFLOW, GITHUB_SERVER_URL,
 #   GITHUB_RUN_ID, GITHUB_REF_NAME, GITHUB_EVENT_NAME, RUNNER_TEMP
@@ -53,10 +54,10 @@ case "$MODE" in
       if [ -s "$LOG" ]; then
         ERRORS=$(grep -o '::error[^:]*::.*' "$LOG" | sed -E 's/^::error[^:]*:://; s/%0A/\n  /g' | head -20 || true)
         if [ -n "$ERRORS" ]; then echo; echo "### Errors"; echo; printf '%s\n' "$ERRORS" | sed 's/^/- /'; fi
-        echo; echo "<details><summary>Last 40 lines of output</summary>"; echo; echo '```'
-        tail -n 40 "$LOG" | sed 's/```/` ` `/g'
-        echo '```'; echo; echo "</details>"
+        # Only the ::error:: lines - never raw output. GitHub masks secrets in
+        # the rendered run log, not in this file, and the issue goes to Slack.
       fi
+      echo; echo "Full output is in [the run log](${RUN_URL}), where GitHub masks secrets."
       echo; echo "This issue closes itself on the next successful run. Further failures are added here as comments."
     } > "$BODY"
     NUM=$(existing)

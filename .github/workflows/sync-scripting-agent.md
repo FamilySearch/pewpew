@@ -92,12 +92,9 @@ safe-outputs:
       - "tests/**"
       - "examples/**"
       - "**/*.rs"
-      - "**/Cargo.toml"
+      - "**/*.toml"
       - "Cargo.lock"
       - "Cargo.lock.scripting"
-      - "clippy.toml"
-      - "deny.toml"
-      - "config.toml"
     protected-files:
       policy: blocked
       exclude: [package.json, package-lock.json, guide/results-viewer-react/package-lock.json, README.md, design.md, DESIGN.md]

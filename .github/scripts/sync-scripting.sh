@@ -20,7 +20,7 @@
 #   other conflicts, all in Node files              -> commit them WITH their
 #                                                      markers, DRAFT PR, sync
 #                                                      agent resolves them
-#   any conflict in Rust files or under .github/    -> commit them with markers,
+#   any conflict in Rust, *.toml or .github/ files  -> commit them with markers,
 #                                                      DRAFT PR, NO agent - the
 #                                                      body says which files need
 #                                                      a human
@@ -108,11 +108,12 @@ if [ -n "$LOCK_CONFLICTS" ]; then
   CONFLICTS=$(printf '%s\n' "$CONFLICTS" | grep -vE '(^|/)package-lock\.json$' || true)
 fi
 
-# Which conflicts the agent may resolve. Rust files and the automation under
-# .github/ are a human's: the wasm build in the agent's own setup cannot
+# Which conflicts the agent may resolve. Rust files, any *.toml (Cargo, the
+# lint configs, the guide's book.toml) and the automation under .github/ are
+# a human's: the wasm build in the agent's own setup cannot
 # compile a tree with markers in it, and the agent's push fence strips
 # .github/** from whatever it pushes.
-HUMAN_CONFLICTS=$(printf '%s\n' "$CONFLICTS" | grep -E '^(\.github/|lib/|src/|tests/|examples/|Cargo\.|.*/Cargo\.toml$|.*\.rs$|clippy\.toml$|deny\.toml$|config\.toml$)' || true)
+HUMAN_CONFLICTS=$(printf '%s\n' "$CONFLICTS" | grep -E '^(\.github/|lib/|src/|tests/|examples/|Cargo\.|.*\.rs$|.*\.toml$)' || true)
 AGENT_CONFLICTS=$(printf '%s\n' "$CONFLICTS" | grep -vxF -f <(printf '%s\n' "$HUMAN_CONFLICTS"; echo '__none__') || true)
 
 if [ "$MERGE_RC" -ne 0 ]; then

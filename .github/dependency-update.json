@@ -1,5 +1,5 @@
 {
-  "$comment": "Read by .github/workflows/dependency-update.yml and by the repair agent (dependency-agent.md). `projects` lists every npm project the monthly update covers; each `validate` mirrors what that project's PR workflow runs. The two lib/**/tests projects are deliberately absent: they are gated by pr-rust.yml behind a wasm-pack build and belong to the Rust update. `holdMajors` names dependency majors the agent must NOT take, with the reason; anything else out of range is fair game for it.",
+  "$comment": "Read by .github/workflows/dependency-update.yml, the repair agent (dependency-agent.md), and the master-into-scripting merge (sync-scripting.yml / sync-scripting-agent.md), which re-resolves and validates the same projects after a merge. `projects` lists every npm project the monthly update covers; each `validate` mirrors what that project's PR workflow runs. The two lib/**/tests projects are deliberately absent: they are gated by pr-rust.yml behind a wasm-pack build and belong to the Rust update. `holdMajors` names dependency majors the agent must NOT take, with the reason; anything else out of range is fair game for it.",
   "projects": [
     {
       "path": ".",

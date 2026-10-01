@@ -1,0 +1,72 @@
+# Forward-merge of master into the scripting branch - the deterministic half
+# (no AI in it).
+#
+# This repository develops on two lines: `master` (the released 0.5.x line)
+# and `0.6.0-scripting-dev`. Everything that lands on master is merged forward
+# by hand: branch off the scripting branch, merge master, resolve conflicts,
+# check that the lockfiles need nothing more, open a PR back into the scripting
+# branch. This workflow does that merge (.github/scripts/sync-scripting.sh),
+# re-resolves every lockfile from the merged manifests, rebuilds the wasm
+# packages and validates every npm project from .github/dependency-update.json,
+# and opens `merge-master-into-<target>-<date>`: READY if the merge was clean
+# and green; otherwise a DRAFT. Conflicts in Node files, or a red validation,
+# go to the sync agent (sync-scripting-agent.md). Conflicts in Rust files or
+# under .github/ are left for a human - the branches have diverged
+# structurally there and the agent could neither build nor push them.
+#
+# Runs on demand, and after anything on master changes a lockfile - which is
+# how the monthly node dependency update reaches the scripting branch.
+name: Sync master into scripting
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Branch to merge master into"
+        type: string
+        default: "0.6.0-scripting-dev"
+  push:
+    branches: [master]
+    paths:
+      - "package-lock.json"
+      - "guide/results-viewer-react/package-lock.json"
+
+# Two runs would race over the same merge branch.
+concurrency:
+  group: sync-scripting
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # push the merge branch
+  pull-requests: write   # open / update the pull request
+  actions: write         # dispatch the sync agent
+
+jobs:
+  sync:
+    name: Merge master into ${{ inputs.target || '0.6.0-scripting-dev' }}
+    runs-on: ubuntu-latest
+    # Wasm build, two installs and two validate runs: about ten minutes.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the merge needs both branches' history
+
+      - name: Add Node.js toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The script rebuilds the wasm packages itself AFTER the merge (the
+      # merged lib/ is what the tests must see); this installs the toolchain
+      # up front so that rebuild is a build, not a download.
+      - name: Prepare the runner (Rust, wasm-pack, wasm packages, controller .env)
+        run: bash .github/scripts/dep-test-env.sh
+
+      - name: Merge, re-resolve, validate, publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: master
+          TARGET_BRANCH: ${{ inputs.target || '0.6.0-scripting-dev' }}
+          REPAIR_WORKFLOW: sync-scripting-agent.lock.yml
+        run: bash .github/scripts/sync-scripting.sh

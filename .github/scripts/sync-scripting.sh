@@ -114,9 +114,10 @@ print_local_command() { # print_local_command <reason>
     echo "################################################################################"
     echo
   } >&2
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    { echo "## Run this sync locally"; echo; echo "$1"; echo; echo '```bash'; printf '%s\n' "$cmd"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-  fi
+  # The same, as markdown: the step summary, and the failure issue's body
+  # (failure-issue.sh reads $RUNNER_TEMP/failure-note.md).
+  { echo "### Run this sync locally"; echo; echo "$1"; echo; echo '```bash'; printf '%s\n' "$cmd"; echo '```'; } > "$TMP/failure-note.md"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || cat "$TMP/failure-note.md" >> "$GITHUB_STEP_SUMMARY"
 }
 
 # Both tips, with the history behind them: a shallow checkout has no merge

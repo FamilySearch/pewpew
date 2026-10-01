@@ -46,6 +46,7 @@ permissions:
   contents: write        # push the merge branch
   pull-requests: write   # open / update the pull request
   actions: write         # dispatch the sync agent
+  issues: write          # open an issue when a run fails (no PR means no other notice)
 
 jobs:
   sync:
@@ -67,7 +68,8 @@ jobs:
       # merged lib/ is what the tests must see); this installs the toolchain
       # up front so that rebuild is a build, not a download.
       - name: Prepare the runner (Rust, wasm-pack, wasm packages, controller .env)
-        run: bash .github/scripts/dep-test-env.sh
+        shell: bash   # explicit: adds pipefail, so the tee below keeps the exit code
+        run: bash .github/scripts/dep-test-env.sh 2>&1 | tee -a "$RUNNER_TEMP/automation.log"
 
       - name: Merge, re-resolve, validate, publish
         env:
@@ -75,4 +77,23 @@ jobs:
           SOURCE_BRANCH: master
           TARGET_BRANCH: ${{ inputs.target || '0.6.0-scripting-dev' }}
           REPAIR_WORKFLOW: sync-scripting-agent.lock.yml
-        run: bash .github/scripts/sync-scripting.sh
+        shell: bash
+        run: bash .github/scripts/sync-scripting.sh 2>&1 | tee -a "$RUNNER_TEMP/automation.log"
+
+      # Notification. A run that fails before publishing opens no pull
+      # request, and GitHub emails only whoever triggered it; an issue
+      # reaches the team's channel through `/github subscribe`. One issue per
+      # workflow: a repeat failure comments on it, the next green run closes it.
+      - name: Report the failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "Sync master into scripting is failing"
+        run: bash .github/scripts/failure-issue.sh open
+
+      - name: Close the failure issue, if one is open
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "Sync master into scripting is failing"
+        run: bash .github/scripts/failure-issue.sh close

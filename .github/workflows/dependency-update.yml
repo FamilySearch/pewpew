@@ -32,6 +32,7 @@ permissions:
   contents: write        # push the update branch
   pull-requests: write   # open / update the pull request
   actions: write         # dispatch the repair agent
+  issues: write          # open an issue when a run fails (no PR means no other notice)
 
 jobs:
   update:
@@ -65,39 +66,44 @@ jobs:
 
       - name: Prepare the runner (Rust, wasm-pack, wasm packages, controller .env)
         if: steps.gate.outputs.run == 'true'
-        run: bash .github/scripts/dep-test-env.sh
+        shell: bash   # explicit: adds pipefail, so the tee below keeps the exit code
+        run: bash .github/scripts/dep-test-env.sh 2>&1 | tee -a "$RUNNER_TEMP/automation.log"
 
       - name: Update every project within its declared ranges
         if: steps.gate.outputs.run == 'true'
         id: update
+        shell: bash
         run: |
           set -euo pipefail
-          CFG=.github/dependency-update.json
-          HAS_UPDATES=false; UPDATE_COUNT=0; MAJORS_COUNT=0; LOCKFILES=""
-          : > "$RUNNER_TEMP/projects.txt"
-          while IFS= read -r p; do
-            slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
-            echo "::group::$p - npm ci"
-            (cd "$p" && npm ci --ignore-scripts)
-            echo "::endgroup::"
-            echo "::group::$p - update"
-            PR_BODY_FILE="$RUNNER_TEMP/body-$slug.md" REPORT_FILE="$RUNNER_TEMP/report-$slug.json" \
-              node .github/scripts/dependency-update.mjs --project "$p"
-            echo "::endgroup::"
-            r="$RUNNER_TEMP/report-$slug.json"
-            echo "$p|$slug" >> "$RUNNER_TEMP/projects.txt"
-            if [ "$(jq -r .hasChanges "$r")" = "true" ]; then
-              HAS_UPDATES=true
-              UPDATE_COUNT=$(( UPDATE_COUNT + $(jq '.updated|length' "$r") ))
-              LOCKFILES="${LOCKFILES}${p}/package-lock.json"$'\n'
-            fi
-            MAJORS_COUNT=$(( MAJORS_COUNT + $(jq '.agentCandidates' "$r") ))
-          done < <(jq -r '.projects[].path' "$CFG")
+          # Teed for the failure issue; braces keep every write to GITHUB_OUTPUT.
           {
-            echo "has_updates=$HAS_UPDATES"; echo "update_count=$UPDATE_COUNT"; echo "majors_count=$MAJORS_COUNT"
-            echo "lockfiles<<EOF_LOCK"; printf '%s' "$LOCKFILES"; echo "EOF_LOCK"
-          } >> "$GITHUB_OUTPUT"
-          echo "has_updates=$HAS_UPDATES update_count=$UPDATE_COUNT majors_count=$MAJORS_COUNT"
+            CFG=.github/dependency-update.json
+            HAS_UPDATES=false; UPDATE_COUNT=0; MAJORS_COUNT=0; LOCKFILES=""
+            : > "$RUNNER_TEMP/projects.txt"
+            while IFS= read -r p; do
+              slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
+              echo "::group::$p - npm ci"
+              (cd "$p" && npm ci --ignore-scripts)
+              echo "::endgroup::"
+              echo "::group::$p - update"
+              PR_BODY_FILE="$RUNNER_TEMP/body-$slug.md" REPORT_FILE="$RUNNER_TEMP/report-$slug.json" \
+                node .github/scripts/dependency-update.mjs --project "$p"
+              echo "::endgroup::"
+              r="$RUNNER_TEMP/report-$slug.json"
+              echo "$p|$slug" >> "$RUNNER_TEMP/projects.txt"
+              if [ "$(jq -r .hasChanges "$r")" = "true" ]; then
+                HAS_UPDATES=true
+                UPDATE_COUNT=$(( UPDATE_COUNT + $(jq '.updated|length' "$r") ))
+                LOCKFILES="${LOCKFILES}${p}/package-lock.json"$'\n'
+              fi
+              MAJORS_COUNT=$(( MAJORS_COUNT + $(jq '.agentCandidates' "$r") ))
+            done < <(jq -r '.projects[].path' "$CFG")
+            {
+              echo "has_updates=$HAS_UPDATES"; echo "update_count=$UPDATE_COUNT"; echo "majors_count=$MAJORS_COUNT"
+              echo "lockfiles<<EOF_LOCK"; printf '%s' "$LOCKFILES"; echo "EOF_LOCK"
+            } >> "$GITHUB_OUTPUT"
+            echo "has_updates=$HAS_UPDATES update_count=$UPDATE_COUNT majors_count=$MAJORS_COUNT"
+          } 2>&1 | tee -a "$RUNNER_TEMP/automation.log"
 
       # Each project's validate command comes from the config through an
       # environment file, never interpolated into this YAML. A project whose
@@ -154,4 +160,23 @@ jobs:
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
           REPAIR_WORKFLOW: dependency-agent.lock.yml
           LABELS: dependencies,javascript
-        run: bash .github/scripts/dep-publish.sh
+        shell: bash
+        run: bash .github/scripts/dep-publish.sh 2>&1 | tee -a "$RUNNER_TEMP/automation.log"
+
+      # Notification. A run that fails before publishing opens no pull
+      # request, and GitHub emails only whoever triggered it; an issue
+      # reaches the team's channel through `/github subscribe`. One issue per
+      # workflow: a repeat failure comments on it, the next green run closes it.
+      - name: Report the failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "Update node dependencies is failing"
+        run: bash .github/scripts/failure-issue.sh open
+
+      - name: Close the failure issue, if one is open
+        if: success() && steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "Update node dependencies is failing"
+        run: bash .github/scripts/failure-issue.sh close

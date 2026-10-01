@@ -45,9 +45,13 @@ imports:
 
 # THE policy knob: what may reach the pull request. This is a ceiling, not the
 # plan - the H1 section below is what the agent works from, and it is narrower.
-# A patch touching anything outside allowed-files, or anything in
-# excluded-files, is refused WHOLE, so a refused push means the agent edited
-# outside the fence.
+# A patch touching anything outside allowed-files is refused WHOLE, so a
+# refused push means the agent edited outside the fence. (excluded-files is
+# different: gh-aw STRIPS those paths from the patch and pushes the rest. Only
+# .github/** is listed there - everything else the agent must not touch is
+# simply not in allowed-files, so an edit to it fails the push loudly instead
+# of vanishing from it.) gh-aw globs: `**/x` needs a slash, so it never matches
+# a root file - root forms are listed separately.
 safe-outputs:
   push-to-pull-request-branch:
     target: triggering                                # only the PR this run was dispatched at
@@ -80,17 +84,18 @@ safe-outputs:
       - "tsconfig*.json"
       # Dotfile configs. Globs skip dotfiles by default, so `**/*.json` does not
       # reach these - and mocha, c8, babel and storybook majors live in them.
+      - ".mocharc*"
       - "**/.mocharc*"
+      - ".c8rc*"
       - "**/.c8rc*"
+      - ".babelrc*"
       - "**/.babelrc*"
       - "controller/.storybook/**"
       - "guide/results-viewer-react/.storybook/**"
     excluded-files:
-      - ".github/**"          # the automation itself, and the agent's own scratch in .github/aw/
-      - "**/.npmrc"           # the registry is not the agent's to move
-      - "lib/**"              # Rust crates and the two lib/**/tests projects belong to the Rust update
-      - "**/Cargo.toml"
-      - "Cargo.lock"
+      # Stripped, not refused: the agent's scratch lives in .github/aw/. The
+      # registry (.npmrc), lib/** and Cargo.* are kept out by allowed-files.
+      - ".github/**"
     protected-files:
       policy: blocked
       # package.json is in gh-aw's DEFAULT protected list, matched by basename and

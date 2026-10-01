@@ -88,11 +88,24 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
+# The failure issue sync-scripting.yml opens for a refused run - the local run
+# that fixes it closes it (failure-issue.sh's label and title).
+FAILURE_ISSUE_TITLE="${FAILURE_ISSUE_TITLE:-Sync master into scripting is failing}"
+close_failure_issue() { # close_failure_issue <pr-url>
+  local n
+  n=$(gh issue list -R "$GITHUB_REPOSITORY" --label automation-failure --state open --limit 50 --json number,title 2>/dev/null \
+        | jq -r --arg t "$FAILURE_ISSUE_TITLE" '.[] | select(.title == $t) | .number' 2>/dev/null | head -1)
+  [ -n "$n" ] || return 0
+  if gh issue close "$n" -R "$GITHUB_REPOSITORY" --comment "Run locally instead: $1" >/dev/null 2>&1; then
+    echo "Closed #$n (\"$FAILURE_ISSUE_TITLE\") - this local run replaces the one it reported."
+  fi
+}
+
 # The command that does this same run from a developer machine. Printed when
 # Actions cannot push the result (workflow files - see the header).
 local_command() {
   cat <<CMD
-cd <your clone of ${GITHUB_REPOSITORY}> && git checkout ${SOURCE_BRANCH} && git pull && \\
+git checkout ${SOURCE_BRANCH} && git pull && \\
   TARGET_BRANCH=${TARGET_BRANCH} GITHUB_REPOSITORY=${GITHUB_REPOSITORY} GH_TOKEN="\$(gh auth token)" \\
   bash .github/scripts/sync-scripting.sh
 CMD
@@ -106,7 +119,7 @@ print_local_command() { # print_local_command <reason>
     echo "##  RUN THIS LOCALLY - the job token cannot push this merge"
     echo "##"
     echo "##  $1"
-    echo "##  Copy and run (the lines between the rules):"
+    echo "##  From your clone of ${GITHUB_REPOSITORY}, copy and run the lines between the rules:"
     echo "--------------------------------------------------------------------------------"
     printf '%s\n' "$cmd"
     echo "--------------------------------------------------------------------------------"
@@ -295,6 +308,8 @@ BODY="$TMP/sync-pr-body.md"
 {
   echo "Merges \`${SOURCE_BRANCH}\` into \`${TARGET_BRANCH}\` - the forward-merge this repository does after changes land on \`${SOURCE_BRANCH}\` (the monthly node dependency update included). Lockfiles are re-resolved from the merged manifests rather than merged textually."
   echo
+  echo "> **Merge this with a merge commit**, not squash or rebase: the next sync finds what is left to forward by ancestry (\`${TARGET_BRANCH}..${SOURCE_BRANCH}\`), so a squash would leave every commit below pending forever."
+  echo
   echo "## Commits from \`${SOURCE_BRANCH}\` (${PENDING})"
   echo
   echo "| Commit | Subject | Author | Date |"; echo "| --- | --- | --- | --- |"
@@ -392,6 +407,7 @@ PR_NUMBER=$(printf '%s' "$PR_JSON" | jq -r '.number'); PR_URL=$(printf '%s' "$PR
 out has_changes true; out conflicts "$(printf '%s' "$CONFLICTS" | grep -c . || true)"; out source_commits "$PENDING"
 out pr_number "$PR_NUMBER"; out pr_url "$PR_URL"; out branch "$BRANCH"; out validation "$VALIDATION"
 summary "$PR_URL"
+[ "$IN_ACTIONS" = true ] || close_failure_issue "$PR_URL"
 
 if [ "$SUPERSEDED" -gt 0 ] || [ "$SUPERSEDED_UNKNOWN" -eq 1 ]; then
   WHAT="replacing whatever was already on the branch (count unavailable)"

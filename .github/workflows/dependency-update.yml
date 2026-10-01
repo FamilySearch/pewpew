@@ -168,7 +168,9 @@ jobs:
       # reaches the team's channel through `/github subscribe`. One issue per
       # workflow: a repeat failure comments on it, the next green run closes it.
       - name: Report the failure as an issue
-        if: failure()
+        # cancelled(): a run past timeout-minutes is cancelled, not failed, and a
+        # hang is exactly the run that publishes nothing.
+        if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_TITLE: "Update node dependencies is failing"

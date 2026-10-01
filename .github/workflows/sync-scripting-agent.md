@@ -85,13 +85,18 @@ safe-outputs:
     required-title-prefix: "Merge master into " # ...and only if the sync opened it
     allowed-files: ["**"]
     excluded-files:
+      # gh-aw globs: `**/x` needs a slash, so it never matches a root file -
+      # every `**/` pattern has its root form beside it.
       - ".github/**"
+      - ".npmrc"
       - "**/.npmrc"
       - "lib/**"
       - "src/**"
       - "tests/**"
       - "examples/**"
+      - "*.rs"
       - "**/*.rs"
+      - "*.toml"
       - "**/*.toml"
       - "Cargo.lock"
       - "Cargo.lock.scripting"

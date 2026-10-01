@@ -92,8 +92,10 @@ if (!projectConfig) {
 }
 const SLUG = PROJECT === "." ? "root" : PROJECT.replaceAll("/", "__");
 const VALIDATE = projectConfig.validate.trim();
-const PR_BODY_FILE = process.env.PR_BODY_FILE || path.join(os.tmpdir(), `deps-${SLUG}-body.md`);
-const REPORT_FILE = process.env.REPORT_FILE || path.join(os.tmpdir(), `deps-${SLUG}-report.json`);
+// Resolved now, against the caller's cwd: the chdir below would otherwise
+// re-root a relative path (.github/aw/...) inside the project directory.
+const PR_BODY_FILE = path.resolve(process.env.PR_BODY_FILE || path.join(os.tmpdir(), `deps-${SLUG}-body.md`));
+const REPORT_FILE = path.resolve(process.env.REPORT_FILE || path.join(os.tmpdir(), `deps-${SLUG}-report.json`));
 
 process.chdir(path.join(ROOT, PROJECT));
 if (!existsSync("package-lock.json")) {

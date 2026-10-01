@@ -45,18 +45,24 @@ wasm-pack --version
 # but NOT .env.local or the environment). Placeholder values, same as CI: the
 # unit tests mock AWS and never reach these endpoints.
 ENV_FILE=controller/.env
-: > "$ENV_FILE"
-{
-  echo 'PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_NAME=unit-test-bucket'
-  echo 'PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_URL=https://unit-test-bucket.s3.amazonaws.com'
-  echo 'PEWPEWCONTROLLER_UNITTESTS_S3_KEYSPACE_PREFIX=unittests/'
-  echo 'PEWPEWCONTROLLER_UNITTESTS_S3_REGION_ENDPOINT=s3-us-east-1.amazonaws.com'
-  echo 'APPLICATION_NAME=pewpewcontroller'
-  echo 'AGENT_ENV=unittests'
-  echo 'AGENT_DESC=c5n.large'
-  echo 'PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-out'
-  echo 'PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-in'
-  echo 'PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-communication'
-} >> "$ENV_FILE"
+# Run on a developer machine (sync-scripting.sh's local run calls this), keep
+# their own .env: it is theirs, and the unit tests only need these keys to exist.
+if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ ! -e "$ENV_FILE" ]; then
+  : > "$ENV_FILE"
+  {
+    echo 'PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_NAME=unit-test-bucket'
+    echo 'PEWPEWCONTROLLER_UNITTESTS_S3_BUCKET_URL=https://unit-test-bucket.s3.amazonaws.com'
+    echo 'PEWPEWCONTROLLER_UNITTESTS_S3_KEYSPACE_PREFIX=unittests/'
+    echo 'PEWPEWCONTROLLER_UNITTESTS_S3_REGION_ENDPOINT=s3-us-east-1.amazonaws.com'
+    echo 'APPLICATION_NAME=pewpewcontroller'
+    echo 'AGENT_ENV=unittests'
+    echo 'AGENT_DESC=c5n.large'
+    echo 'PEWPEWAGENT_UNITTESTS_SQS_SCALE_OUT_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-out'
+    echo 'PEWPEWAGENT_UNITTESTS_SQS_SCALE_IN_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-scale-in'
+    echo 'PEWPEWCONTROLLER_UNITTESTS_SQS_COMMUNICATION_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/unittests/sqs-communication'
+  } >> "$ENV_FILE"
+else
+  echo "dep-test-env: keeping the existing $ENV_FILE (not in Actions)"
+fi
 
-echo "dep-test-env: wasm packages built, controller/.env written"
+echo "dep-test-env: wasm packages built, controller/.env ready"

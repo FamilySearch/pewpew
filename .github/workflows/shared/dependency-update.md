@@ -377,8 +377,10 @@ does not contain.
 
 ## Rules
 
-- **Never edit** anything under `.github/`, any `.npmrc`, anything under
-  `lib/`, or any `Cargo.*` - the fence refuses the whole patch if you do.
+- **Never edit** any `.npmrc`, anything under `lib/`, or any `Cargo.*` - the
+  fence refuses the whole patch if you do. Anything under `.github/` is
+  silently left out of the push, so a fix there never reaches the PR: if
+  validation only passes with one, that is a **Not taken**, not a success.
 - **Install scripts never run, the registry never moves, nothing is forced.**
   npm is reachable only through the wrappers; they force `--ignore-scripts`
   and refuse options. No `--force`, no `--legacy-peer-deps`.

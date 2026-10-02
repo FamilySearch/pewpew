@@ -117,7 +117,7 @@ pre-agent-steps:
   # gh-aw does not set up Node for the agent job. Same Node as
   # sync-scripting.yml and pr-ppaas.yml (engines: >=20 <25).
   - name: Add Node.js toolchain
-    uses: actions/setup-node@v4
+    uses: actions/setup-node@v7
     with:
       node-version: 24
   # The wasm packages are build outputs the root workspace cannot install

@@ -87,7 +87,7 @@ pre-agent-steps:
   # pr-ppaas.yml use, so the agent validates against the same Node the update
   # did (engines: >=20 <25).
   - name: Add Node.js toolchain
-    uses: actions/setup-node@v4
+    uses: actions/setup-node@v7
     with:
       node-version: 24
   # The wasm packages are build outputs the root workspace cannot install

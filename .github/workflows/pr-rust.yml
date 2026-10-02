@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: cargo test --all
         timeout-minutes: 20
@@ -24,7 +24,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: cargo fmt --all -- --check
 
@@ -32,7 +32,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup component add clippy
       - run: cargo clippy --all -- -D warnings
@@ -41,7 +41,7 @@ jobs:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - run: cargo install cargo-deny --locked
       - run: cargo deny check --hide-inclusion-graph licenses sources advisories
@@ -78,7 +78,7 @@ jobs:
             cross: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linker
         if: matrix.cross
@@ -160,7 +160,7 @@ jobs:
       wasm-directory: ./lib/${{ matrix.wasm-dirctory }}
       test-directory: ./lib/${{ matrix.wasm-dirctory }}/tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal --no-self-update
 
       - name: Create the Web Assembly
@@ -178,7 +178,7 @@ jobs:
         shell: bash
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install Dependencies ${{ matrix.node-version }}

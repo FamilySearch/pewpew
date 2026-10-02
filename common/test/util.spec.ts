@@ -1,3 +1,4 @@
+import { isIPv4, isIPv6 } from "net";
 import { expect } from "chai";
 import os from "os";
 import { util } from "../src/index.js";
@@ -78,18 +79,22 @@ describe("Util", () => {
 
   describe("getLocalIpAddress", () => {
     it("should be an ipv4 address", (done: Mocha.Done) => {
-      const ipmatch: RegExp = /^\d+\.\d+\.\d+\.\d+$/;
       const ipaddress: string = getLocalIpAddress();
-      expect(ipmatch.test(ipaddress), ipaddress + " is ipv4").to.equal(true);
+      expect(isIPv4(ipaddress), `isIPv4("${ipaddress}")`).to.equal(true);
       done();
     });
 
-    if (!process.env.TRAVIS) {
+    // getLocalIpAddress(6) falls back to the hostname when the machine has no
+    // external IPv6 interface (CI containers, the dependency agent's sandbox),
+    // so there is nothing to validate there - skip rather than fail.
+    const hasExternalIpv6: boolean = Object.values(os.networkInterfaces())
+      .some((addresses) => (addresses || []).some((address) => address.family === "IPv6" && !address.internal));
+    if (hasExternalIpv6) {
       it("should be an ipv6 address", (done: Mocha.Done) => {
-        // eslint-disable-next-line no-useless-escape
-        const ipmatch: RegExp = /^[a-z0-9]+\:\:[a-z0-9]+\:[a-z0-9]+\:[a-z0-9]+\:/;
+        // Hand-rolled IPv6 regexes keep missing legal forms (1-2 digit groups, ::
+        // compression anywhere); net.isIPv6 is Node's own canonical validator
         const ipaddress: string = getLocalIpAddress(6);
-        expect(ipmatch.test(ipaddress), ipaddress + " is ipv6").to.equal(true);
+        expect(isIPv6(ipaddress), `isIPv6("${ipaddress}")`).to.equal(true);
         done();
       });
     }

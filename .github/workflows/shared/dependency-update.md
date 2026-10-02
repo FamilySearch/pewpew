@@ -85,7 +85,7 @@ pre-agent-steps:
   # gh-aw does not set up Node for the agent job; without this the tests would
   # run on whatever the runner image ships. Pin what dependency-update.yml and
   # pr-ppaas.yml use, so the agent validates against the same Node the update
-  # did (engines: >=20 <25).
+  # did (engines: ^22.22.2 || ^24.15.0 || >=26.0.0).
   - name: Add Node.js toolchain
     uses: actions/setup-node@v7
     with:

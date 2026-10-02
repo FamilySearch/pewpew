@@ -115,7 +115,7 @@ safe-outputs:
 
 pre-agent-steps:
   # gh-aw does not set up Node for the agent job. Same Node as
-  # sync-scripting.yml and pr-ppaas.yml (engines: >=20 <25).
+  # sync-scripting.yml and pr-ppaas.yml (engines: ^22.22.2 || ^24.15.0 || >=26.0.0).
   - name: Add Node.js toolchain
     uses: actions/setup-node@v7
     with:

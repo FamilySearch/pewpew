@@ -26,9 +26,12 @@ case "${1:?usage: .github/scripts/dep-checkpoint.sh save|restore}" in
     git clean -fd -e .github/aw >/dev/null
     if [ -s "$PATCH" ]; then git apply "$PATCH"; fi
     # node_modules still holds what the failed attempt installed.
-    while IFS= read -r p; do
+    # fd 3, not stdin: commands in the body (npm, the validate command) can read
+    # stdin, and one that does swallows the remaining project paths - the repair
+    # agent's context once listed only the root project for that reason.
+    while IFS= read -r p <&3; do
       (cd "$ROOT/$p" && npm ci --ignore-scripts >/dev/null 2>&1) || { echo "dep-checkpoint: npm ci failed in $p while restoring - the checkpoint itself may not install" >&2; exit 1; }
-    done < <(jq -r '.projects[].path' .github/dependency-update.json)
+    done 3< <(jq -r '.projects[].path' .github/dependency-update.json)
     echo "dep-checkpoint: restored" >&2
     ;;
   *) echo "dep-checkpoint: expected save or restore, got '$1'" >&2; exit 2 ;;

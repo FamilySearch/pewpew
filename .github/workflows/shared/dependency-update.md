@@ -126,9 +126,13 @@ pre-agent-steps:
       CFG=.github/dependency-update.json
       ROOT=$(pwd)
       mkdir -p .github/aw
-      # The agent execs the wrappers by path; a lost +x bit would read exactly
-      # like the allowlist refusal in #415. Fail here, loudly, instead.
+      # The agent execs the wrappers by path, so they must be executable. gh-aw
+      # restores .github from the activation job's artifact, and artifacts do
+      # not keep file modes - the scripts arrive 644 (#418). This step runs
+      # after the restore: set the bit, then check it, since a lost bit reads
+      # exactly like the allowlist refusal in #415.
       for s in dep-validate dep-npm-update dep-npm-sync dep-checkpoint; do
+        chmod +x ".github/scripts/$s.sh"
         [ -x ".github/scripts/$s.sh" ] || { echo "::error::.github/scripts/$s.sh is not executable - the agent cannot run it"; exit 1; }
       done
       CTX=.github/aw/dep-repair-context.json

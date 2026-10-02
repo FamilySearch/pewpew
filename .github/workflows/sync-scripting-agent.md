@@ -54,9 +54,17 @@ network:
 # project path first (`.` or `guide/results-viewer-react`).
 tools:
   bash:
-    - "bash .github/scripts/dep-validate.sh:*"      # <project>            - that project's validate command
-    - "bash .github/scripts/dep-npm-sync.sh:*"      # <project> ci|install - restore the lockfile's tree / re-resolve the lockfile
-    - "bash .github/scripts/dep-checkpoint.sh:*"    # save|restore         - the last-known-green tree
+    # Wrappers are allowlisted by their PATH, and the prompt calls them that way
+    # (`.github/scripts/x.sh <args>`). The Copilot CLI never matches a rule that
+    # starts with `bash` - `bash <path>` is refused even as an exact match - so
+    # both the plain and ./ forms of the path are listed. (Verified against CLI
+    # 1.0.80; the first run of this agent was refused every wrapper, #415.)
+    - ".github/scripts/dep-validate.sh:*"      # <project>            - that project's validate command
+    - "./.github/scripts/dep-validate.sh:*"
+    - ".github/scripts/dep-npm-sync.sh:*"      # <project> ci|install - restore the lockfile's tree / re-resolve the lockfile
+    - "./.github/scripts/dep-npm-sync.sh:*"
+    - ".github/scripts/dep-checkpoint.sh:*"    # save|restore         - the last-known-green tree
+    - "./.github/scripts/dep-checkpoint.sh:*"
     - "npm ls:*"
     - "npm view:*"
     - "git:*"
@@ -237,7 +245,7 @@ judged only by what you hand to the safe-outputs tools.
 
 ## The checkpoint
 
-`bash .github/scripts/dep-checkpoint.sh save` records the whole tree as the
+`.github/scripts/dep-checkpoint.sh save` records the whole tree as the
 last state known to validate; `restore` throws away everything since and
 re-installs every project from its lockfile. At the start of a conflict run
 it is empty: the committed head is the merge with markers, and nothing
@@ -256,20 +264,20 @@ hunk:
 |---|---|
 | `package.json` → `version` | **The higher of the two.** Both lines bump their own versions (master on release, the scripting branch for its previews); a merge never lowers one and never invents a third. |
 | `package.json` → dependencies, `devDependencies`, `overrides`, `engines`, scripts | **master wins** - its ranges are what the monthly update and its agent chose. Keep any key that exists only on the scripting side (`guide/results-viewer-react` declares `@fs/config-gen` as a `file:` dependency master does not have). When both changed the same dependency's range, master's. |
-| `package-lock.json` (any) | **never hand-merged.** After the project's `package.json` is clean: `bash .github/scripts/dep-npm-sync.sh <project> install` regenerates it. A lockfile with markers is not JSON and nothing can read it. |
+| `package-lock.json` (any) | **never hand-merged.** After the project's `package.json` is clean: `.github/scripts/dep-npm-sync.sh <project> install` regenerates it. A lockfile with markers is not JSON and nothing can read it. |
 | Source, tests and fixtures under `common/`, `agent/`, `controller/`, `guide/` | **master's change, in the scripting branch's shape.** Read both sides and `git log -3 --format='%h %s' origin/master -- <file>` / `origin/<base> -- <file>`. Port what master changed (a fix, a renamed import, a new option a dependency major required) into the code as the scripting branch has it - do not replace the scripting branch's structure with master's. A hunk where the scripting side merely lags master (it missed an earlier forward-merge) is master's. If `historyComplete` is `false` these logs are not trustworthy (a shallow boundary makes old commits look like they touched everything): port only what master's side of the conflict plainly shows, and where you cannot tell a port from a regression, leave that file under **Not resolved**. |
 | A file master changed that the scripting branch moved or split | Find where that content lives on the scripting branch (`git log --follow`, `git grep` for a distinctive line) and port the change there; take the deletion of the old path. |
 | A `.scripting` sibling file (`package-lock.json.scripting`, `Cargo.lock.scripting`) | Not yours; leave it exactly as the merge left it. |
 
-After each file: confirm no markers remain (`git grep -n -E '^(<<<<<<< |=======$|>>>>>>> )' -- <file>` is empty), and for a `package.json` confirm it parses (`jq . <file>`). Only when **every** file in `conflicts` is clean: `bash .github/scripts/dep-npm-sync.sh <project> install` for each project whose manifest or lockfile changed. If npm refuses - a range the merged manifest cannot satisfy - read why: a peer range is a `package.json` fix per the table above; anything else is a human's call, recorded under **Not resolved** with npm's exact message.
+After each file: confirm no markers remain (`git grep -n -E '^(<<<<<<< |=======$|>>>>>>> )' -- <file>` is empty), and for a `package.json` confirm it parses (`jq . <file>`). Only when **every** file in `conflicts` is clean: `.github/scripts/dep-npm-sync.sh <project> install` for each project whose manifest or lockfile changed. If npm refuses - a range the merged manifest cannot satisfy - read why: a peer range is a `package.json` fix per the table above; anything else is a human's call, recorded under **Not resolved** with npm's exact message.
 
 ## Phase B - make it green
 
 If `installOutcome` is not `success` and you have not already re-resolved,
-there is no usable `node_modules` yet: `bash .github/scripts/dep-npm-sync.sh
+there is no usable `node_modules` yet: `.github/scripts/dep-npm-sync.sh
 <project> install` first for each project and read why it failed last time.
 
-`bash .github/scripts/dep-validate.sh <project>` for every project. Green →
+`.github/scripts/dep-validate.sh <project>` for every project. Green →
 save the checkpoint and go to *What to hand back*. Red → read the failure
 and fix what **the merge** broke, not what was already wrong:
 

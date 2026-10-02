@@ -158,6 +158,20 @@ pre-agent-steps:
       fi
       BASE=$(gh pr view "$PR" --json baseRefName -q .baseRefName)
       TITLE=$(gh pr view "$PR" --json title -q .title)
+      # Full history, and both branches. Phase A's rule reads `git log
+      # origin/master -- <file>` and `git log origin/<base> -- <file>`; the
+      # job starts from a depth-1 checkout of master plus the PR's own
+      # commits, so without this origin/<base> may not exist at all, and at a
+      # shallow boundary a commit looks like it added every file it holds.
+      # About 90 MB for this repo.
+      if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+        git fetch -q --unshallow origin 2>/dev/null || git fetch -q --deepen=500 origin 2>/dev/null || true
+      fi
+      git fetch -q origin "+refs/heads/master:refs/remotes/origin/master" "+refs/heads/$BASE:refs/remotes/origin/$BASE" 2>/dev/null || true
+      HISTORY_COMPLETE=true
+      { [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "false" ] \
+          && git rev-parse -q --verify "refs/remotes/origin/$BASE" >/dev/null \
+          && git rev-parse -q --verify refs/remotes/origin/master >/dev/null; } || HISTORY_COMPLETE=false
       # Files still carrying conflict markers. Tracked files only, scratch excluded.
       CONFLICTS=$(git grep -l -E '^(<<<<<<< |>>>>>>> )' -- . ':(exclude).github/aw' 2>/dev/null || true)
       PROJECTS='[]'
@@ -183,7 +197,8 @@ pre-agent-steps:
       bash .github/scripts/dep-checkpoint.sh save
       jq -n --argjson pr "$PR" --arg base "$BASE" --arg title "$TITLE" --arg install "$INSTALL_OUTCOME" \
             --argjson conflicts "$(printf '%s\n' "$CONFLICTS" | sed '/^$/d' | jq -R . | jq -s .)" --argjson projects "$PROJECTS" \
-        '{pr:$pr, base:$base, title:$title, installOutcome:$install, conflicts:$conflicts, projects:$projects}' > "$CTX"
+            --argjson history "$HISTORY_COMPLETE" \
+        '{pr:$pr, base:$base, title:$title, installOutcome:$install, conflicts:$conflicts, projects:$projects, historyComplete:$history}' > "$CTX"
       jq . "$CTX"
 ---
 
@@ -198,7 +213,9 @@ the merged tree does not install or validate. Everything deterministic is done.
 Read `.github/aw/sync-context.json` first: `pr`, `base`, `title`,
 `installOutcome`, `conflicts` (tracked files that still carry markers) and
 `projects[]` - one entry per npm project with `path`, `slug`, `validate` and
-`headValidates`. Then read the pull request body (`get_pull_request`): it
+`headValidates` - and `historyComplete`: whether the checkout holds full
+history of both `origin/master` and `origin/<base>`, which the `git log`
+checks in Phase A depend on. Then read the pull request body (`get_pull_request`): it
 lists every master commit the merge brought in, with links, and the
 `## Conflicts` section if there was one. That is your record of what master
 intended.
@@ -240,7 +257,7 @@ hunk:
 | `package.json` → `version` | **The higher of the two.** Both lines bump their own versions (master on release, the scripting branch for its previews); a merge never lowers one and never invents a third. |
 | `package.json` → dependencies, `devDependencies`, `overrides`, `engines`, scripts | **master wins** - its ranges are what the monthly update and its agent chose. Keep any key that exists only on the scripting side (`guide/results-viewer-react` declares `@fs/config-gen` as a `file:` dependency master does not have). When both changed the same dependency's range, master's. |
 | `package-lock.json` (any) | **never hand-merged.** After the project's `package.json` is clean: `bash .github/scripts/dep-npm-sync.sh <project> install` regenerates it. A lockfile with markers is not JSON and nothing can read it. |
-| Source, tests and fixtures under `common/`, `agent/`, `controller/`, `guide/` | **master's change, in the scripting branch's shape.** Read both sides and `git log -3 --format='%h %s' origin/master -- <file>` / `origin/<base> -- <file>`. Port what master changed (a fix, a renamed import, a new option a dependency major required) into the code as the scripting branch has it - do not replace the scripting branch's structure with master's. A hunk where the scripting side merely lags master (it missed an earlier forward-merge) is master's. |
+| Source, tests and fixtures under `common/`, `agent/`, `controller/`, `guide/` | **master's change, in the scripting branch's shape.** Read both sides and `git log -3 --format='%h %s' origin/master -- <file>` / `origin/<base> -- <file>`. Port what master changed (a fix, a renamed import, a new option a dependency major required) into the code as the scripting branch has it - do not replace the scripting branch's structure with master's. A hunk where the scripting side merely lags master (it missed an earlier forward-merge) is master's. If `historyComplete` is `false` these logs are not trustworthy (a shallow boundary makes old commits look like they touched everything): port only what master's side of the conflict plainly shows, and where you cannot tell a port from a regression, leave that file under **Not resolved**. |
 | A file master changed that the scripting branch moved or split | Find where that content lives on the scripting branch (`git log --follow`, `git grep` for a distinctive line) and port the change there; take the deletion of the old path. |
 | A `.scripting` sibling file (`package-lock.json.scripting`, `Cargo.lock.scripting`) | Not yours; leave it exactly as the merge left it. |
 

@@ -159,7 +159,9 @@ pre-agent-steps:
       mkdir -p .github/aw
       # The agent execs the wrappers by path; a lost +x bit would read exactly
       # like the allowlist refusal in #415. Fail here, loudly, instead.
-      for s in .github/scripts/dep-*.sh; do [ -x "$s" ] || { echo "::error::$s is not executable - the agent cannot run it"; exit 1; }; done
+      for s in dep-validate dep-npm-sync dep-checkpoint; do
+        [ -x ".github/scripts/$s.sh" ] || { echo "::error::.github/scripts/$s.sh is not executable - the agent cannot run it"; exit 1; }
+      done
       CTX=.github/aw/sync-context.json
       PR="${GH_AW_PR_HEAD_BASE_PR_NUMBER:-}"
       if [ -z "$PR" ]; then

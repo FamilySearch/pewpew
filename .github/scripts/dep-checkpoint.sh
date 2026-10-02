@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The repair agent's checkpoint: the last whole-tree state known to validate.
-#   bash .github/scripts/dep-checkpoint.sh save      # record the current tree as the checkpoint
-#   bash .github/scripts/dep-checkpoint.sh restore   # throw away everything since, re-install every project
+#   .github/scripts/dep-checkpoint.sh save      # record the current tree as the checkpoint
+#   .github/scripts/dep-checkpoint.sh restore   # throw away everything since, re-install every project
 # The checkpoint is a plain `git diff` against the pull request's head, kept in
 # .github/aw/ (excluded from anything the agent pushes). `save` after every
 # change that validated green; `restore` after one that did not - it undoes the
@@ -14,7 +14,7 @@ ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 mkdir -p .github/aw
 PATCH=.github/aw/dep-checkpoint.patch
-case "${1:?usage: dep-checkpoint.sh save|restore}" in
+case "${1:?usage: .github/scripts/dep-checkpoint.sh save|restore}" in
   save)
     git diff > "$PATCH"
     echo "dep-checkpoint: saved ($(grep -c '^diff --git' "$PATCH" || true) file(s) differ from the PR head)" >&2

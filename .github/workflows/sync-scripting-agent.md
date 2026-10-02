@@ -58,7 +58,7 @@ tools:
     # (`.github/scripts/x.sh <args>`). The Copilot CLI never matches a rule that
     # starts with `bash` - `bash <path>` is refused even as an exact match - so
     # both the plain and ./ forms of the path are listed. (Verified against CLI
-    # 1.0.80; the first run of this agent was refused every wrapper, #415.)
+    # 1.0.80; the dependency agent's first run was refused every wrapper, #415.)
     - ".github/scripts/dep-validate.sh:*"      # <project>            - that project's validate command
     - "./.github/scripts/dep-validate.sh:*"
     - ".github/scripts/dep-npm-sync.sh:*"      # <project> ci|install - restore the lockfile's tree / re-resolve the lockfile
@@ -157,6 +157,9 @@ pre-agent-steps:
       set -euo pipefail
       CFG=.github/dependency-update.json
       mkdir -p .github/aw
+      # The agent execs the wrappers by path; a lost +x bit would read exactly
+      # like the allowlist refusal in #415. Fail here, loudly, instead.
+      for s in .github/scripts/dep-*.sh; do [ -x "$s" ] || { echo "::error::$s is not executable - the agent cannot run it"; exit 1; }; done
       CTX=.github/aw/sync-context.json
       PR="${GH_AW_PR_HEAD_BASE_PR_NUMBER:-}"
       if [ -z "$PR" ]; then
@@ -244,6 +247,12 @@ judged only by what you hand to the safe-outputs tools.
 | `conflicts` is empty, a project has `headValidates: false` | Phase B only: the merge was clean but the tree is red. |
 
 ## The checkpoint
+
+Type every wrapper exactly as `.github/scripts/<name>.sh <args>`, from the
+repository root. `bash`, `sh`, absolute-path and `$GITHUB_WORKSPACE` prefixes
+are not allowlisted and are refused - a refusal means the prefix, not the
+script; a non-zero exit from the script itself is a result to read, not a
+reason to retry it another way.
 
 `.github/scripts/dep-checkpoint.sh save` records the whole tree as the
 last state known to validate; `restore` throws away everything since and

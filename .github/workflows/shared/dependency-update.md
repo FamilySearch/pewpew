@@ -126,6 +126,9 @@ pre-agent-steps:
       CFG=.github/dependency-update.json
       ROOT=$(pwd)
       mkdir -p .github/aw
+      # The agent execs the wrappers by path; a lost +x bit would read exactly
+      # like the allowlist refusal in #415. Fail here, loudly, instead.
+      for s in .github/scripts/dep-*.sh; do [ -x "$s" ] || { echo "::error::$s is not executable - the agent cannot run it"; exit 1; }; done
       CTX=.github/aw/dep-repair-context.json
 
       PR="${GH_AW_PR_HEAD_BASE_PR_NUMBER:-}"
@@ -262,6 +265,12 @@ safe-outputs tools.
 | Otherwise | Phase A for every red project, then Phase B for every project with candidates, then the version bump, then the final check. |
 
 ## The checkpoint
+
+Type every wrapper exactly as `.github/scripts/<name>.sh <args>`, from the
+repository root. `bash`, `sh`, absolute-path and `$GITHUB_WORKSPACE` prefixes
+are not allowlisted and are refused - a refusal means the prefix, not the
+script; a non-zero exit from the script itself is a result to read, not a
+reason to retry it another way.
 
 `.github/scripts/dep-checkpoint.sh save` records the whole tree as the
 last state known to validate; `restore` throws away everything since and

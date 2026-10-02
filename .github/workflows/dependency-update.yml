@@ -80,7 +80,10 @@ jobs:
             CFG=.github/dependency-update.json
             HAS_UPDATES=false; UPDATE_COUNT=0; MAJORS_COUNT=0; LOCKFILES=""
             : > "$RUNNER_TEMP/projects.txt"
-            while IFS= read -r p; do
+            # fd 3, not stdin: commands in the body (npm, the validate command) can read
+            # stdin, and one that does swallows the remaining project paths - the repair
+            # agent's context once listed only the root project for that reason.
+            while IFS= read -r p <&3; do
               slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
               echo "::group::$p - npm ci"
               (cd "$p" && npm ci --ignore-scripts)
@@ -97,7 +100,7 @@ jobs:
                 LOCKFILES="${LOCKFILES}${p}/package-lock.json"$'\n'
               fi
               MAJORS_COUNT=$(( MAJORS_COUNT + $(jq '.agentCandidates' "$r") ))
-            done < <(jq -r '.projects[].path' "$CFG")
+            done 3< <(jq -r '.projects[].path' "$CFG")
             {
               echo "has_updates=$HAS_UPDATES"; echo "update_count=$UPDATE_COUNT"; echo "majors_count=$MAJORS_COUNT"
               echo "lockfiles<<EOF_LOCK"; printf '%s' "$LOCKFILES"; echo "EOF_LOCK"
@@ -115,7 +118,7 @@ jobs:
           set -uo pipefail
           OVERALL=success
           : > "$RUNNER_TEMP/validation.md"
-          while IFS='|' read -r p slug; do
+          while IFS='|' read -r p slug <&3; do
             r="$RUNNER_TEMP/report-$slug.json"
             [ "$(jq -r .hasChanges "$r")" = "true" ] || { echo "- \`$p\`: lockfile unchanged, not re-validated" >> "$RUNNER_TEMP/validation.md"; continue; }
             cmd=$(jq -r .validate "$r")
@@ -126,7 +129,7 @@ jobs:
               echo "::endgroup::"; echo "::error::$p: validate failed: $cmd"
               echo "- \`$p\`: \`$cmd\` **FAILED**" >> "$RUNNER_TEMP/validation.md"; OVERALL=failure
             fi
-          done < "$RUNNER_TEMP/projects.txt"
+          done 3< "$RUNNER_TEMP/projects.txt"
           echo "validation=$OVERALL" >> "$GITHUB_OUTPUT"
           echo "validation=$OVERALL"
 
@@ -139,10 +142,10 @@ jobs:
             echo "Monthly node dependency update. In-range updates and \`npm audit fix\` are applied here without judgment; everything a declared range holds back is listed per project for the repair agent."
             echo ""
             echo "Only \`package-lock.json\` files change in this commit. Any \`package.json\`, code or version changes come from the repair agent in a later commit on this branch, explained in its comment."
-            while IFS='|' read -r p slug; do
+            while IFS='|' read -r p slug <&3; do
               echo ""; echo "### Project: \`$p\`"; echo ""
               cat "$RUNNER_TEMP/body-$slug.md"
-            done < "$RUNNER_TEMP/projects.txt"
+            done 3< "$RUNNER_TEMP/projects.txt"
           } > "$BODY"
           echo "pr_body=$BODY" >> "$GITHUB_ENV"
 

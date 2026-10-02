@@ -238,7 +238,10 @@ if [ -z "$CONFLICTS" ]; then
   if bash "$TEST_ENV_SCRIPT" > "$TMP/sync-test-env.log" 2>&1; then
     echo "::endgroup::"
     VALIDATION=success
-    while IFS= read -r p; do
+    # fd 3, not stdin: commands in the body (npm, the validate command) can read
+    # stdin, and one that does swallows the remaining project paths - the repair
+    # agent's context once listed only the root project for that reason.
+    while IFS= read -r p <&3; do
       slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
       lock="${p#./}/package-lock.json"; lock="${lock#./}"
       echo "::group::$p - npm install (re-resolve the lockfile from the merged package.json)"
@@ -257,7 +260,7 @@ if [ -z "$CONFLICTS" ]; then
         echo "- \`$p\`: \`npm install\` **FAILED** - validation not run" >> "$VALIDATION_MD"
         VALIDATION=install-failed
       fi
-    done < <(jq -r '.projects[].path' "$CONFIG")
+    done 3< <(jq -r '.projects[].path' "$CONFIG")
     if ! git diff --cached --quiet; then
       git commit -q --no-verify -m "Re-resolve the lockfiles after merging ${SOURCE_BRANCH}"
     fi
@@ -267,7 +270,7 @@ if [ -z "$CONFLICTS" ]; then
     fi
 
     if [ "$VALIDATION" = success ]; then
-      while IFS= read -r p; do
+      while IFS= read -r p <&3; do
         slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
         cmd=$(jq -r --arg p "$p" '.projects[] | select(.path == $p) | .validate' "$CONFIG")
         echo "::group::$p - validate: $cmd"
@@ -278,7 +281,7 @@ if [ -z "$CONFLICTS" ]; then
           echo "::error::$p: validate failed: $cmd"
           echo "- \`$p\`: \`$cmd\` **FAILED**" >> "$VALIDATION_MD"; VALIDATION=failure
         fi
-      done < <(jq -r '.projects[].path' "$CONFIG")
+      done 3< <(jq -r '.projects[].path' "$CONFIG")
       # A validate command that edits tracked files would leave the PR's tree
       # and its commits out of step; refuse rather than publish.
       if [ -n "$(git status "${STATUS_ARGS[@]}")" ]; then

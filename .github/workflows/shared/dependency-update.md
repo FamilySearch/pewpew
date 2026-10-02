@@ -105,11 +105,14 @@ pre-agent-steps:
   - name: Install every project from the committed lockfile
     run: |
       set -euo pipefail
-      while IFS= read -r p; do
+      # fd 3, not stdin: commands in the body (npm, the validate command) can read
+      # stdin, and one that does swallows the remaining project paths - the repair
+      # agent's context once listed only the root project for that reason.
+      while IFS= read -r p <&3; do
         echo "::group::$p - npm ci --ignore-scripts"
         (cd "$p" && npm ci --ignore-scripts)
         echo "::endgroup::"
-      done < <(jq -r '.projects[].path' .github/dependency-update.json)
+      done 3< <(jq -r '.projects[].path' .github/dependency-update.json)
 
   # Per project: write the validate command (from the BASE branch's config,
   # restored above - the PR does not get to choose the command that runs with
@@ -166,7 +169,7 @@ pre-agent-steps:
       fi
 
       PROJECTS='[]'
-      while IFS= read -r p; do
+      while IFS= read -r p <&3; do
         slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
         validate=$(jq -r --arg p "$p" '.projects[] | select(.path == $p) | .validate' "$CFG")
         [ -n "$validate" ] || { echo "::error::$CFG lists $p without a validate command"; exit 1; }
@@ -218,7 +221,7 @@ pre-agent-steps:
                      '$acc + [{path:$p, slug:$slug, validate:$v, headValidates:$ok, bisectExit:$rc,
                                 bisectReport:(if $br == "" or $br == "null" then null else $br end),
                                 survey:(if $sv == "" or $sv == "null" then null else $sv end)}]')
-      done < <(jq -r '.projects[].path' "$CFG")
+      done 3< <(jq -r '.projects[].path' "$CFG")
 
       # First checkpoint: the tree the bisect(s) left, which validates by
       # construction. Empty when every head validated - normal for a

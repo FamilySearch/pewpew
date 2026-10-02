@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "4.3.1",
+  "version": "4.4.0",
   "description": "Controller Service for running pewpew tests",
   "type": "module",
   "private": true,
@@ -114,7 +114,7 @@
     "@types/yauzl": "^3.0.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/coverage-v8": "^5.0.0",
     "@wdio/cli": "^9.27.0",
     "@wdio/globals": "^9.27.0",
     "@wdio/local-runner": "^9.27.0",
@@ -129,12 +129,12 @@
     "eslint": "^10.0.0",
     "eslint-config-next": "^16.0.7",
     "form-data": "^4.0.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.1.1",
     "mocha": "^12.0.0",
     "storybook": "^10.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^6.0.0",
-    "vitest": "^4.1.6",
+    "vitest": "^5.0.0",
     "webdriverio": "^9.27.0",
     "webpack": "^5.0.0"
   }

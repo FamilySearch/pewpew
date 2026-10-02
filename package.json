@@ -1,6 +1,6 @@
 {
   "name": "@fs/monorepo",
-  "version": "4.3.1",
+  "version": "4.4.0",
   "description": "Service for running pewpew tests",
   "type": "module",
   "private": true,
@@ -64,7 +64,7 @@
   },
   "homepage": "https://github.com/FamilySearch/pewpew#readme",
   "engines": {
-    "node": ">=20.0.0 <25.0.0"
+    "node": ">=22.22.2"
   },
   "overrides": {
     "eslint": "$eslint",
@@ -76,7 +76,7 @@
     "cookie": "^1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "jsdom": "^29.1.1"
+    "jsdom": "^30.1.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",

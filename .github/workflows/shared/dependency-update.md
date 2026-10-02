@@ -344,8 +344,8 @@ worklist **one package at a time**, in this order: everything else
 alphabetically first, then `@types/node`, then `typescript` - the last two
 cascade into everything and are best attempted with the rest already green.
 Skip anything `held` without comment beyond listing it. Skip - and say why -
-anything whose `latest` drops Node 20 (`npm view <pkg>@<latest> engines`);
-this repo runs 20, 22 and 24.
+anything whose `latest` drops Node 22 (`npm view <pkg>@<latest> engines`);
+this repo runs 22, 24 and 26.
 
 For each candidate:
 
@@ -434,7 +434,7 @@ Always, in this order:
    - **Taken**: package, `from -> to`, files changed, one line on what the
      version needed. This is the record of every range change in the PR.
    - **Not taken**: package, `wanted -> latest`, the reason (peer range with
-     the dependent named, failure excerpt, drops Node 20, would be a rewrite).
+     the dependent named, failure excerpt, drops Node 22, would be a rewrite).
    - **Held** (from `holdMajors`): just the list, with the config's reasons.
    - **Not attempted this month**, if you ran out of time.
    - **Version**: what you bumped, from -> to, patch or minor and why.

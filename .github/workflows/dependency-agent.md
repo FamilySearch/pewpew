@@ -139,6 +139,7 @@ Repository specifics (the shared procedure supplies everything else):
   it broke) and simple-git 3 → 4 (bump the range in every workspace that
   declares it, add `allowEnvironment` and filter the guarded `GIT_*` variables
   the new version rejects).
-- **Node engines** are `>=20.0.0 <25.0.0` and CI runs 20, 22 and 24. A version
-  that drops Node 20 support is a major for this repo regardless of its own
+- **Node engines** are `^22.22.2 || ^24.15.0 || >=26.0.0` (jsdom 30's range) for the root
+  workspace and `>=22.22.2` for the guide, and CI runs 22, 24 and 26. A version
+  that drops Node 22 support is a major for this repo regardless of its own
   semver: leave it, and say so.

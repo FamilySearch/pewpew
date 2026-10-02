@@ -53,14 +53,14 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"; echo "not the first Monday of the month - skipping"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.run == 'true'
         with:
           fetch-depth: 0   # publish counts commits on a rerun's existing branch
 
       - name: Add Node.js toolchain
         if: steps.gate.outputs.run == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

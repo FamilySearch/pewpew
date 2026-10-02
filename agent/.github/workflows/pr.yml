@@ -13,7 +13,7 @@ jobs:
     steps:
         # Make sure we have some code to diff.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -41,7 +41,7 @@ jobs:
     name: Build project
     strategy:
       matrix:
-        node-version: [22.x, 24.x]
+        node-version: [24.x, 26.x]
         runner: [ubuntu-latest, ubuntu-24.04-arm]
       fail-fast: false
     needs: changedfiles
@@ -50,10 +50,10 @@ jobs:
       DOWNLOAD_PEWPEW: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Add Node.js toolchain ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
 

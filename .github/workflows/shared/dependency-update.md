@@ -41,10 +41,19 @@ network:
 # npm, not the workspace.
 tools:
   bash:
-    - "bash .github/scripts/dep-validate.sh:*"      # <project>            - run that project's validate command
-    - "bash .github/scripts/dep-npm-update.sh:*"    # <project> <names...> - npm update, names only
-    - "bash .github/scripts/dep-npm-sync.sh:*"      # <project> ci|install - restore the lockfile / re-resolve it from package.json
-    - "bash .github/scripts/dep-checkpoint.sh:*"    # save|restore         - the last-known-green tree
+    # Wrappers are allowlisted by their PATH, and the prompt calls them that way
+    # (`.github/scripts/x.sh <args>`). The Copilot CLI never matches a rule that
+    # starts with `bash` - `bash <path>` is refused even as an exact match - so
+    # both the plain and ./ forms of the path are listed. (Verified against CLI
+    # 1.0.80; the first run of this agent was refused every wrapper, #415.)
+    - ".github/scripts/dep-validate.sh:*"      # <project>            - run that project's validate command
+    - "./.github/scripts/dep-validate.sh:*"
+    - ".github/scripts/dep-npm-update.sh:*"    # <project> <names...> - npm update, names only
+    - "./.github/scripts/dep-npm-update.sh:*"
+    - ".github/scripts/dep-npm-sync.sh:*"      # <project> ci|install - restore the lockfile / re-resolve it from package.json
+    - "./.github/scripts/dep-npm-sync.sh:*"
+    - ".github/scripts/dep-checkpoint.sh:*"    # save|restore         - the last-known-green tree
+    - "./.github/scripts/dep-checkpoint.sh:*"
     - "npm ls:*"
     - "npm view:*"
     - "npm outdated:*"
@@ -96,11 +105,14 @@ pre-agent-steps:
   - name: Install every project from the committed lockfile
     run: |
       set -euo pipefail
-      while IFS= read -r p; do
+      # fd 3, not stdin: commands in the body (npm, the validate command) can read
+      # stdin, and one that does swallows the remaining project paths - the repair
+      # agent's context once listed only the root project for that reason.
+      while IFS= read -r p <&3; do
         echo "::group::$p - npm ci --ignore-scripts"
         (cd "$p" && npm ci --ignore-scripts)
         echo "::endgroup::"
-      done < <(jq -r '.projects[].path' .github/dependency-update.json)
+      done 3< <(jq -r '.projects[].path' .github/dependency-update.json)
 
   # Per project: write the validate command (from the BASE branch's config,
   # restored above - the PR does not get to choose the command that runs with
@@ -117,6 +129,15 @@ pre-agent-steps:
       CFG=.github/dependency-update.json
       ROOT=$(pwd)
       mkdir -p .github/aw
+      # The agent execs the wrappers by path, so they must be executable. gh-aw
+      # restores .github from the activation job's artifact, and artifacts do
+      # not keep file modes - the scripts arrive 644 (#418). This step runs
+      # after the restore: set the bit, then check it, since a lost bit reads
+      # exactly like the allowlist refusal in #415.
+      for s in dep-validate dep-npm-update dep-npm-sync dep-checkpoint; do
+        chmod +x ".github/scripts/$s.sh"
+        [ -x ".github/scripts/$s.sh" ] || { echo "::error::.github/scripts/$s.sh is not executable - the agent cannot run it"; exit 1; }
+      done
       CTX=.github/aw/dep-repair-context.json
 
       PR="${GH_AW_PR_HEAD_BASE_PR_NUMBER:-}"
@@ -148,7 +169,7 @@ pre-agent-steps:
       fi
 
       PROJECTS='[]'
-      while IFS= read -r p; do
+      while IFS= read -r p <&3; do
         slug=$( [ "$p" = "." ] && echo root || printf '%s' "$p" | sed 's#/#__#g' )
         validate=$(jq -r --arg p "$p" '.projects[] | select(.path == $p) | .validate' "$CFG")
         [ -n "$validate" ] || { echo "::error::$CFG lists $p without a validate command"; exit 1; }
@@ -200,7 +221,7 @@ pre-agent-steps:
                      '$acc + [{path:$p, slug:$slug, validate:$v, headValidates:$ok, bisectExit:$rc,
                                 bisectReport:(if $br == "" or $br == "null" then null else $br end),
                                 survey:(if $sv == "" or $sv == "null" then null else $sv end)}]')
-      done < <(jq -r '.projects[].path' "$CFG")
+      done 3< <(jq -r '.projects[].path' "$CFG")
 
       # First checkpoint: the tree the bisect(s) left, which validates by
       # construction. Empty when every head validated - normal for a
@@ -254,7 +275,13 @@ safe-outputs tools.
 
 ## The checkpoint
 
-`bash .github/scripts/dep-checkpoint.sh save` records the whole tree as the
+Type every wrapper exactly as `.github/scripts/<name>.sh <args>`, from the
+repository root. `bash`, `sh`, absolute-path and `$GITHUB_WORKSPACE` prefixes
+are not allowlisted and are refused - a refusal means the prefix, not the
+script; a non-zero exit from the script itself is a result to read, not a
+reason to retry it another way.
+
+`.github/scripts/dep-checkpoint.sh save` records the whole tree as the
 last state known to validate; `restore` throws away everything since and
 re-installs every project. It already holds what the bisect left. **Save after
 every change that validated green. Restore after any that did not.** A fix
@@ -273,15 +300,15 @@ every culprit at baseline. For **each** culprit in that project:
    large fix means the package is not really honouring its range; that goes to
    a human.
 2. Re-apply that one update on top of the checkpoint:
-   `bash .github/scripts/dep-npm-update.sh <project> <culprit>`, then confirm
+   `.github/scripts/dep-npm-update.sh <project> <culprit>`, then confirm
    it moved: `jq -r '.packages["node_modules/<culprit>"].version'
    <project>/package-lock.json` must equal the culprit's `to`. If it does not,
    the update is not reproducible here (a nested transitive only `npm audit
    fix` reaches): leave it rolled back and file the issue saying that, not
    that the package breaks anything.
-3. Make the edit, then `bash .github/scripts/dep-validate.sh <project>`.
-4. Green → `dep-checkpoint.sh save`, record it as **Repaired**. Red, or more
-   than minimal → `dep-checkpoint.sh restore`, record it as **Rolled back**
+3. Make the edit, then `.github/scripts/dep-validate.sh <project>`.
+4. Green → `.github/scripts/dep-checkpoint.sh save`, record it as **Repaired**. Red, or more
+   than minimal → `.github/scripts/dep-checkpoint.sh restore`, record it as **Rolled back**
    and `create_issue` for it: title `<package> <from> -> <to> breaks <validate
    command> (<project>)`, body with the excerpt, what you tried, and the PR
    link. Read *The issue budget* before opening the first one.
@@ -329,7 +356,7 @@ For each candidate:
    `overrides` entry pins the old major for some dependent's copy, re-key it to
    apply only there (the accepted pattern is `"mocha@<12": {...}`) rather than
    deleting it. Never edit `holdMajors`, `engines`, or anything under `.github/`.
-2. **Re-resolve:** `bash .github/scripts/dep-npm-sync.sh <project> install`.
+2. **Re-resolve:** `.github/scripts/dep-npm-sync.sh <project> install`.
    Confirm the lockfile now records `latest` for the package (`jq -r
    '.packages["node_modules/<pkg>"].version' <project>/package-lock.json`). If
    npm resolved something else, a peer range elsewhere is holding it: read the
@@ -337,15 +364,15 @@ For each candidate:
    worklist try that one first; otherwise restore and record **Not taken:
    peer range** naming the dependent. Do not `--force`, do not add overrides
    to defeat a peer.
-3. **Validate:** `bash .github/scripts/dep-validate.sh <project>`.
-4. Green → `dep-checkpoint.sh save`, record **Taken** (package, `from -> to`,
+3. **Validate:** `.github/scripts/dep-validate.sh <project>`.
+4. Green → `.github/scripts/dep-checkpoint.sh save`, record **Taken** (package, `from -> to`,
    files changed, one line on what the version needed). Red → read the
    failure: if it is what the new major's breaking change requires (a renamed
    API, a changed option, a stricter type, a CLI flag it now parses
    differently), make exactly that change - the way the surrounding code does
    it, no refactors, no drive-by cleanups, no new dependencies - and validate
    again. Green → save, record **Taken** with the code change described. Still
-   red, or the change would be a rewrite → `dep-checkpoint.sh restore`, record
+   red, or the change would be a rewrite → `.github/scripts/dep-checkpoint.sh restore`, record
    **Not taken** with the first relevant failure lines and why.
 5. Keep an eye on the clock (`date -u`). Each attempt is a minute of install
    plus two to four minutes of validation. When fewer than thirty minutes of
@@ -361,15 +388,15 @@ workspace's four manifests (`package.json`, `common/`, `agent/`,
 has its own. **Patch** when only manifests, `overrides`, lockfiles or
 build/test config changed; **minor** when source under `src/`, `pages/` or
 `components/` changed. **Never a major** - `5.0.0` is a release decision for a
-human. Then `dep-npm-sync.sh <project> install` so the lockfile records the
+human. Then `.github/scripts/dep-npm-sync.sh <project> install` so the lockfile records the
 new versions, validate once more, and save. A lockfile-only outcome bumps
 nothing.
 
 ## Final check
 
-Run `bash .github/scripts/dep-validate.sh <project>` on every project you
+Run `.github/scripts/dep-validate.sh <project>` on every project you
 touched. Every one must be green. If one is not, you have a bug in your own
-work: `dep-checkpoint.sh restore`, validate again, and hand back that state
+work: `.github/scripts/dep-checkpoint.sh restore`, validate again, and hand back that state
 (re-doing the version bump if the restore predates it). Then confirm every
 version you are about to report as Taken or Repaired is actually recorded in
 that project's lockfile - the comment must not claim an update the lockfile

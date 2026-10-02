@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # `npm update` for NAMED packages only, in one project.
-#   bash .github/scripts/dep-npm-update.sh <project-path> <package> [<package>...]
+#   .github/scripts/dep-npm-update.sh <project-path> <package> [<package>...]
 # Package names and nothing else: a version, alias, path or option would let
 # the agent choose a registry, re-enable install scripts, or install something
 # package.json never declared. To take a new major the agent edits the range in
@@ -10,7 +10,7 @@
 # must start alphanumeric so a leading dot or dash cannot be a path or a flag.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/dep-project.sh"
-dep_project_resolve "${1:?usage: dep-npm-update.sh <project-path> <package>...}" || exit 2
+dep_project_resolve "${1:?usage: .github/scripts/dep-npm-update.sh <project-path> <package>...}" || exit 2
 shift
 [ "$#" -gt 0 ] || { echo "dep-npm-update: no package names given" >&2; exit 2; }
 for a in "$@"; do

@@ -73,6 +73,24 @@ tools:
     - "date:*"
 
 safe-outputs:
+  # Detection (gh-aw's threat-detection job) judges the patch without the
+  # registry. A dependency update legitimately adds packages the lockfile never
+  # had - Babel 8 brought in `obug` (its replacement for `debug`) and detection
+  # called it a typosquat (#424). This tells it how to check instead of
+  # guessing; an undeclared package is still flagged.
+  threat-detection:
+    prompt: |
+      This patch comes from an npm dependency update. A package that is new to a
+      package-lock.json is expected - not suspicious by itself - when an updated
+      package's lockfile entry lists it under its own "dependencies",
+      "optionalDependencies" or "peerDependencies" in the same patch; the lockfile
+      records each package's published manifest. For any new package, check: (1)
+      some updated entry in the patch declares it; (2) its "resolved" URL is on
+      registry.npmjs.org; (3) it has an "integrity" hash. A new package that no
+      entry in the patch declares, a "resolved" URL on any other host, a missing
+      integrity, or a version that changes while its integrity does not, IS
+      suspicious and should be flagged. An unfamiliar name alone is not evidence
+      of a typosquat.
   # The agent's account of what it did, on the PR it did it to.
   add-comment:
     max: 2

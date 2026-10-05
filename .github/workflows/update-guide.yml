@@ -9,12 +9,12 @@ jobs:
     name: Update guide
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Add Rust toolchain
         run: rustup toolchain install stable --profile minimal --no-self-update
       - run: rustup target add wasm32-unknown-unknown --toolchain stable
       - name: Add Node.js toolchain
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.x
 

@@ -46,7 +46,7 @@ describe("Scripting Test Submission", () => {
       await expect(versionSelect).toHaveValue(scriptingVersion!);
 
       const fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(SCRIPTING_WITH_ENV_YAML);
+      await fileInput.setFiles(SCRIPTING_WITH_ENV_YAML);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("scriptingwithenv.yaml");

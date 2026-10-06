@@ -23,7 +23,7 @@ describe("GET /calendar (Calendar Page)", () => {
       await browser.url(PAGE_CALENDAR);
       await assertNoPageError();
       // FullCalendar uses timeGridWeek by default, wait for it to render (dynamically imported)
-      const slot = await $(".fc-timegrid-slot-lane");
+      const slot = await $(".fc-timegrid-slot-lane", { strict: false });
       await slot.waitForExist({ timeout: 10000, timeoutMsg: "Calendar time grid did not render" });
       await slot.click();
       await browser.waitUntil(async () => {
@@ -42,7 +42,7 @@ describe("GET /calendar (Calendar Page)", () => {
       await monthButton.waitForExist({ timeout: 10000, timeoutMsg: "Calendar toolbar did not render" });
       await monthButton.click();
       // Month view renders day grid cells
-      const dayCell = await $(".fc-daygrid-day");
+      const dayCell = await $(".fc-daygrid-day", { strict: false });
       await expect(dayCell).toExist();
       // URL should reflect month view
       await browser.waitUntil(async () => {
@@ -58,7 +58,7 @@ describe("GET /calendar (Calendar Page)", () => {
       await dayButton.waitForExist({ timeout: 10000, timeoutMsg: "Calendar toolbar did not render" });
       await dayButton.click();
       // Day view still uses time grid slots
-      const slot = await $(".fc-timegrid-slot-lane");
+      const slot = await $(".fc-timegrid-slot-lane", { strict: false });
       await expect(slot).toExist();
       // Should only show one day column header
       const colHeaders = $$(".fc-col-header-cell");
@@ -142,17 +142,17 @@ describe("GET /calendar (Calendar Page)", () => {
       await browser.url(`${PAGE_CALENDAR}?defaultView=dayGridMonth&defaultDate=${FUTURE_TIMESTAMP}`);
       await assertNoPageError();
       // Month view renders day grid cells (not time grid)
-      const dayCell = await $(".fc-daygrid-day");
+      const dayCell = await $(".fc-daygrid-day", { strict: false });
       await dayCell.waitForExist({ timeout: 10000, timeoutMsg: "Month view did not render from URL param" });
       await expect(dayCell).toExist();
-      const timeSlot = await $(".fc-timegrid-slot-lane");
+      const timeSlot = await $(".fc-timegrid-slot-lane", { strict: false });
       await expect(timeSlot).not.toExist();
     });
 
     it("loading with defaultView=timeGridDay should pre-select day view", async () => {
       await browser.url(`${PAGE_CALENDAR}?defaultView=timeGridDay&defaultDate=${FUTURE_TIMESTAMP}`);
       await assertNoPageError();
-      const slot = await $(".fc-timegrid-slot-lane");
+      const slot = await $(".fc-timegrid-slot-lane", { strict: false });
       await slot.waitForExist({ timeout: 10000, timeoutMsg: "Day view did not render from URL param" });
       const colHeaders = $$(".fc-col-header-cell");
       const headerCount = await colHeaders.length;
@@ -162,7 +162,7 @@ describe("GET /calendar (Calendar Page)", () => {
     it("clicking the Calendar nav link from a parameterized URL should reset to default week view", async () => {
       await browser.url(`${PAGE_CALENDAR}?defaultView=dayGridMonth&defaultDate=${FUTURE_TIMESTAMP}`);
       await assertNoPageError();
-      const dayCell = await $(".fc-daygrid-day");
+      const dayCell = await $(".fc-daygrid-day", { strict: false });
       await dayCell.waitForExist({ timeout: 10000, timeoutMsg: "Month view did not render before nav link click" });
 
       // Click the Calendar nav link (strips query params)
@@ -183,7 +183,7 @@ describe("GET /calendar (Calendar Page)", () => {
     it("clicking back after nav link should restore previous view and URL params", async () => {
       await browser.url(`${PAGE_CALENDAR}?defaultView=dayGridMonth&defaultDate=${FUTURE_TIMESTAMP}`);
       await assertNoPageError();
-      const dayCell = await $(".fc-daygrid-day");
+      const dayCell = await $(".fc-daygrid-day", { strict: false });
       await dayCell.waitForExist({ timeout: 10000, timeoutMsg: "Month view did not render before nav link click" });
 
       // Click Calendar nav link to reset to plain /calendar
@@ -200,7 +200,7 @@ describe("GET /calendar (Calendar Page)", () => {
         const url = await browser.getUrl();
         return url.includes("defaultView=dayGridMonth");
       }, { timeout: 5000, timeoutMsg: "URL did not restore defaultView=dayGridMonth after back" });
-      const restoredDayCell = await $(".fc-daygrid-day");
+      const restoredDayCell = await $(".fc-daygrid-day", { strict: false });
       await restoredDayCell.waitForExist({ timeout: 10000, timeoutMsg: "Month view did not restore after back navigation" });
     });
   });

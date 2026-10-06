@@ -129,10 +129,16 @@ Repository specifics (the shared procedure supplies everything else):
   changed. A lockfile-only run bumps nothing. Never touch the `version` field
   of anything else, and never bump a major - `5.0.0` is a human's release
   decision.
-- **Code changes: allowed where the fence above allows them**, and bounded by
-  necessity rather than size: what the new version's breaking change requires,
+- **Code changes: allowed where the fence above allows them**, bounded by
+  necessity AND by size: what the new version's breaking change requires,
   done the way the surrounding code does it, and nothing beyond it - no
-  refactors, no drive-by cleanups, no dependency additions. Two accepted
+  refactors, no drive-by cleanups, no dependency additions. Tests, build/test
+  config, package scripts and `overrides` may change as much as the major
+  needs; source under `src/`, `pages/` and `components/` may change by about
+  ten lines in at most three files. A major that needs more than that is a
+  human's job - a TypeScript major that surfaces type errors across the
+  codebase is the typical case - so restore it and report it as too large
+  (Phase B in the shared procedure). Two accepted
   examples from this repo's sibling monorepo, both taken by hand and exactly
   the shape wanted here: mocha 11 → 12 (re-key the `overrides` entry to
   `mocha@<12`, replace `--project` with `TS_NODE_PROJECT=` in the scripts

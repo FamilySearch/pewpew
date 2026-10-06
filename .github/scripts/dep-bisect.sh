@@ -153,7 +153,11 @@ GIT_PREFIX=$(git rev-parse --show-prefix)
 
 T0=$(now_s)
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# On any abnormal exit (2: an install failed mid-trial, a revert went wrong)
+# put the PR's full lockfile back, so a trial's half-way lockfile is never left
+# for the agent's first checkpoint to save - and push. checkout first, so a
+# stray tracked-file write is undone without clobbering the restored lockfile.
+trap 'rc=$?; if [ "$rc" -ne 0 ] && [ -f "$FULL_LOCK" ]; then git checkout -- . 2>/dev/null || true; cp "$FULL_LOCK" package-lock.json; fi; rm -rf "$WORK"' EXIT
 
 FULL_LOCK="$WORK/full.json"
 HEAD_LOCK="$WORK/head.json"
@@ -722,9 +726,18 @@ trial() {
       local -a dn=()
       while IFS= read -r x; do [ -n "$x" ] && dn+=("$x"); done <<< "$delta_names"
       if [ ${#dn[@]} -eq 0 ]; then
-        # audit-fix produced no net delta and the subset alone still fails:
-        # convict the subset itself.
-        dn=("${subset[@]}")
+        # No net delta against the accepted set: this trial installed exactly
+        # a state that already validated green, so the failure cannot be
+        # attributed to the subset - most likely a flaky validate. Convicting
+        # it would roll back and file issues for packages that did nothing.
+        # If the accepted set really is broken, finalize's re-validation says so.
+        for n in "${subset[@]}"; do
+          name_is_terminal "$n" || state_add held_back "$(held_back_entry "$n" "not-reproducible" \
+            "this trial's lockfile matched the already-validated accepted set, so the failure cannot be attributed to it - most likely a flaky validate")"
+        done
+        state_add trials "$(jq -n --arg req "$subset_csv" --arg res fail-no-delta --argjson n "$trial_no" \
+          '{n:$n, requested:$req, delta:[], result:$res}')"
+        return 0
       fi
       # Requested names this failing delta cannot account for. The empty case
       # above is not the only one: when `dn` is a non-empty STRICT subset of

@@ -92,8 +92,9 @@ safe-outputs:
       /tmp/gh-aw/threat-detection/lockfile-registry-evidence.json. A new package
       is expected - not suspicious by itself - when its row there has
       "verified": true: the published manifest of a package that declares it
-      lists it (or a project's own package.json declares it, visible in the
-      patch as a direct dependency change), and its "resolved" URL and
+      lists it with a range that admits this exact version (or a project's own
+      package.json declares it, visible in the patch as a direct dependency
+      change), and its "resolved" URL and
       "integrity" match what the registry serves for that version. A new
       package with "verified": false, or with no row, IS suspicious and should
       be flagged; if the file is missing or its "status" is not "ok", treat

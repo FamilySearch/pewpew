@@ -27,7 +27,9 @@
 // Output: { schema: 1, status: "ok"|"no-patch"|"unavailable", reason?, pr, prHead?, lockfiles: [
 //   { path, newPackages: [{ key, name, version, resolved, integrity, verified,
 //     registry: { exists, tarball, integrity, resolvedMatches, integrityMatches, error? },
-//     declaredBy: [{ key, name, version, field, project, registryLists, error? }] }] }] }
+//     declaredBy: [{ key, name, version, field, project, spec, registryLists, error? }] }] }] }
+//   registryLists: the declarer's PUBLISHED manifest has a spec for this package
+//   that admits this exact version (null when it could not be checked).
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import console from "node:console";
 import { execFile, execFileSync } from "node:child_process";
@@ -65,11 +67,30 @@ function git (args, opts = {}) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"], ...opts });
 }
 
-// "node_modules/a/node_modules/@s/b" -> "@s/b"; workspace entries carry "name".
-function packageName (key, entry) {
-  if (entry.name) { return entry.name; }
+// "node_modules/a/node_modules/@s/b" -> "@s/b": the name it is installed and
+// declared under, which an npm alias makes differ from the package's own name.
+function installName (key) {
   const i = key.lastIndexOf("node_modules/");
   return i >= 0 ? key.slice(i + "node_modules/".length) : null;
+}
+
+// The package's real name; aliased and workspace entries carry "name".
+function packageName (key, entry) {
+  return entry.name || installName(key);
+}
+
+// Does a published dependency spec admit this exact version of this package?
+// The registry resolves the range, so this is npm's own semver, not ours.
+// Anything that is not a registry range (git, URL, file, ...) fails closed.
+async function specAdmits (spec, name, version) {
+  if (typeof spec !== "string") { return false; }
+  const alias = /^npm:((?:@[^/]+\/)?[^@]+)(?:@(.*))?$/.exec(spec);
+  const target = alias ? alias[1] : name;
+  const range = alias ? (alias[2] || "*") : (spec || "*");
+  if (target !== name || /^[a-z+]+:|\//i.test(range)) { return false; }
+  const versions = await view(`${target}@${range}`, ["version"]);
+  // One match comes back as a string, several as an array, none as nothing.
+  return [versions].flat().includes(version);
 }
 
 function lockAt (rev, file) {
@@ -114,6 +135,7 @@ function queue (fn) {
 
 async function checkPackage (key, entry, after) {
   const name = packageName(key, entry);
+  const declaredAs = installName(key);
   const row = { key, name, version: entry.version ?? null, resolved: entry.resolved ?? null, integrity: entry.integrity ?? null,
     verified: false, registry: null, declaredBy: [] };
 
@@ -130,17 +152,22 @@ async function checkPackage (key, entry, after) {
 
   for (const [parentKey, parent] of Object.entries(after)) {
     for (const field of DEP_FIELDS) {
-      if (!parent[field] || !Object.hasOwn(parent[field], name)) { continue; }
+      if (!parent[field] || !Object.hasOwn(parent[field], declaredAs)) { continue; }
       // The root ("") and workspace entries are the repo's own package.json
       // files: a direct dependency, visible as such in the patch, not something
       // the registry can vouch for.
       const project = parentKey === "" || !parentKey.includes("node_modules/");
-      const decl = { key: parentKey, name: packageName(parentKey, parent), version: parent.version ?? null, field, project, registryLists: null };
+      const decl = { key: parentKey, name: packageName(parentKey, parent), version: parent.version ?? null, field, project,
+        spec: null, registryLists: null };
       if (!project) {
         try {
           const manifest = await view(`${decl.name}@${decl.version}`, [field]);
           // A single field comes back as the object itself, not keyed by field.
-          decl.registryLists = Object.hasOwn(manifest || {}, name);
+          // The PUBLISHED spec is what counts, not the one the patch wrote: it
+          // must name this package and admit this exact version, or a forged
+          // entry could pin any published version (an old vulnerable one).
+          decl.spec = Object.hasOwn(manifest || {}, declaredAs) ? manifest[declaredAs] : null;
+          decl.registryLists = decl.spec !== null && await specAdmits(decl.spec, name, entry.version);
         } catch (error) {
           decl.error = String(error.message || error).slice(0, 300);
         }

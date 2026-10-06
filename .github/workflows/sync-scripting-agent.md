@@ -73,24 +73,43 @@ tools:
     - "date:*"
 
 safe-outputs:
-  # Detection (gh-aw's threat-detection job) judges the patch without the
-  # registry. A dependency update legitimately adds packages the lockfile never
-  # had - Babel 8 brought in `obug` (its replacement for `debug`) and detection
-  # called it a typosquat (#424). This tells it how to check instead of
-  # guessing; an undeclared package is still flagged.
+  # Detection (gh-aw's threat-detection job) judges the patch, and a dependency
+  # update legitimately adds packages the lockfile never had - Babel 8 brought
+  # in `obug` and detection called it a typosquat (#424). The patch cannot
+  # vouch for those itself: the agent that wrote a new entry also wrote the
+  # entry that "declares" it. So the step below asks the registry, on the
+  # runner and from this workflow's own checkout (not the patch), and
+  # detection flags any new package the registry does not confirm. The step
+  # fails closed: no evidence means unverified.
   threat-detection:
+    steps:
+      - name: Check packages new to a lockfile against the npm registry
+        if: needs.agent.outputs.has_patch == 'true'
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ fromJSON(github.event.inputs.aw_context || '{}').item_number }}
+        run: node .github/scripts/lockfile-registry-evidence.mjs --pr "$PR_NUMBER"
     prompt: |
-      This patch comes from an npm dependency update. A package that is new to a
-      package-lock.json is expected - not suspicious by itself - when an updated
-      package's lockfile entry lists it under its own "dependencies",
-      "optionalDependencies" or "peerDependencies" in the same patch; the lockfile
-      records each package's published manifest. For any new package, check: (1)
-      some updated entry in the patch declares it; (2) its "resolved" URL is on
-      registry.npmjs.org; (3) it has an "integrity" hash. A new package that no
-      entry in the patch declares, a "resolved" URL on any other host, a missing
-      integrity, or a version that changes while its integrity does not, IS
-      suspicious and should be flagged. An unfamiliar name alone is not evidence
-      of a typosquat.
+      This patch comes from an npm dependency update, which legitimately adds
+      packages a package-lock.json never had. A declaration in the patch proves
+      nothing - the same patch wrote it. Use the registry evidence instead: a
+      step outside the agent's control applied this patch to the pull request
+      head and checked every package new to a package-lock.json against
+      registry.npmjs.org, in
+      /tmp/gh-aw/threat-detection/lockfile-registry-evidence.json. A new package
+      is expected - not suspicious by itself - when its row there has
+      "verified": true: the published manifest of a package that declares it
+      lists it (or a project's own package.json declares it, visible in the
+      patch as a direct dependency change), and its "resolved" URL and
+      "integrity" match what the registry serves for that version. A new
+      package with "verified": false, or with no row, IS suspicious and should
+      be flagged; if the file is missing or its "status" is not "ok", treat
+      every package new to a lockfile as unverified. Also flag a "resolved" URL
+      on any host other than registry.npmjs.org, a missing integrity, or a
+      version that changes while its integrity does not. An unfamiliar name
+      alone is not evidence of a typosquat.
   # The agent's account of what it did, on the PR it did it to.
   add-comment:
     max: 2

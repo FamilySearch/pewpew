@@ -64,6 +64,44 @@ tools:
     - "date:*"
 
 safe-outputs:
+  # Detection (gh-aw's threat-detection job) judges the patch, and a dependency
+  # update legitimately adds packages the lockfile never had - Babel 8 brought
+  # in `obug` and detection called it a typosquat (#424). The patch cannot
+  # vouch for those itself: the agent that wrote a new entry also wrote the
+  # entry that "declares" it. So the step below asks the registry, on the
+  # runner and from this workflow's own checkout (not the patch), and
+  # detection flags any new package the registry does not confirm. The step
+  # fails closed: no evidence means unverified.
+  threat-detection:
+    steps:
+      - name: Check packages new to a lockfile against the npm registry
+        if: needs.agent.outputs.has_patch == 'true'
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ fromJSON(github.event.inputs.aw_context || '{}').item_number }}
+        run: node .github/scripts/lockfile-registry-evidence.mjs --pr "$PR_NUMBER"
+    prompt: |
+      This patch comes from an npm dependency update, which legitimately adds
+      packages a package-lock.json never had. A declaration in the patch proves
+      nothing - the same patch wrote it. Use the registry evidence instead: a
+      step outside the agent's control applied this patch to the pull request
+      head and checked every package new to a package-lock.json against
+      registry.npmjs.org, in
+      /tmp/gh-aw/threat-detection/lockfile-registry-evidence.json. A new package
+      is expected - not suspicious by itself - when its row there has
+      "verified": true: the published manifest of a package that declares it
+      lists it with a range that admits this exact version (or a project's own
+      package.json declares it, visible in the patch as a direct dependency
+      change), and its "resolved" URL and
+      "integrity" match what the registry serves for that version. A new
+      package with "verified": false, or with no row, IS suspicious and should
+      be flagged; if the file is missing or its "status" is not "ok", treat
+      every package new to a lockfile as unverified. Also flag a "resolved" URL
+      on any host other than registry.npmjs.org, a missing integrity, or a
+      version that changes while its integrity does not. An unfamiliar name
+      alone is not evidence of a typosquat.
   # Issues are for Phase A only: an in-range update that broke validation and
   # stayed rolled back, or a package the bisect held back for a reason of its
   # own. Neither survives anywhere else once the run ends. Out-of-range
@@ -374,6 +412,20 @@ For each candidate:
    again. Green → save, record **Taken** with the code change described. Still
    red, or the change would be a rewrite → `.github/scripts/dep-checkpoint.sh restore`, record
    **Not taken** with the first relevant failure lines and why.
+
+   **Size cap - majors are only taken when the code change is small.** Tests
+   (`*.spec.*`, `*.test.*`, `test/`, `acceptance/`, stories), build/test
+   config, package scripts and `overrides` may change as much as the major
+   needs - like adapting a test suite to its runner's new major. Source under
+   `src/`, `pages/` and `components/` may change by **about ten lines in at
+   most three files**, in total for that package. Check before you validate
+   the fix (`git diff --stat` against the checkpoint), and stop as soon as
+   the failures show the change will be bigger than that - do not fix your
+   way through it to find out. Over the cap → `.github/scripts/dep-checkpoint.sh restore`,
+   record **Not taken: too large for the agent** with the scope you saw
+   (files and roughly how many errors or lines, and of what kind), so a human
+   can pick it up. A TypeScript major that turns up type errors across the
+   codebase is the typical case.
 5. Keep an eye on the clock (`date -u`). Each attempt is a minute of install
    plus two to four minutes of validation. When fewer than thirty minutes of
    the job remain, stop attempting and list the rest as **Not attempted this
@@ -434,7 +486,8 @@ Always, in this order:
    - **Taken**: package, `from -> to`, files changed, one line on what the
      version needed. This is the record of every range change in the PR.
    - **Not taken**: package, `wanted -> latest`, the reason (peer range with
-     the dependent named, failure excerpt, drops Node 22, would be a rewrite).
+     the dependent named, failure excerpt, drops Node 22, too large for the
+     agent with the scope seen).
    - **Held** (from `holdMajors`): just the list, with the config's reasons.
    - **Not attempted this month**, if you ran out of time.
    - **Version**: what you bumped, from -> to, patch or minor and why.

@@ -27,7 +27,7 @@ describe("Start Test Submissions", () => {
       await assertNoPageError();
       // Upload the yaml file via the hidden file input
       const fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(BASIC_WITH_ENV_YAML);
+      await fileInput.setFiles(BASIC_WITH_ENV_YAML);
       // Wait for file to appear in the file list
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
@@ -49,7 +49,7 @@ describe("Start Test Submissions", () => {
       await assertNoPageError();
       // Upload the yaml file
       const fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(BASIC_WITH_ENV_YAML);
+      await fileInput.setFiles(BASIC_WITH_ENV_YAML);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("basicwithenv.yaml");
@@ -98,7 +98,7 @@ describe("Start Test Submissions", () => {
       await assertNoPageError();
       // Upload the yaml file only
       const fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(BASIC_WITH_FILES_YAML);
+      await fileInput.setFiles(BASIC_WITH_FILES_YAML);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("basicwithfiles.yaml");
@@ -119,7 +119,7 @@ describe("Start Test Submissions", () => {
       await assertNoPageError();
       // Upload the yaml file
       let fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(BASIC_WITH_FILES_YAML);
+      await fileInput.setFiles(BASIC_WITH_FILES_YAML);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("basicwithfiles.yaml");
@@ -127,13 +127,13 @@ describe("Start Test Submissions", () => {
       // Upload additional files (text.txt and text2.txt)
       // After the first file upload, the dropzone re-renders so we need a fresh reference
       fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(TEXT_FILE);
+      await fileInput.setFiles(TEXT_FILE);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("text.txt");
       }, { timeout: 5000 });
       fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(TEXT_FILE_2);
+      await fileInput.setFiles(TEXT_FILE_2);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("text2.txt");
@@ -157,7 +157,7 @@ describe("Start Test Submissions", () => {
       await assertNoPageError();
       // Upload the yaml file
       const fileInput = await $("[data-testid='dropzone-file-input']");
-      await fileInput.setValue(BASIC_YAML);
+      await fileInput.setFiles(BASIC_YAML);
       await browser.waitUntil(async () => {
         const text = await $("body").getText();
         return text.includes("basic.yaml");

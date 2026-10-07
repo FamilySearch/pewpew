@@ -150,8 +150,16 @@ function npmOutdated () {
   }));
 }
 
+// npm audit prints a JSON error document (registry, auth or network failure)
+// with a non-zero exit, and runJson accepts any JSON on stdout - so a report
+// without vulnerability metadata is a failed audit, never a clean one.
 function auditVulnerabilityCounts () {
-  return runJson("npm audit --json").metadata?.vulnerabilities || {};
+  const report = runJson("npm audit --json");
+  const counts = report.metadata?.vulnerabilities;
+  if (!counts) {
+    throw new Error(`npm audit produced no vulnerability metadata: ${JSON.stringify(report.error ?? report).slice(0, 500)}. Nothing was committed.`);
+  }
+  return counts;
 }
 
 function lockfileChanged () {
@@ -329,13 +337,37 @@ const agentCandidates = outOfRange.filter((o) => !o.held);
 const auditAfter = DRY_RUN ? auditBefore : auditVulnerabilityCounts();
 const hasChanges = DRY_RUN ? updatable.length > 0 : lockfileChanged();
 
+// What actually moved, read from the lockfile after the update and audit fix -
+// not what the snapshot said would. A package is reported at the version its
+// install location now records, and only if that differs from where it began.
+// `npm outdated` gives that location as an absolute path, which npm may partly
+// redact (`***`), so it is matched to the lockfile key it ends with - the
+// longest, so a workspace's nested copy is not mistaken for the hoisted one. A
+// dry run installs nothing, so it reports intent.
+function actuallyUpdated () {
+  const planned = updatable.map(([name, info]) => ({ name, from: info.current, to: info.wanted, type: dependencyType(name), location: info.location }));
+  if (DRY_RUN) { return planned.map(({ location, ...row }) => row); }
+  const lockPackages = JSON.parse(readFileSync("package-lock.json", "utf8")).packages || {};
+  const keys = Object.keys(lockPackages);
+  const lockKey = (row, location) => {
+    const loc = (location || "").split(path.sep).join("/");
+    const matches = keys.filter((k) => k.endsWith(`node_modules/${row.name}`) && (loc === k || loc.endsWith("/" + k)));
+    return matches.sort((a, b) => b.length - a.length)[0] ?? `node_modules/${row.name}`;
+  };
+  return planned
+    .map(({ location, ...row }) => ({ ...row, to: lockPackages[lockKey(row, location)]?.version ?? null }))
+    .filter((row) => row.to && row.to !== row.from);
+}
+
+const updated = actuallyUpdated();
+
 const report = {
   schema: 2,
   project: PROJECT,
   slug: SLUG,
   hasChanges,
   validate: VALIDATE,
-  updated: updatable.map(([name, info]) => ({ name, from: info.current, to: info.wanted, type: dependencyType(name) })),
+  updated,
   outOfRange,
   agentCandidates: agentCandidates.length,
   audit: { before: auditBefore, after: auditAfter },
@@ -364,9 +396,9 @@ function formatVulnerabilities (counts) {
 
 const sections = [];
 
-sections.push(`#### In-range updates (${updatable.length})
+sections.push(`#### In-range updates (${updated.length})
 
-${updatable.length > 0
+${updated.length > 0
     ? markdownTable(["Package", "From", "To", "Type"], report.updated.map((u) => [`\`${u.name}\``, u.from, u.to, u.type]))
     : hasChanges
       ? "No direct dependency was updatable in range; the lockfile change here came from `npm audit fix` - see **Security audit** below."
@@ -408,6 +440,6 @@ if ((auditBefore.total || 0) > 0 || (auditAfter.total || 0) > 0) {
 
 writeFileSync(PR_BODY_FILE, sections.join("\n\n") + "\n");
 
-console.log(`\n${PROJECT}: hasChanges=${hasChanges} updated=${updatable.length} outOfRange=${outOfRange.length} agentCandidates=${agentCandidates.length}`);
+console.log(`\n${PROJECT}: hasChanges=${hasChanges} updated=${updated.length} outOfRange=${outOfRange.length} agentCandidates=${agentCandidates.length}`);
 console.log(`PR body fragment: ${PR_BODY_FILE}`);
 console.log(`Report: ${REPORT_FILE}`);

@@ -53,7 +53,7 @@ vi.mock("chart.js", () => {
 });
 
 import TestResults, { configureURL } from ".";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { configure, fireEvent, getConfig, render, screen, waitFor } from "@testing-library/react";
 import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import axios from "axios";
@@ -147,6 +147,7 @@ describe("Test Result Component", () => {
       status: TestStatus.Finished
     };
     // What the next fetch of each file returns, keyed by the end of its URL
+    const defaultAsyncUtilTimeout = getConfig().asyncUtilTimeout;
     let fileTexts: Record<string, string>;
     let requestedUrls: string[];
 
@@ -166,9 +167,12 @@ describe("Test Result Component", () => {
       });
       // Only fake the poll. Parsing awaits a dynamic import that needs real timers.
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      // The first load includes that import, which can pass the 1s default when the whole suite runs in parallel
+      configure({ asyncUtilTimeout: 5000 });
     });
 
     afterEach(() => {
+      configure({ asyncUtilTimeout: defaultAsyncUtilTimeout });
       vi.useRealTimers();
       vi.mocked(axios.get).mockReset();
     });
@@ -225,6 +229,34 @@ describe("Test Result Component", () => {
       await waitFor(() => expect(countRequests("stats-runningtest2.json")).toBe(1));
       await poll();
       expect(countRequests("stats-runningtest2.json")).toBe(2);
+    });
+
+    it("drops a refresh of the previous file that finishes after switching files", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      // A different endpoint so the two files are told apart on screen
+      fileTexts["stats-runningtest2.json"] = statsText.split("https://ident.pewpew.org/oauth2/v3/token").join("https://second.pewpew.org/switched");
+      render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
+      await poll();
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+
+      // Hold the next poll of the first file until after the switch
+      let releasePoll: () => void = () => undefined;
+      const heldText = statsText + " ";
+      vi.mocked(axios.get).mockImplementationOnce((url: string) => {
+        requestedUrls.push(url);
+        return new Promise((resolve) => { releasePoll = () => resolve({ data: heldText }); });
+      });
+      await poll();
+
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      releasePoll();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
+      expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
     });
 
     it("fetches the results once more when a running test finishes", async () => {

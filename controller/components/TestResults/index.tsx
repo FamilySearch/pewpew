@@ -975,6 +975,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const mergeSourcesRef = useRef<MergeSource[]>([]);
   // Bumped whenever the user merges or clears, so a poll already in flight can't undo it
   const mergeGenerationRef = useRef(0);
+  // The selected results file, so a refresh that finishes after the user switched files can be dropped
+  const resultsPathRef = useRef(state.resultsPath);
+  resultsPathRef.current = state.resultsPath;
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -1031,9 +1034,21 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             allParsed.push(await parseResultsData(text));
           }
           merged = buildMergedView(allParsed, mergedTestIds);
+        } catch (error) {
+          // resultsData never reaches state, so nothing else will free it
+          freeParsedEntries(resultsData);
+          throw error;
         } finally {
           for (const parsed of allParsed) { freeParsedEntries(parsed); }
         }
+      }
+
+      // The user picked a different results file while this poll was fetching. Don't put the old one back.
+      if (refresh && resultsPathRef.current !== s3ResultPath) {
+        log("updateResults: results file changed during refresh, discarding " + s3ResultPath, LogLevel.DEBUG);
+        freeParsedEntries(resultsData);
+        freeParsedEntries(merged?.mergedData);
+        return;
       }
 
       // A merge or clear the user did while we were fetching wins. The next poll rebuilds it.
@@ -1095,6 +1110,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
     const selectedIndex = event.target.selectedIndex;
+    // Set now rather than on the next render so an in-flight refresh sees the switch
+    resultsPathRef.current = selectedIndex !== 0 ? event.target.value : undefined;
     updateState({
       defaultMessage: "Results Loading...",
       resultsPath: event.target.value

@@ -1033,9 +1033,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       const mergeSources: MergeSource[] = refresh ? mergeSourcesRef.current : [];
       // Check the status before fetching the file. The agent uploads the final results before it
       // writes Finished, so a file fetched after seeing Finished is the final one.
-      const mergeStatuses: (TestStatus | undefined)[] = await Promise.all(mergeSources.map((source: MergeSource) =>
-        isTestActive(source.status) ? fetchTestStatus(source) : Promise.resolve(source.status)));
-      const resultsText: string = await fetchResults(s3ResultPath);
+      // This test's own file doesn't depend on the merged statuses, so fetch it at the same time.
+      const [resultsText, mergeStatuses]: [string, (TestStatus | undefined)[]] = await Promise.all([
+        fetchResults(s3ResultPath),
+        Promise.all(mergeSources.map((source: MergeSource) =>
+          isTestActive(source.status) ? fetchTestStatus(source) : Promise.resolve(source.status)))
+      ]);
       const mergeTexts: string[] = await Promise.all(mergeSources.map(async (source: MergeSource) => {
         try {
           return await fetchResults(source.s3ResultPath);
@@ -1068,18 +1071,26 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       const mergedTestIds: string[] = [testData.testId, ...mergeSources.map((source: MergeSource) => source.testId)];
       let merged: ReturnType<typeof buildMergedView> | undefined;
       if (mergeSources.length > 0) {
-        const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(resultsData)];
+        // resultsData is still ours here and mergeResults clones what it keeps, so it doesn't need its own clone
+        const mergedParsed: ParsedFileEntry[][] = [];
         try {
-          for (const text of mergeTexts) {
-            allParsed.push(await parseResultsData(text));
+          for (let index = 0; index < mergeTexts.length; index++) {
+            try {
+              mergedParsed.push(await parseResultsData(mergeTexts[index]));
+            } catch (error) {
+              // Fall back to the last text that parsed, rather than failing every refresh from here on
+              log(`updateResults: error parsing merged ${mergeSources[index].testId}`, LogLevel.WARN, error);
+              mergeTexts[index] = mergeSources[index].resultsText;
+              mergedParsed.push(await parseResultsData(mergeTexts[index]));
+            }
           }
-          merged = buildMergedView(allParsed, mergedTestIds);
+          merged = buildMergedView([resultsData, ...mergedParsed], mergedTestIds);
         } catch (error) {
           // resultsData never reaches state, so nothing else will free it
           freeParsedEntries(resultsData);
           throw error;
         } finally {
-          for (const parsed of allParsed) { freeParsedEntries(parsed); }
+          for (const parsed of mergedParsed) { freeParsedEntries(parsed); }
         }
       }
 
@@ -1162,9 +1173,17 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
     mergeSourcesRef.current = [];
     mergeGenerationRef.current++;
-    updateState({
-      defaultMessage: "Results Loading...",
-      resultsPath: event.target.value
+    // Drop the compare now too, since a refresh that takes over this load would keep it
+    setState((oldState: TestResultState) => {
+      freeHistograms(undefined, undefined, oldState.compareData);
+      return {
+        ...oldState,
+        defaultMessage: "Results Loading...",
+        resultsPath: event.target.value,
+        compareTest: undefined,
+        compareText: undefined,
+        compareData: undefined
+      };
     });
     if (selectedIndex !== 0) {
       await updateResults(event.target.value);
@@ -1392,6 +1411,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(state.resultsData)];
     const fileLabels: string[] = [testData.testId];
     const mergeSources: MergeSource[] = [];
+    // The merge is built from this file's data, so drop it if the user picks another file meanwhile
+    const resultsPath = resultsPathRef.current;
 
     for (const test of selectedTests) {
       const s3ResultPath = test.resultsFileLocation?.[0];
@@ -1408,6 +1429,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       } catch (error) {
         log(`onMergeLoad: error loading ${test.testId}`, LogLevel.WARN, error);
       }
+    }
+
+    if (resultsPathRef.current !== resultsPath) {
+      log("onMergeLoad: results file changed while merging, discarding", LogLevel.DEBUG);
+      for (const parsed of allParsed) { freeParsedEntries(parsed); }
+      return;
     }
 
     if (userInitiated && !detectOverlap(allParsed)) {

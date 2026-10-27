@@ -185,7 +185,8 @@ describe("Test Result Component", () => {
           : Promise.reject(new Error("Unexpected url " + url));
       });
       pollCallbacks = new Map();
-      let nextPollId = 1;
+      // Well above jsdom's own timer ids, so clearing a real timer can never remove a poll callback
+      let nextPollId = 1_000_000_000;
       const realSetInterval = globalThis.setInterval;
       const realClearInterval = globalThis.clearInterval;
       intervalSpies = [vi.spyOn(globalThis, "setInterval").mockImplementation(((callback: () => void, ms?: number) => {
@@ -222,34 +223,42 @@ describe("Test Result Component", () => {
 
     const countRequests = (fileName: string) => requestedUrls.filter((url: string) => url.endsWith(fileName)).length;
 
+    // The same results with the first endpoint renamed, so a test can tell which version is showing
+    const secondText = () => statsText.split("https://ident.pewpew.org/oauth2/v3/token").join("https://second.pewpew.org/switched");
+    const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
+
+    /** Fails if text matching pattern shows up within a second, long enough for a stale refresh to have rendered */
+    const expectNotToAppear = async (pattern: RegExp) => {
+      await expect(waitFor(() => expect(screen.queryAllByText(pattern)).not.toHaveLength(0), { timeout: 1000 })).rejects.toThrow();
+    };
+
     it("keeps the merge when the base file changes", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await poll();
-      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      fileTexts["stats-runningtest.json"] = statsText + " ";
+      fileTexts["stats-runningtest.json"] = secondText();
       const mergeRequests = countRequests("stats-mergetest.json");
       await poll();
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
-      // Let the rebuilt state render, then check the merge survived it
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for the new data to render, then check the merge survived it
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1);
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
     it("re-fetches the merged files on each poll even when the base file has not changed", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await poll();
-      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      fileTexts["stats-mergetest.json"] = statsText + " ";
+      fileTexts["stats-mergetest.json"] = secondText();
       const baseRequests = countRequests("stats-runningtest.json");
       const mergeRequests = countRequests("stats-mergetest.json");
       await poll();
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      // Only the merged file changed, so the new endpoint shows up only if the merge was rebuilt
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1);
       expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
-      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
@@ -286,31 +295,25 @@ describe("Test Result Component", () => {
       fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
       releasePoll(statsText + " ");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
+      await expectNotToAppear(/ident\.pewpew\.org/);
       expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
     });
 
     it("fetches the results once more when a running test finishes", async () => {
       const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await poll();
-      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      fileTexts["stats-runningtest.json"] = statsText + " ";
+      fileTexts["stats-runningtest.json"] = secondText();
       const baseRequests = countRequests("stats-runningtest.json");
       const mergeRequests = countRequests("stats-mergetest.json");
-      // No timer advance: the final fetch comes from the status change, not the poll
+      // No poll: the final fetch comes from the status change
       rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1);
       expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
-      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
-
-    // The same results with the first endpoint renamed, so a test can tell which version is showing
-    const secondText = () => statsText.split("https://ident.pewpew.org/oauth2/v3/token").join("https://second.pewpew.org/switched");
-    const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
 
     it("keeps polling a merged test that is still running after this test finishes", async () => {
       const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
@@ -346,9 +349,8 @@ describe("Test Result Component", () => {
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
 
       releasePoll(statsText + " ");
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expectNotToAppear(/ident\.pewpew\.org/);
       expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
     });
 
     it("rebuilds the merge from the newer results when the merge lands during a refresh", async () => {
@@ -388,9 +390,20 @@ describe("Test Result Component", () => {
       expect(onMergeTestIdsChange).toHaveBeenLastCalledWith(undefined);
 
       releasePoll(statsText + " ");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(screen.queryByText(/Merged view/)).not.toBeInTheDocument();
-      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
+      await expectNotToAppear(/Merged view|ident\.pewpew\.org/);
+    });
+
+    it("keeps refreshing when a merged file stops parsing", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      fileTexts["stats-mergetest.json"] = "<html>Bad Gateway</html>";
+      fileTexts["stats-runningtest.json"] = secondText();
+      await poll();
+      // The merged test falls back to its last good data, so this test's update still shows
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
     it("keeps the compare when the base file changes", async () => {
@@ -399,10 +412,10 @@ describe("Test Result Component", () => {
       const compareHeading = `${compareTest.testId} - Request Count by Endpoint`;
       expect(await screen.findByText(compareHeading)).toBeInTheDocument();
 
-      fileTexts["stats-runningtest.json"] = statsText + " ";
+      fileTexts["stats-runningtest.json"] = secondText();
       const compareRequests = countRequests("stats-comparetest.json");
       await poll();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
       expect(screen.getByText(compareHeading)).toBeInTheDocument();
       // Kept as-is, not dropped and then reloaded by the initialCompareTestId effect
       expect(countRequests("stats-comparetest.json")).toBe(compareRequests);

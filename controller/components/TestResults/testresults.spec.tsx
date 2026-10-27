@@ -146,10 +146,17 @@ describe("Test Result Component", () => {
       resultsFileLocation: ["s3/comparetest/20200311T200153210/stats-comparetest.json"],
       status: TestStatus.Finished
     };
-    // What the next fetch of each file returns, keyed by the end of its URL
     const defaultAsyncUtilTimeout = getConfig().asyncUtilTimeout;
+    // What the next fetch of each file returns, keyed by the end of its URL
     let fileTexts: Record<string, string>;
+    // What the next /api/test lookup returns for each merged test
+    let testStatuses: Record<string, TestStatus>;
+    // One-shot responses held until the test releases them, keyed by the end of the URL
+    let heldRequests: Record<string, Promise<{ data: string }>>;
     let requestedUrls: string[];
+    // The component's 15s poll callbacks, run by hand. Faking setInterval would also freeze waitFor's own re-checks.
+    let pollCallbacks: Map<number, () => void>;
+    let intervalSpies: { mockRestore: () => void }[];
 
     beforeEach(() => {
       fileTexts = {
@@ -157,30 +164,60 @@ describe("Test Result Component", () => {
         "stats-mergetest.json": statsText,
         "stats-comparetest.json": statsText
       };
+      testStatuses = { [mergeTest.testId]: TestStatus.Running };
+      heldRequests = {};
       requestedUrls = [];
       vi.mocked(axios.get).mockImplementation((url: string) => {
         requestedUrls.push(url);
+        const heldKey = Object.keys(heldRequests).find((key: string) => url.endsWith(key));
+        if (heldKey) {
+          const held = heldRequests[heldKey];
+          delete heldRequests[heldKey];
+          return held;
+        }
+        const statusTestId = Object.keys(testStatuses).find((testId: string) => url.endsWith("testId=" + testId));
+        if (statusTestId) {
+          return Promise.resolve({ data: { ...mergeTest, testId: statusTestId, status: testStatuses[statusTestId] } });
+        }
         const fileName = Object.keys(fileTexts).find((name: string) => url.endsWith(name));
         return fileName
           ? Promise.resolve({ data: fileTexts[fileName] })
           : Promise.reject(new Error("Unexpected url " + url));
       });
-      // Only fake the poll. Parsing awaits a dynamic import that needs real timers.
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      // The first load includes that import, which can pass the 1s default when the whole suite runs in parallel
+      pollCallbacks = new Map();
+      let nextPollId = 1;
+      const realSetInterval = globalThis.setInterval;
+      const realClearInterval = globalThis.clearInterval;
+      intervalSpies = [vi.spyOn(globalThis, "setInterval").mockImplementation(((callback: () => void, ms?: number) => {
+        if (ms !== POLL_INTERVAL) { return realSetInterval(callback, ms); }
+        const id = nextPollId++;
+        pollCallbacks.set(id, callback);
+        return id;
+      }) as typeof setInterval), vi.spyOn(globalThis, "clearInterval").mockImplementation(((id?: number) => {
+        if (!pollCallbacks.delete(id!)) { realClearInterval(id); }
+      }) as typeof clearInterval)];
+      // The first load includes a dynamic import, which can pass the 1s default when the whole suite runs in parallel
       configure({ asyncUtilTimeout: 5000 });
     });
 
     afterEach(() => {
       configure({ asyncUtilTimeout: defaultAsyncUtilTimeout });
-      vi.useRealTimers();
+      for (const spy of intervalSpies) { spy.mockRestore(); }
       vi.mocked(axios.get).mockReset();
     });
 
     const poll = async () => {
+      expect(pollCallbacks.size).toBe(1);
       const requestCount = requestedUrls.length;
-      vi.advanceTimersByTime(POLL_INTERVAL);
+      for (const callback of pollCallbacks.values()) { callback(); }
       await waitFor(() => expect(requestedUrls.length).toBeGreaterThan(requestCount));
+    };
+
+    /** The next request ending in urlEnd waits until the returned function is called with its response text */
+    const holdNextRequest = (urlEnd: string): ((text: string) => void) => {
+      let release: (text: string) => void = () => undefined;
+      heldRequests[urlEnd] = new Promise((resolve) => { release = (text: string) => resolve({ data: text }); });
+      return (text: string) => release(text);
     };
 
     const countRequests = (fileName: string) => requestedUrls.filter((url: string) => url.endsWith(fileName)).length;
@@ -243,17 +280,12 @@ describe("Test Result Component", () => {
       expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
 
       // Hold the next poll of the first file until after the switch
-      let releasePoll: () => void = () => undefined;
-      const heldText = statsText + " ";
-      vi.mocked(axios.get).mockImplementationOnce((url: string) => {
-        requestedUrls.push(url);
-        return new Promise((resolve) => { releasePoll = () => resolve({ data: heldText }); });
-      });
+      const releasePoll = holdNextRequest("stats-runningtest.json");
       await poll();
 
       fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-      releasePoll();
+      releasePoll(statsText + " ");
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
       expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
@@ -274,6 +306,91 @@ describe("Test Result Component", () => {
       expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    // The same results with the first endpoint renamed, so a test can tell which version is showing
+    const secondText = () => statsText.split("https://ident.pewpew.org/oauth2/v3/token").join("https://second.pewpew.org/switched");
+    const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
+
+    it("keeps polling a merged test that is still running after this test finishes", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      const mergeRequests = countRequests("stats-mergetest.json");
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      // The merged test is still running, so polling carries on
+      expect(pollCallbacks.size).toBe(1);
+
+      fileTexts["stats-mergetest.json"] = secondText();
+      await poll();
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+
+      // Once the merged test finishes, fetch one last time and stop
+      testStatuses[mergeTest.testId] = TestStatus.Finished;
+      await poll();
+      await waitFor(() => expect(pollCallbacks.size).toBe(0));
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("keeps the final fetch when an older poll finishes after it", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} />);
+      await poll();
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      fileTexts["stats-runningtest.json"] = secondText();
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} />);
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+
+      releasePoll(statsText + " ");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
+    });
+
+    it("rebuilds the merge from the newer results when the merge lands during a refresh", async () => {
+      // Hold the auto-merge's fetch so the merge lands while the next poll is in flight
+      const releaseMerge = holdNextRequest("stats-mergetest.json");
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(1));
+
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      releaseMerge(statsText);
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      fileTexts["stats-runningtest.json"] = secondText();
+      releasePoll(secondText());
+      // The merged view is what's shown, so the newer results only appear if the merge was rebuilt from them
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("doesn't restore the merge when a refresh finishes after switching files", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      fileTexts["stats-runningtest2.json"] = secondText();
+      const onMergeTestIdsChange = vi.fn();
+      render(<TestResults testData={twoFiles} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} onMergeTestIdsChange={onMergeTestIdsChange} />);
+      await poll();
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(onMergeTestIdsChange).toHaveBeenLastCalledWith(undefined);
+
+      releasePoll(statsText + " ");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(screen.queryByText(/Merged view/)).not.toBeInTheDocument();
+      expect(screen.queryAllByText(/ident\.pewpew\.org/)).toHaveLength(0);
     });
 
     it("keeps the compare when the base file changes", async () => {

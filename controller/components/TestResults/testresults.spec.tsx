@@ -53,9 +53,12 @@ vi.mock("chart.js", () => {
 });
 
 import TestResults, { configureURL } from ".";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import axios from "axios";
+import { join } from "path";
+import { readFileSync } from "fs";
 
 configureURL.baseS3Url = "https://ps-services-us-east-1-unittests-pewpewcontroller.s3.amazonaws.com/";
 
@@ -117,5 +120,111 @@ describe("Test Result Component", () => {
     };
     render(<TestResults testData={oneResult} initialResultsIndex={0} />);
     expect(screen.getByText("Results Loading...")).toBeInTheDocument();
+  });
+
+  describe("polling a running test", () => {
+    const POLL_INTERVAL = 15000;
+    const statsText = readFileSync(join(__dirname, "../../public/test-results/stats-discoverywicffamilybeta20200311T200153210.json"), "utf8");
+    const runningTest: TestData = {
+      ...noResult,
+      testId: "runningtest20200311T200153210",
+      s3Folder: "runningtest/20200311T200153210",
+      resultsFileLocation: ["s3/runningtest/20200311T200153210/stats-runningtest.json"],
+      status: TestStatus.Running
+    };
+    const mergeTest: TestData = {
+      ...noResult,
+      testId: "mergetest20200311T200153210",
+      s3Folder: "mergetest/20200311T200153210",
+      resultsFileLocation: ["s3/mergetest/20200311T200153210/stats-mergetest.json"],
+      status: TestStatus.Running
+    };
+    const compareTest: TestData = {
+      ...noResult,
+      testId: "comparetest20200311T200153210",
+      s3Folder: "comparetest/20200311T200153210",
+      resultsFileLocation: ["s3/comparetest/20200311T200153210/stats-comparetest.json"],
+      status: TestStatus.Finished
+    };
+    // What the next fetch of each file returns, keyed by the end of its URL
+    let fileTexts: Record<string, string>;
+    let requestedUrls: string[];
+
+    beforeEach(() => {
+      fileTexts = {
+        "stats-runningtest.json": statsText,
+        "stats-mergetest.json": statsText,
+        "stats-comparetest.json": statsText
+      };
+      requestedUrls = [];
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        const fileName = Object.keys(fileTexts).find((name: string) => url.endsWith(name));
+        return fileName
+          ? Promise.resolve({ data: fileTexts[fileName] })
+          : Promise.reject(new Error("Unexpected url " + url));
+      });
+      // Only fake the poll. Parsing awaits a dynamic import that needs real timers.
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.mocked(axios.get).mockReset();
+    });
+
+    const poll = async () => {
+      const requestCount = requestedUrls.length;
+      vi.advanceTimersByTime(POLL_INTERVAL);
+      await waitFor(() => expect(requestedUrls.length).toBeGreaterThan(requestCount));
+    };
+
+    const countRequests = (fileName: string) => requestedUrls.filter((url: string) => url.endsWith(fileName)).length;
+
+    it("keeps the merge when the base file changes", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      fileTexts["stats-runningtest.json"] = statsText + " ";
+      const mergeRequests = countRequests("stats-mergetest.json");
+      await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      // Let the rebuilt state render, then check the merge survived it
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("re-fetches the merged files on each poll even when the base file has not changed", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      fileTexts["stats-mergetest.json"] = statsText + " ";
+      const baseRequests = countRequests("stats-runningtest.json");
+      const mergeRequests = countRequests("stats-mergetest.json");
+      await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("keeps the compare when the base file changes", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialCompareTestId={compareTest.testId} initialCompareTestData={compareTest} />);
+      await poll();
+      const compareHeading = `${compareTest.testId} - Request Count by Endpoint`;
+      expect(await screen.findByText(compareHeading)).toBeInTheDocument();
+
+      fileTexts["stats-runningtest.json"] = statsText + " ";
+      const compareRequests = countRequests("stats-comparetest.json");
+      await poll();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByText(compareHeading)).toBeInTheDocument();
+      // Kept as-is, not dropped and then reloaded by the initialCompareTestId effect
+      expect(countRequests("stats-comparetest.json")).toBe(compareRequests);
+    });
   });
 });

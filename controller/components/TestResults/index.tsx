@@ -33,7 +33,7 @@ import { ModalObject, TestsListModal, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TestData, TestManagerError, TestManagerMessage } from "../../types/testmanager";
 import axios, { AxiosResponse } from "axios";
-import { cloneParsedEntries, detectOverlap, mergeResults } from "./merge";
+import { cloneParsedEntries, detectOverlap, mergeResults, requestCountTimeSeries } from "./merge";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
@@ -406,6 +406,23 @@ export const freeParsedEntries = (data: ParsedFileEntry[] | undefined) => {
     for (const dp of dps) { try { dp.rttHistogram.free(); } catch { /* already freed */ } }
   }
 };
+
+/** A test merged into the current view, and the results text last fetched for it */
+interface MergeSource {
+  testId: string;
+  s3ResultPath: string;
+  resultsText: string;
+}
+
+/**
+ * Merges the base file (allParsed[0]) with the other tests' files. The caller still owns
+ * allParsed and must free it; mergeResults clones what it keeps.
+ */
+const buildMergedView = (allParsed: ParsedFileEntry[][], fileLabels: string[]) => ({
+  mergedData: mergeResults(allParsed),
+  mergedAgentTimeSeries: allParsed.map((fileData, i) =>
+    [fileLabels[i] ?? `Agent ${i + 1}`, requestCountTimeSeries(fileData)] as [string, { time: Date; count: number }[]])
+});
 
 /**
  * Groups displayData by a label function, then merges DataPoints within each group
@@ -954,6 +971,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const onMergeTestIdsChangeRef = useRef(onMergeTestIdsChange);
   onMergeTestIdsChangeRef.current = onMergeTestIdsChange;
   const autoMergeTriggeredRef = useRef(false);
+  // The tests in the current merge, so each poll of a running test can re-fetch and rebuild it
+  const mergeSourcesRef = useRef<MergeSource[]>([]);
+  // Bumped whenever the user merges or clears, so a poll already in flight can't undo it
+  const mergeGenerationRef = useRef(0);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -973,41 +994,85 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     return resultsText;
   };
 
-  const updateResults = async (s3ResultPath: string): Promise<void> => {
+  /**
+   * Loads the results file into the view. A refresh (polling a running test) keeps the compare
+   * and re-fetches and rebuilds any merge; otherwise (a different file was picked) both are dropped.
+   */
+  const updateResults = async (s3ResultPath: string, refresh: boolean = false): Promise<void> => {
     try {
+      // Read before any await so we can tell if the user merged or cleared while we were fetching
+      const mergeGeneration = mergeGenerationRef.current;
+      const mergeSources: MergeSource[] = refresh ? mergeSourcesRef.current : [];
       const resultsText: string = await fetchResults(s3ResultPath);
+      const mergeTexts: string[] = await Promise.all(mergeSources.map(async (source: MergeSource) => {
+        try {
+          return await fetchResults(source.s3ResultPath);
+        } catch (error) {
+          // Keep showing the last data we have for this test rather than dropping the whole merge
+          log(`updateResults: error refreshing merged ${source.testId}`, LogLevel.WARN, error);
+          return source.resultsText;
+        }
+      }));
       // Check if the data has changed. No need to reprocess and redraw if it didn't
-      if (state.resultsText === resultsText) {
+      const mergeChanged = mergeTexts.some((text: string, index: number) => text !== mergeSources[index].resultsText);
+      if (state.resultsText === resultsText && !mergeChanged) {
         log("resultsText not changed", LogLevel.DEBUG);
         return;
       }
 
       // Use shared parsing utility (includes sorting)
       const resultsData = await parseResultsData(resultsText);
+      const mergedTestIds: string[] = [testData.testId, ...mergeSources.map((source: MergeSource) => source.testId)];
+      let merged: ReturnType<typeof buildMergedView> | undefined;
+      if (mergeSources.length > 0) {
+        const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(resultsData)];
+        try {
+          for (const text of mergeTexts) {
+            allParsed.push(await parseResultsData(text));
+          }
+          merged = buildMergedView(allParsed, mergedTestIds);
+        } finally {
+          for (const parsed of allParsed) { freeParsedEntries(parsed); }
+        }
+      }
+
+      // A merge or clear the user did while we were fetching wins. The next poll rebuilds it.
+      const keepCurrentMerge = refresh && mergeGenerationRef.current !== mergeGeneration;
+      if (keepCurrentMerge) {
+        freeParsedEntries(merged?.mergedData);
+        merged = undefined;
+      } else {
+        mergeSourcesRef.current = mergeSources.map((source: MergeSource, index: number) => ({ ...source, resultsText: mergeTexts[index] }));
+      }
+
       setState((oldState: TestResultState) => {
         // Free the old ones
-        freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
-        // Free merged data — new base results invalidate the merge
-        freeParsedEntries(oldState.mergedData);
+        freeHistograms(oldState.resultsData, oldState.summaryData, refresh ? undefined : oldState.compareData);
+        const mergeState = keepCurrentMerge
+          ? { mergedData: oldState.mergedData, mergedAgentTimeSeries: oldState.mergedAgentTimeSeries, mergedTestIds: oldState.mergedTestIds }
+          : { mergedData: merged?.mergedData, mergedAgentTimeSeries: merged?.mergedAgentTimeSeries ?? [], mergedTestIds: merged ? mergedTestIds : [] };
+        if (!keepCurrentMerge) {
+          freeParsedEntries(oldState.mergedData);
+        }
+        const compareState = refresh
+          ? {}
+          : { compareTest: undefined, compareText: undefined, compareData: undefined };
 
-        const startEndTime: MinMaxTime = minMaxTime(resultsData);
         const { summaryTagFilter, summaryTagValueFilter } = oldState;
         const filteredData = getFilteredEndpoints({ resultsData, summaryTagFilter, summaryTagValueFilter });
-        const summaryData = getSummaryData({ filteredData: filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
+        // The merged view replaces the single-test view, so its summary and time range win
+        const startEndTime: MinMaxTime = minMaxTime(mergeState.mergedData || resultsData);
+        const summaryData = getSummaryData({ filteredData: mergeState.mergedData || filteredData || resultsData, summaryTagFilter, summaryTagValueFilter });
 
-        log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, summaryData });
+        log("updateResultsData", LogLevel.DEBUG, { filteredData: filteredData?.length, resultsData: resultsData?.length, mergedData: mergeState.mergedData?.length, summaryData });
         return {
           ...oldState,
           resultsData,
           filteredData,
           resultsText,
           summaryData,
-          compareTest: undefined,
-          compareText: undefined,
-          compareData: undefined,
-          mergedData: undefined,
-          mergedAgentTimeSeries: [],
-          mergedTestIds: [],
+          ...compareState,
+          ...mergeState,
           error: undefined,
           minMaxTime: startEndTime
         };
@@ -1021,6 +1086,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
   };
 
+  // The polling interval outlives renders, so it calls through this ref to see the current state
+  // (otherwise it compares against the resultsText from when the interval started).
+  const updateResultsRef = useRef(updateResults);
+  updateResultsRef.current = updateResults;
+
   const onResultsFileChange = async (
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
@@ -1033,6 +1103,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       await updateResults(event.target.value);
       onResultsIndexChange?.(selectedIndex - 1);
     } else {
+      mergeSourcesRef.current = [];
+      mergeGenerationRef.current++;
       setState((oldState: TestResultState) => {
         // Free the old data
         freeHistograms(oldState.resultsData, oldState.summaryData, oldState.compareData);
@@ -1253,6 +1325,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     // by a concurrent reload or clear while we fetch additional agents' results.
     const allParsed: ParsedFileEntry[][] = [cloneParsedEntries(state.resultsData)];
     const fileLabels: string[] = [testData.testId];
+    const mergeSources: MergeSource[] = [];
 
     for (const test of selectedTests) {
       const s3ResultPath = test.resultsFileLocation?.[0];
@@ -1265,6 +1338,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         const parsed = await parseResultsData(text);
         allParsed.push(parsed);
         fileLabels.push(test.testId);
+        mergeSources.push({ testId: test.testId, s3ResultPath, resultsText: text });
       } catch (error) {
         log(`onMergeLoad: error loading ${test.testId}`, LogLevel.WARN, error);
       }
@@ -1277,27 +1351,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }
     }
 
-    // Compute per-file request count time series before merging (mergeResults loses file identity)
-    const agentTimeSeries: [string, { time: Date; count: number }[]][] = allParsed.map((fileData, i) => {
-      const timeMap = new Map<number, { time: Date; count: number }>();
-      for (const [, dataPoints] of fileData) {
-        for (const dp of dataPoints) {
-          const t = dp.time.getTime();
-          const count = Number(dp.rttHistogram.getTotalCount());
-          const existing = timeMap.get(t);
-          if (existing) { existing.count += count; }
-          else { timeMap.set(t, { time: new Date(t), count }); }
-        }
-      }
-      const points = Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
-      return [fileLabels[i] ?? `Agent ${i + 1}`, points];
-    });
-
-    const merged = mergeResults(allParsed);
+    const { mergedData: merged, mergedAgentTimeSeries: agentTimeSeries } = buildMergedView(allParsed, fileLabels);
 
     // Free all parsed data (including the base clone at [0]) — mergeResults cloned what it needed
     for (const parsed of allParsed) { freeParsedEntries(parsed); }
 
+    mergeSourcesRef.current = mergeSources;
+    mergeGenerationRef.current++;
     setState((old) => {
       freeParsedEntries(old.mergedData);
       freeHistograms(undefined, old.summaryData, undefined);
@@ -1310,6 +1370,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   }, [state.resultsData, testData.testId]);
 
   const onClearMerge = useCallback(() => {
+    mergeSourcesRef.current = [];
+    mergeGenerationRef.current++;
     setState((old) => {
       freeParsedEntries(old.mergedData);
       freeHistograms(undefined, old.summaryData, undefined);
@@ -1333,7 +1395,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       testData.status === TestStatus.Running
     ) {
       const intervalId = setInterval(() => {
-      updateResults(state.resultsPath!).catch((error) =>
+      updateResultsRef.current(state.resultsPath!, true).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
       );
       }, 15000);

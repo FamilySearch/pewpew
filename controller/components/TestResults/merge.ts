@@ -37,6 +37,24 @@ export function cloneParsedEntries (entries: ParsedFileEntry[]): ParsedFileEntry
 }
 
 /**
+ * Sums the request counts of every endpoint at each bucket timestamp of one file.
+ * Computed per file before merging, since mergeResults loses which file a DataPoint came from.
+ */
+export function requestCountTimeSeries (fileData: ParsedFileEntry[]): { time: Date; count: number }[] {
+  const timeMap = new Map<number, { time: Date; count: number }>();
+  for (const [, dataPoints] of fileData) {
+    for (const dp of dataPoints) {
+      const t = dp.time.getTime();
+      const count = Number(dp.rttHistogram.getTotalCount());
+      const existing = timeMap.get(t);
+      if (existing) { existing.count += count; }
+      else { timeMap.set(t, { time: new Date(t), count }); }
+    }
+  }
+  return Array.from(timeMap.values()).sort((a, b) => a.time.getTime() - b.time.getTime());
+}
+
+/**
  * Merges N sets of parsed results into a single unified result set.
  * Used when a test is spread across multiple agents — each agent produces its own
  * results file, and merging combines them as if they ran as one.

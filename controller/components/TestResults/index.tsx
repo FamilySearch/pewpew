@@ -1387,13 +1387,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     .catch((error) => log("Could not load chartjs-adapter-date-fns import", LogLevel.WARN, error));
   }, []);
 
+  // The status this effect last saw, so we can tell when a running test has just stopped
+  const previousStatusRef = useRef(testData.status);
   useEffect(() => {
-    if (
-      state.resultsPath &&
-      !state.resultsData &&
-      !state.error &&
-      testData.status === TestStatus.Running
-    ) {
+    const wasRunning = previousStatusRef.current === TestStatus.Running;
+    previousStatusRef.current = testData.status;
+    // Keep polling even when data is already showing (e.g. the user switched results files mid-test)
+    if (state.resultsPath && testData.status === TestStatus.Running) {
       const intervalId = setInterval(() => {
       updateResultsRef.current(state.resultsPath!, true).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
@@ -1402,13 +1402,18 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       return () => clearInterval(intervalId);
     } else if (
       state.resultsPath &&
-      !state.resultsData &&
-      !state.error &&
       (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)
     ) {
-      updateResults(state.resultsPath).catch((error) =>
-        log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
-      );
+      if (wasRunning && state.resultsData) {
+        // The test stopped between polls. Fetch once more so the end of the results isn't missed.
+        updateResultsRef.current(state.resultsPath, true).catch((error) =>
+          log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
+        );
+      } else if (!state.resultsData && !state.error) {
+        updateResults(state.resultsPath).catch((error) =>
+          log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
+        );
+      }
     }
     return undefined;
   }, [testData.status, state.resultsPath]);

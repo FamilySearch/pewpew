@@ -53,7 +53,7 @@ vi.mock("chart.js", () => {
 });
 
 import TestResults, { configureURL } from ".";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TestData } from "../../types/testmanager";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import axios from "axios";
@@ -206,6 +206,38 @@ describe("Test Result Component", () => {
       const baseRequests = countRequests("stats-runningtest.json");
       const mergeRequests = countRequests("stats-mergetest.json");
       await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+      expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("keeps polling after switching to another results file mid-test", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      fileTexts["stats-runningtest2.json"] = statsText;
+      render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
+      await poll();
+
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      await waitFor(() => expect(countRequests("stats-runningtest2.json")).toBe(1));
+      await poll();
+      expect(countRequests("stats-runningtest2.json")).toBe(2);
+    });
+
+    it("fetches the results once more when a running test finishes", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      const mergedLabel = `Merged view: ${runningTest.testId}, ${mergeTest.testId}`;
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      fileTexts["stats-runningtest.json"] = statsText + " ";
+      const baseRequests = countRequests("stats-runningtest.json");
+      const mergeRequests = countRequests("stats-mergetest.json");
+      // No timer advance: the final fetch comes from the status change, not the poll
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
       expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
       await new Promise((resolve) => setTimeout(resolve, 50));

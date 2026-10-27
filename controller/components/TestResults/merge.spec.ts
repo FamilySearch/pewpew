@@ -2,6 +2,7 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
   function makeHist () {
     return {
       clone: vi.fn(makeHist),
+      getTotalCount: vi.fn(() => BigInt(2)),
       add: vi.fn(),
       free: vi.fn()
     };
@@ -10,7 +11,7 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
 });
 
 import { DataPoint, ParsedFileEntry } from "./model";
-import { cloneParsedEntries, detectOverlap, mergeResults } from "./merge";
+import { cloneParsedEntries, detectOverlap, mergeResults, requestCountTimeSeries } from "./merge";
 
 function makeDataPoint (timeSec: number, statusCounts: Record<string, number> = { "200": 1 }): DataPoint {
   return new DataPoint({
@@ -165,5 +166,22 @@ describe("mergeResults", () => {
     const file3: ParsedFileEntry[] = [[GET_ENDPOINT, [makeDataPoint(t, { "404": 1 })]]];
     const result = mergeResults([file1, file2, file3]);
     expect(result[0][1][0].statusCounts).toEqual({ "200": 5, "404": 1 });
+  });
+});
+
+describe("requestCountTimeSeries", () => {
+  it("returns an empty series for an empty file", () => {
+    expect(requestCountTimeSeries([])).toEqual([]);
+  });
+
+  it("sums request counts across endpoints at the same timestamp, sorted by time", () => {
+    const file: ParsedFileEntry[] = [
+      [GET_ENDPOINT, [makeDataPoint(2000), makeDataPoint(1000)]],
+      [POST_ENDPOINT, [makeDataPoint(1000)]]
+    ];
+    expect(requestCountTimeSeries(file)).toEqual([
+      { time: new Date(1000 * 1000), count: 4 },
+      { time: new Date(2000 * 1000), count: 2 }
+    ]);
   });
 });

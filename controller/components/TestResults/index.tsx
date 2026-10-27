@@ -988,6 +988,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   resultsPathRef.current = state.resultsPath;
   // Bumped by every updateResults call, so only the newest one is applied
   const refreshSeqRef = useRef(0);
+  // Set while an interval refresh is running, so a slow one finishes instead of being replaced by the next tick
+  const refreshInFlightRef = useRef(false);
+  // Bumped each time updateResults saves new base data, so onMergeLoad can tell its clone went stale
+  const baseRevisionRef = useRef(0);
+  // Set by onMergeLoad when its merge was built from stale base data, so the next refresh rebuilds it
+  const forceMergeRebuildRef = useRef(false);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -1039,12 +1045,14 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         Promise.all(mergeSources.map((source: MergeSource) =>
           isTestActive(source.status) ? fetchTestStatus(source) : Promise.resolve(source.status)))
       ]);
-      const mergeTexts: string[] = await Promise.all(mergeSources.map(async (source: MergeSource) => {
+      const mergeTexts: string[] = await Promise.all(mergeSources.map(async (source: MergeSource, index: number) => {
         try {
           return await fetchResults(source.s3ResultPath);
         } catch (error) {
-          // Keep showing the last data we have for this test rather than dropping the whole merge
+          // Keep showing the last data we have for this test rather than dropping the whole merge. Keep its
+          // previous status too, so a test that just finished is polled again for its final file.
           log(`updateResults: error refreshing merged ${source.testId}`, LogLevel.WARN, error);
+          mergeStatuses[index] = source.status;
           return source.resultsText;
         }
       }));
@@ -1052,10 +1060,11 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         log("updateResults: superseded by a newer call, discarding " + s3ResultPath, LogLevel.DEBUG);
         return;
       }
-      const mergedTestsRunning = mergeStatuses.some(isTestActive);
+      let mergedTestsRunning = mergeStatuses.some(isTestActive);
+      const forceMergeRebuild = forceMergeRebuildRef.current;
       // Check if the data has changed. No need to reprocess and redraw if it didn't
       const mergeChanged = mergeTexts.some((text: string, index: number) => text !== mergeSources[index].resultsText);
-      if (state.resultsText === resultsText && !mergeChanged) {
+      if (state.resultsText === resultsText && !mergeChanged && !forceMergeRebuild) {
         log("resultsText not changed", LogLevel.DEBUG);
         if (mergeGenerationRef.current === mergeGeneration) {
           mergeSourcesRef.current = mergeSources.map((source: MergeSource, index: number) => ({ ...source, status: mergeStatuses[index] }));
@@ -1081,10 +1090,12 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
               // Fall back to the last text that parsed, rather than failing every refresh from here on
               log(`updateResults: error parsing merged ${mergeSources[index].testId}`, LogLevel.WARN, error);
               mergeTexts[index] = mergeSources[index].resultsText;
+              mergeStatuses[index] = mergeSources[index].status;
               mergedParsed.push(await parseResultsData(mergeTexts[index]));
             }
           }
           merged = buildMergedView([resultsData, ...mergedParsed], mergedTestIds);
+          mergedTestsRunning = mergeStatuses.some(isTestActive);
         } catch (error) {
           // resultsData never reaches state, so nothing else will free it
           freeParsedEntries(resultsData);
@@ -1113,6 +1124,10 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }
       mergeSourcesRef.current = mergeSources.map((source: MergeSource, index: number) =>
         ({ ...source, resultsText: mergeTexts[index], status: mergeStatuses[index] }));
+      baseRevisionRef.current++;
+      if (refresh) {
+        forceMergeRebuildRef.current = false;
+      }
 
       setState((oldState: TestResultState) => {
         // Free the old ones
@@ -1413,6 +1428,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     const mergeSources: MergeSource[] = [];
     // The merge is built from this file's data, so drop it if the user picks another file meanwhile
     const resultsPath = resultsPathRef.current;
+    const baseRevision = baseRevisionRef.current;
 
     for (const test of selectedTests) {
       const s3ResultPath = test.resultsFileLocation?.[0];
@@ -1468,6 +1484,14 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     });
     // Sync additional testIds (all labels except the current test) to the URL
     onMergeTestIdsChangeRef.current?.(fileLabels.slice(1));
+    // A refresh saved newer base data while we were fetching, so this merge was built from the old base.
+    // Rebuild it now: the files may not change again (e.g. after the final fetch), so a poll may never do it.
+    if (baseRevisionRef.current !== baseRevision && resultsPath) {
+      forceMergeRebuildRef.current = true;
+      updateResultsRef.current(resultsPath, true).catch((error) =>
+        log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error)
+      );
+    }
   }, [state.resultsData, testData.testId]);
 
   const onClearMerge = useCallback(() => {
@@ -1515,9 +1539,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
     if (polling) {
       const intervalId = setInterval(() => {
+      // Let a slow refresh finish rather than replace it every tick. The final fetch and a file switch
+      // don't check this, so they still replace one in flight.
+      if (refreshInFlightRef.current) { return; }
+      refreshInFlightRef.current = true;
       updateResultsRef.current(state.resultsPath!, true).catch((error) =>
         log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
-      );
+      ).finally(() => { refreshInFlightRef.current = false; });
       }, 15000);
       return () => clearInterval(intervalId);
     }

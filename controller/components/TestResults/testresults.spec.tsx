@@ -207,10 +207,15 @@ describe("Test Result Component", () => {
       vi.mocked(axios.get).mockReset();
     });
 
-    const poll = async () => {
+    /** Fires the poll without waiting for it to make a request */
+    const tick = () => {
       expect(pollCallbacks.size).toBe(1);
-      const requestCount = requestedUrls.length;
       for (const callback of pollCallbacks.values()) { callback(); }
+    };
+
+    const poll = async () => {
+      const requestCount = requestedUrls.length;
+      tick();
       await waitFor(() => expect(requestedUrls.length).toBeGreaterThan(requestCount));
     };
 
@@ -404,6 +409,62 @@ describe("Test Result Component", () => {
       // The merged test falls back to its last good data, so this test's update still shows
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("lets a slow poll finish instead of replacing it on the next tick", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} />);
+      await poll();
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      // The next tick lands while the first poll is still fetching
+      const requestCount = requestedUrls.length;
+      tick();
+      expect(requestedUrls.length).toBe(requestCount);
+
+      releasePoll(secondText());
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
+    it("rebuilds a merge that was built from base data a refresh has since replaced", async () => {
+      // Hold the auto-merge's fetch so a poll saves newer base data before the merge lands
+      const releaseMerge = holdNextRequest("stats-mergetest.json");
+      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(1));
+
+      fileTexts["stats-runningtest.json"] = secondText();
+      await poll();
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+
+      // The merge was built from the older base, and no file changes after this, so no poll would fix it
+      releaseMerge(statsText);
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
+    it("keeps polling a merged test that finished when its final file fails to download", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+      // This test stopping triggers its own fetch. Let it finish before setting up the failure.
+      const finalRequests = countRequests("stats-mergetest.json");
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(finalRequests + 1));
+
+      // The merged test reports Finished, but its file download fails
+      testStatuses[mergeTest.testId] = TestStatus.Finished;
+      delete fileTexts["stats-mergetest.json"];
+      const mergeRequests = countRequests("stats-mergetest.json");
+      await poll();
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
+
+      // Still polling, so the next poll gets the final file
+      fileTexts["stats-mergetest.json"] = secondText();
+      await poll();
+      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      await waitFor(() => expect(pollCallbacks.size).toBe(0));
     });
 
     it("keeps the compare when the base file changes", async () => {

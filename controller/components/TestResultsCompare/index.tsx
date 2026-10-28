@@ -14,6 +14,7 @@ import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { LogLevel, log } from "../../src/log";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
+import { ChartBox } from "../TestResults/styled";
 import { compareEndpointAnchorId } from "../TestResults/utils";
 import styled from "styled-components";
 
@@ -46,17 +47,6 @@ const QuadPanel = styled.div`
 `;
 
 /** Side-by-side grid layout */
-/**
- * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
- * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
- * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
- */
-const ChartBox = styled.div`
-  position: relative;
-  width: 100%;
-  height: 270px;
-`;
-
 const ComparisonChartsGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;

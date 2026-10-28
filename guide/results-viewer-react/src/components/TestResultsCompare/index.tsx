@@ -15,6 +15,7 @@ import { LogLevel, formatError, log } from "../../util/log";
 import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime, parseResultsData } from "../TestResults/utils";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
+import { ChartBox } from "../TestResults/styled";
 import { Danger } from "../Alert";
 import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
@@ -57,17 +58,6 @@ const QUADPANEL = styled.div`
 `;
 
 /** Side-by-side grid layout for baseline vs comparison */
-/**
- * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
- * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
- * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
- */
-const CHARTBOX = styled.div`
-  position: relative;
-  width: 100%;
-  height: 270px;
-`;
-
 const COMPARISONCHARTSGRID = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -558,9 +548,9 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -613,9 +603,9 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -672,9 +662,9 @@ const ComparisonRequestCountByFileChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -757,9 +747,9 @@ const ComparisonMedianChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -845,9 +835,9 @@ const ComparisonWorst5Chart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -933,9 +923,9 @@ const ComparisonError5xxChart: React.FC<{ displayData: ParsedFileEntry[]; mergeE
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1021,9 +1011,9 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (

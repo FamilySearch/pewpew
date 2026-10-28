@@ -1,4 +1,16 @@
 import "@testing-library/jest-dom";
+
+// merge.ts imports the model at runtime, which loads the WASM histogram; replace it with a stub
+jest.mock("@fs/hdr-histogram-wasm", () => {
+  class HDRHistogram {
+    public _count = 0;
+    getTotalCount () { return BigInt(this._count); }
+    add (other: any) { this._count += other._count || 0; }
+    clone () { return new HDRHistogram(); }
+    free () { /* noop */ }
+  }
+  return { HDRHistogram };
+});
 import { BucketId, DataPoint, ParsedFileEntry } from "../model";
 import { mergeResults } from "../merge";
 

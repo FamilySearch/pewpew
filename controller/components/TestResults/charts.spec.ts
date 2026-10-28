@@ -44,7 +44,7 @@ vi.mock("chart.js", () => {
   };
 });
 
-import { RTT, allErrorsChart, error5xxChart, errorColors, externalTooltipHandler, medianDurationChart, tooltipLabelShortener, totalCalls, worst5PercentChart } from "./charts";
+import { RTT, allErrorsChart, error5xxChart, errorColors, externalTooltipHandler, externalTooltipPlugin, medianDurationChart, tooltipFooter, tooltipLabelShortener, tooltipRowFilter, tooltipRowSort, totalCalls, worst5PercentChart } from "./charts";
 import { DataPoint } from "./model";
 
 const BASE_DP = {
@@ -325,5 +325,56 @@ describe("externalTooltipHandler", () => {
     externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip() });
     expect(document.querySelectorAll("#pewpew-chart-tooltip").length).toBe(1);
     expect(tooltipElement().style.opacity).toBe("1");
+  });
+
+  it("shows a 'no data' row when every dataset was filtered out", () => {
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ body: [], labelColors: [] }) });
+    expect(tooltipElement().textContent).toContain("no data");
+  });
+
+  it("is hidden by the plugin when a chart is destroyed", () => {
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip() });
+    expect(tooltipElement().style.opacity).toBe("1");
+    externalTooltipPlugin.beforeDestroy();
+    expect(tooltipElement().style.opacity).toBe("0");
+    // nothing to hide is fine too
+    document.body.innerHTML = "";
+    expect(() => externalTooltipPlugin.beforeDestroy()).not.toThrow();
+  });
+});
+
+describe("tooltip row limit", () => {
+  const chart = {} as any;
+  const rows = (values: number[]) => values.map((y, datasetIndex) => ({ chart, parsed: { y }, datasetIndex }));
+  const visible = (items: ReturnType<typeof rows>) => items.filter((item, i) => tooltipRowFilter(item, i, items));
+
+  it("hides zero and NaN rows", () => {
+    const items = rows([5, 0, NaN, 3]);
+    expect(visible(items).map((item) => item.datasetIndex)).toEqual([0, 3]);
+    expect(tooltipFooter(visible(items))).toBe("");
+  });
+
+  it("keeps only the 12 largest rows and reports the rest in the footer", () => {
+    const items = rows([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    const kept = visible(items);
+    expect(kept).toHaveLength(12);
+    expect(kept.map((item) => item.parsed.y)).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    expect(tooltipFooter(kept)).toBe("and 3 more");
+  });
+
+  it("breaks ties by dataset order so exactly 12 rows survive", () => {
+    const items = rows(new Array(14).fill(7));
+    const kept = visible(items);
+    expect(kept.map((item) => item.datasetIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(tooltipFooter(kept)).toBe("and 2 more");
+  });
+
+  it("sorts rows by value descending, then by dataset order", () => {
+    const sorted = rows([2, 9, 9, 5]).sort(tooltipRowSort);
+    expect(sorted.map((item) => item.datasetIndex)).toEqual([1, 2, 3, 0]);
+  });
+
+  it("reports no footer when there are no rows", () => {
+    expect(tooltipFooter([])).toBe("");
   });
 });

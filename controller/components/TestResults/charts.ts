@@ -16,11 +16,26 @@ import {
   TimeScale,
   Title,
   Tooltip,
-  TooltipItem,
   TooltipModel
 } from "chart.js";
 import { LogLevel, log } from "../../src/log";
 import { DataPoint } from "./model";
+
+const TOOLTIP_ID = "pewpew-chart-tooltip";
+
+function hideTooltipElement (): void {
+  const el = document.getElementById(TOOLTIP_ID);
+  if (el) {
+    el.style.opacity = "0";
+  }
+}
+
+/**
+ * Hides the page tooltip when a chart is destroyed. Chart.js only hides it through the external
+ * handler on mouse-out, so a tooltip open while a chart is rebuilt (the controller redraws while a
+ * running test is polled) would otherwise stay on screen.
+ */
+export const externalTooltipPlugin = { id: "pewpewExternalTooltip", beforeDestroy: hideTooltipElement };
 
 // https://www.chartjs.org/docs/latest/getting-started/integration.html#bundlers-webpack-rollup-etc
 Chart.register(
@@ -33,7 +48,8 @@ Chart.register(
   TimeScale,
   Legend,
   Title,
-  Tooltip
+  Tooltip,
+  externalTooltipPlugin
 );
 
 // Splunk-style color palette (matching the polished dashboard theme)
@@ -928,16 +944,23 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
 /** Most datasets a tooltip lists. The rest are summed up in the footer. */
 const MAX_TOOLTIP_ROWS = 12;
 
-interface TooltipRow { parsed: { y: number | null }, datasetIndex: number }
+interface TooltipRow { chart: Chart, parsed: { y: number | null }, datasetIndex: number }
 
 const tooltipValue = (item: TooltipRow): number => item.parsed.y || 0;
+
+/** How many non-zero rows the row limit hid, per chart, written by tooltipRowFilter for tooltipFooter. */
+const hiddenTooltipRows = new WeakMap<Chart, number>();
 
 /**
  * Tooltip filter that hides datasets with nothing at the hovered time and keeps only the
  * MAX_TOOLTIP_ROWS largest. Chart.js runs the filter before itemSort, so the rank is computed here.
  * O(n^2) in the number of datasets, which is a few dozen at most.
  */
-const tooltipRowFilter = (item: TooltipRow, _index: number, items: TooltipRow[]): boolean => {
+export const tooltipRowFilter = (item: TooltipRow, index: number, items: TooltipRow[]): boolean => {
+  if (index === 0) {
+    const nonZero = items.filter((other) => tooltipValue(other) > 0).length;
+    hiddenTooltipRows.set(item.chart, Math.max(0, nonZero - MAX_TOOLTIP_ROWS));
+  }
   const value = tooltipValue(item);
   if (!(value > 0)) {
     return false;
@@ -955,24 +978,12 @@ const tooltipRowFilter = (item: TooltipRow, _index: number, items: TooltipRow[])
   return true;
 };
 
-const tooltipRowSort = (a: TooltipRow, b: TooltipRow): number =>
+export const tooltipRowSort = (a: TooltipRow, b: TooltipRow): number =>
   tooltipValue(b) - tooltipValue(a) || a.datasetIndex - b.datasetIndex;
 
 /** Footer line saying how many non-zero datasets the row limit hid. */
-const tooltipFooter = (items: TooltipItem<"line">[]): string => {
-  if (items.length < MAX_TOOLTIP_ROWS) {
-    return "";
-  }
-  const { chart, dataIndex } = items[0];
-  let nonZero = 0;
-  chart.data.datasets.forEach((dataset, i) => {
-    const point = dataset.data[dataIndex] as { y?: number | null } | number | null | undefined;
-    const y = typeof point === "number" ? point : point?.y;
-    if (chart.isDatasetVisible(i) && (y || 0) > 0) {
-      nonZero++;
-    }
-  });
-  const hidden = nonZero - items.length;
+export const tooltipFooter = (items: TooltipRow[]): string => {
+  const hidden = items.length > 0 ? hiddenTooltipRows.get(items[0].chart) || 0 : 0;
   return hidden > 0 ? `and ${hidden} more` : "";
 };
 
@@ -1003,7 +1014,6 @@ export function tooltipLabelShortener (labels: (string | undefined)[]): (label: 
   };
 }
 
-const TOOLTIP_ID = "pewpew-chart-tooltip";
 const TOOLTIP_MAX_WIDTH = 520;
 const TOOLTIP_OFFSET = 12;
 const TOOLTIP_VIEWPORT_MARGIN = 8;
@@ -1075,6 +1085,11 @@ export function externalTooltipHandler ({ chart, tooltip }: { chart: Chart, tool
     el.appendChild(titleEl);
   }
   tooltip.body.forEach((item, i) => el.appendChild(tooltipRow(item.lines.join(" "), tooltip.labelColors[i])));
+  if (tooltip.body.length === 0) {
+    const emptyRow = tooltipRow("no data");
+    emptyRow.style.opacity = "0.7";
+    el.appendChild(emptyRow);
+  }
   const footer = tooltip.footer.join(" ");
   if (footer) {
     const footerEl = tooltipRow(footer);

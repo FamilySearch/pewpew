@@ -10,7 +10,7 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
   return { HDRHistogram: vi.fn(makeHist) };
 });
 
-import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, processJson, processNewJson } from "./model";
+import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, fillMissingDataPoints, processJson, processNewJson } from "./model";
 
 const VALID_DP = {
   time: 1000,
@@ -258,5 +258,66 @@ describe("fillMissingBuckets", () => {
       ]
     });
     expect(result[1][1].map((p) => p.hasActivity())).toEqual([false, true, false]);
+  });
+});
+
+describe("fillMissingBuckets duplicates and timeouts", () => {
+  const HEADER = { test: "t.yaml", bin: "pewpew", bucketSize: 60 };
+  const TAG_A = { index: 0, tags: { _id: "0", method: "GET", url: "/a" } };
+
+  it("keeps every data point that shares a bucket time instead of collapsing them", () => {
+    const dp = (time: number, count: number) => ({ ...VALID_DP, time, startTime: time, endTime: time + 60, statusCounts: { "200": count } });
+    const [[, points]] = fillMissingBuckets([[{ method: "GET", url: "/a" }, [dp(1000, 1), dp(1000, 2), dp(1120, 3)]]]);
+    expect(points.map((p) => [p.time, p.statusCounts["200"] || 0])).toEqual([[1000, 1], [1000, 2], [1060, 0], [1120, 3]]);
+  });
+
+  it("copies requestTimeouts from the new format so a bucket with only timeouts counts as activity", () => {
+    const result = processNewJson([
+      HEADER, TAG_A,
+      { time: 1000, entries: { "0": { statusCounts: { "200": 3 } } } },
+      { time: 1060, entries: { "0": { requestTimeouts: 5 } } }
+    ]);
+    const [, points] = result[0];
+    expect(points[1].requestTimeouts).toBe(5);
+    expect(points[1].hasActivity()).toBe(true);
+  });
+});
+
+describe("fillMissingDataPoints", () => {
+  const dp = (timeSec: number, count: number) => new DataPoint({ ...VALID_DP, time: timeSec, startTime: timeSec, endTime: timeSec + 60, statusCounts: { "200": count } });
+
+  it("returns the input untouched when there are no data points", () => {
+    expect(fillMissingDataPoints([])).toEqual([]);
+    const empty = [[{ method: "GET", url: "/a" }, []]] as any;
+    expect(fillMissingDataPoints(empty)).toEqual(empty);
+  });
+
+  it("pads an endpoint onto the union grid of all endpoints", () => {
+    // /a spans 1000-1120, /b only has 1060: /b gets empty points at 1000 and 1120
+    const [, aPoints] = fillMissingDataPoints([
+      [{ method: "GET", url: "/a" }, [dp(1000, 1), dp(1060, 1), dp(1120, 1)]],
+      [{ method: "GET", url: "/b" }, [dp(1060, 2)]]
+    ])[0];
+    const [, bPoints] = fillMissingDataPoints([
+      [{ method: "GET", url: "/a" }, [dp(1000, 1), dp(1060, 1), dp(1120, 1)]],
+      [{ method: "GET", url: "/b" }, [dp(1060, 2)]]
+    ])[1];
+    expect(aPoints).toHaveLength(3);
+    expect(bPoints.map((p) => p.time.getTime())).toEqual([1000000, 1060000, 1120000]);
+    expect(bPoints.map((p) => p.hasActivity())).toEqual([false, true, false]);
+    expect(bPoints[0]).toBeInstanceOf(DataPoint);
+    expect(bPoints[0].duration).toBe(60);
+    expect(bPoints[0].startTime).toEqual(new Date(1000000));
+  });
+
+  it("steps by the bucket duration across a gap no endpoint has", () => {
+    const [[, points]] = fillMissingDataPoints([[{ method: "GET", url: "/a" }, [dp(1000, 1), dp(1180, 1)]]]);
+    expect(points.map((p) => p.time.getTime())).toEqual([1000000, 1060000, 1120000, 1180000]);
+  });
+
+  it("reuses the existing data points rather than cloning them", () => {
+    const original = dp(1000, 1);
+    const [[, points]] = fillMissingDataPoints([[{ method: "GET", url: "/a" }, [original]]]);
+    expect(points[0]).toBe(original);
   });
 });

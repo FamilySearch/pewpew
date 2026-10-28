@@ -15,6 +15,7 @@ import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
 import {
+  ChartBox,
   EndpointDiv,
   EndpointDiv1,
   EndpointDiv2,
@@ -91,17 +92,6 @@ const FullWidthPanel = styled.div`
     font-size: 14px;
     color: #ccc;
   }
-`;
-
-/**
- * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
- * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
- * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
- */
-const ChartBox = styled.div`
-  position: relative;
-  width: 100%;
-  height: 270px;
 `;
 
 const CustomLegend = styled.div`

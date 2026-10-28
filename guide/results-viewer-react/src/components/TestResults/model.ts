@@ -307,6 +307,65 @@ function emptyDataPoint (time: number, duration: number): DataPointPreProcessed 
   };
 }
 
+/** Smallest positive bucket duration among the data points, or 0 when none has one. */
+function smallestDuration (durations: Iterable<number>): number {
+  let smallest = Infinity;
+  for (const duration of durations) {
+    if (duration > 0) {
+      smallest = Math.min(smallest, duration);
+    }
+  }
+  return Number.isFinite(smallest) ? smallest : 0;
+}
+
+/**
+ * The bucket times every endpoint should cover: from the earliest to the latest time seen, stepping
+ * by the bucket size, plus any time that is actually present. Sorted ascending.
+ */
+function timeGrid (times: Iterable<number>, bucketSize: number): number[] {
+  const allTimes = new Set<number>();
+  let minTime = Infinity;
+  let maxTime = -Infinity;
+  for (const time of times) {
+    allTimes.add(time);
+    minTime = Math.min(minTime, time);
+    maxTime = Math.max(maxTime, time);
+  }
+  if (allTimes.size > 0 && bucketSize > 0) {
+    for (let time = minTime; time <= maxTime; time += bucketSize) {
+      allTimes.add(time);
+    }
+  }
+  return [...allTimes].sort((a, b) => a - b);
+}
+
+/**
+ * Lays one endpoint's points onto the grid, inserting an empty point at each time the endpoint has
+ * none. Points that share a time are all kept, in their original order. O(points + grid).
+ */
+function fillOntoGrid<T> (grid: number[], points: T[], getTime: (point: T) => number, makeEmpty: (time: number) => T): T[] {
+  const byTime = new Map<number, T[]>();
+  for (const point of points) {
+    const time = getTime(point);
+    const existing = byTime.get(time);
+    if (existing) {
+      existing.push(point);
+    } else {
+      byTime.set(time, [point]);
+    }
+  }
+  const filled: T[] = [];
+  for (const time of grid) {
+    const existing = byTime.get(time);
+    if (existing) {
+      filled.push(...existing);
+    } else {
+      filled.push(makeEmpty(time));
+    }
+  }
+  return filled;
+}
+
 /**
  * Fills in the time buckets each endpoint is missing with empty data points so every endpoint
  * covers the same time grid as the whole test, sorted by time.
@@ -315,41 +374,34 @@ function emptyDataPoint (time: number, duration: number): DataPointPreProcessed 
  * An endpoint with intermittent errors (or one whose requests stop part way through the test) would
  * otherwise have holes in its series, and a line chart draws straight across a hole instead of
  * dropping to zero.
- *
- * The grid runs from the earliest to the latest bucket time seen in any endpoint, stepping by the
- * smallest bucket duration, plus any bucket time that is actually present. Each endpoint has at most
- * one data point per bucket time. O(endpoints * buckets).
  */
 export function fillMissingBuckets (buckets: BucketEntry[]): BucketEntry[] {
-  let minTime = Infinity;
-  let maxTime = -Infinity;
-  let bucketSize = Infinity;
-  const allTimes = new Set<number>();
-  for (const [, dataPoints] of buckets) {
-    for (const dp of dataPoints) {
-      allTimes.add(dp.time);
-      minTime = Math.min(minTime, dp.time);
-      maxTime = Math.max(maxTime, dp.time);
-      if (dp.duration > 0) {
-        bucketSize = Math.min(bucketSize, dp.duration);
-      }
-    }
-  }
-  if (allTimes.size === 0) {
+  const all = buckets.flatMap(([, dataPoints]) => dataPoints);
+  if (all.length === 0) {
     return buckets;
   }
-  const duration = Number.isFinite(bucketSize) ? bucketSize : 0;
-  if (duration > 0) {
-    for (let time = minTime; time <= maxTime; time += duration) {
-      allTimes.add(time);
-    }
+  const duration = smallestDuration(all.map((dp) => dp.duration));
+  const grid = timeGrid(all.map((dp) => dp.time), duration);
+  return buckets.map(([bucketId, dataPoints]) =>
+    [bucketId, fillOntoGrid(grid, dataPoints, (dp) => dp.time, (time) => emptyDataPoint(time, duration))]);
+}
+
+/**
+ * The same fill for parsed data points, used after several files are merged: an endpoint that only
+ * some of the files contain would otherwise stop where those files stop. DataPoint times are in
+ * milliseconds and durations in seconds. Returns new arrays; the input points are reused, not cloned.
+ */
+export function fillMissingDataPoints (entries: ParsedFileEntry[]): ParsedFileEntry[] {
+  const all = entries.flatMap(([, dataPoints]) => dataPoints);
+  if (all.length === 0) {
+    return entries;
   }
-  const sortedTimes = [...allTimes].sort((a, b) => a - b);
-  return buckets.map(([bucketId, dataPoints]) => {
-    const byTime = new Map(dataPoints.map((dp) => [dp.time, dp]));
-    const filled = sortedTimes.map((time) => byTime.get(time) || emptyDataPoint(time, duration));
-    return [bucketId, filled];
-  });
+  const duration = smallestDuration(all.map((dp) => dp.duration));
+  const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000);
+  return entries.map(([bucketId, dataPoints]) => [
+    bucketId,
+    fillOntoGrid(grid, dataPoints, (dp) => dp.time.getTime(), (timeMs) => new DataPoint(emptyDataPoint(timeMs / 1000, duration)))
+  ]);
 }
 
 export function processJson (json: any): ParsedFileEntry[] {
@@ -490,7 +542,9 @@ export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
           rttHistogram: values.rttHistogram || EMPTY_HISTOGRAM_BASE64,
           startTime: time,
           statusCounts: values.statusCounts || {},
-          testErrors: values.testErrors || {}
+          testErrors: values.testErrors || {},
+          // Only set when present: the property checks reject an explicit undefined
+          ...(values.requestTimeouts !== undefined ? { requestTimeouts: values.requestTimeouts } : {})
         };
 
         const index2 = parseInt(index, 10);

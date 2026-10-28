@@ -4,6 +4,7 @@ import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResults
 // Dynamic import for charts to reduce bundle size
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
+import { ChartBox } from "./styled";
 import { Danger } from "../Alert";
 import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
@@ -681,17 +682,6 @@ const QUADPANEL = styled.div`
   }
 `;
 
-/**
- * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
- * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
- * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
- */
-const CHARTBOX = styled.div`
-  position: relative;
-  width: 100%;
-  height: 270px;
-`;
-
 const CUSTOMLEGEND = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -990,9 +980,9 @@ const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1072,9 +1062,9 @@ const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps)
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1154,9 +1144,9 @@ const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1236,9 +1226,9 @@ const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => 
 
   return (
     <>
-      <CHARTBOX>
+      <ChartBox>
         <canvas ref={canvasRef} />
-      </CHARTBOX>
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (

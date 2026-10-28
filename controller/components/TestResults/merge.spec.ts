@@ -119,7 +119,10 @@ describe("mergeResults", () => {
     const file2: ParsedFileEntry[] = [[GET_ENDPOINT, [makeDataPoint(2000)]]];
     const result = mergeResults([file1, file2]);
     expect(result).toHaveLength(1);
-    expect(result[0][1]).toHaveLength(2);
+    // 1000s apart at 60s buckets: both points survive and the 16 buckets between them are filled in empty
+    expect(result[0][1]).toHaveLength(18);
+    const active = result[0][1].filter((dp) => dp.statusCounts["200"]);
+    expect(active.map((dp) => dp.time.getTime())).toEqual([1000000, 2000000]);
   });
 
   it("keeps distinct endpoint buckets as separate entries", () => {

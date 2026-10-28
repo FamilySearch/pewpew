@@ -1,4 +1,4 @@
-import { BucketId, DataPoint, ParsedFileEntry } from "./model";
+import { BucketId, DataPoint, ParsedFileEntry, fillMissingDataPoints } from "./model";
 
 /**
  * Returns true if any file in the array shares at least one bucket timestamp
@@ -87,9 +87,12 @@ export function mergeResults (resultsArray: ParsedFileEntry[][]): ParsedFileEntr
     }
   }
 
-  return Array.from(bucketMap.values()).map(([bucketId, timeMap]) => {
+  const merged = Array.from(bucketMap.values()).map(([bucketId, timeMap]) => {
     const dataPoints = Array.from(timeMap.values())
       .sort((a, b) => a.time.getTime() - b.time.getTime());
     return [bucketId, dataPoints] as ParsedFileEntry;
   });
+  // Each file was filled onto its own grid when parsed; an endpoint that only some files contain
+  // still needs the union grid so its series does not stop where those files stop.
+  return fillMissingDataPoints(merged);
 }

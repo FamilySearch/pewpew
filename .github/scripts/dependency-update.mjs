@@ -133,7 +133,12 @@ function runWithOutput (command) {
     const stderr = typeof error.stderr === "string" ? error.stderr : "";
     if (stdout) { process.stdout.write(stdout); }
     if (stderr) { process.stderr.write(stderr); }
-    return { status: Number.isInteger(error.status) ? error.status : 1, stdout, stderr };
+    // No exit status means npm never exited on its own: killed by a signal (e.g. the OOM killer) or
+    // stopped at maxBuffer (ENOBUFS). Report -1 and the cause, never a status npm could have meant.
+    if (!Number.isInteger(error.status)) {
+      return { status: -1, cause: error.code ?? error.signal ?? undefined, stdout, stderr };
+    }
+    return { status: error.status, stdout, stderr };
   }
 }
 
@@ -298,8 +303,8 @@ if (!DRY_RUN) {
     // auditFixFailed (PERF-4615, PERF-4728), minus its Artifactory cases.
     const output = `${auditFix.stdout}\n${auditFix.stderr}`;
     if (auditFix.status !== 1 || /^npm error /m.test(output)) {
-      const code = /^npm error code (\S+)/m.exec(output)?.[1];
-      throw new Error(`npm audit fix failed with exit ${auditFix.status}${code ? ` (${code})` : ""}, so the lockfile may be half-moved. Nothing was committed.`);
+      const reason = auditFix.cause ?? /^npm error code (\S+)/m.exec(output)?.[1];
+      throw new Error(`npm audit fix failed with exit ${auditFix.status}${reason ? ` (${reason})` : ""}, so the lockfile may be half-moved. Nothing was committed.`);
     }
     try { auditVulnerabilityCounts(); } catch {
       throw new Error("npm audit fix failed with exit 1 and npm audit could not produce a follow-up report. Nothing was committed.");

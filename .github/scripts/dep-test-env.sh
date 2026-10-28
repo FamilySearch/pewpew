@@ -35,11 +35,16 @@ fi
 [ -z "${GITHUB_PATH:-}" ] || echo "$HOME/bin" >> "$GITHUB_PATH"
 wasm-pack --version
 
-# The three builds CI performs before installing. Order does not matter; each
+# The builds CI performs before installing. Order does not matter; each
 # writes only into its -d target (all gitignored).
 (cd lib/hdr-histogram-wasm && wasm-pack build --release -t bundler -d "$ROOT/controller/lib/hdr-histogram-wasm" --scope fs)
 (cd lib/hdr-histogram-wasm && wasm-pack build --release -t bundler -d "$ROOT/guide/results-viewer-react/lib/hdr-histogram-wasm" --scope fs)
 (cd lib/config-wasm && wasm-pack build --release -t nodejs --scope fs)
+# Only the scripting branch has config-gen (the guide's HAR to YAML converter, `@fs/config-gen`).
+# Guarded so this script stays identical on both branches: sync-scripting.sh runs it on the merged tree.
+if [ -d lib/config-gen ]; then
+  (cd lib/config-gen && wasm-pack build --release -t bundler -d "$ROOT/guide/results-viewer-react/lib/config-gen" --scope fs)
+fi
 
 # Controller unit tests read these from .env (.env.production overrides .env,
 # but NOT .env.local or the environment). Placeholder values, same as CI: the

@@ -122,7 +122,8 @@ describe("Test Result Component", () => {
     expect(screen.getByText("Results Loading...")).toBeInTheDocument();
   });
 
-  describe("polling a running test", () => {
+  // A test can chain several waitFor calls at the 5s asyncUtilTimeout below, so it needs more than vitest's 5s default
+  describe("polling a running test", { timeout: 15000 }, () => {
     const POLL_INTERVAL = 15000;
     const statsText = readFileSync(join(__dirname, "../../public/test-results/stats-discoverywicffamilybeta20200311T200153210.json"), "utf8");
     const runningTest: TestData = {

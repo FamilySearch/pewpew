@@ -5,8 +5,9 @@
 # pre-agent steps. Mirrors pr-ppaas.yml and pr-guide.yml exactly.
 #
 # Why this exists: the WebAssembly packages are BUILD OUTPUTS, not committed
-# (lib/config-wasm/pkg, controller/lib/hdr-histogram-wasm and
-# guide/results-viewer-react/lib/hdr-histogram-wasm are all gitignored), and
+# (lib/config-wasm/pkg, controller/lib/hdr-histogram-wasm,
+# guide/results-viewer-react/lib/hdr-histogram-wasm and, on the scripting
+# branch only, guide/results-viewer-react/lib/config-gen are all gitignored), and
 # `@fs/config-wasm` is a root workspace member, so the root workspace cannot
 # even `npm ci` until they exist. That makes the Rust toolchain a prerequisite
 # of the node update, which is not obvious from package.json alone.

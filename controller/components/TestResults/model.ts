@@ -319,10 +319,18 @@ function smallestDuration (durations: Iterable<number>): number {
 }
 
 /**
- * The bucket times every endpoint should cover: from the earliest to the latest time seen, stepping
- * by the bucket size, plus any time that is actually present. Sorted ascending.
+ * Upper bound on the empty data points a fill may add across all endpoints. Each one carries a WASM
+ * histogram, and merging two runs recorded days apart would otherwise fill every bucket in between.
  */
-function timeGrid (times: Iterable<number>, bucketSize: number): number[] {
+export const MAX_FILLED_POINTS = 100_000;
+
+/**
+ * The bucket times every endpoint should cover: from the earliest to the latest time seen, stepping
+ * by the bucket size, plus any time that is actually present. Sorted ascending. The stepping is
+ * skipped when it would add more than MAX_FILLED_POINTS across the endpoints; the times actually
+ * present are always included.
+ */
+function timeGrid (times: Iterable<number>, bucketSize: number, endpointCount: number): number[] {
   const allTimes = new Set<number>();
   let minTime = Infinity;
   let maxTime = -Infinity;
@@ -332,8 +340,11 @@ function timeGrid (times: Iterable<number>, bucketSize: number): number[] {
     maxTime = Math.max(maxTime, time);
   }
   if (allTimes.size > 0 && bucketSize > 0) {
-    for (let time = minTime; time <= maxTime; time += bucketSize) {
-      allTimes.add(time);
+    const steps = Math.floor((maxTime - minTime) / bucketSize) + 1;
+    if ((steps - allTimes.size) * endpointCount <= MAX_FILLED_POINTS) {
+      for (let time = minTime; time <= maxTime; time += bucketSize) {
+        allTimes.add(time);
+      }
     }
   }
   return [...allTimes].sort((a, b) => a - b);
@@ -381,7 +392,7 @@ export function fillMissingBuckets (buckets: BucketEntry[]): BucketEntry[] {
     return buckets;
   }
   const duration = smallestDuration(all.map((dp) => dp.duration));
-  const grid = timeGrid(all.map((dp) => dp.time), duration);
+  const grid = timeGrid(all.map((dp) => dp.time), duration, buckets.length);
   return buckets.map(([bucketId, dataPoints]) =>
     [bucketId, fillOntoGrid(grid, dataPoints, (dp) => dp.time, (time) => emptyDataPoint(time, duration))]);
 }
@@ -397,7 +408,7 @@ export function fillMissingDataPoints (entries: ParsedFileEntry[]): ParsedFileEn
     return entries;
   }
   const duration = smallestDuration(all.map((dp) => dp.duration));
-  const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000);
+  const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000, entries.length);
   return entries.map(([bucketId, dataPoints]) => [
     bucketId,
     fillOntoGrid(grid, dataPoints, (dp) => dp.time.getTime(), (timeMs) => new DataPoint(emptyDataPoint(timeMs / 1000, duration)))

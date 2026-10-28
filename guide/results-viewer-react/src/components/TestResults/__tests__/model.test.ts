@@ -11,7 +11,7 @@ jest.mock("@fs/hdr-histogram-wasm", () => {
   return { HDRHistogram };
 });
 
-import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, fillMissingDataPoints, processJson, processNewJson } from "../model";
+import { DataPoint, EMPTY_HISTOGRAM_BASE64, MAX_FILLED_POINTS, fillMissingBuckets, fillMissingDataPoints, processJson, processNewJson } from "../model";
 
 const HEADER = { test: "t.yaml", bin: "pewpew", bucketSize: 60 };
 const TAG_A = { index: 0, tags: { _id: "0", method: "GET", url: "/a" } };
@@ -148,5 +148,25 @@ describe("fillMissingDataPoints", () => {
     const original = dp(1000, 1);
     const [[, points]] = fillMissingDataPoints([[{ method: "GET", url: "/a" }, [original]]]);
     expect(points[0]).toBe(original);
+  });
+});
+
+describe("fill cap", () => {
+  it("keeps the actual times but skips the stepping when it would add more than MAX_FILLED_POINTS", () => {
+    const far = 1000 + 60 * (MAX_FILLED_POINTS + 10);
+    const dp = (time: number) => new DataPoint({ ...BASE_DP, time, startTime: time, endTime: time + 60 });
+    const [[, points]] = fillMissingDataPoints([[{ method: "GET", url: "/a" }, [dp(1000), dp(far)]]]);
+    expect(points.map((p) => p.time.getTime())).toEqual([1000000, far * 1000]);
+  });
+
+  it("counts the cap across all endpoints", () => {
+    // 60 steps of empty buckets for each of 2 endpoints is fine, far below the cap
+    const dp = (time: number) => new DataPoint({ ...BASE_DP, time, startTime: time, endTime: time + 60 });
+    const result = fillMissingDataPoints([
+      [{ method: "GET", url: "/a" }, [dp(1000)]],
+      [{ method: "GET", url: "/b" }, [dp(1000 + 60 * 60)]]
+    ]);
+    expect(result[0][1]).toHaveLength(61);
+    expect(result[1][1]).toHaveLength(61);
   });
 });

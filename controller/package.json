@@ -1,6 +1,6 @@
 {
   "name": "@fs/ppaas-controller",
-  "version": "4.4.1",
+  "version": "4.4.2",
   "description": "Controller Service for running pewpew tests",
   "type": "module",
   "private": true,
@@ -65,7 +65,7 @@
     "@fullcalendar/timegrid": "~6.1.9",
     "axios": "^1.7.0",
     "bunyan": "~1.8.0",
-    "chart.js": "~4.5.0",
+    "chart.js": "~4.6.0",
     "chartjs-adapter-date-fns": "^3.0.0",
     "cookie": "^1.0.0",
     "copy-webpack-plugin": "^14.0.0",

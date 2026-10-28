@@ -133,7 +133,12 @@ function runWithOutput (command) {
     const stderr = typeof error.stderr === "string" ? error.stderr : "";
     if (stdout) { process.stdout.write(stdout); }
     if (stderr) { process.stderr.write(stderr); }
-    return { status: Number.isInteger(error.status) ? error.status : 1, stdout, stderr };
+    // No exit status means npm never exited on its own: killed by a signal (e.g. the OOM killer) or
+    // stopped at maxBuffer (ENOBUFS). Report -1 and the cause, never a status npm could have meant.
+    if (!Number.isInteger(error.status)) {
+      return { status: -1, cause: error.code ?? error.signal ?? undefined, stdout, stderr };
+    }
+    return { status: error.status, stdout, stderr };
   }
 }
 
@@ -290,13 +295,16 @@ if (!DRY_RUN) {
   const beforeAuditFix = Object.fromEntries(["package-lock.json", ...MANIFEST_PATHS].map((file) => [file, readFileSync(file, "utf8")]));
   const auditFix = runWithOutput("npm audit fix --ignore-scripts");
   if (auditFix.status !== 0) {
-    if (/ERESOLVE/.test(`${auditFix.stdout}\n${auditFix.stderr}`)) {
-      throw new Error("npm audit fix failed with ERESOLVE, so the lockfile may be half-moved. Nothing was committed.");
-    }
     // Exit 1 is npm's documented "unresolved vulnerabilities remain" - expected
-    // and reported below. Anything else is a real failure.
-    if (auditFix.status !== 1) {
-      throw new Error(`npm audit fix failed with exit ${auditFix.status}. Nothing was committed.`);
+    // and reported below - but only when npm printed no `npm error` line. A real
+    // failure (a fatal ERESOLVE, an E404, an unreachable registry) always does.
+    // Don't match ERESOLVE on its own: `npm warn ERESOLVE overriding peer
+    // dependency` is routine and fails nothing. Same rule as perfqa-update's
+    // auditFixFailed (PERF-4615, PERF-4728), minus its Artifactory cases.
+    const output = `${auditFix.stdout}\n${auditFix.stderr}`;
+    if (auditFix.status !== 1 || /^npm error /m.test(output)) {
+      const reason = auditFix.cause ?? /^npm error code (\S+)/m.exec(output)?.[1];
+      throw new Error(`npm audit fix failed with exit ${auditFix.status}${reason ? ` (${reason})` : ""}, so the lockfile may be half-moved. Nothing was committed.`);
     }
     try { auditVulnerabilityCounts(); } catch {
       throw new Error("npm audit fix failed with exit 1 and npm audit could not produce a follow-up report. Nothing was committed.");

@@ -43,14 +43,20 @@ const QuadPanel = styled.div`
   padding: 1em;
   display: flex;
   flex-direction: column;
-
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
-  }
 `;
 
 /** Side-by-side grid layout */
+/**
+ * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
+ * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
+ * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
+ */
+const ChartBox = styled.div`
+  position: relative;
+  width: 100%;
+  height: 270px;
+`;
+
 const ComparisonChartsGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -525,7 +531,9 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -591,7 +599,9 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -647,7 +657,9 @@ const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; co
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -754,7 +766,9 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   return (
     <>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (

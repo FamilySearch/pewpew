@@ -15,7 +15,9 @@ import {
   ScatterDataPoint,
   TimeScale,
   Title,
-  Tooltip
+  Tooltip,
+  TooltipItem,
+  TooltipModel
 } from "chart.js";
 import { LogLevel, log } from "../../src/log";
 import { DataPoint } from "./model";
@@ -118,13 +120,14 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
       borderColor,
       backgroundColor,
       fill: "origin",
-      tension: 0.4,
+      cubicInterpolationMode: "monotone" as const,
       borderWidth: 2,
       pointRadius: 0,
       order: index
     };
   });
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -154,15 +157,15 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
           display: false
         },
         tooltip: {
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 10, bottom: 10, left: 12, right: 12 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 12 },
-          bodySpacing: 6,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${(context.parsed.y || 0).toLocaleString()}`
+            footer: tooltipFooter,
+            label: (context) => `${shorten(context.dataset.label)}: ${(context.parsed.y || 0).toLocaleString()}`
           }
         }
       }
@@ -189,13 +192,14 @@ export function requestCountByAgentSeries (
       borderColor,
       backgroundColor,
       fill: "origin",
-      tension: 0.4,
+      cubicInterpolationMode: "monotone" as const,
       borderWidth: 2,
       pointRadius: 0,
       order: index
     };
   });
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -220,15 +224,15 @@ export function requestCountByAgentSeries (
           display: false
         },
         tooltip: {
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 10, bottom: 10, left: 12, right: 12 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 12 },
-          bodySpacing: 6,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
-            label: (context) => `${context.dataset.label}: ${(context.parsed.y || 0).toLocaleString()}`
+            footer: tooltipFooter,
+            label: (context) => `${shorten(context.dataset.label)}: ${(context.parsed.y || 0).toLocaleString()}`
           }
         }
       }
@@ -348,6 +352,8 @@ export function RTT (el: HTMLCanvasElement, dataPoints: DataPoint[]): Chart {
       },
       plugins: {
         tooltip: {
+          enabled: false,
+          external: externalTooltipHandler,
           callbacks: {
             label: ({ formattedValue }) => formattedValue + "ms"
           }
@@ -464,6 +470,8 @@ export function totalCalls (el: HTMLCanvasElement, dataPoints: DataPoint[]): Cha
       },
       plugins: {
         tooltip: {
+          enabled: false,
+          external: externalTooltipHandler,
           callbacks: {
             label: ({ datasetIndex, formattedValue: yLabel }) => {
               const { label } = datasets[datasetIndex || 0];
@@ -537,6 +545,7 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
     };
   });
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -578,21 +587,15 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
           display: false
         },
         tooltip: {
-          enabled: true,
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
           position: "nearest",
-          yAlign: "top",
-          xAlign: "center",
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 12, bottom: 12, left: 14, right: 14 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 13 },
-          bodySpacing: 8,
-          titleSpacing: 6,
-          titleMarginBottom: 8,
-          caretPadding: 10,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
+            footer: tooltipFooter,
             title: (items: any) => {
               if (items.length > 0) {
                 const date = new Date(items[0].parsed.x);
@@ -600,10 +603,7 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
               }
               return "";
             },
-            label: (context: any) => {
-              const value = context.parsed.y.toFixed(2);
-              return `${context.dataset.label}: ${value}ms (median)`;
-            }
+            label: (context) => `${shorten(context.dataset.label)}: ${(context.parsed.y || 0).toFixed(2)}ms (median)`
           }
         }
       }
@@ -638,6 +638,7 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
     };
   });
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -679,21 +680,15 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
           display: false
         },
         tooltip: {
-          enabled: true,
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
           position: "nearest",
-          yAlign: "top",
-          xAlign: "center",
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 12, bottom: 12, left: 14, right: 14 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 13 },
-          bodySpacing: 8,
-          titleSpacing: 6,
-          titleMarginBottom: 8,
-          caretPadding: 10,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
+            footer: tooltipFooter,
             title: (items: any) => {
               if (items.length > 0) {
                 const date = new Date(items[0].parsed.x);
@@ -701,10 +696,7 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
               }
               return "";
             },
-            label: (context: any) => {
-              const value = context.parsed.y.toFixed(2);
-              return `${context.dataset.label}: ${value}ms (p95)`;
-            }
+            label: (context) => `${shorten(context.dataset.label)}: ${(context.parsed.y || 0).toFixed(2)}ms (p95)`
           }
         }
       }
@@ -744,7 +736,7 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
         borderColor,
         backgroundColor: borderColor + "DD",
         fill: "origin",
-        tension: 0.4,
+        cubicInterpolationMode: "monotone" as const,
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 6,
@@ -755,6 +747,7 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
     }
   }
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -797,21 +790,15 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
           display: false
         },
         tooltip: {
-          enabled: true,
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
           position: "nearest",
-          yAlign: "top",
-          xAlign: "center",
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 12, bottom: 12, left: 14, right: 14 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 13 },
-          bodySpacing: 8,
-          titleSpacing: 6,
-          titleMarginBottom: 8,
-          caretPadding: 10,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
+            footer: tooltipFooter,
             title: (items: any) => {
               if (items.length > 0) {
                 const date = new Date(items[0].parsed.x);
@@ -819,9 +806,7 @@ export function error5xxChart (el: HTMLCanvasElement, allEndpoints: [string, Dat
               }
               return "";
             },
-            label: (context: any) => {
-              return `${context.dataset.label}: ${context.parsed.y}`;
-            }
+            label: (context) => `${shorten(context.dataset.label)}: ${context.parsed.y || 0}`
           }
         }
       }
@@ -861,7 +846,7 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
         borderColor,
         backgroundColor: borderColor + "DD",
         fill: "origin",
-        tension: 0.4,
+        cubicInterpolationMode: "monotone" as const,
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 6,
@@ -872,6 +857,7 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
     }
   }
 
+  const shorten = tooltipLabelShortener(datasets.map((dataset) => dataset.label));
   return new Chart(el, {
     type: "line",
     data: { datasets },
@@ -914,21 +900,15 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
           display: false
         },
         tooltip: {
-          enabled: true,
+          enabled: false,
+          external: externalTooltipHandler,
           mode: "index",
           intersect: false,
           position: "nearest",
-          yAlign: "top",
-          xAlign: "center",
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
-          padding: { top: 12, bottom: 12, left: 14, right: 14 },
-          titleFont: { size: 13, weight: "bold" },
-          bodyFont: { size: 13 },
-          bodySpacing: 8,
-          titleSpacing: 6,
-          titleMarginBottom: 8,
-          caretPadding: 10,
+          filter: tooltipRowFilter,
+          itemSort: tooltipRowSort,
           callbacks: {
+            footer: tooltipFooter,
             title: (items: any) => {
               if (items.length > 0) {
                 const date = new Date(items[0].parsed.x);
@@ -936,15 +916,194 @@ export function allErrorsChart (el: HTMLCanvasElement, allEndpoints: [string, Da
               }
               return "";
             },
-            label: (context: any) => {
-              return `${context.dataset.label}: ${context.parsed.y}`;
-            }
+            label: (context) => `${shorten(context.dataset.label)}: ${context.parsed.y || 0}`
           }
         }
       }
     }
   }) as any as Chart;
 }
+
+
+/** Most datasets a tooltip lists. The rest are summed up in the footer. */
+const MAX_TOOLTIP_ROWS = 12;
+
+interface TooltipRow { parsed: { y: number | null }, datasetIndex: number }
+
+const tooltipValue = (item: TooltipRow): number => item.parsed.y || 0;
+
+/**
+ * Tooltip filter that hides datasets with nothing at the hovered time and keeps only the
+ * MAX_TOOLTIP_ROWS largest. Chart.js runs the filter before itemSort, so the rank is computed here.
+ * O(n^2) in the number of datasets, which is a few dozen at most.
+ */
+const tooltipRowFilter = (item: TooltipRow, _index: number, items: TooltipRow[]): boolean => {
+  const value = tooltipValue(item);
+  if (!(value > 0)) {
+    return false;
+  }
+  let rank = 0;
+  for (const other of items) {
+    const otherValue = tooltipValue(other);
+    if (otherValue > value || (otherValue === value && other.datasetIndex < item.datasetIndex)) {
+      rank++;
+      if (rank >= MAX_TOOLTIP_ROWS) {
+        return false;
+      }
+    }
+  }
+  return true;
+};
+
+const tooltipRowSort = (a: TooltipRow, b: TooltipRow): number =>
+  tooltipValue(b) - tooltipValue(a) || a.datasetIndex - b.datasetIndex;
+
+/** Footer line saying how many non-zero datasets the row limit hid. */
+const tooltipFooter = (items: TooltipItem<"line">[]): string => {
+  if (items.length < MAX_TOOLTIP_ROWS) {
+    return "";
+  }
+  const { chart, dataIndex } = items[0];
+  let nonZero = 0;
+  chart.data.datasets.forEach((dataset, i) => {
+    const point = dataset.data[dataIndex] as { y?: number | null } | number | null | undefined;
+    const y = typeof point === "number" ? point : point?.y;
+    if (chart.isDatasetVisible(i) && (y || 0) > 0) {
+      nonZero++;
+    }
+  });
+  const hidden = nonZero - items.length;
+  return hidden > 0 ? `and ${hidden} more` : "";
+};
+
+const URL_LABEL = /^(.*?)(https?:\/\/[^/\s]+)(\/\S*)?(.*)$/;
+
+/**
+ * Builds a function that shortens dataset labels for the tooltip. When every label is on the same
+ * host, the scheme and host are dropped: they take most of a line and the legend already shows them.
+ * Otherwise only the scheme is dropped. Labels that are not URLs come back unchanged.
+ */
+export function tooltipLabelShortener (labels: (string | undefined)[]): (label: string | undefined) => string {
+  const hosts = new Set<string>();
+  for (const label of labels) {
+    const match = label?.match(URL_LABEL);
+    if (match) {
+      hosts.add(match[2]);
+    }
+  }
+  const dropHost = hosts.size === 1;
+  return (label) => {
+    const match = label?.match(URL_LABEL);
+    if (!label || !match) {
+      return label || "";
+    }
+    const [, prefix, host, path = "", rest] = match;
+    const shortHost = dropHost && path ? "" : host.replace(/^https?:\/\//, "");
+    return `${prefix}${shortHost}${path}${rest}`;
+  };
+}
+
+const TOOLTIP_ID = "pewpew-chart-tooltip";
+const TOOLTIP_MAX_WIDTH = 520;
+const TOOLTIP_OFFSET = 12;
+const TOOLTIP_VIEWPORT_MARGIN = 8;
+
+function getTooltipElement (): HTMLDivElement {
+  let el = document.getElementById(TOOLTIP_ID) as HTMLDivElement | null;
+  if (!el) {
+    el = document.createElement("div");
+    el.id = TOOLTIP_ID;
+    Object.assign(el.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      zIndex: "1000",
+      pointerEvents: "none",
+      background: "rgba(0, 0, 0, 0.85)",
+      color: "#fff",
+      borderRadius: "4px",
+      padding: "10px 12px",
+      font: "12px/1.4 sans-serif",
+      overflowWrap: "anywhere",
+      opacity: "0",
+      transition: "opacity 0.1s"
+    } as Partial<CSSStyleDeclaration>);
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function tooltipRow (text: string, labelColors?: { backgroundColor: unknown, borderColor: unknown }): HTMLDivElement {
+  const row = document.createElement("div");
+  Object.assign(row.style, { display: "flex", gap: "6px", alignItems: "baseline", marginTop: "3px" });
+  if (labelColors) {
+    const swatch = document.createElement("span");
+    Object.assign(swatch.style, {
+      flex: "none",
+      width: "10px",
+      height: "10px",
+      display: "inline-block",
+      background: String(labelColors.backgroundColor),
+      border: `1px solid ${String(labelColors.borderColor)}`
+    });
+    row.appendChild(swatch);
+  }
+  const span = document.createElement("span");
+  span.textContent = text;
+  row.appendChild(span);
+  return row;
+}
+
+/**
+ * Renders the tooltip as an HTML element on the page instead of on the canvas. A canvas tooltip is
+ * clipped at the chart's edge, so a tooltip listing many endpoints could never be read. The element
+ * sits beside the hovered point and is kept inside the viewport; the chart's own callbacks still
+ * decide the title, rows and footer text.
+ */
+export function externalTooltipHandler ({ chart, tooltip }: { chart: Chart, tooltip: TooltipModel<"line"> }): void {
+  const el = getTooltipElement();
+  if (tooltip.opacity === 0) {
+    el.style.opacity = "0";
+    return;
+  }
+  el.replaceChildren();
+  const title = tooltip.title.join(" ");
+  if (title) {
+    const titleEl = document.createElement("div");
+    Object.assign(titleEl.style, { fontWeight: "bold", marginBottom: "6px" });
+    titleEl.textContent = title;
+    el.appendChild(titleEl);
+  }
+  tooltip.body.forEach((item, i) => el.appendChild(tooltipRow(item.lines.join(" "), tooltip.labelColors[i])));
+  const footer = tooltip.footer.join(" ");
+  if (footer) {
+    const footerEl = tooltipRow(footer);
+    Object.assign(footerEl.style, { marginTop: "6px", opacity: "0.8" });
+    el.appendChild(footerEl);
+  }
+
+  const viewWidth = document.documentElement.clientWidth;
+  const viewHeight = document.documentElement.clientHeight;
+  el.style.maxWidth = `${Math.min(TOOLTIP_MAX_WIDTH, viewWidth - 2 * TOOLTIP_VIEWPORT_MARGIN)}px`;
+  el.style.opacity = "1";
+  const rect = chart.canvas.getBoundingClientRect();
+  const pointX = rect.left + window.scrollX + tooltip.caretX;
+  const pointY = rect.top + window.scrollY + tooltip.caretY;
+  const viewLeft = window.scrollX + TOOLTIP_VIEWPORT_MARGIN;
+  const viewTop = window.scrollY + TOOLTIP_VIEWPORT_MARGIN;
+  const viewRight = window.scrollX + viewWidth - TOOLTIP_VIEWPORT_MARGIN;
+  const viewBottom = window.scrollY + viewHeight - TOOLTIP_VIEWPORT_MARGIN;
+  // To the right of the point, or to the left when it does not fit there
+  let left = pointX + TOOLTIP_OFFSET;
+  if (left + el.offsetWidth > viewRight) {
+    left = Math.max(viewLeft, pointX - TOOLTIP_OFFSET - el.offsetWidth);
+  }
+  // Centered on the point, pushed up or down to stay on screen
+  const top = Math.min(Math.max(pointY - el.offsetHeight / 2, viewTop), Math.max(viewTop, viewBottom - el.offsetHeight));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
 
 // add a double-click handler to the chart legends
 {

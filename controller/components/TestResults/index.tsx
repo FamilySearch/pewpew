@@ -77,11 +77,6 @@ const QuadPanel = styled.div`
   padding: 1em;
   display: flex;
   flex-direction: column;
-
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
-  }
 `;
 
 const FullWidthPanel = styled.div`
@@ -96,11 +91,17 @@ const FullWidthPanel = styled.div`
     font-size: 14px;
     color: #ccc;
   }
+`;
 
-  canvas {
-    width: 100% !important;
-    height: 260px !important;
-  }
+/**
+ * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
+ * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
+ * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
+ */
+const ChartBox = styled.div`
+  position: relative;
+  width: 100%;
+  height: 270px;
 `;
 
 const CustomLegend = styled.div`
@@ -581,7 +582,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart, hiddenD
   return (
     <QuadPanel>
       <h3 style={{ margin: "0 0 0.5em 0", fontSize: "14px", color: "#ccc" }}>{title}</h3>
-      <canvas ref={chartRef} />
+      <ChartBox>
+        <canvas ref={chartRef} />
+      </ChartBox>
       {chart && chart.data.datasets && chart.data.datasets.length > 0 && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -766,7 +769,9 @@ const FullWidthChartPanel: React.FC<ChartPanelProps> = ({ title, chartRef, chart
   return (
     <FullWidthPanel>
       <h3>{title}</h3>
-      <canvas ref={chartRef} />
+      <ChartBox>
+        <canvas ref={chartRef} />
+      </ChartBox>
       {chart && chart.data.datasets && chart.data.datasets.length > 0 && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -1734,9 +1739,15 @@ export const FinalResultsTable = React.memo(({ displayData }: TableProps) => {
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -1791,7 +1802,7 @@ export const FinalResultsTable = React.memo(({ displayData }: TableProps) => {
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+        time: lastActive.time // Last timestamp with requests
       });
 
       // Free cloned histogram

@@ -54,19 +54,29 @@ const QUADPANEL = styled.div`
   padding: 1em;
   display: flex;
   flex-direction: column;
-
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
-  }
 `;
 
 /** Side-by-side grid layout for baseline vs comparison */
+/**
+ * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
+ * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
+ * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
+ */
+const CHARTBOX = styled.div`
+  position: relative;
+  width: 100%;
+  height: 270px;
+`;
+
 const COMPARISONCHARTSGRID = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-gap: 1.5em;
   margin-bottom: 2em;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 /** Each column contains 4 stacked charts or tables */
@@ -548,7 +558,9 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -601,7 +613,9 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -658,7 +672,9 @@ const ComparisonRequestCountByFileChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -741,7 +757,9 @@ const ComparisonMedianChart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -827,7 +845,9 @@ const ComparisonWorst5Chart: React.FC<{ displayData: ParsedFileEntry[]; mergeEnd
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -913,7 +933,9 @@ const ComparisonError5xxChart: React.FC<{ displayData: ParsedFileEntry[]; mergeE
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -999,7 +1021,9 @@ const ComparisonAllErrorsChart: React.FC<{ displayData: ParsedFileEntry[]; merge
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1079,9 +1103,15 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -1141,7 +1171,7 @@ const FinalResultsTable: React.FC<{ displayData: ParsedFileEntry[]; fileLabel?: 
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+        time: lastActive.time // Last timestamp with requests
       });
     }
 

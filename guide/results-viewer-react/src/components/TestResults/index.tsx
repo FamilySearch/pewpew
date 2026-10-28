@@ -644,9 +644,10 @@ const OVERVIEWCANVAS = styled.div`
   width: 85%;
   max-width: 1000px;
   margin: 2em auto;
+  height: 300px;
 
-  canvas {
-    max-height: 300px !important;
+  @media (max-width: 768px) {
+    width: 100%;
   }
 `;
 
@@ -657,6 +658,11 @@ const QUADGRID = styled.div`
   width: 95%;
   max-width: 1400px;
   margin: 2em auto;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
 `;
 
 const QUADPANEL = styled.div`
@@ -673,11 +679,17 @@ const QUADPANEL = styled.div`
     margin: 0 0 1em 0;
     text-align: left;
   }
+`;
 
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
-  }
+/**
+ * Sized box that Chart.js fills. Chart.js reads its size from the canvas's parent, so the parent
+ * must be a dedicated block with a fixed height. Forcing the canvas size with CSS instead makes the
+ * backing store and the CSS size disagree and squashes everything drawn, tooltips included.
+ */
+const CHARTBOX = styled.div`
+  position: relative;
+  width: 100%;
+  height: 270px;
 `;
 
 const CUSTOMLEGEND = styled.div`
@@ -978,7 +990,9 @@ const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1058,7 +1072,9 @@ const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps)
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1138,7 +1154,9 @@ const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1218,7 +1236,9 @@ const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => 
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <CHARTBOX>
+        <canvas ref={canvasRef} />
+      </CHARTBOX>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1321,9 +1341,15 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -1384,7 +1410,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+        time: lastActive.time // Last timestamp with requests
       });
     }
 

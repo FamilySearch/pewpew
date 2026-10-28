@@ -150,6 +150,17 @@ export class DataPoint {
     }
   }
 
+  /**
+   * True when any request was recorded in this bucket.
+   * Buckets added by fillMissingBuckets have none.
+   */
+  hasActivity (): boolean {
+    return Number(this.rttHistogram.getTotalCount()) > 0
+      || this.requestTimeouts > 0
+      || Object.keys(this.statusCounts).length > 0
+      || Object.keys(this.testErrors).length > 0;
+  }
+
   clone (): DataPoint {
     const props = {
       rttHistogram: this.rttHistogram.clone(),
@@ -281,6 +292,66 @@ function asStatsFile (s: unknown): StatsFile | Error {
 
 export type ParsedFileEntry = [BucketId, DataPoint[]];
 
+/** base64 string of an empty HDRHistogram */
+export const EMPTY_HISTOGRAM_BASE64 = "HISTEwAAAAEAAAAAAAAAAwAAAAAAAAABAAAAAAAAAAI/8AAAAAAAAAA";
+
+function emptyDataPoint (time: number, duration: number): DataPointPreProcessed {
+  return {
+    time,
+    duration,
+    endTime: time + duration,
+    rttHistogram: EMPTY_HISTOGRAM_BASE64,
+    startTime: time,
+    statusCounts: {},
+    testErrors: {}
+  };
+}
+
+/**
+ * Fills in the time buckets each endpoint is missing with empty data points so every endpoint
+ * covers the same time grid as the whole test, sorted by time.
+ *
+ * The stats file only writes an endpoint into a time bucket when that endpoint had activity in it.
+ * An endpoint with intermittent errors (or one whose requests stop part way through the test) would
+ * otherwise have holes in its series, and a line chart draws straight across a hole instead of
+ * dropping to zero.
+ *
+ * The grid runs from the earliest to the latest bucket time seen in any endpoint, stepping by the
+ * smallest bucket duration, plus any bucket time that is actually present. Each endpoint has at most
+ * one data point per bucket time. O(endpoints * buckets).
+ */
+export function fillMissingBuckets (buckets: BucketEntry[]): BucketEntry[] {
+  let minTime = Infinity;
+  let maxTime = -Infinity;
+  let bucketSize = Infinity;
+  const allTimes = new Set<number>();
+  for (const [, dataPoints] of buckets) {
+    for (const dp of dataPoints) {
+      allTimes.add(dp.time);
+      minTime = Math.min(minTime, dp.time);
+      maxTime = Math.max(maxTime, dp.time);
+      if (dp.duration > 0) {
+        bucketSize = Math.min(bucketSize, dp.duration);
+      }
+    }
+  }
+  if (allTimes.size === 0) {
+    return buckets;
+  }
+  const duration = Number.isFinite(bucketSize) ? bucketSize : 0;
+  if (duration > 0) {
+    for (let time = minTime; time <= maxTime; time += duration) {
+      allTimes.add(time);
+    }
+  }
+  const sortedTimes = [...allTimes].sort((a, b) => a - b);
+  return buckets.map(([bucketId, dataPoints]) => {
+    const byTime = new Map(dataPoints.map((dp) => [dp.time, dp]));
+    const filled = sortedTimes.map((time) => byTime.get(time) || emptyDataPoint(time, duration));
+    return [bucketId, filled];
+  });
+}
+
 export function processJson (json: any): ParsedFileEntry[] {
   const result = asStatsFile(json);
 
@@ -288,7 +359,7 @@ export function processJson (json: any): ParsedFileEntry[] {
     throw result;
   } else {
     const ret: ParsedFileEntry[] = [];
-    for (const [bucketId, dataPoints] of result.buckets) {
+    for (const [bucketId, dataPoints] of fillMissingBuckets(result.buckets)) {
       ret.push([bucketId, dataPoints.map((dp) => new DataPoint(dp))]);
     }
     return ret;
@@ -416,7 +487,7 @@ export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
           time,
           duration: bucketSize,
           endTime: time + bucketSize,
-          rttHistogram: values.rttHistogram || "HISTEwAAAAEAAAAAAAAAAwAAAAAAAAABAAAAAAAAAAI/8AAAAAAAAAA", // base64 string of an empty HDRHistogram
+          rttHistogram: values.rttHistogram || EMPTY_HISTOGRAM_BASE64,
           startTime: time,
           statusCounts: values.statusCounts || {},
           testErrors: values.testErrors || {}

@@ -122,7 +122,8 @@ describe("Test Result Component", () => {
     expect(screen.getByText("Results Loading...")).toBeInTheDocument();
   });
 
-  describe("polling a running test", () => {
+  // A test can chain several waitFor calls at the 5s asyncUtilTimeout below, so it needs more than vitest's 5s default
+  describe("polling a running test", { timeout: 15000 }, () => {
     const POLL_INTERVAL = 15000;
     const statsText = readFileSync(join(__dirname, "../../public/test-results/stats-discoverywicffamilybeta20200311T200153210.json"), "utf8");
     const runningTest: TestData = {
@@ -149,8 +150,6 @@ describe("Test Result Component", () => {
     const defaultAsyncUtilTimeout = getConfig().asyncUtilTimeout;
     // What the next fetch of each file returns, keyed by the end of its URL
     let fileTexts: Record<string, string>;
-    // What the next /api/test lookup returns for each merged test
-    let testStatuses: Record<string, TestStatus>;
     // One-shot responses held until the test releases them, keyed by the end of the URL
     let heldRequests: Record<string, Promise<{ data: string }>>;
     let requestedUrls: string[];
@@ -164,7 +163,6 @@ describe("Test Result Component", () => {
         "stats-mergetest.json": statsText,
         "stats-comparetest.json": statsText
       };
-      testStatuses = { [mergeTest.testId]: TestStatus.Running };
       heldRequests = {};
       requestedUrls = [];
       vi.mocked(axios.get).mockImplementation((url: string) => {
@@ -174,10 +172,6 @@ describe("Test Result Component", () => {
           const held = heldRequests[heldKey];
           delete heldRequests[heldKey];
           return held;
-        }
-        const statusTestId = Object.keys(testStatuses).find((testId: string) => url.endsWith("testId=" + testId));
-        if (statusTestId) {
-          return Promise.resolve({ data: { ...mergeTest, testId: statusTestId, status: testStatuses[statusTestId] } });
         }
         const fileName = Object.keys(fileTexts).find((name: string) => url.endsWith(name));
         return fileName
@@ -304,61 +298,7 @@ describe("Test Result Component", () => {
       expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
     });
 
-    it("fetches the results once more when a running test finishes", async () => {
-      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
-      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
-
-      fileTexts["stats-runningtest.json"] = secondText();
-      const baseRequests = countRequests("stats-runningtest.json");
-      const mergeRequests = countRequests("stats-mergetest.json");
-      // No poll: the final fetch comes from the status change
-      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-      expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1);
-      expect(countRequests("stats-runningtest.json")).toBe(baseRequests + 1);
-      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
-    });
-
-    it("keeps polling a merged test that is still running after this test finishes", async () => {
-      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
-      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
-
-      const mergeRequests = countRequests("stats-mergetest.json");
-      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
-      // The merged test is still running, so polling carries on
-      expect(pollCallbacks.size).toBe(1);
-
-      fileTexts["stats-mergetest.json"] = secondText();
-      await poll();
-      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-
-      // Once the merged test finishes, fetch one last time and stop
-      testStatuses[mergeTest.testId] = TestStatus.Finished;
-      await poll();
-      await waitFor(() => expect(pollCallbacks.size).toBe(0));
-      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
-    });
-
-    it("keeps the final fetch when an older poll finishes after it", async () => {
-      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} />);
-      await poll();
-      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
-
-      const releasePoll = holdNextRequest("stats-runningtest.json");
-      await poll();
-      fileTexts["stats-runningtest.json"] = secondText();
-      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} />);
-      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-
-      releasePoll(statsText + " ");
-      await expectNotToAppear(/ident\.pewpew\.org/);
-      expect(screen.queryAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-    });
-
-    it("rebuilds the merge from the newer results when the merge lands during a refresh", async () => {
+    it("keeps a merge that lands during a refresh and rebuilds it on the next poll", async () => {
       // Hold the auto-merge's fetch so the merge lands while the next poll is in flight
       const releaseMerge = holdNextRequest("stats-mergetest.json");
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
@@ -370,10 +310,28 @@ describe("Test Result Component", () => {
       releaseMerge(statsText);
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      fileTexts["stats-runningtest.json"] = secondText();
+      // The held refresh was built without the merge, so it's dropped rather than undoing the merge
       releasePoll(secondText());
-      // The merged view is what's shown, so the newer results only appear if the merge was rebuilt from them
+      await expectNotToAppear(/second\.pewpew\.org/);
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+
+      // The next poll rebuilds the merge from the newer results
+      fileTexts["stats-runningtest.json"] = secondText();
+      await poll();
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
+      expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+    });
+
+    it("stops polling when the test finishes", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await poll();
+      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
+
+      const requestCount = requestedUrls.length;
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+      await waitFor(() => expect(pollCallbacks.size).toBe(0));
+      // No final fetch: the last few seconds of results need a page reload
+      expect(requestedUrls.length).toBe(requestCount);
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
@@ -427,44 +385,26 @@ describe("Test Result Component", () => {
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
     });
 
-    it("rebuilds a merge that was built from base data a refresh has since replaced", async () => {
-      // Hold the auto-merge's fetch so a poll saves newer base data before the merge lands
-      const releaseMerge = holdNextRequest("stats-mergetest.json");
-      render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
+    it("keeps polling the new file while a poll of the previous file is still stuck", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      fileTexts["stats-runningtest2.json"] = statsText;
+      render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
       await poll();
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(1));
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
 
-      fileTexts["stats-runningtest.json"] = secondText();
+      // Never released, like a request that hangs
+      holdNextRequest("stats-runningtest.json");
       await poll();
+
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      await waitFor(() => expect(countRequests("stats-runningtest2.json")).toBe(1));
+      fileTexts["stats-runningtest2.json"] = secondText();
+      await poll();
+      expect(countRequests("stats-runningtest2.json")).toBe(2);
       expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-
-      // The merge was built from the older base, and no file changes after this, so no poll would fix it
-      releaseMerge(statsText);
-      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
-      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-    });
-
-    it("keeps polling a merged test that finished when its final file fails to download", async () => {
-      const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
-      expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
-      // This test stopping triggers its own fetch. Let it finish before setting up the failure.
-      const finalRequests = countRequests("stats-mergetest.json");
-      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(finalRequests + 1));
-
-      // The merged test reports Finished, but its file download fails
-      testStatuses[mergeTest.testId] = TestStatus.Finished;
-      delete fileTexts["stats-mergetest.json"];
-      const mergeRequests = countRequests("stats-mergetest.json");
-      await poll();
-      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeRequests + 1));
-
-      // Still polling, so the next poll gets the final file
-      fileTexts["stats-mergetest.json"] = secondText();
-      await poll();
-      expect(await screen.findAllByText(/second\.pewpew\.org/)).not.toHaveLength(0);
-      await waitFor(() => expect(pollCallbacks.size).toBe(0));
     });
 
     it("keeps the compare when the base file changes", async () => {

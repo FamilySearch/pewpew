@@ -116,7 +116,9 @@ const TestStatusPage = ({
   };
 
   const handleResultsIndexChange = (index: number | undefined): void => {
-    updateQuery({ results: index !== undefined ? String(index) : undefined });
+    // Picking a results file drops the merge. TestResults already cleared ?merge=, but router.query here doesn't
+    // have that change yet, so clear it again in this push or it comes back.
+    updateQuery({ results: index !== undefined ? String(index) : undefined, merge: undefined });
   };
 
   const handleCompareTestIdChange = (testId: string | undefined): void => {

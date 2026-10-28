@@ -43,7 +43,8 @@ wasm-pack --version
 (cd lib/config-wasm && wasm-pack build --release -t nodejs --scope fs)
 # Only the scripting branch has config-gen (the guide's HAR to YAML converter, `@fs/config-gen`).
 # Guarded so this script stays identical on both branches: sync-scripting.sh runs it on the merged tree.
-if [ -d lib/config-gen ]; then
+# Checks the crate, not the directory: switching branches leaves its ignored pkg/ behind on master.
+if [ -f lib/config-gen/Cargo.toml ]; then
   (cd lib/config-gen && wasm-pack build --release -t bundler -d "$ROOT/guide/results-viewer-react/lib/config-gen" --scope fs)
 fi
 

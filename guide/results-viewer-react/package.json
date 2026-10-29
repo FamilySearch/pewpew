@@ -1,6 +1,6 @@
 {
   "name": "results-viewer-react",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -39,7 +39,7 @@
   "dependencies": {
     "@fs/hdr-histogram-wasm": "file:./lib/hdr-histogram-wasm",
     "axios": "^1.7.8",
-    "chart.js": "~4.5.0",
+    "chart.js": "~4.6.0",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.0.0",
     "file-saver": "^2.0.5",

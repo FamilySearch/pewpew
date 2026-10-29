@@ -251,15 +251,21 @@ describe("tooltipLabelShortener", () => {
       .toBe("500 GET /dz/v1/*/image_files/*/*_*.jpg?session=* [_id:4 status:500]");
   });
 
-  it("keeps the host but drops the scheme when labels span several hosts", () => {
+  it("leaves labels alone when they span several hosts", () => {
     const shorten = tooltipLabelShortener(["GET https://a.example.org/x", "GET https://b.example.org/y"]);
-    expect(shorten("GET https://a.example.org/x")).toBe("GET a.example.org/x");
+    expect(shorten("GET https://a.example.org/x")).toBe("GET https://a.example.org/x");
+  });
+
+  it("keeps http and https variants of one host distinguishable", () => {
+    const shorten = tooltipLabelShortener(["GET http://api.example.org/x", "GET https://api.example.org/x"]);
+    expect(shorten("GET http://api.example.org/x")).toBe("GET http://api.example.org/x");
+    expect(shorten("GET https://api.example.org/x")).toBe("GET https://api.example.org/x");
   });
 
   it("keeps the host when the label has no path, such as a per-host chart", () => {
     const shorten = tooltipLabelShortener(["http://a.example.org", "http://b.example.org"]);
-    expect(shorten("http://a.example.org")).toBe("a.example.org");
-    expect(tooltipLabelShortener(["http://only.example.org"])("http://only.example.org")).toBe("only.example.org");
+    expect(shorten("http://a.example.org")).toBe("http://a.example.org");
+    expect(tooltipLabelShortener(["http://only.example.org"])("http://only.example.org")).toBe("http://only.example.org");
   });
 
   it("returns labels that are not URLs unchanged", () => {
@@ -318,6 +324,33 @@ describe("externalTooltipHandler", () => {
     expect(el.style.top).toBe("80px");
   });
 
+  /** jsdom has no layout, so give the tooltip a size for the flip and clamp branches. */
+  const sizedTooltipElement = (width: number, height: number) => {
+    const el = document.createElement("div");
+    el.id = "pewpew-chart-tooltip";
+    Object.defineProperty(el, "offsetWidth", { get: () => width });
+    Object.defineProperty(el, "offsetHeight", { get: () => height });
+    document.body.appendChild(el);
+    return el;
+  };
+
+  it("flips to the left of the point when it would run past the right edge of the viewport", () => {
+    const el = sizedTooltipElement(300, 100);
+    // point at page x 920 in a 1000px viewport: 932 + 300 does not fit, so 920 - 12 - 300
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ caretX: 900 }) });
+    expect(el.style.left).toBe("608px");
+  });
+
+  it("is pushed up from the bottom edge and down from the top edge instead of running off screen", () => {
+    const el = sizedTooltipElement(300, 200);
+    // point at page y 790 in an 800px viewport: centered would start at 690, clamped to 800 - 8 - 200
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ caretY: 760 }) });
+    expect(el.style.top).toBe("592px");
+    // point at page y 80: centered would start at -20, clamped to the 8px margin
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ caretY: 50 }) });
+    expect(el.style.top).toBe("8px");
+  });
+
   it("hides the element when the tooltip is not active and reuses it on the next hover", () => {
     externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip() });
     externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ opacity: 0 }) });
@@ -353,6 +386,7 @@ describe("externalTooltipHandler", () => {
     const el = document.createElement("div");
     el.id = "pewpew-chart-tooltip";
     Object.defineProperty(el, "scrollHeight", { get: () => el.children.length * 100 });
+    Object.defineProperty(el, "clientHeight", { get: () => Math.min(el.children.length * 100, 234) });
     document.body.appendChild(el);
     Object.defineProperty(document.documentElement, "clientHeight", { value: 250, configurable: true });
     const body = ["one: 3", "two: 2", "three: 1"].map((line) => ({ before: [], lines: [line], after: [] }));

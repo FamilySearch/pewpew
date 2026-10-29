@@ -10,7 +10,7 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
   return { HDRHistogram: vi.fn(makeHist) };
 });
 
-import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, processJson, processNewJson } from "./model";
+import { DataPoint, EMPTY_HISTOGRAM_BASE64, ParsedFileEntry, fillMissingBuckets, processJson, processNewJson } from "./model";
 import { MAX_FILLED_POINTS } from "./timegrid";
 import { fillMissingDataPoints } from "./merge";
 
@@ -367,5 +367,22 @@ describe("quiet buckets written with no entries", () => {
       { time: 1060, entries: { "0": { statusCounts: { "200": 1 } } } }
     ]);
     expect(result[0][1].map((p) => p.hasActivity())).toEqual([false, true]);
+  });
+});
+
+describe("fillMissingDataPoints cap on the union grid", () => {
+  const dp = (timeSec: number) => new DataPoint({ ...VALID_DP, time: timeSec, startTime: timeSec, endTime: timeSec + 60 });
+
+  it("leaves the entries unfilled when laying them onto each other's real times would exceed the cap", () => {
+    // Endpoint A has contiguous buckets, so stepping adds nothing, but B would need a copy of every one
+    const count = MAX_FILLED_POINTS + 10_000;
+    const aPoints = Array.from({ length: count }, (_, i) => dp(1000 + i * 60));
+    const entries: ParsedFileEntry[] = [
+      [{ method: "GET", url: "/a" }, aPoints],
+      [{ method: "GET", url: "/b" }, [dp(1000)]]
+    ];
+    const result = fillMissingDataPoints(entries);
+    expect(result).toBe(entries);
+    expect(result[1][1]).toHaveLength(1);
   });
 });

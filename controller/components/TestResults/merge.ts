@@ -1,7 +1,7 @@
 // Type-only on purpose: a value import would pull the model and its WASM histogram into the
 // controller's server bundle, where the WASM asset is not available at build time
 import type { BucketId, DataPoint, ParsedFileEntry } from "./model";
-import { fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
+import { MAX_FILLED_POINTS, fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
 
 /**
  * Returns true if any file in the array shares at least one bucket timestamp
@@ -115,6 +115,12 @@ export function fillMissingDataPoints (entries: ParsedFileEntry[]): ParsedFileEn
   const sample = all[0];
   const duration = smallestDuration(all.map((dp) => dp.duration));
   const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000, entries.length);
+  // timeGrid's cap only limits the stepped times. Two runs merged despite not overlapping would still
+  // fill each endpoint onto the other run's real times, so bound the whole fill the same way. Each
+  // file was already filled onto its own grid when parsed, so unfilled here means the pre-merge shape.
+  if (grid.length * entries.length - all.length > MAX_FILLED_POINTS) {
+    return entries;
+  }
   return entries.map(([bucketId, dataPoints]) => [
     bucketId,
     fillOntoGrid(grid, dataPoints, (dp) => dp.time.getTime(), (timeMs) => sample.emptyAt(timeMs / 1000, duration))

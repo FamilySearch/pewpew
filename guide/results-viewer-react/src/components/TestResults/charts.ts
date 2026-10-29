@@ -215,7 +215,8 @@ const URL_LABEL = /^(.*?)(https?:\/\/[^/\s]+)(\/\S*)?(.*)$/;
 /**
  * Builds a function that shortens dataset labels for the tooltip. When every label is on the same
  * host, the scheme and host are dropped: they take most of a line and the legend already shows them.
- * Otherwise only the scheme is dropped. Labels that are not URLs come back unchanged.
+ * Otherwise labels are left as they are, scheme included, so http and https variants of one host
+ * stay distinguishable. Labels that are not URLs come back unchanged.
  */
 export function tooltipLabelShortener (labels: (string | undefined)[]): (label: string | undefined) => string {
   const hosts = new Set<string>();
@@ -232,7 +233,7 @@ export function tooltipLabelShortener (labels: (string | undefined)[]): (label: 
       return label || "";
     }
     const [, prefix, host, path = "", rest] = match;
-    const shortHost = dropHost && path ? "" : host.replace(/^https?:\/\//, "");
+    const shortHost = dropHost && path ? "" : host;
     return `${prefix}${shortHost}${path}${rest}`;
   };
 }
@@ -329,7 +330,7 @@ export function externalTooltipHandler ({ chart, tooltip }: { chart: Chart, tool
   // Wrapped labels on a short screen can make the rows taller than the viewport. Nothing can scroll a
   // hover tooltip, so drop rows from the bottom until it fits and count them with the hidden rows.
   let hidden = hiddenTooltipRows.get(chart) || 0;
-  while (rows.length > 1 && el.scrollHeight > maxHeight) {
+  while (rows.length > 1 && el.scrollHeight > el.clientHeight) {
     rows.pop()!.remove();
     hidden++;
     footerEl.textContent = `and ${hidden} more`;
@@ -566,14 +567,10 @@ export function requestCountByEndpoint (el: HTMLCanvasElement, allEndpoints: [st
   const datasets = allEndpoints.map(([endpointLabel, dataPoints], index) => {
     log(`Processing endpoint: ${endpointLabel}`, LogLevel.DEBUG, { dataPointCount: dataPoints.length });
 
-    const data = dataPoints.map(dp => {
-      const count = Number(dp.rttHistogram.getTotalCount());
-      log(`  ${endpointLabel} at ${dp.time.toISOString()}: ${count} requests`, LogLevel.DEBUG);
-      return {
-        x: dp.time,
-        y: count
-      };
-    });
+    const data = dataPoints.map(dp => ({
+      x: dp.time,
+      y: Number(dp.rttHistogram.getTotalCount())
+    }));
 
     const borderColor = colorPalette[index % colorPalette.length];
     const backgroundColor = borderColor + "DD"; // High opacity for visible shading

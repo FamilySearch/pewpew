@@ -215,8 +215,9 @@ describe("fillMissingBuckets", () => {
     expect(bPoints.map((dp) => dp.time.getTime())).toEqual([1000000, 1060000, 1120000]);
     expect(bPoints.map((dp) => dp.statusCounts)).toEqual([{ "500": 1 }, {}, { "500": 4 }]);
     expect(bPoints[1].duration).toBe(60);
-    expect(bPoints[1].startTime).toEqual(new Date(1060000));
-    expect(bPoints[1].endTime).toEqual(new Date(1120000));
+    // No request was observed in a filled bucket, so it carries no start or end for minMaxTime
+    expect(bPoints[1].startTime).toBeUndefined();
+    expect(bPoints[1].endTime).toBeUndefined();
     expect(bPoints[1].hasActivity()).toBe(false);
     expect(bPoints[2].hasActivity()).toBe(true);
   });
@@ -309,7 +310,7 @@ describe("fillMissingDataPoints", () => {
     expect(bPoints.map((p) => p.hasActivity())).toEqual([false, true, false]);
     expect(bPoints[0]).toBeInstanceOf(DataPoint);
     expect(bPoints[0].duration).toBe(60);
-    expect(bPoints[0].startTime).toEqual(new Date(1000000));
+    expect(bPoints[0].startTime).toBeUndefined();
   });
 
   it("steps by the bucket duration across a gap no endpoint has", () => {
@@ -341,5 +342,30 @@ describe("fill cap", () => {
     ]);
     expect(result[0][1]).toHaveLength(61);
     expect(result[1][1]).toHaveLength(61);
+  });
+});
+
+describe("quiet buckets written with no entries", () => {
+  it("keeps a trailing run of empty bucket records in the grid", () => {
+    const result = processNewJson([
+      { test: "t.yaml", bin: "pewpew", bucketSize: 60 },
+      { index: 0, tags: { _id: "0", method: "GET", url: "/a" } },
+      { time: 1000, entries: { "0": { statusCounts: { "200": 1 } } } },
+      { time: 1060, entries: {} },
+      { time: 1120, entries: {} }
+    ]);
+    const [, points] = result[0];
+    expect(points.map((p) => p.time.getTime())).toEqual([1000000, 1060000, 1120000]);
+    expect(points.map((p) => p.hasActivity())).toEqual([true, false, false]);
+  });
+
+  it("keeps a leading empty bucket record so the first chart point is zero", () => {
+    const result = processNewJson([
+      { test: "t.yaml", bin: "pewpew", bucketSize: 60 },
+      { index: 0, tags: { _id: "0", method: "GET", url: "/a" } },
+      { time: 1000, entries: {} },
+      { time: 1060, entries: { "0": { statusCounts: { "200": 1 } } } }
+    ]);
+    expect(result[0][1].map((p) => p.hasActivity())).toEqual([false, true]);
   });
 });

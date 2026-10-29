@@ -301,13 +301,17 @@ export type ParsedFileEntry = [BucketId, DataPoint[]];
 /** base64 string of an empty HDRHistogram */
 export const EMPTY_HISTOGRAM_BASE64 = "HISTEwAAAAEAAAAAAAAAAwAAAAAAAAABAAAAAAAAAAI/8AAAAAAAAAA";
 
+/**
+ * A bucket with nothing recorded in it. startTime and endTime are the 0 sentinel: no request was
+ * observed, so the test's start and end (see minMaxTime) must not move to this bucket's bounds.
+ */
 function emptyDataPoint (time: number, duration: number): DataPointPreProcessed {
   return {
     time,
     duration,
-    endTime: time + duration,
+    endTime: 0,
     rttHistogram: EMPTY_HISTOGRAM_BASE64,
-    startTime: time,
+    startTime: 0,
     statusCounts: {},
     testErrors: {}
   };
@@ -320,27 +324,28 @@ function emptyDataPoint (time: number, duration: number): DataPointPreProcessed 
  * The stats file only writes an endpoint into a time bucket when that endpoint had activity in it.
  * An endpoint with intermittent errors (or one whose requests stop part way through the test) would
  * otherwise have holes in its series, and a line chart draws straight across a hole instead of
- * dropping to zero.
+ * dropping to zero. extraTimes are bucket times the grid must also cover, such as buckets the stats
+ * file wrote with no endpoint entries at all.
  */
-export function fillMissingBuckets (buckets: BucketEntry[]): BucketEntry[] {
+export function fillMissingBuckets (buckets: BucketEntry[], extraTimes: number[] = []): BucketEntry[] {
   const all = buckets.flatMap(([, dataPoints]) => dataPoints);
   if (all.length === 0) {
     return buckets;
   }
   const duration = smallestDuration(all.map((dp) => dp.duration));
-  const grid = timeGrid(all.map((dp) => dp.time), duration, buckets.length);
+  const grid = timeGrid([...all.map((dp) => dp.time), ...extraTimes], duration, buckets.length);
   return buckets.map(([bucketId, dataPoints]) =>
     [bucketId, fillOntoGrid(grid, dataPoints, (dp) => dp.time, (time) => emptyDataPoint(time, duration))]);
 }
 
-export function processJson (json: any): ParsedFileEntry[] {
+export function processJson (json: any, extraTimes: number[] = []): ParsedFileEntry[] {
   const result = asStatsFile(json);
 
   if (result instanceof Error) {
     throw result;
   } else {
     const ret: ParsedFileEntry[] = [];
-    for (const [bucketId, dataPoints] of fillMissingBuckets(result.buckets)) {
+    for (const [bucketId, dataPoints] of fillMissingBuckets(result.buckets, extraTimes)) {
       ret.push([bucketId, dataPoints.map((dp) => new DataPoint(dp))]);
     }
     return ret;
@@ -450,6 +455,8 @@ function checkNewJsonEntry (entry: unknown): entry is Header | Tags | Buckets {
 export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
   const tags: BucketId[] = [];
   const data: DataPointPreProcessed[][] = [];
+  // Every bucket the file wrote, including ones with no endpoint entries (a quiet interval)
+  const bucketTimes: number[] = [];
   let bucketSize = 0;
   for (const json of jsons) {
     if (!checkNewJsonEntry(json)) {
@@ -463,6 +470,7 @@ export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
       tags[json.index] = json.tags;
     } else {
       const time = json.time;
+      bucketTimes.push(time);
       for (const [index, values] of Object.entries(json.entries)) {
         const dppp: DataPointPreProcessed = {
           time,
@@ -491,5 +499,5 @@ export function processNewJson (jsons: unknown[]): ParsedFileEntry[] {
 
   const statsFile: StatsFile = { buckets };
 
-  return processJson(statsFile);
+  return processJson(statsFile, bucketTimes);
 }

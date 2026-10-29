@@ -258,6 +258,7 @@ function getTooltipElement (): HTMLDivElement {
       padding: "10px 12px",
       font: "12px/1.4 sans-serif",
       overflowWrap: "anywhere",
+      overflow: "hidden",
       opacity: "0",
       transition: "opacity 0.1s"
     } as Partial<CSSStyleDeclaration>);
@@ -307,23 +308,35 @@ export function externalTooltipHandler ({ chart, tooltip }: { chart: Chart, tool
     titleEl.textContent = title;
     el.appendChild(titleEl);
   }
-  tooltip.body.forEach((item, i) => el.appendChild(tooltipRow(item.lines.join(" "), tooltip.labelColors[i])));
+  const rows = tooltip.body.map((item, i) => el.appendChild(tooltipRow(item.lines.join(" "), tooltip.labelColors[i])));
   if (tooltip.body.length === 0) {
     const emptyRow = tooltipRow("no data");
     emptyRow.style.opacity = "0.7";
     el.appendChild(emptyRow);
   }
-  const footer = tooltip.footer.join(" ");
-  if (footer) {
-    const footerEl = tooltipRow(footer);
-    Object.assign(footerEl.style, { marginTop: "6px", opacity: "0.8" });
+  const footerEl = tooltipRow(tooltip.footer.join(" "));
+  Object.assign(footerEl.style, { marginTop: "6px", opacity: "0.8" });
+  if (footerEl.textContent) {
     el.appendChild(footerEl);
   }
 
   const viewWidth = document.documentElement.clientWidth;
   const viewHeight = document.documentElement.clientHeight;
+  const maxHeight = Math.max(0, viewHeight - 2 * TOOLTIP_VIEWPORT_MARGIN);
   el.style.maxWidth = `${Math.min(TOOLTIP_MAX_WIDTH, viewWidth - 2 * TOOLTIP_VIEWPORT_MARGIN)}px`;
+  el.style.maxHeight = `${maxHeight}px`;
   el.style.opacity = "1";
+  // Wrapped labels on a short screen can make the rows taller than the viewport. Nothing can scroll a
+  // hover tooltip, so drop rows from the bottom until it fits and count them with the hidden rows.
+  let hidden = hiddenTooltipRows.get(chart) || 0;
+  while (rows.length > 1 && el.scrollHeight > maxHeight) {
+    rows.pop()!.remove();
+    hidden++;
+    footerEl.textContent = `and ${hidden} more`;
+    if (!footerEl.isConnected) {
+      el.appendChild(footerEl);
+    }
+  }
   const rect = chart.canvas.getBoundingClientRect();
   const pointX = rect.left + window.scrollX + tooltip.caretX;
   const pointY = rect.top + window.scrollY + tooltip.caretY;

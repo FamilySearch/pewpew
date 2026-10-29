@@ -102,6 +102,29 @@ describe("externalTooltipHandler", () => {
     document.body.innerHTML = "";
     expect(() => externalTooltipPlugin.beforeDestroy()).not.toThrow();
   });
+
+  it("sets a max height from the viewport so the element can never extend past the screen", () => {
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip() });
+    expect(tooltipElement().style.maxHeight).toBe("784px"); // 800 - 2 * 8 margin
+    expect(tooltipElement().style.overflow).toBe("hidden");
+  });
+
+  it("drops rows from the bottom until the tooltip fits the viewport and counts them in the footer", () => {
+    // jsdom has no layout, so give the element a fake content height of 100px per child
+    const el = document.createElement("div");
+    el.id = "pewpew-chart-tooltip";
+    Object.defineProperty(el, "scrollHeight", { get: () => el.children.length * 100 });
+    document.body.appendChild(el);
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 250, configurable: true });
+    const body = ["one: 3", "two: 2", "three: 1"].map((line) => ({ before: [], lines: [line], after: [] }));
+    const labelColors = body.map(() => ({ backgroundColor: "#000", borderColor: "#000" }));
+    externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip({ body, labelColors }) });
+    // title + 3 rows is 400px against a 234px budget: two rows go, the footer reports them
+    expect(el.textContent).toContain("one: 3");
+    expect(el.textContent).not.toContain("two: 2");
+    expect(el.textContent).not.toContain("three: 1");
+    expect(el.textContent).toContain("and 2 more");
+  });
 });
 
 describe("tooltip row limit", () => {

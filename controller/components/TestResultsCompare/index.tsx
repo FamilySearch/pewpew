@@ -818,9 +818,15 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -872,7 +878,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time
+        time: lastActive.time // Last timestamp with requests
       });
 
       totalRTT.free();

@@ -47,6 +47,9 @@ function createDataPoint (
     },
     clone () {
       return createDataPoint(timeMs, { ...statusCounts }, requestTimeouts);
+    },
+    emptyAt (timeSec: number) {
+      return createDataPoint(timeSec * 1000, {}, 0);
     }
   };
 

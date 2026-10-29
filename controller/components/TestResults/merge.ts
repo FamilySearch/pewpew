@@ -1,4 +1,7 @@
-import { BucketId, DataPoint, ParsedFileEntry, fillMissingDataPoints } from "./model";
+// Type-only on purpose: a value import would pull the model and its WASM histogram into the
+// controller's server bundle, where the WASM asset is not available at build time
+import type { BucketId, DataPoint, ParsedFileEntry } from "./model";
+import { fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
 
 /**
  * Returns true if any file in the array shares at least one bucket timestamp
@@ -95,4 +98,25 @@ export function mergeResults (resultsArray: ParsedFileEntry[][]): ParsedFileEntr
   // Each file was filled onto its own grid when parsed; an endpoint that only some files contain
   // still needs the union grid so its series does not stop where those files stop.
   return fillMissingDataPoints(merged);
+}
+
+/**
+ * Fills every endpoint onto the union time grid of all entries, inserting an empty point where an
+ * endpoint has none, so an endpoint that only some merged files contain does not stop where those
+ * files stop. DataPoint times are in milliseconds and durations in seconds. Empty points come from
+ * DataPoint.emptyAt on an existing point, so this module never imports the WASM histogram and stays
+ * out of the controller's server bundle. Returns new arrays; the input points are reused, not cloned.
+ */
+export function fillMissingDataPoints (entries: ParsedFileEntry[]): ParsedFileEntry[] {
+  const all = entries.flatMap(([, dataPoints]) => dataPoints);
+  if (all.length === 0) {
+    return entries;
+  }
+  const sample = all[0];
+  const duration = smallestDuration(all.map((dp) => dp.duration));
+  const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000, entries.length);
+  return entries.map(([bucketId, dataPoints]) => [
+    bucketId,
+    fillOntoGrid(grid, dataPoints, (dp) => dp.time.getTime(), (timeMs) => sample.emptyAt(timeMs / 1000, duration))
+  ]);
 }

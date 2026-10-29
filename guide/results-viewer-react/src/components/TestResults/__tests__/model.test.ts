@@ -11,7 +11,9 @@ jest.mock("@fs/hdr-histogram-wasm", () => {
   return { HDRHistogram };
 });
 
-import { DataPoint, EMPTY_HISTOGRAM_BASE64, MAX_FILLED_POINTS, fillMissingBuckets, fillMissingDataPoints, processJson, processNewJson } from "../model";
+import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, processJson, processNewJson } from "../model";
+import { MAX_FILLED_POINTS } from "../timegrid";
+import { fillMissingDataPoints } from "../merge";
 
 const HEADER = { test: "t.yaml", bin: "pewpew", bucketSize: 60 };
 const TAG_A = { index: 0, tags: { _id: "0", method: "GET", url: "/a" } };

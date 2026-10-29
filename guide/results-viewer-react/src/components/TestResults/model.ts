@@ -1,3 +1,4 @@
+import { fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
 import { HDRHistogram } from "@fs/hdr-histogram-wasm";
 type CheckType = string | ((x: unknown) => boolean);
 type Check = [string, CheckType];
@@ -161,6 +162,11 @@ export class DataPoint {
       || Object.keys(this.testErrors).length > 0;
   }
 
+  /** A data point for this endpoint at another bucket time, with nothing recorded in it. */
+  emptyAt (timeSec: number, duration: number): DataPoint {
+    return new DataPoint(emptyDataPoint(timeSec, duration));
+  }
+
   clone (): DataPoint {
     const props = {
       rttHistogram: this.rttHistogram.clone(),
@@ -307,76 +313,6 @@ function emptyDataPoint (time: number, duration: number): DataPointPreProcessed 
   };
 }
 
-/** Smallest positive bucket duration among the data points, or 0 when none has one. */
-function smallestDuration (durations: Iterable<number>): number {
-  let smallest = Infinity;
-  for (const duration of durations) {
-    if (duration > 0) {
-      smallest = Math.min(smallest, duration);
-    }
-  }
-  return Number.isFinite(smallest) ? smallest : 0;
-}
-
-/**
- * Upper bound on the empty data points a fill may add across all endpoints. Each one carries a WASM
- * histogram, and merging two runs recorded days apart would otherwise fill every bucket in between.
- */
-export const MAX_FILLED_POINTS = 100_000;
-
-/**
- * The bucket times every endpoint should cover: from the earliest to the latest time seen, stepping
- * by the bucket size, plus any time that is actually present. Sorted ascending. The stepping is
- * skipped when it would add more than MAX_FILLED_POINTS across the endpoints; the times actually
- * present are always included.
- */
-function timeGrid (times: Iterable<number>, bucketSize: number, endpointCount: number): number[] {
-  const allTimes = new Set<number>();
-  let minTime = Infinity;
-  let maxTime = -Infinity;
-  for (const time of times) {
-    allTimes.add(time);
-    minTime = Math.min(minTime, time);
-    maxTime = Math.max(maxTime, time);
-  }
-  if (allTimes.size > 0 && bucketSize > 0) {
-    const steps = Math.floor((maxTime - minTime) / bucketSize) + 1;
-    if ((steps - allTimes.size) * endpointCount <= MAX_FILLED_POINTS) {
-      for (let time = minTime; time <= maxTime; time += bucketSize) {
-        allTimes.add(time);
-      }
-    }
-  }
-  return [...allTimes].sort((a, b) => a - b);
-}
-
-/**
- * Lays one endpoint's points onto the grid, inserting an empty point at each time the endpoint has
- * none. Points that share a time are all kept, in their original order. O(points + grid).
- */
-function fillOntoGrid<T> (grid: number[], points: T[], getTime: (point: T) => number, makeEmpty: (time: number) => T): T[] {
-  const byTime = new Map<number, T[]>();
-  for (const point of points) {
-    const time = getTime(point);
-    const existing = byTime.get(time);
-    if (existing) {
-      existing.push(point);
-    } else {
-      byTime.set(time, [point]);
-    }
-  }
-  const filled: T[] = [];
-  for (const time of grid) {
-    const existing = byTime.get(time);
-    if (existing) {
-      filled.push(...existing);
-    } else {
-      filled.push(makeEmpty(time));
-    }
-  }
-  return filled;
-}
-
 /**
  * Fills in the time buckets each endpoint is missing with empty data points so every endpoint
  * covers the same time grid as the whole test, sorted by time.
@@ -395,24 +331,6 @@ export function fillMissingBuckets (buckets: BucketEntry[]): BucketEntry[] {
   const grid = timeGrid(all.map((dp) => dp.time), duration, buckets.length);
   return buckets.map(([bucketId, dataPoints]) =>
     [bucketId, fillOntoGrid(grid, dataPoints, (dp) => dp.time, (time) => emptyDataPoint(time, duration))]);
-}
-
-/**
- * The same fill for parsed data points, used after several files are merged: an endpoint that only
- * some of the files contain would otherwise stop where those files stop. DataPoint times are in
- * milliseconds and durations in seconds. Returns new arrays; the input points are reused, not cloned.
- */
-export function fillMissingDataPoints (entries: ParsedFileEntry[]): ParsedFileEntry[] {
-  const all = entries.flatMap(([, dataPoints]) => dataPoints);
-  if (all.length === 0) {
-    return entries;
-  }
-  const duration = smallestDuration(all.map((dp) => dp.duration));
-  const grid = timeGrid(all.map((dp) => dp.time.getTime()), duration * 1000, entries.length);
-  return entries.map(([bucketId, dataPoints]) => [
-    bucketId,
-    fillOntoGrid(grid, dataPoints, (dp) => dp.time.getTime(), (timeMs) => new DataPoint(emptyDataPoint(timeMs / 1000, duration)))
-  ]);
 }
 
 export function processJson (json: any): ParsedFileEntry[] {

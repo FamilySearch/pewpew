@@ -10,7 +10,9 @@ vi.mock("@fs/hdr-histogram-wasm", () => {
   return { HDRHistogram: vi.fn(makeHist) };
 });
 
-import { DataPoint, EMPTY_HISTOGRAM_BASE64, MAX_FILLED_POINTS, fillMissingBuckets, fillMissingDataPoints, processJson, processNewJson } from "./model";
+import { DataPoint, EMPTY_HISTOGRAM_BASE64, fillMissingBuckets, processJson, processNewJson } from "./model";
+import { MAX_FILLED_POINTS } from "./timegrid";
+import { fillMissingDataPoints } from "./merge";
 
 const VALID_DP = {
   time: 1000,

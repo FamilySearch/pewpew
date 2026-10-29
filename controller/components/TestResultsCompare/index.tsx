@@ -14,6 +14,7 @@ import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { LogLevel, log } from "../../src/log";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
+import { ChartBox } from "../TestResults/styled";
 import { compareEndpointAnchorId } from "../TestResults/utils";
 import styled from "styled-components";
 
@@ -43,11 +44,6 @@ const QuadPanel = styled.div`
   padding: 1em;
   display: flex;
   flex-direction: column;
-
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
-  }
 `;
 
 /** Side-by-side grid layout */
@@ -525,7 +521,9 @@ const ComparisonRequestCountByEndpointChart: React.FC<{ displayData: ParsedFileE
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -591,7 +589,9 @@ const ComparisonRequestCountByHostChart: React.FC<{ displayData: ParsedFileEntry
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -647,7 +647,9 @@ const ComparisonRequestCountByFileChart: React.FC<{ timeSeries: { time: Date; co
 
   return (
     <QuadPanel>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -754,7 +756,9 @@ const ComparisonChart: React.FC<ChartComponentProps> = ({ displayData, mergeEndp
 
   return (
     <>
-      <canvas ref={canvasNodeRef} />
+      <ChartBox>
+        <canvas ref={canvasNodeRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CustomLegend>
           {chart.data.datasets.map((dataset: any, index: number) => (
@@ -814,9 +818,15 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -868,7 +878,7 @@ const FinalResultsTable: React.FC<TableProps> = ({ displayData, fileLabel = "Res
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time
+        time: lastActive.time // Last timestamp with requests
       });
 
       totalRTT.free();

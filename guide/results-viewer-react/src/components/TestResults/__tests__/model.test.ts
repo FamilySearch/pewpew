@@ -12,8 +12,8 @@ jest.mock("@fs/hdr-histogram-wasm", () => {
 });
 
 import { DataPoint, EMPTY_HISTOGRAM_BASE64, ParsedFileEntry, fillMissingBuckets, processJson, processNewJson } from "../model";
+import { fillMissingDataPoints, mergeResults } from "../merge";
 import { MAX_FILLED_POINTS } from "../timegrid";
-import { fillMissingDataPoints } from "../merge";
 
 const HEADER = { test: "t.yaml", bin: "pewpew", bucketSize: 60 };
 const TAG_A = { index: 0, tags: { _id: "0", method: "GET", url: "/a" } };
@@ -219,5 +219,55 @@ describe("fillMissingDataPoints cap on the union grid", () => {
     const result = fillMissingDataPoints(entries);
     expect(result).toBe(entries);
     expect(result[1][1]).toHaveLength(1);
+  });
+});
+
+describe("mergeInto observed bounds", () => {
+  const real = (timeSec: number) => new DataPoint({ ...BASE_DP, time: timeSec, startTime: timeSec + 7, endTime: timeSec + 52 });
+  const empty = (timeSec: number) => real(timeSec).emptyAt(timeSec, 60);
+
+  it("takes the bounds of a real point merged into a filled empty one", () => {
+    const target = empty(1060);
+    target.mergeInto(real(1060));
+    expect(target.startTime).toEqual(new Date(1067000));
+    expect(target.endTime).toEqual(new Date(1112000));
+  });
+
+  it("keeps the earliest start and latest end of two real points", () => {
+    const target = real(1060);
+    const other = new DataPoint({ ...BASE_DP, time: 1060, startTime: 1062, endTime: 1119 });
+    target.mergeInto(other);
+    expect(target.startTime).toEqual(new Date(1062000));
+    expect(target.endTime).toEqual(new Date(1119000));
+  });
+
+  it("leaves two filled empties without bounds", () => {
+    const target = empty(1060);
+    target.mergeInto(empty(1060));
+    expect(target.startTime).toBeUndefined();
+    expect(target.endTime).toBeUndefined();
+  });
+
+  it("gives the same merged bounds whichever file comes first", () => {
+    // File A has a parse-time filled empty at 1060 between two real points; file B has a real 1060
+    const fileA: ParsedFileEntry[] = fillMissingDataPoints([[{ method: "GET", url: "/x" }, [real(1000), real(1120)]]]);
+    const fileB: ParsedFileEntry[] = [[{ method: "GET", url: "/x" }, [real(1060)]]];
+    const ab = mergeResults([fileA, fileB])[0][1].find((dp) => dp.time.getTime() === 1060000)!;
+    const ba = mergeResults([fileB, fileA])[0][1].find((dp) => dp.time.getTime() === 1060000)!;
+    expect(ab.startTime).toEqual(new Date(1067000));
+    expect(ab.endTime).toEqual(new Date(1112000));
+    expect(ba.startTime).toEqual(ab.startTime);
+    expect(ba.endTime).toEqual(ab.endTime);
+  });
+});
+
+describe("fillMissingBuckets cap on the whole fill", () => {
+  it("leaves a file unfilled when many endpoints each active in their own bucket would exceed the cap", () => {
+    // 400 endpoints x 400 grid times minus the 400 present pairs is 159,600 empty points
+    const buckets = Array.from({ length: 400 }, (_, i) => [
+      { method: "GET", url: `/e${i}` },
+      [{ ...BASE_DP, time: 1000 + i * 60, startTime: 1000 + i * 60, endTime: 1060 + i * 60 }]
+    ]) as any;
+    expect(fillMissingBuckets(buckets)).toBe(buckets);
   });
 });

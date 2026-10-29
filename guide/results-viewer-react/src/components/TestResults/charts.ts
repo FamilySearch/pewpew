@@ -258,6 +258,7 @@ function getTooltipElement (): HTMLDivElement {
       borderRadius: "4px",
       padding: "10px 12px",
       font: "12px/1.4 sans-serif",
+      boxSizing: "border-box", // the viewport limits below must include the padding
       overflowWrap: "anywhere",
       overflow: "hidden",
       opacity: "0",
@@ -354,6 +355,23 @@ export function externalTooltipHandler ({ chart, tooltip }: { chart: Chart, tool
   const top = Math.min(Math.max(pointY - el.offsetHeight / 2, viewTop), Math.max(viewTop, viewBottom - el.offsetHeight));
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
+}
+
+/**
+ * Point radius for the latency charts. Empty buckets are NaN and break the line, so a sample with no
+ * neighbour on either side would be invisible; it gets a marker, everything else stays a plain line.
+ * A Chart.js scriptable option, evaluated per point.
+ */
+export function isolatedSampleRadius (context: { dataIndex: number, dataset: { data: unknown[] } }): number {
+  const data = context.dataset.data as ({ y: number } | null | undefined)[];
+  const present = (index: number): boolean => {
+    const value = data[index]?.y;
+    return value !== undefined && !Number.isNaN(value);
+  };
+  if (!present(context.dataIndex)) {
+    return 0;
+  }
+  return present(context.dataIndex - 1) || present(context.dataIndex + 1) ? 0 : 3;
 }
 
 // Legend click handler with double-click support
@@ -872,7 +890,7 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
       fill: false,
       tension: 0.4,
       borderWidth: 2,
-      pointRadius: 0,
+      pointRadius: isolatedSampleRadius,
       pointHoverRadius: 6,
       pointHoverBorderWidth: 2
     };
@@ -965,7 +983,7 @@ export function worst5PercentChart (el: HTMLCanvasElement, allEndpoints: [string
       fill: false,
       tension: 0.4,
       borderWidth: 2,
-      pointRadius: 0,
+      pointRadius: isolatedSampleRadius,
       pointHoverRadius: 6,
       pointHoverBorderWidth: 2
     };

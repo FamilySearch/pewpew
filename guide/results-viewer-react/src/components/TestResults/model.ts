@@ -1,4 +1,4 @@
-import { fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
+import { MAX_FILLED_POINTS, fillOntoGrid, smallestDuration, timeGrid } from "./timegrid";
 import { HDRHistogram } from "@fs/hdr-histogram-wasm";
 type CheckType = string | ((x: unknown) => boolean);
 type Check = [string, CheckType];
@@ -111,10 +111,10 @@ function asBucketId (b: unknown): BucketId | Error {
 export class DataPoint {
   public readonly time: Date;
   public readonly duration: number;
-  public readonly endTime?: Date;
+  public endTime?: Date;
   public requestTimeouts: number;
   public readonly rttHistogram: HDRHistogram;
-  public readonly startTime?: Date;
+  public startTime?: Date;
   public readonly statusCounts: StatusCounts;
   public readonly testErrors: TestErrors;
 
@@ -136,6 +136,14 @@ export class DataPoint {
   mergeInto (other: DataPoint) {
     // merge the requestTimeouts
     this.requestTimeouts += other.requestTimeouts;
+
+    // merge the observed bounds: filled empties carry none, so a real point merged into one supplies them
+    if (other.startTime && (!this.startTime || other.startTime < this.startTime)) {
+      this.startTime = other.startTime;
+    }
+    if (other.endTime && (!this.endTime || other.endTime > this.endTime)) {
+      this.endTime = other.endTime;
+    }
 
     // merge the rttHistogram
     this.rttHistogram.add(other.rttHistogram);
@@ -334,6 +342,13 @@ export function fillMissingBuckets (buckets: BucketEntry[], extraTimes: number[]
   }
   const duration = smallestDuration(all.map((dp) => dp.duration));
   const grid = timeGrid([...all.map((dp) => dp.time), ...extraTimes], duration, buckets.length);
+  // timeGrid's cap only limits the stepped times. Many endpoints each active in a few distinct buckets
+  // would still fill every other bucket for every endpoint, each with a WASM histogram, so bound the
+  // whole fill the same way. Unfilled means the charts fall back to joining each endpoint's own points.
+  const present = buckets.reduce((n, [, dataPoints]) => n + new Set(dataPoints.map((dp) => dp.time)).size, 0);
+  if (grid.length * buckets.length - present > MAX_FILLED_POINTS) {
+    return buckets;
+  }
   return buckets.map(([bucketId, dataPoints]) =>
     [bucketId, fillOntoGrid(grid, dataPoints, (dp) => dp.time, (time) => emptyDataPoint(time, duration))]);
 }

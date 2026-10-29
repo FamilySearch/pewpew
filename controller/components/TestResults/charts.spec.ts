@@ -44,7 +44,7 @@ vi.mock("chart.js", () => {
   };
 });
 
-import { RTT, allErrorsChart, error5xxChart, errorColors, externalTooltipHandler, externalTooltipPlugin, medianDurationChart, tooltipFooter, tooltipLabelShortener, tooltipRowFilter, tooltipRowSort, totalCalls, worst5PercentChart } from "./charts";
+import { RTT, allErrorsChart, error5xxChart, errorColors, externalTooltipHandler, externalTooltipPlugin, isolatedSampleRadius, medianDurationChart, tooltipFooter, tooltipLabelShortener, tooltipRowFilter, tooltipRowSort, totalCalls, worst5PercentChart } from "./charts";
 import { DataPoint } from "./model";
 
 const BASE_DP = {
@@ -379,6 +379,7 @@ describe("externalTooltipHandler", () => {
     externalTooltipHandler({ chart: makeChart(), tooltip: makeTooltip() });
     expect(tooltipElement().style.maxHeight).toBe("784px"); // 800 - 2 * 8 margin
     expect(tooltipElement().style.overflow).toBe("hidden");
+    expect(tooltipElement().style.boxSizing).toBe("border-box");
   });
 
   it("drops rows from the bottom until the tooltip fits the viewport and counts them in the footer", () => {
@@ -433,5 +434,26 @@ describe("tooltip row limit", () => {
 
   it("reports no footer when there are no rows", () => {
     expect(tooltipFooter([])).toBe("");
+  });
+});
+
+describe("isolatedSampleRadius", () => {
+  const context = (data: ({ y: number } | null)[], dataIndex: number) => ({ dataIndex, dataset: { data } });
+  const point = (y: number) => ({ y });
+
+  it("gives a marker to a sample with gaps on both sides and none to one on a line", () => {
+    expect(isolatedSampleRadius(context([point(NaN), point(5), point(NaN)], 1))).toBe(3);
+    expect(isolatedSampleRadius(context([point(4), point(5), point(NaN)], 1))).toBe(0);
+    expect(isolatedSampleRadius(context([point(NaN), point(5), point(6)], 1))).toBe(0);
+  });
+
+  it("treats the ends of the series as gaps", () => {
+    expect(isolatedSampleRadius(context([point(5)], 0))).toBe(3);
+    expect(isolatedSampleRadius(context([point(5), point(6)], 0))).toBe(0);
+  });
+
+  it("draws nothing for an empty bucket", () => {
+    expect(isolatedSampleRadius(context([point(NaN)], 0))).toBe(0);
+    expect(isolatedSampleRadius(context([null, point(1)], 0))).toBe(0);
   });
 });

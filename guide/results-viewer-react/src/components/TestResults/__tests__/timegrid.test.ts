@@ -40,3 +40,12 @@ describe("smallestDuration", () => {
     expect(smallestDuration([])).toBe(0);
   });
 });
+
+describe("timeGrid cap early exit", () => {
+  it("stops counting as soon as the cap is passed, so a year-wide span at 1s buckets is instant", () => {
+    const start = performance.now();
+    expect(timeGrid([0, 31_536_000_000], 1000, 1)).toEqual([0, 31_536_000_000]);
+    // 31.5M steps without the break; with it about 100k
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+});

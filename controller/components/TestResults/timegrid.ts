@@ -37,9 +37,10 @@ export function timeGrid (times: Iterable<number>, bucketSize: number, endpointC
     maxTime = Math.max(maxTime, time);
   }
   if (allTimes.size > 0 && bucketSize > 0) {
-    // Count the times the stepping would really add: existing times need not lie on the grid
+    // Count the times the stepping would really add: existing times need not lie on the grid.
+    // Stop as soon as the cap is passed; the exact count beyond it does not matter.
     let added = 0;
-    for (let time = minTime; time <= maxTime; time += bucketSize) {
+    for (let time = minTime; time <= maxTime && added * endpointCount <= MAX_FILLED_POINTS; time += bucketSize) {
       if (!allTimes.has(time)) {
         added++;
       }

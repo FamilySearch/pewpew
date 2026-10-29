@@ -6,9 +6,10 @@
 
 /**
  * Upper bound on the empty data points a fill may add across all endpoints. Each one carries a WASM
- * histogram, and merging two runs recorded days apart would otherwise fill every bucket in between.
+ * histogram of about 16KB, so the cap is sized in memory: 20,000 is about 320MB at worst. A fill
+ * that would pass it is skipped and the charts fall back to joining each endpoint's own points.
  */
-export const MAX_FILLED_POINTS = 100_000;
+export const MAX_FILLED_POINTS = 20_000;
 
 /** Smallest positive bucket duration among the data points, or 0 when none has one. */
 export function smallestDuration (durations: Iterable<number>): number {
@@ -36,18 +37,22 @@ export function timeGrid (times: Iterable<number>, bucketSize: number, endpointC
     minTime = Math.min(minTime, time);
     maxTime = Math.max(maxTime, time);
   }
-  if (allTimes.size > 0 && bucketSize > 0) {
+  // A non-finite time or bucket size (a malformed file) skips the stepping: the loops below would
+  // never end, since -Infinity or a value beyond float precision does not change when stepped.
+  if (allTimes.size > 0 && bucketSize > 0 && Number.isFinite(bucketSize) && Number.isFinite(minTime) && Number.isFinite(maxTime)) {
+    // Step by index so both loops always end, even when adding bucketSize would not change the time
+    const steps = Math.floor((maxTime - minTime) / bucketSize);
     // Count the times the stepping would really add: existing times need not lie on the grid.
     // Stop as soon as the cap is passed; the exact count beyond it does not matter.
     let added = 0;
-    for (let time = minTime; time <= maxTime && added * endpointCount <= MAX_FILLED_POINTS; time += bucketSize) {
-      if (!allTimes.has(time)) {
+    for (let i = 0; i <= steps && added * endpointCount <= MAX_FILLED_POINTS; i++) {
+      if (!allTimes.has(minTime + i * bucketSize)) {
         added++;
       }
     }
     if (added * endpointCount <= MAX_FILLED_POINTS) {
-      for (let time = minTime; time <= maxTime; time += bucketSize) {
-        allTimes.add(time);
+      for (let i = 0; i <= steps; i++) {
+        allTimes.add(minTime + i * bucketSize);
       }
     }
   }

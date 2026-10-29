@@ -13,10 +13,10 @@ describe("timeGrid", () => {
   });
 
   it("counts the times the stepping really adds against the cap, not an estimate from the span", () => {
-    // [0, 7] with bucket 2: the step adds 2, 4 and 6 (3 times), so 3 x 40,000 exceeds the cap.
-    // The old estimate, steps minus times present, gave (4 - 2) x 40,000 and would have filled.
-    expect(timeGrid([0, 7], 2, 40_000)).toEqual([0, 7]);
-    expect(timeGrid([0, 7], 2, 30_000)).toEqual([0, 2, 4, 6, 7]);
+    // [0, 7] with bucket 2: the step adds 2, 4 and 6 (3 times). With half the cap in endpoints, 3 of
+    // them exceed it, while the old estimate, steps minus times present, gave 2 and would have filled.
+    expect(timeGrid([0, 7], 2, Math.floor(MAX_FILLED_POINTS / 2))).toEqual([0, 7]);
+    expect(timeGrid([0, 7], 2, Math.floor(MAX_FILLED_POINTS / 3))).toEqual([0, 2, 4, 6, 7]);
   });
 
   it("skips the stepping entirely when it would add more than MAX_FILLED_POINTS", () => {
@@ -47,5 +47,22 @@ describe("timeGrid cap early exit", () => {
     expect(timeGrid([0, 31_536_000_000], 1000, 1)).toEqual([0, 31_536_000_000]);
     // 31.5M steps without the break; with it about 100k
     expect(performance.now() - start).toBeLessThan(2000);
+  });
+});
+
+describe("timeGrid with malformed times", () => {
+  it("returns only the times present when one of them is -Infinity, instead of looping forever", () => {
+    expect(timeGrid([-Infinity, 0, 60], 60, 1)).toEqual([-Infinity, 0, 60]);
+  });
+
+  it("returns quickly when the times are too large for a bucket step to change them", () => {
+    const start = performance.now();
+    // At 1e21 a 60 step is far below the float spacing, so stepping by addition never moved
+    expect(timeGrid([1e21, 2e21], 60, 1)).toEqual([1e21, 2e21]);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
+  it("skips the stepping for a non-finite bucket size", () => {
+    expect(timeGrid([0, 120], Infinity, 1)).toEqual([0, 120]);
   });
 });

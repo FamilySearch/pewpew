@@ -4,6 +4,7 @@ import { MinMaxTime, bucketAnchorId, comprehensiveSort, minMaxTime, parseResults
 // Dynamic import for charts to reduce bundle size
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
+import { ChartBox } from "./styled";
 import { Danger } from "../Alert";
 import { exportResultsToExcel } from "../../excelexport";
 import styled from "styled-components";
@@ -644,9 +645,10 @@ const OVERVIEWCANVAS = styled.div`
   width: 85%;
   max-width: 1000px;
   margin: 2em auto;
+  height: 300px;
 
-  canvas {
-    max-height: 300px !important;
+  @media (max-width: 768px) {
+    width: 100%;
   }
 `;
 
@@ -657,6 +659,11 @@ const QUADGRID = styled.div`
   width: 95%;
   max-width: 1400px;
   margin: 2em auto;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
 `;
 
 const QUADPANEL = styled.div`
@@ -672,11 +679,6 @@ const QUADPANEL = styled.div`
     font-size: 0.9em;
     margin: 0 0 1em 0;
     text-align: left;
-  }
-
-  canvas {
-    width: 100% !important;
-    height: 270px !important;
   }
 `;
 
@@ -978,7 +980,9 @@ const MedianDurationChart = ({ displayData, mergeEndpoints }: OverviewChartProps
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <ChartBox>
+        <canvas ref={canvasRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1058,7 +1062,9 @@ const Worst5PercentChart = ({ displayData, mergeEndpoints }: OverviewChartProps)
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <ChartBox>
+        <canvas ref={canvasRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1138,7 +1144,9 @@ const Error5xxChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => {
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <ChartBox>
+        <canvas ref={canvasRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1218,7 +1226,9 @@ const AllErrorsChart = ({ displayData, mergeEndpoints }: OverviewChartProps) => 
 
   return (
     <>
-      <canvas ref={canvasRef} />
+      <ChartBox>
+        <canvas ref={canvasRef} />
+      </ChartBox>
       {chart && chart.data.datasets && (
         <CUSTOMLEGEND>
           {chart.data.datasets.map((dataset, index) => (
@@ -1321,9 +1331,15 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
       const totalRTT = first.rttHistogram.clone();
       const statusCounts: Record<string, number> = { ...first.statusCounts };
 
+      // Last bucket with requests. Empty buckets are filled in by fillMissingBuckets so the
+      // last data point is the end of the test, not the last time this endpoint saw traffic.
+      let lastActive = first;
       for (let i = 1; i < dataPoints.length; i++) {
         const dp = dataPoints[i];
         totalRTT.add(dp.rttHistogram);
+        if (dp.hasActivity()) {
+          lastActive = dp;
+        }
         for (const [status, count] of Object.entries(dp.statusCounts)) {
           statusCounts[status] = count + (statusCounts[status] || 0);
         }
@@ -1384,7 +1400,7 @@ const FinalResultsTable = ({ displayData }: TableProps) => {
         min,
         max,
         stddev,
-        time: dataPoints[dataPoints.length - 1].time // Last timestamp
+        time: lastActive.time // Last timestamp with requests
       });
     }
 

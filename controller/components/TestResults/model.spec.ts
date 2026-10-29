@@ -371,7 +371,13 @@ describe("quiet buckets written with no entries", () => {
 });
 
 describe("fillMissingDataPoints cap on the union grid", () => {
-  const dp = (timeSec: number) => new DataPoint({ ...VALID_DP, time: timeSec, startTime: timeSec, endTime: timeSec + 60 });
+  // The fill only reads time, duration and emptyAt, and building 110k real DataPoints (each with a
+  // mocked histogram) takes longer than the test timeout on CI, so use plain stand-ins here.
+  const dp = (timeSec: number): DataPoint => ({
+    time: new Date(timeSec * 1000),
+    duration: 60,
+    emptyAt: () => { throw new Error("the cap should have prevented any fill"); }
+  }) as unknown as DataPoint;
 
   it("leaves the entries unfilled when laying them onto each other's real times would exceed the cap", () => {
     // Endpoint A has contiguous buckets, so stepping adds nothing, but B would need a copy of every one

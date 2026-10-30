@@ -184,7 +184,6 @@ export async function validateToken (token: string): Promise<AuthPermissions> {
   const sessionResponse: UserInfoResponse | undefined = await getSessionFromToken(token);
   log("getSessionFromToken(token)", LogLevel.DEBUG, { valid: sessionResponse !== undefined, sub: sessionResponse?.sub });
   log("getSessionFromToken(token)", LogLevel.TRACE, sessionResponse);
-  // If it's expired redirect to login
   if (!sessionResponse) {
     // Return invalid
     return { token, authPermission: AuthPermission.Expired };

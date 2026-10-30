@@ -303,7 +303,7 @@ export async function getTokenFromCode (req: NextApiRequest): Promise<TokenRespo
     loginUrl = getFullCallbackUrl(req) + `?code=${req.query.code}`;
     // When it was a NextApiRequest, this parsed fine, with the new GetServerSideContext we parse an extra "state"
     // which causes an error if it's there.
-    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl: getFullCallbackUrl(req), queryKeys: Object.keys(req.query) });
+    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl: loginUrl.split("?")[0], queryKeys: Object.keys(req.query) });
     log("openIdClient.callback", LogLevel.TRACE, { loginUrl, url: req.url, query: req.query });
     const tokenSet: TokenEndpointResponse & TokenEndpointResponseHelpers = await openIdClient.authorizationCodeGrant(
       configuration,

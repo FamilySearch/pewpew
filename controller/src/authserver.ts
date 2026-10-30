@@ -64,7 +64,8 @@ const getOpenIdClientId = (): string => OPENID_CLIENT_ID;
 
 async function getOpenIdConfiguration (): Promise<Configuration> {
   if (openIdConfiguration === undefined) {
-    log("getOpenIdClient", LogLevel.DEBUG, { OPENID_CLIENT_ID, OPENID_OIDC_BASE_URL, OPENID_HOST: process.env.OPENID_HOST, env: process.env });
+    log("getOpenIdClient", LogLevel.DEBUG, { OPENID_CLIENT_ID, OPENID_OIDC_BASE_URL, OPENID_HOST: process.env.OPENID_HOST });
+    log("getOpenIdClient", LogLevel.TRACE, { env: process.env });
     const serverMetadata: ServerMetadata = {
       issuer: OPENID_OIDC_BASE_URL,
       authorization_endpoint: OPENID_OIDC_BASE_URL + "/oauth2/v1/authorize",
@@ -115,7 +116,8 @@ const OpenIdPermissions: OpenIdPermissionNames = {
 log("AUTH_MODE=" + AUTH_MODE, LogLevel.INFO);
 
 function getPermissions (userInfoResponse: UserInfoResponse): AuthPermission {
-  log("userInfoResponse", LogLevel.DEBUG, userInfoResponse);
+  log("userInfoResponse", LogLevel.DEBUG, { sub: userInfoResponse.sub, groups: userInfoResponse.groups });
+  log("userInfoResponse", LogLevel.TRACE, userInfoResponse);
   if (TEST_AUTH_PERMISSION !== undefined) {
     log("TEST_AUTH_PERMISSION overridden, using: " + TEST_AUTH_PERMISSION, LogLevel.ERROR, { TEST_AUTH_PERMISSION });
     return TEST_AUTH_PERMISSION;
@@ -146,19 +148,23 @@ function getPermissions (userInfoResponse: UserInfoResponse): AuthPermission {
  * @returns SessionResponse if valid, undefined otherwise
  */
 async function getSessionFromToken (token: string): Promise<UserInfoResponse | undefined> {
-  log("getSessionFromToken", LogLevel.DEBUG, { token });
+  log("getSessionFromToken", LogLevel.DEBUG);
+  log("getSessionFromToken", LogLevel.TRACE, { token });
   try {
     const configuration: Configuration = await getOpenIdConfiguration();
     // Check if the token is valid and get the sub for the fetchUserInfo call. The `sub` is the unique identifier for the user
     const tokenIntrospection = await openIdClient.tokenIntrospection(configuration, token);
-    log("tokenIntrospection", LogLevel.DEBUG, tokenIntrospection);
+    log("tokenIntrospection", LogLevel.DEBUG, { active: tokenIntrospection.active, exp: tokenIntrospection.exp });
+    log("tokenIntrospection", LogLevel.TRACE, tokenIntrospection);
     if (tokenIntrospection.active === false) {
-      log("Token is not active", LogLevel.DEBUG, tokenIntrospection);
+      log("Token is not active", LogLevel.DEBUG, { active: tokenIntrospection.active, exp: tokenIntrospection.exp });
+      log("Token is not active", LogLevel.TRACE, tokenIntrospection);
       return undefined;
     }
     // If the token is valid, fetch the user info and get the groups
     const userInfo: UserInfoResponse = await openIdClient.fetchUserInfo(configuration, token, tokenIntrospection.uid as string);
-    log("userInfo", LogLevel.DEBUG, userInfo);
+    log("userInfo", LogLevel.DEBUG, { sub: userInfo.sub });
+    log("userInfo", LogLevel.TRACE, userInfo);
     return userInfo;
   } catch (error: unknown) {
     const message = `${error instanceof Error ? error.message : error}`;
@@ -172,10 +178,12 @@ async function getSessionFromToken (token: string): Promise<UserInfoResponse | u
 // 2. Token has User permissions
 // 3. Token has Admin permissions
 export async function validateToken (token: string): Promise<AuthPermissions> {
-  log("validateToken", LogLevel.DEBUG, { token });
+  log("validateToken", LogLevel.DEBUG);
+  log("validateToken", LogLevel.TRACE, { token });
   // Check if the token is valid
   const sessionResponse: UserInfoResponse | undefined = await getSessionFromToken(token);
-  log(`getSessionFromToken(token): ${JSON.stringify(sessionResponse)}`, LogLevel.DEBUG, sessionResponse);
+  log("getSessionFromToken(token)", LogLevel.DEBUG, { valid: sessionResponse !== undefined, sub: sessionResponse?.sub });
+  log("getSessionFromToken(token)", LogLevel.TRACE, sessionResponse);
   // If it's expired redirect to login
   if (!sessionResponse) {
     // Return invalid
@@ -255,22 +263,27 @@ function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AU
   let token: string | undefined;
   // If we don't have a cookie token, check the querystring (for a redirect)
   const queryToken: string | string[] | undefined = req.query[headerName];
-  log("req.query: " + JSON.stringify(req.query), LogLevel.DEBUG);
+  log("req.query keys", LogLevel.DEBUG, Object.keys(req.query));
+  log("req.query", LogLevel.TRACE, req.query);
   if (queryToken && !Array.isArray(queryToken)) {
     token = queryToken;
-    log("query token: " + JSON.stringify(token), LogLevel.DEBUG);
+    log("query token found", LogLevel.DEBUG, { token: token !== undefined });
+    log("query token", LogLevel.TRACE, { token });
   }
   // Or check the headers
   const headersToken: string | string[] | undefined = req.headers[headerName];
-  log("req.headers: " + JSON.stringify(req.headers), LogLevel.DEBUG);
+  log("req.headers keys", LogLevel.DEBUG, Object.keys(req.headers));
+  log("req.headers", LogLevel.TRACE, req.headers);
   if (!token && headersToken && !Array.isArray(headersToken)) {
     token = headersToken;
-    log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
+    log("header token found", LogLevel.DEBUG, { token: token !== undefined });
+    log("header token", LogLevel.TRACE, { token });
   }
   if (!token && req.headers.cookie && !Array.isArray(req.headers.cookie)) {
     const cookies = cookieParse(req.headers.cookie);
     token = cookies[headerName];
-    log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
+    log("cookie token found", LogLevel.DEBUG, { token: token !== undefined });
+    log("cookie token", LogLevel.TRACE, { token });
   }
   return token;
 }
@@ -281,7 +294,8 @@ function getTokenFromQueryOrHeader (req: NextApiRequest, headerName: string = AU
  * @param code code queryparam returned by Web Auth call
  */
 export async function getTokenFromCode (req: NextApiRequest): Promise<TokenResponse> {
-  log("getTokenFromCode: " + req.url, LogLevel.DEBUG, req.query);
+  log("getTokenFromCode: " + req.url?.split("?")[0], LogLevel.DEBUG, Object.keys(req.query));
+  log("getTokenFromCode: " + req.url, LogLevel.TRACE, req.query);
   let loginUrl: string | undefined;
   try {
     // https://github.com/panva/node-openid-client
@@ -290,22 +304,27 @@ export async function getTokenFromCode (req: NextApiRequest): Promise<TokenRespo
     loginUrl = getFullCallbackUrl(req) + `?code=${req.query.code}`;
     // When it was a NextApiRequest, this parsed fine, with the new GetServerSideContext we parse an extra "state"
     // which causes an error if it's there.
-    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl, url: req.url, query: req.query });
+    log("openIdClient.callback", LogLevel.DEBUG, { loginUrl: getFullCallbackUrl(req), queryKeys: Object.keys(req.query) });
+    log("openIdClient.callback", LogLevel.TRACE, { loginUrl, url: req.url, query: req.query });
     const tokenSet: TokenEndpointResponse & TokenEndpointResponseHelpers = await openIdClient.authorizationCodeGrant(
       configuration,
       new URL(loginUrl),
       undefined
     );
-    log("openIdClient.callback result", LogLevel.DEBUG, { tokenSet, sub: tokenSet.claims()?.sub, claims: tokenSet.claims() });
+    log("openIdClient.callback result", LogLevel.DEBUG, { sub: tokenSet.claims()?.sub, tokenSetKeys: Object.keys(tokenSet) });
+    log("openIdClient.callback result", LogLevel.TRACE, { tokenSet, claims: tokenSet.claims() });
     if (tokenSet && tokenSet.access_token) {
       const { access_token: token, refresh_token: refreshToken, id_token: hintToken } = tokenSet;
-      log("getTokenFromCode auth token: " + JSON.stringify(token), LogLevel.DEBUG, { token, refreshToken, hintToken });
+      log("getTokenFromCode auth token", LogLevel.DEBUG, { token: token !== undefined, refreshToken: refreshToken !== undefined, hintToken: hintToken !== undefined });
+      log("getTokenFromCode auth token", LogLevel.TRACE, { token, refreshToken, hintToken });
       return { token, refreshToken, hintToken };
     } else {
-      throw new Error("Could not get the auth token from: " + JSON.stringify(tokenSet));
+      log("Could not get the auth token", LogLevel.TRACE, { tokenSet });
+      throw new Error("Could not get the auth token. Token response keys: " + JSON.stringify(Object.keys(tokenSet || {})));
     }
   } catch (error) {
-    log("Error calling getTokenFromCode", LogLevel.WARN, error, { loginUrl, headers: req.headers });
+    log("Error calling getTokenFromCode", LogLevel.WARN, error, { loginUrl: loginUrl?.split("?")[0], headerKeys: Object.keys(req.headers) });
+    log("Error calling getTokenFromCode", LogLevel.TRACE, { loginUrl, headers: req.headers });
     throw error;
   }
 }
@@ -319,14 +338,17 @@ export async function getTokenFromRefreshToken (refreshToken: string): Promise<T
   try {
     const configuration: Configuration = await getOpenIdConfiguration();
     const tokenSet: TokenEndpointResponse = await openIdClient.refreshTokenGrant(configuration, refreshToken);
-    log("getTokenFromRefreshToken tokenResponse: " + JSON.stringify(tokenSet), LogLevel.DEBUG, tokenSet);
+    log("getTokenFromRefreshToken tokenResponse", LogLevel.DEBUG, { tokenSetKeys: Object.keys(tokenSet) });
+    log("getTokenFromRefreshToken tokenResponse", LogLevel.TRACE, tokenSet);
     if (tokenSet && tokenSet.access_token) {
       // There will be a NEW refresh_token we have to use in the future. The old one is dead now.
       const { access_token: token, refresh_token: newRefreshToken, id_token: hintToken } = tokenSet;
-      log("openId token: " + JSON.stringify(token), LogLevel.DEBUG, { token, newRefreshToken, hintToken });
+      log("openId token", LogLevel.DEBUG, { token: token !== undefined, newRefreshToken: newRefreshToken !== undefined, hintToken: hintToken !== undefined });
+      log("openId token", LogLevel.TRACE, { token, newRefreshToken, hintToken });
       return { token, refreshToken: newRefreshToken, hintToken };
     } else {
-      throw new Error("Could not get the auth token from: " + JSON.stringify(tokenSet));
+      log("Could not get the auth token", LogLevel.TRACE, { tokenSet });
+      throw new Error("Could not get the auth token. Token response keys: " + JSON.stringify(Object.keys(tokenSet || {})));
     }
   } catch (error) {
     log("Error calling getTokenFromRefreshToken", LogLevel.WARN, error);
@@ -347,7 +369,8 @@ export async function getLogoutUrl (req: NextApiRequest): Promise<string> {
     // const logoutUrl: string = `${OPENID_OIDC_BASE_URL}/oauth2/v1/logout?id_token_hint=${token}&post_logout_redirect_uri=${homeUrl}}`;
     const configuration: Configuration = await getOpenIdConfiguration();
     const logoutUrl = openIdClient.buildEndSessionUrl(configuration, { id_token_hint, post_logout_redirect_uri });
-    log("getLogoutUrl: " + logoutUrl, LogLevel.DEBUG, { id_token_hint, post_logout_redirect_uri });
+    log("getLogoutUrl", LogLevel.DEBUG, { post_logout_redirect_uri });
+    log("getLogoutUrl: " + logoutUrl, LogLevel.TRACE, { id_token_hint });
     return logoutUrl.toString();
   }
   return post_logout_redirect_uri;
@@ -370,7 +393,8 @@ export async function authApi (req: NextApiRequest, res: NextApiResponse, requir
     }
 
     let authPermissions: AuthPermissions = await validateToken(token);
-    log(`${req.method} ${req.url} authPermissions: ${JSON.stringify(authPermissions)}`, LogLevel.DEBUG);
+    log(`${req.method} ${req.url} authPermissions`, LogLevel.DEBUG, { ...authPermissions, token: undefined });
+    log(`${req.method} ${req.url} authPermissions`, LogLevel.TRACE, authPermissions);
     // If expired, attempt a silent refresh before giving up
     if (authPermissions.authPermission === AuthPermission.Expired) {
       const refreshToken: string | undefined = getTokenFromQueryOrHeader(req, REFRESH_COOKIE_NAME);
@@ -488,19 +512,23 @@ function getTokenFromCookieOrHeader (ctx: GetServerSidePropsContext, cookieName:
     headerName = cookieName;
   }
   let token: string | undefined = nextCookie(ctx)[cookieName];
-  log("cookie token: " + JSON.stringify(token), LogLevel.DEBUG);
+  log("cookie token found", LogLevel.DEBUG, { token: token !== undefined });
+  log("cookie token", LogLevel.TRACE, { token });
   // If we don't have a cookie token, check the querystring (for a redirect)
   const queryToken: string | string[] | undefined = ctx.query[headerName];
   if (!token && queryToken && !Array.isArray(queryToken)) {
     token = queryToken;
-    log("query token: " + JSON.stringify(token), LogLevel.DEBUG);
+    log("query token found", LogLevel.DEBUG, { token: token !== undefined });
+    log("query token", LogLevel.TRACE, { token });
   }
   // Or check the headers
   const headersToken: string | string[] | undefined = ctx.req && ctx.req.headers[headerName];
-  log("ctx.req.headers: " + JSON.stringify(ctx.req && ctx.req.headers), LogLevel.DEBUG);
+  log("ctx.req.headers keys", LogLevel.DEBUG, Object.keys((ctx.req && ctx.req.headers) || {}));
+  log("ctx.req.headers", LogLevel.TRACE, ctx.req && ctx.req.headers);
   if (!token && headersToken && !Array.isArray(headersToken)) {
     token = headersToken;
-    log("header token: " + JSON.stringify(token), LogLevel.DEBUG);
+    log("header token found", LogLevel.DEBUG, { token: token !== undefined });
+    log("header token", LogLevel.TRACE, { token });
   }
   return token;
 }
@@ -523,7 +551,8 @@ export async function authPage (ctx: GetServerSidePropsContext, requiredPermissi
     // Check if the token is valid
     // if we have a ctx.req we're server side and can just call the code
     const authPermissions: AuthPermissions = await validateToken(token);
-    log("validateToken(token): " + JSON.stringify(authPermissions), LogLevel.DEBUG);
+    log("validateToken(token)", LogLevel.DEBUG, { ...authPermissions, token: undefined });
+    log("validateToken(token)", LogLevel.TRACE, authPermissions);
     // If it's expired redirect to login
     if (authPermissions.authPermission === AuthPermission.Expired) {
       return redirectToLogin(ctx, SESSION_EXPIRED_MESSAGE);

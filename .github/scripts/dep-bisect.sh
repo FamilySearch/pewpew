@@ -212,8 +212,16 @@ assert_only_lockfile_dirty() {
   # directory-wide filter would additionally hide a genuinely unexpected file
   # such as `.github/aw/rogue`, weakening the assert for a case the workflow
   # already handles.
+  #
+  # `core.fileMode=false` so a mode-only change does not read as dirty. gh-aw
+  # restores .github from the activation job's artifact, artifacts do not keep
+  # file modes, and every tracked 755 script arrives 644: with modes compared,
+  # that aborted active-monitoring's 2026-11 bisect at startup
+  # (FamilySearch/active-monitoring#105) although no file's content had
+  # changed. A mode cannot change what npm resolves, so it is not the kind of
+  # change this assert guards against.
   local bad
-  bad=$(git status --porcelain -uall --ignore-submodules -- . | sed -E 's/^.{3}//' | grep -vxF "${GIT_PREFIX}package-lock.json" || true)
+  bad=$(git -c core.fileMode=false status --porcelain -uall --ignore-submodules -- . | sed -E 's/^.{3}//' | grep -vxF "${GIT_PREFIX}package-lock.json" || true)
   if [ -n "$bad" ]; then
     log "::error::dep-bisect: unexpected changes outside package-lock.json:"
     printf '%s\n' "$bad" >&2

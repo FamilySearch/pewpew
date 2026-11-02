@@ -170,10 +170,16 @@ pre-agent-steps:
       # The agent execs the wrappers by path, so they must be executable. gh-aw
       # restores .github from the activation job's artifact, and artifacts do
       # not keep file modes - the scripts arrive 644 (#418). This step runs
-      # after the restore: set the bit, then check it, since a lost bit reads
-      # exactly like the allowlist refusal in #415.
+      # after the restore: put back every mode the index records as 755, not
+      # just the wrappers. A list of four left dep-bisect.sh and the other
+      # scripts at 644, which git status reports as modified, and the bisect's
+      # dirty-tree check aborts on them (FamilySearch/active-monitoring#105).
+      git ls-files -s -z -- .github | while IFS= read -r -d '' entry; do
+        if [ "${entry%% *}" = 100755 ]; then chmod +x "${entry#*$'\t'}"; fi
+      done
+      # Then check the wrappers, since a lost bit reads exactly like the
+      # allowlist refusal in #415.
       for s in dep-validate dep-npm-update dep-npm-sync dep-checkpoint; do
-        chmod +x ".github/scripts/$s.sh"
         [ -x ".github/scripts/$s.sh" ] || { echo "::error::.github/scripts/$s.sh is not executable - the agent cannot run it"; exit 1; }
       done
       CTX=.github/aw/dep-repair-context.json

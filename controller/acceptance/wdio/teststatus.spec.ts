@@ -119,6 +119,67 @@ describe("GET /teststatus (Test Status Page)", () => {
     });
   });
 
+  describe("Notes", () => {
+    it("with no ?notes= should show notes section collapsed by default", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT(testId);
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await collapseButton.waitForExist({ timeout: 15000, timeoutMsg: "Notes collapse button did not appear" });
+      await expect(collapseButton).toHaveText("▼ Expand");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).not.toExist();
+    });
+
+    it("with ?notes=1 should display notes section expanded", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT({ testId, notes: 1 });
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const notesEditor = await $("[data-testid='notes-editor']");
+      await notesEditor.waitForExist({ timeout: 15000, timeoutMsg: "Notes editor did not load" });
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await expect(collapseButton).toExist();
+      await expect(collapseButton).toHaveText("▲ Collapse");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).toExist();
+    });
+
+    it("clicking the Expand button should reveal the notes editor and update the URL", async () => {
+      await browser.url(PAGE_TEST_STATUS_FORMAT(testId));
+      await assertNoPageError();
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await collapseButton.waitForExist({ timeout: 15000, timeoutMsg: "Notes collapse button did not appear" });
+      await expect(collapseButton).toHaveText("▼ Expand");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).not.toExist();
+      await collapseButton.click();
+      await editorLayout.waitForExist({ timeout: 10000, timeoutMsg: "Notes editor did not expand after clicking Expand" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return currentUrl.includes("notes=1");
+      }, { timeout: 5000, timeoutMsg: "URL did not update to include notes=1 after expanding" });
+      await expect(collapseButton).toHaveText("▲ Collapse");
+    });
+
+    it("clicking the Collapse button should hide the notes editor and remove notes=1 from URL", async () => {
+      await browser.url(PAGE_TEST_STATUS_FORMAT({ testId, notes: 1 }));
+      await assertNoPageError();
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await editorLayout.waitForExist({ timeout: 15000, timeoutMsg: "Notes editor did not load expanded" });
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await expect(collapseButton).toHaveText("▲ Collapse");
+      await collapseButton.click();
+      await editorLayout.waitForExist({ reverse: true, timeout: 5000, timeoutMsg: "Notes editor did not collapse" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return !currentUrl.includes("notes=1");
+      }, { timeout: 5000, timeoutMsg: "URL still contains notes=1 after collapsing" });
+      await expect(collapseButton).toHaveText("▼ Expand");
+    });
+  });
+
   describe("Download Test Files", () => {
     it("should show the Download Test Files button when running as admin", async () => {
       const url = PAGE_TEST_STATUS_FORMAT(testId);

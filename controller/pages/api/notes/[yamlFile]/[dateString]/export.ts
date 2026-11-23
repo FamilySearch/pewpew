@@ -46,6 +46,9 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
       const confluenceContent = markdownToConfluence(notes);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Content-Type-Options", "nosniff");
+      // Code blocks must stay raw inside CDATA for Confluence, but an HTML parser ends <![CDATA[ at the first ">".
+      // Sandbox the page (no scripts, forms, or same-origin access) so nothing in a note can run on this origin.
+      res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'");
       res.status(200).send(confluenceContent);
     } else {
       // Default markdown export

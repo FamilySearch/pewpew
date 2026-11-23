@@ -155,6 +155,8 @@ describe("Notes API Acceptance", () => {
       const res = await fetch(`${exportUrl}?format=confluence`);
       expect(res.status).to.equal(200);
       expect(res.headers["content-type"]).to.include("text/html");
+      expect(res.headers["x-content-type-options"]).to.equal("nosniff");
+      expect(res.headers["content-security-policy"]).to.include("sandbox");
       expect(res.data).to.include("<h1>");
     });
   });

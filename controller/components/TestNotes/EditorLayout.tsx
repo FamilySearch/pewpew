@@ -32,7 +32,7 @@ const SinglePane = styled.div`
 // In split view the preview trails typing by this much, instead of re-serializing and re-rendering on every keystroke.
 export const PREVIEW_DEBOUNCE_MS = 300;
 
-export default function EditorLayout ({ editor, getContent }: { editor: Editor | null; getContent: () => string }) {
+export default function EditorLayout ({ editor, getContent, editable = true }: { editor: Editor | null; getContent: () => string; editable?: boolean }) {
   const { viewMode } = useNotesContext();
 
   const showEditor = viewMode === VIEW_MODES.EDIT || viewMode === VIEW_MODES.SPLIT;
@@ -57,7 +57,8 @@ export default function EditorLayout ({ editor, getContent }: { editor: Editor |
 
   return (
     <LayoutContainer data-testid="notes-editor-layout">
-      {showEditor && <EditorToolbar editor={editor} />}
+      {/* TipTap commands still run when editable is false, so read-only users get no toolbar */}
+      {showEditor && editable && <EditorToolbar editor={editor} />}
       {isSplit ? (
         <SplitPane>
           {showEditor && <MarkdownEditor editor={editor} />}

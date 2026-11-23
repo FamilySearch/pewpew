@@ -105,6 +105,15 @@ export async function getPewPewNotes ({ yamlFile, dateString }: { yamlFile: stri
   }
 }
 
+/** Metadata for a save: the existing record with updatedAt/updatedBy bumped, or a new one that records createdBy. */
+export function buildNotesMetadata ({ existing, userId, now }: { existing?: NotesMetadata; userId?: string; now: string }): NotesMetadata {
+  const metadata: NotesMetadata = existing
+    ? { ...existing, updatedAt: now }
+    : { version: 1, createdAt: now, updatedAt: now, createdBy: userId };
+  if (userId) { metadata.updatedBy = userId; }
+  return metadata;
+}
+
 export async function savePewPewNotes ({ yamlFile, dateString, content, userId }: {
   yamlFile: string;
   dateString: string;
@@ -112,9 +121,10 @@ export async function savePewPewNotes ({ yamlFile, dateString, content, userId }
   userId?: string;
 }): Promise<void> {
   const s3Folder = `${yamlFile}/${dateString}`;
-  const localPath = path.join(LOCAL_FILE_LOCATION, `notes-${Date.now()}`);
+  // mkdtemp adds a random suffix, so concurrent saves (even of the same test) never share a directory
+  let localPath: string | undefined;
   try {
-    await fs.mkdir(localPath, { recursive: true });
+    localPath = await fs.mkdtemp(path.join(LOCAL_FILE_LOCATION, `notes-${yamlFile}${dateString}-`));
     const localFilePath = path.join(localPath, NOTES_FILENAME);
     await fs.writeFile(localFilePath, content, "utf-8");
     const s3File = new PpaasS3File({
@@ -124,34 +134,18 @@ export async function savePewPewNotes ({ yamlFile, dateString, content, userId }
     });
     await s3File.upload();
 
-    // Update metadata
-    const now = new Date().toISOString();
-    let metadata: NotesMetadata;
-    try {
-      const existing = await getNotesMetadata({ yamlFile, dateString });
-      metadata = existing || { version: 1, createdAt: now, updatedAt: now };
-      metadata.updatedAt = now;
-      if (userId) { metadata.updatedBy = userId; }
-    } catch (metadataError) {
-      log(`Could not load existing metadata for ${s3Folder}, creating new`, LogLevel.DEBUG, metadataError);
-      metadata = {
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-        createdBy: userId,
-        updatedBy: userId
-      };
-    }
+    // getNotesMetadata returns undefined rather than throwing when it can't load one
+    const existing = await getNotesMetadata({ yamlFile, dateString });
+    const metadata = buildNotesMetadata({ existing, userId, now: new Date().toISOString() });
     await saveNotesMetadata({ yamlFile, dateString, metadata });
   } catch (error) {
     log(`savePewPewNotes failed for ${s3Folder}`, LogLevel.WARN, error);
     throw error;
   } finally {
-    try {
-      const files = await fs.readdir(localPath);
-      for (const file of files) { await fs.unlink(path.join(localPath, file)); }
-      await fs.rmdir(localPath);
-    } catch (cleanupError) { log("Cleanup of temp notes files failed", LogLevel.DEBUG, cleanupError); }
+    if (localPath) {
+      await fs.rm(localPath, { recursive: true, force: true })
+        .catch((cleanupError: unknown) => log("Cleanup of temp notes files failed", LogLevel.DEBUG, cleanupError));
+    }
   }
 }
 
@@ -161,7 +155,8 @@ export async function deletePewPewNotes ({ yamlFile, dateString }: { yamlFile: s
     const notesKey = `${s3Folder}/${NOTES_FILENAME}`;
     const metaKey = `${s3Folder}/${NOTES_META_FILENAME}`;
     await Promise.all([
-      s3.deleteObject(notesKey).catch((err) => log(`Could not delete ${notesKey}`, LogLevel.WARN, err)),
+      // A notes.md that couldn't be deleted must fail the request; stray metadata is harmless, so that stays best-effort
+      s3.deleteObject(notesKey),
       s3.deleteObject(metaKey).catch((err) => log(`Could not delete ${metaKey}`, LogLevel.WARN, err))
     ]);
   } catch (error) {
@@ -203,9 +198,9 @@ export async function saveNotesMetadata ({ yamlFile, dateString, metadata }: {
   metadata: NotesMetadata;
 }): Promise<void> {
   const s3Folder = `${yamlFile}/${dateString}`;
-  const localPath = path.join(LOCAL_FILE_LOCATION, `notes-meta-${Date.now()}`);
+  let localPath: string | undefined;
   try {
-    await fs.mkdir(localPath, { recursive: true });
+    localPath = await fs.mkdtemp(path.join(LOCAL_FILE_LOCATION, `notes-meta-${yamlFile}${dateString}-`));
     const localFilePath = path.join(localPath, NOTES_META_FILENAME);
     await fs.writeFile(localFilePath, JSON.stringify(metadata, null, 2), "utf-8");
     const s3File = new PpaasS3File({
@@ -218,11 +213,10 @@ export async function saveNotesMetadata ({ yamlFile, dateString, metadata }: {
     log(`saveNotesMetadata failed for ${s3Folder}`, LogLevel.WARN, error);
     throw error;
   } finally {
-    try {
-      const files = await fs.readdir(localPath);
-      for (const file of files) { await fs.unlink(path.join(localPath, file)); }
-      await fs.rmdir(localPath);
-    } catch (cleanupError) { log("Cleanup of temp notes files failed", LogLevel.DEBUG, cleanupError); }
+    if (localPath) {
+      await fs.rm(localPath, { recursive: true, force: true })
+        .catch((cleanupError: unknown) => log("Cleanup of temp notes files failed", LogLevel.DEBUG, cleanupError));
+    }
   }
 }
 
@@ -515,8 +509,7 @@ const isSafeUrl = (url: string): boolean => /^(?:https?:|mailto:|[/#?]|[^:]*$)/i
 // Convert markdown to Confluence Storage Format.
 // The output is served as HTML, so all user text is HTML-escaped and only safe URL schemes are linked.
 export function markdownToConfluence (markdown: string): string {
-  // HTML comments (strip for Confluence) before escaping so they don't survive as visible text
-  let html = markdown.replaceAll(/<!--[\s\S]*?-->/g, "");
+  let html = markdown;
 
   // Code blocks become CDATA macros (raw, unescaped), so pull them out before escaping the rest
   const codeBlocks: string[] = [];
@@ -529,8 +522,16 @@ export function markdownToConfluence (markdown: string): string {
 
   html = escapeHtml(html);
 
-  // Inline code
-  html = html.replaceAll(/`([^`]+)`/g, "<code>$1</code>");
+  // HTML comments (strip for Confluence). Matched in escaped form, after code blocks are out, so comments inside
+  // code snippets survive and raw HTML never goes through a sanitizing regex.
+  html = html.replaceAll(/&lt;!--[\s\S]*?--&gt;/g, "");
+
+  // Inline code (already escaped) is held out like code blocks so the formatting passes below don't touch it
+  const inlineCode: string[] = [];
+  html = html.replaceAll(/`([^`]+)`/g, (_match, code: string) => {
+    inlineCode.push(`<code>${code}</code>`);
+    return `\uE001CODE${inlineCode.length - 1}\uE001`;
+  });
 
   // Headings
   html = html.replaceAll(/^######\s+(.+)$/gm, "<h6>$1</h6>");
@@ -558,9 +559,11 @@ export function markdownToConfluence (markdown: string): string {
 
   // Tables
   html = html.replaceAll(/^(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)*)/gm, (_match, headerRow, _separator, bodyRows) => {
-    const headers = (headerRow as string).split("|").filter((c: string) => c.trim()).map((c: string) => `<th><p>${c.trim()}</p></th>`).join("");
+    // Drop only the outer pipes' empty entries so blank interior cells keep their column
+    const splitRow = (row: string): string[] => row.trim().split("|").slice(1, -1);
+    const headers = splitRow(headerRow as string).map((c: string) => `<th><p>${c.trim()}</p></th>`).join("");
     const rows = (bodyRows as string).trim().split("\n").map((row: string) => {
-      const cells = row.split("|").filter((c: string) => c.trim()).map((c: string) => `<td><p>${c.trim()}</p></td>`).join("");
+      const cells = splitRow(row).map((c: string) => `<td><p>${c.trim()}</p></td>`).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
     return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -569,12 +572,14 @@ export function markdownToConfluence (markdown: string): string {
   // Horizontal rules
   html = html.replaceAll(/^---+$/gm, "<hr />");
 
+  // Ordered lists (simple single-level). A temporary tag keeps the <ul> pass below from grabbing these items.
+  html = html.replaceAll(/^\s*\d+\.\s+(.+)$/gm, "<oli>$1</oli>");
+  html = html.replaceAll(/((?:<oli>.*<\/oli>\n?)+)/g, "<ol>$1</ol>");
+
   // Unordered lists (simple single-level)
   html = html.replaceAll(/^(\s*)-\s+(.+)$/gm, "<li>$2</li>");
   html = html.replaceAll(/((?:<li>.*<\/li>\n?)+)/g, "<ul>$1</ul>");
-
-  // Ordered lists
-  html = html.replaceAll(/^(\s*)\d+\.\s+(.+)$/gm, "<li>$2</li>");
+  html = html.replaceAll("<oli>", "<li>").replaceAll("</oli>", "</li>");
 
   // Blockquotes
   html = html.replaceAll(/^&gt;\s+(.+)$/gm, "<blockquote><p>$1</p></blockquote>");
@@ -584,6 +589,9 @@ export function markdownToConfluence (markdown: string): string {
 
   // Clean up empty paragraphs
   html = html.replaceAll(/<p>\s*<\/p>/g, "");
+
+  // Restore inline code
+  html = html.replaceAll(/\uE001CODE(\d+)\uE001/g, (_match, index: string) => inlineCode[Number(index)]);
 
   // Restore code blocks (the paragraph pass may have wrapped their placeholders)
   html = html.replaceAll(/(?:<p>)?\uE000CODE(\d+)\uE000(?:<\/p>)?/g, (_match, index: string) => codeBlocks[Number(index)]);

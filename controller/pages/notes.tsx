@@ -101,7 +101,8 @@ const NotesPage = ({ authPermission, s3Folder: initialS3Folder, error: propsErro
   const [loading, setLoading] = useState(false);
 
   // Get s3Folder from query param (client-side routing)
-  const s3Folder = (router.query.s3Folder as string) || initialS3Folder;
+  // A repeated ?s3Folder= arrives as an array; only accept a single string, like getServerSideProps does
+  const s3Folder = (typeof router.query.s3Folder === "string" ? router.query.s3Folder : undefined) || initialS3Folder;
 
   // Otherwise show the notes browser/search
   const handleSearch = async (e: { preventDefault: () => void }) => {

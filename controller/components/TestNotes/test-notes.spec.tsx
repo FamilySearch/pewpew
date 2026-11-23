@@ -14,7 +14,10 @@ vi.mock("next/dynamic", () => ({
     return MockEditor;
   }
 }));
-vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} }) }));
+vi.mock("next/router", () => ({
+  default: { events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() } },
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} })
+}));
 vi.mock("./ExportMenu", () => ({ default: () => <div data-testid="mock-export-menu" /> }));
 vi.mock("./StatusBar", () => ({ default: () => <div data-testid="mock-status-bar" /> }));
 vi.mock("./ViewModeToggle", () => ({ default: () => <div data-testid="mock-view-mode-toggle" /> }));

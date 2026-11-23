@@ -143,7 +143,7 @@ describe("GET /teststatus (Test Status Page)", () => {
       await expect(collapseButton).toExist();
       await expect(collapseButton).toHaveText("▲ Collapse");
       const editorLayout = await $("[data-testid='notes-editor-layout']");
-      await expect(editorLayout).toExist();
+      await expect(editorLayout).toBeDisplayed();
     });
 
     it("clicking the Expand button should reveal the notes editor and update the URL", async () => {
@@ -155,7 +155,7 @@ describe("GET /teststatus (Test Status Page)", () => {
       const editorLayout = await $("[data-testid='notes-editor-layout']");
       await expect(editorLayout).not.toExist();
       await collapseButton.click();
-      await editorLayout.waitForExist({ timeout: 10000, timeoutMsg: "Notes editor did not expand after clicking Expand" });
+      await editorLayout.waitForDisplayed({ timeout: 10000, timeoutMsg: "Notes editor did not expand after clicking Expand" });
       await browser.waitUntil(async () => {
         const currentUrl = await browser.getUrl();
         return currentUrl.includes("notes=1");
@@ -167,11 +167,12 @@ describe("GET /teststatus (Test Status Page)", () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT({ testId, notes: 1 }));
       await assertNoPageError();
       const editorLayout = await $("[data-testid='notes-editor-layout']");
-      await editorLayout.waitForExist({ timeout: 15000, timeoutMsg: "Notes editor did not load expanded" });
+      await editorLayout.waitForDisplayed({ timeout: 15000, timeoutMsg: "Notes editor did not load expanded" });
       const collapseButton = await $("[data-testid='notes-collapse-button']");
       await expect(collapseButton).toHaveText("▲ Collapse");
       await collapseButton.click();
-      await editorLayout.waitForExist({ reverse: true, timeout: 5000, timeoutMsg: "Notes editor did not collapse" });
+      // The editor stays mounted (hidden) after the first expand so drafts survive collapsing
+      await editorLayout.waitForDisplayed({ reverse: true, timeout: 5000, timeoutMsg: "Notes editor did not collapse" });
       await browser.waitUntil(async () => {
         const currentUrl = await browser.getUrl();
         return !currentUrl.includes("notes=1");

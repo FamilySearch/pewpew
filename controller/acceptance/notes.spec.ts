@@ -118,6 +118,16 @@ describe("Notes API Acceptance", () => {
       const getRes = await fetch(notesUrl);
       expect(getRes.data).to.include("Latency p95 = 120ms");
     });
+
+    it("should reject a section update without string content", async () => {
+      for (const data of [{ section: "findings" }, { section: "findings", content: { text: "x" } }, { section: "findings", content: "x", append: "yes" }]) {
+        const res = await fetch(notesUrl, { method: "post", data, headers: { "Content-Type": "application/json" } });
+        expect(res.status, JSON.stringify(data)).to.equal(400);
+      }
+      const getRes = await fetch(notesUrl);
+      expect(getRes.data).to.not.include("undefined");
+      expect(getRes.data).to.not.include("[object Object]");
+    });
   });
 
   describe("GET /api/notes/:yamlFile/:dateString/meta", () => {

@@ -54,5 +54,5 @@ export default function TipTapEditorInner ({ initialContent, editable, editorCon
     }
   }, [initialContent, editor, updateStats]);
 
-  return <EditorLayout editor={editor} getContent={getContent} />;
+  return <EditorLayout editor={editor} getContent={getContent} editable={editable} />;
 }

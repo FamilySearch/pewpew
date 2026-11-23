@@ -400,6 +400,20 @@ describe("Test Result Component", () => {
       await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 2), { timeout: 500 })).rejects.toThrow();
     });
 
+    it("still loads the final results when the test stops after the first load failed", async () => {
+      vi.mocked(axios.get).mockImplementationOnce((url: string) => {
+        requestedUrls.push(url);
+        return Promise.reject(Object.assign(new Error("Request failed with status code 500"), { response: { status: 500 } }));
+      });
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      // Let the failed load settle into the error state before the test stops
+      await waitFor(() => expect(screen.queryAllByText(/500/).length).toBeGreaterThan(0));
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(2));
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
     it("waits for an in-flight poll before the final refresh when the test finishes with results showing", async () => {
       const { rerender } = render(<TestResults testData={runningTest} />);
       await initialLoad();

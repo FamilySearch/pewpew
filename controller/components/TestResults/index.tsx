@@ -1530,7 +1530,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       }).catch((error) => log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error));
       return undefined;
     }
-    if (!state.resultsData && !state.error && isStopped) {
+    // A test that just stopped gets its final load even if an earlier (running) load errored; a test that was
+    // already stopped doesn't retry a failed load, or every render would loop on it.
+    if (!state.resultsData && (!state.error || wasRunning) && isStopped) {
       const resultsPath = state.resultsPath;
       const inFlight = refreshInFlightRef.current?.resultsPath === resultsPath ? refreshInFlightRef.current : undefined;
       if (!inFlight) {

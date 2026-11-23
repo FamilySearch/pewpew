@@ -5,6 +5,7 @@ import React, { JSX, useCallback, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { AuthPermission } from "../../types";
 import ExportMenu from "./ExportMenu";
+import Router from "next/router";
 import StatusBar from "./StatusBar";
 import ViewModeToggle from "./ViewModeToggle";
 import { colors } from "./editorStyles";
@@ -142,7 +143,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     const loadNotes = async () => {
       try {
         const url = formatPageHref(API_NOTES_FORMAT(testData.s3Folder));
-        const response: AxiosResponse = await axios.get(url);
+        // Raw text: axios would otherwise JSON-parse notes that happen to look like JSON (e.g. "123" or "null")
+        const response: AxiosResponse<string> = await axios.get(url, { responseType: "text", transformResponse: [] });
         if (response.status === 204) {
           // No notes yet, try loading a template
           try {
@@ -163,7 +165,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     loadNotes();
   }, [testData.s3Folder, hasInitialContent]);
 
-  // Warn before leaving the page (nav links and "View Test" are full page loads) with unsaved changes
+  // Warn before leaving with unsaved changes. beforeunload covers full page loads ("View Test", "Back to Notes",
+  // reload, closing the tab); the router guard below covers client-side navigation (the nav bar's LinkButtons).
   useEffect(() => {
     if (!isDirty) { return; }
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -172,6 +175,20 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    const routerEvents = Router?.events;
+    if (!isDirty || !routerEvents) { return; }
+    const onRouteChangeStart = (url: string, { shallow }: { shallow: boolean }) => {
+      // Shallow updates stay on this page (results file pick, notes expand/collapse)
+      if (shallow || window.confirm("You have unsaved notes. Leave this page and discard them?")) { return; }
+      routerEvents.emit("routeChangeError", new Error("Route change aborted: unsaved notes"), url, { shallow });
+      // Next.js has no API to cancel a navigation; throwing from routeChangeStart is the documented workaround
+      throw new Error("Route change aborted: unsaved notes");
+    };
+    routerEvents.on("routeChangeStart", onRouteChangeStart);
+    return () => routerEvents.off("routeChangeStart", onRouteChangeStart);
   }, [isDirty]);
 
   // Clear success messages after 5 seconds
@@ -195,7 +212,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
       const url = formatPageHref(API_NOTES_FORMAT(testData.s3Folder));
       await axios.put(url, { content }, { headers: { "Content-Type": "application/json" } });
       setState({ isSaving: false, message: "Notes saved", messageType: "success", hasNotes: true });
-      setIsDirty(false);
+      // Anything typed while the PUT was in flight wasn't saved, so it stays dirty
+      if (editorContentRef.current?.() === content) { setIsDirty(false); }
     } catch (error) {
       log("Error saving notes", LogLevel.ERROR, error);
       setState({ isSaving: false, message: "Failed to save notes", messageType: "error" });
@@ -208,7 +226,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     try {
       const url = formatPageHref(API_NOTES_FORMAT(testData.s3Folder));
       await axios.delete(url);
-      setState({ isSaving: false, initialContent: "", message: "Notes deleted", messageType: "success", hasNotes: false });
+      // Bump editorKey so the editor clears even when initialContent was already "" (an earlier delete)
+      setNotesState((old) => ({ ...old, isSaving: false, initialContent: "", message: "Notes deleted", messageType: "success", hasNotes: false, editorKey: old.editorKey + 1 }));
       setIsDirty(false);
     } catch (error) {
       log("Error deleting notes", LogLevel.ERROR, error);
@@ -235,16 +254,12 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     }
   }, [testData.s3Folder, setIsDirty]);
 
-  // Collapsing unmounts the editor, so keep its current content (saved or not) for when it remounts on expand.
-  const handleToggle = useCallback(() => {
-    if (isExpanded && editorContentRef.current) {
-      setState({ initialContent: editorContentRef.current() });
-    }
-    onToggle?.();
-  }, [isExpanded, onToggle]);
-
   // When isExpanded is explicitly false the section is collapsed; undefined means uncontrolled (always visible).
   const showContent = isExpanded !== false;
+  // The editor mounts on first expand and then stays mounted (hidden while collapsed), so a draft survives every way
+  // the section can collapse, including browser Back removing ?notes=1. Never-expanded panels don't pay for TipTap.
+  const [hasExpanded, setHasExpanded] = useState(showContent);
+  if (showContent && !hasExpanded) { setHasExpanded(true); }
 
   return (
     <NotesSection data-testid={state.isLoading ? "notes-loading" : "notes-editor"}>
@@ -274,7 +289,7 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
             </ActionBtn>
           )}
           {onToggle && (
-            <ActionBtn data-testid="notes-collapse-button" onClick={handleToggle} $variant="secondary">
+            <ActionBtn data-testid="notes-collapse-button" onClick={onToggle} $variant="secondary">
               {isExpanded ? "▲ Collapse" : "▼ Expand"}
             </ActionBtn>
           )}
@@ -295,8 +310,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
         </MessageBar>
       )}
 
-      {showContent && !state.isLoading && (
-        <>
+      {hasExpanded && !state.isLoading && (
+        <div hidden={!showContent} data-testid="notes-editor-container">
           <TipTapEditorInner
             key={state.editorKey}
             initialContent={state.initialContent}
@@ -304,7 +319,7 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
             editorContentRef={editorContentRef}
           />
           <StatusBar />
-        </>
+        </div>
       )}
     </NotesSection>
   );
@@ -312,7 +327,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
 
 export function TestNotes (props: TestNotesProps): JSX.Element {
   return (
-    <NotesProvider>
+    // Keyed on the folder so a different test always starts with a clean editor and dirty state
+    <NotesProvider key={props.testData.s3Folder}>
       <TestNotesInner {...props} />
     </NotesProvider>
   );

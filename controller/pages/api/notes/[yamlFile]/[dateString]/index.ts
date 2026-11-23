@@ -33,6 +33,11 @@ async function handlePost (req: NextApiRequest, res: NextApiResponse, yamlFile: 
   // Structured section update
   if (body.section) {
     const { section, content, append } = body;
+    if (typeof section !== "string" || typeof content !== "string" || !content
+      || (append !== undefined && typeof append !== "boolean")) {
+      res.status(400).json({ message: "section and content must be non-empty strings; append must be a boolean" });
+      return;
+    }
     const updatedContent = await updateNotesSection({
       yamlFile, dateString, section, content, append
     });

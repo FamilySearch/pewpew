@@ -1,4 +1,4 @@
-import { GetObjectCommand, ListObjectsV2Command, _Object as S3Object } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, _Object as S3Object } from "@aws-sdk/client-s3";
 import {
   UNIT_TEST_KEYSPACE_PREFIX,
   mockListObjects,
@@ -8,6 +8,7 @@ import {
   resetMockS3
 } from "./mock";
 import {
+  buildNotesMetadata,
   deletePewPewNotes,
   generateNotesMarkdown,
   getMonitoringConfig,
@@ -23,9 +24,11 @@ import {
   updateNotesSection,
   validateNotesParams
 } from "../src/notes";
+import { LOCAL_FILE_LOCATION } from "../src/util";
 import { Readable } from "stream";
 import { expect } from "chai";
 import { promisify } from "node:util";
+import { readdir } from "node:fs/promises";
 import { s3 } from "@fs/ppaas-common";
 import { sdkStreamMixin } from "@smithy/util-stream";
 import { gzip as zlibGzip } from "node:zlib";
@@ -442,6 +445,27 @@ providers:
     });
   });
 
+  describe("buildNotesMetadata", () => {
+    const now = "2026-11-23T00:00:00.000Z";
+
+    it("should record createdBy and updatedBy on a first save", () => {
+      expect(buildNotesMetadata({ userId: "alice", now })).to.deep.equal({
+        version: 1, createdAt: now, updatedAt: now, createdBy: "alice", updatedBy: "alice"
+      });
+    });
+
+    it("should keep createdBy and createdAt when updating existing metadata", () => {
+      const existing = { version: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", createdBy: "alice" };
+      expect(buildNotesMetadata({ existing, userId: "bob", now })).to.deep.equal({ ...existing, updatedAt: now, updatedBy: "bob" });
+    });
+
+    it("should leave the user fields unset without a userId", () => {
+      const metadata = buildNotesMetadata({ now });
+      expect(metadata.createdBy).to.equal(undefined);
+      expect(metadata.updatedBy).to.equal(undefined);
+    });
+  });
+
   describe("markdownToConfluence", () => {
     it("should convert headings", () => {
       expect(markdownToConfluence("# Heading 1")).to.include("<h1>Heading 1</h1>");
@@ -537,6 +561,38 @@ providers:
 
     it("should escape HTML inside inline code", () => {
       expect(markdownToConfluence("`<div>`")).to.include("<code>&lt;div&gt;</code>");
+    });
+
+    it("should keep HTML comments inside fenced code blocks", () => {
+      const result = markdownToConfluence("```html\n<!-- keep me -->\n<div></div>\n```\n\n<!-- strip me -->\nText");
+      expect(result).to.include("<![CDATA[<!-- keep me -->\n<div></div>]]>");
+      expect(result).to.not.include("strip me");
+      expect(result).to.include("<p>Text</p>");
+    });
+
+    it("should not apply markdown formatting inside inline code", () => {
+      expect(markdownToConfluence("Match `**/*.yaml` files")).to.include("<code>**/*.yaml</code>");
+      const link = markdownToConfluence("Use `[name](url)` syntax");
+      expect(link).to.include("<code>[name](url)</code>");
+      expect(link).to.not.include("<a ");
+    });
+
+    it("should keep empty table cells in their column", () => {
+      const result = markdownToConfluence("| Metric | Before | After |\n|---|---|---|\n| p95 | | 200ms |");
+      expect(result).to.include("<tr><td><p>p95</p></td><td></td><td><p>200ms</p></td></tr>");
+      expect(result).to.include("<th><p>Metric</p></th><th><p>Before</p></th><th><p>After</p></th>");
+    });
+
+    it("should wrap ordered list items in <ol>", () => {
+      const result = markdownToConfluence("1. First\n2. Second\n3. Third");
+      expect(result).to.include("<ol><li>First</li>\n<li>Second</li>\n<li>Third</li></ol>");
+      expect(result).to.not.include("<ul>");
+    });
+
+    it("should keep ordered and unordered lists separate", () => {
+      const result = markdownToConfluence("- a\n- b\n\n1. one\n2. two");
+      expect(result).to.include("<ul><li>a</li>\n<li>b</li>\n</ul>");
+      expect(result).to.include("<ol><li>one</li>\n<li>two</li></ol>");
     });
 
     it("should convert strikethrough", () => {
@@ -780,8 +836,43 @@ providers:
     });
 
     describe("deletePewPewNotes", () => {
+      afterEach(() => {
+        mockedS3.on(DeleteObjectCommand).resolves({});
+      });
+
       it("should delete both notes and metadata files", async () => {
         await deletePewPewNotes({ yamlFile: testYamlFile, dateString: testDateString });
+      });
+
+      it("should throw when notes.md cannot be deleted", async () => {
+        mockedS3.on(DeleteObjectCommand, { Key: `${s3.KEYSPACE_PREFIX}${notesKey}` }).rejects(new Error("Access denied"));
+        try {
+          await deletePewPewNotes({ yamlFile: testYamlFile, dateString: testDateString });
+          expect.fail("Should have thrown");
+        } catch (error: any) {
+          expect(error.message).to.equal("Access denied");
+        }
+      });
+
+      it("should still succeed when only the metadata delete fails", async () => {
+        mockedS3.on(DeleteObjectCommand, { Key: `${s3.KEYSPACE_PREFIX}${metaKey}` }).rejects(new Error("Access denied"));
+        await deletePewPewNotes({ yamlFile: testYamlFile, dateString: testDateString });
+      });
+    });
+
+    describe("save temp directories", () => {
+      const leftoverDirs = async () => (await readdir(LOCAL_FILE_LOCATION))
+        .filter((name: string) => name.startsWith(`notes-${testYamlFile}${testDateString}-`) || name.startsWith(`notes-meta-${testYamlFile}${testDateString}-`));
+
+      it("should give concurrent saves of the same test their own directories and clean them up", async () => {
+        mockUploadObject();
+        mockListObjects([]);
+        await Promise.all([1, 2, 3].map((index: number) => savePewPewNotes({
+          yamlFile: testYamlFile,
+          dateString: testDateString,
+          content: `# Notes ${index}`
+        })));
+        expect(await leftoverDirs()).to.deep.equal([]);
       });
     });
 

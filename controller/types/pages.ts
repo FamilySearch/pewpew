@@ -8,15 +8,17 @@ export interface TestStatusParams {
   testId: string;
   results?: number;
   compare?: string;
+  notes?: number;
 }
 export const PAGE_TEST_STATUS_FORMAT = (params: string | TestStatusParams): Route => {
   if (typeof params === "string") {
     return `${PAGE_TEST_STATUS}?testId=${params}` as Route;
   }
-  const { testId, results, compare } = params;
+  const { testId, results, compare, notes } = params;
   const searchParams = new URLSearchParams({ testId });
   if (results !== undefined) { searchParams.set("results", String(results)); }
   if (compare !== undefined) { searchParams.set("compare", compare); }
+  if (notes !== undefined) { searchParams.set("notes", String(notes)); }
   return `${PAGE_TEST_STATUS}?${searchParams.toString()}` as Route;
 };
 export const PAGE_TEST_UPDATE: Route = "/testupdate";
@@ -53,3 +55,11 @@ export const API_YAML: Route = "/api/yaml" as Route;
 export const API_YAML_FORMAT = (s3Folder: string, filename: string): Route => `${API_YAML}/${s3Folder}/${filename}` as Route;
 export const API_DOWNLOAD: Route = "/api/download" as Route;
 export const API_DOWNLOAD_FORMAT = (testId: string, filename?: string): Route => `${API_DOWNLOAD}?testId=${testId}${filename ? `&file=${filename}` : ""}` as Route;
+export const PAGE_NOTES: Route = "/notes";
+export const PAGE_NOTES_FORMAT = (s3Folder: string): Route => `${PAGE_NOTES}?s3Folder=${s3Folder}` as Route;
+export const API_NOTES: Route = "/api/notes" as Route;
+export const API_NOTES_FORMAT = (s3Folder: string): Route => `${API_NOTES}/${s3Folder}` as Route;
+export const API_NOTES_TEMPLATE_FORMAT = (s3Folder: string): Route => `${API_NOTES}/template/${s3Folder}` as Route;
+export const API_NOTES_EXPORT_FORMAT = (s3Folder: string): Route => `${API_NOTES}/${s3Folder}/export` as Route;
+export const API_NOTES_META_FORMAT = (s3Folder: string): Route => `${API_NOTES}/${s3Folder}/meta` as Route;
+export const API_NOTES_SEARCH: Route = `${API_NOTES}/search` as Route;

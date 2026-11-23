@@ -41,6 +41,22 @@ describe("GET /teststatus (Test Status Page)", () => {
       if (!testDataWithResults) { this.skip(); }
     });
 
+    /** A single results file is auto-selected, so reset to the empty option first to make the next pick a real change */
+    const selectFirstResult = async () => {
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(0);
+      await select.selectByIndex(1);
+      return select;
+    };
+
+    it("should auto-load the results for a test with a single results file", async function () {
+      if (testDataWithResults!.resultsFileLocation?.length !== 1) { this.skip(); }
+      await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
+      await assertNoPageError();
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not auto-load for a single results file" });
+    });
+
     it("should display the results dropdown for a test with results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
@@ -51,8 +67,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("selecting a result file should load the results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load after selecting from dropdown" });
     });
@@ -60,8 +75,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("deselecting the result should hide the results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      const select = await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load before deselect" });
       await select.selectByIndex(0);
@@ -80,8 +94,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("selecting a result should update the URL to include results=0", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load" });
       await browser.waitUntil(async () => {

@@ -503,15 +503,31 @@ export async function searchNotes ({ query = "", limit = 20 }: { query?: string;
   return results;
 }
 
-// Convert markdown to Confluence Storage Format
-export function markdownToConfluence (markdown: string): string {
-  let html = markdown;
+const escapeHtml = (text: string): string => text
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll("\"", "&quot;");
 
-  // Code blocks (must be before inline code)
-  html = html.replaceAll(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang, code) => {
+// Only http(s), mailto, and relative URLs are emitted as links/images; anything else (javascript:, data:, ...) is dropped.
+const isSafeUrl = (url: string): boolean => /^(?:https?:|mailto:|[/#?]|[^:]*$)/i.test(url.trim());
+
+// Convert markdown to Confluence Storage Format.
+// The output is served as HTML, so all user text is HTML-escaped and only safe URL schemes are linked.
+export function markdownToConfluence (markdown: string): string {
+  // HTML comments (strip for Confluence) before escaping so they don't survive as visible text
+  let html = markdown.replaceAll(/<!--[\s\S]*?-->/g, "");
+
+  // Code blocks become CDATA macros (raw, unescaped), so pull them out before escaping the rest
+  const codeBlocks: string[] = [];
+  html = html.replaceAll(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang, code: string) => {
     const langParam = lang ? `<ac:parameter ac:name="language">${lang}</ac:parameter>` : "";
-    return `<ac:structured-macro ac:name="code">${langParam}<ac:plain-text-body><![CDATA[${code.trimEnd()}]]></ac:plain-text-body></ac:structured-macro>`;
+    const cdata = code.trimEnd().replaceAll("]]>", "]]]]><![CDATA[>");
+    codeBlocks.push(`<ac:structured-macro ac:name="code">${langParam}<ac:plain-text-body><![CDATA[${cdata}]]></ac:plain-text-body></ac:structured-macro>`);
+    return `\uE000CODE${codeBlocks.length - 1}\uE000`;
   });
+
+  html = escapeHtml(html);
 
   // Inline code
   html = html.replaceAll(/`([^`]+)`/g, "<code>$1</code>");
@@ -532,11 +548,13 @@ export function markdownToConfluence (markdown: string): string {
   // Strikethrough
   html = html.replaceAll(/~~(.+?)~~/g, "<del>$1</del>");
 
-  // Links
-  html = html.replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, "<a href=\"$2\">$1</a>");
+  // Images (before links, or the link pattern would consume them)
+  html = html.replaceAll(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt: string, url: string) =>
+    isSafeUrl(url) ? `<ac:image><ri:url ri:value="${url}" /></ac:image>` : alt);
 
-  // Images
-  html = html.replaceAll(/!\[([^\]]*)\]\(([^)]+)\)/g, "<ac:image><ri:url ri:value=\"$2\" /></ac:image>");
+  // Links
+  html = html.replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) =>
+    isSafeUrl(url) ? `<a href="${url}">${text}</a>` : text);
 
   // Tables
   html = html.replaceAll(/^(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)*)/gm, (_match, headerRow, _separator, bodyRows) => {
@@ -559,16 +577,16 @@ export function markdownToConfluence (markdown: string): string {
   html = html.replaceAll(/^(\s*)\d+\.\s+(.+)$/gm, "<li>$2</li>");
 
   // Blockquotes
-  html = html.replaceAll(/^>\s+(.+)$/gm, "<blockquote><p>$1</p></blockquote>");
+  html = html.replaceAll(/^&gt;\s+(.+)$/gm, "<blockquote><p>$1</p></blockquote>");
 
   // Paragraphs - wrap lines that aren't already in tags
   html = html.replaceAll(/^(?!<[a-z/]|$)(.+)$/gm, "<p>$1</p>");
 
-  // HTML comments (strip for Confluence)
-  html = html.replaceAll(/<!--[\s\S]*?-->/g, "");
-
   // Clean up empty paragraphs
   html = html.replaceAll(/<p>\s*<\/p>/g, "");
+
+  // Restore code blocks (the paragraph pass may have wrapped their placeholders)
+  html = html.replaceAll(/(?:<p>)?\uE000CODE(\d+)\uE000(?:<\/p>)?/g, (_match, index: string) => codeBlocks[Number(index)]);
 
   return html.trim();
 }

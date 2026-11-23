@@ -44,7 +44,8 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
 
     if (exportFormat === "confluence") {
       const confluenceContent = markdownToConfluence(notes);
-      res.setHeader("Content-Type", "text/html");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.status(200).send(confluenceContent);
     } else {
       // Default markdown export

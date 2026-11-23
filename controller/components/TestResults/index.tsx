@@ -1498,7 +1498,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     if (!state.resultsPath) { return undefined; }
     if (testData.status === TestStatus.Running) {
       // Keep polling even when data is already showing (e.g. the user switched results files mid-test).
-      // Polling stops when this test does, so the last few seconds of results need a page reload.
+      // Polling stops when this test does; the terminal branch below loads the final results once.
       const resultsPath = state.resultsPath;
       const refresh = () => {
         // Let a slow refresh finish rather than replace it every tick. Only skip for the same file, so one
@@ -1518,8 +1518,19 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       const intervalId = setInterval(refresh, POLL_INTERVAL);
       return () => clearInterval(intervalId);
     }
-    if (!state.resultsData && !state.error
-      && (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)) {
+    const isStopped = testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed;
+    if (isStopped && wasRunning && state.resultsData) {
+      // The test stopped while results were showing. Polling has ended, so refresh once more for the final
+      // seconds of results, after any in-flight refresh of this file finishes rather than overlapping it.
+      const resultsPath = state.resultsPath;
+      const inFlight = refreshInFlightRef.current?.resultsPath === resultsPath ? refreshInFlightRef.current : undefined;
+      (inFlight?.done ?? Promise.resolve()).then(() => {
+        if (resultsPathRef.current !== resultsPath) { return; }
+        return updateResultsRef.current(resultsPath, true);
+      }).catch((error) => log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error));
+      return undefined;
+    }
+    if (!state.resultsData && !state.error && isStopped) {
       const resultsPath = state.resultsPath;
       const inFlight = refreshInFlightRef.current?.resultsPath === resultsPath ? refreshInFlightRef.current : undefined;
       if (!inFlight) {

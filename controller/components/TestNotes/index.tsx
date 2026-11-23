@@ -113,6 +113,8 @@ export interface NotesState {
   message?: string;
   messageType?: "success" | "error";
   hasNotes: boolean;
+  /** Bumped to remount the editor with initialContent even when the string is unchanged (Generate Template). */
+  editorKey: number;
 }
 
 function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpanded, onToggle }: TestNotesProps): JSX.Element {
@@ -122,7 +124,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     initialContent: hasInitialContent ? initialNotesContent : "",
     isLoading: !hasInitialContent,
     isSaving: false,
-    hasNotes: hasInitialContent && initialNotesContent.length > 0
+    hasNotes: hasInitialContent && initialNotesContent.length > 0,
+    editorKey: 0
   });
   const state = notesState;
   const setState = (newState: Partial<NotesState>) => setNotesState((old) => ({ ...old, ...newState }));
@@ -160,6 +163,17 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     loadNotes();
   }, [testData.s3Folder, hasInitialContent]);
 
+  // Warn before leaving the page (nav links and "View Test" are full page loads) with unsaved changes
+  useEffect(() => {
+    if (!isDirty) { return; }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = ""; // Required by some browsers to show the prompt
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+
   // Clear success messages after 5 seconds
   useEffect(() => {
     if (state.messageType === "success" && state.message) {
@@ -171,7 +185,10 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
   const handleSave = useCallback(async () => {
     if (!editorContentRef.current) { return; }
     const content = editorContentRef.current();
-    if (!content) { return; }
+    if (!content.trim()) {
+      setState({ message: "Notes are empty. Use Delete to remove saved notes.", messageType: "error" });
+      return;
+    }
 
     setState({ isSaving: true });
     try {
@@ -208,7 +225,8 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
       const templateUrl = formatPageHref(API_NOTES_TEMPLATE_FORMAT(testData.s3Folder));
       const response: AxiosResponse = await axios.get(templateUrl);
       if (response.data.markdown) {
-        setState({ initialContent: response.data.markdown });
+        // Bump editorKey so the editor remounts even when the template equals the last loaded content
+        setNotesState((old) => ({ ...old, initialContent: response.data.markdown, editorKey: old.editorKey + 1 }));
         setIsDirty(true);
       }
     } catch (error) {
@@ -216,6 +234,14 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
       setState({ message: "Failed to generate template", messageType: "error" });
     }
   }, [testData.s3Folder, setIsDirty]);
+
+  // Collapsing unmounts the editor, so keep its current content (saved or not) for when it remounts on expand.
+  const handleToggle = useCallback(() => {
+    if (isExpanded && editorContentRef.current) {
+      setState({ initialContent: editorContentRef.current() });
+    }
+    onToggle?.();
+  }, [isExpanded, onToggle]);
 
   // When isExpanded is explicitly false the section is collapsed; undefined means uncontrolled (always visible).
   const showContent = isExpanded !== false;
@@ -248,7 +274,7 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
             </ActionBtn>
           )}
           {onToggle && (
-            <ActionBtn data-testid="notes-collapse-button" onClick={onToggle} $variant="secondary">
+            <ActionBtn data-testid="notes-collapse-button" onClick={handleToggle} $variant="secondary">
               {isExpanded ? "▲ Collapse" : "▼ Expand"}
             </ActionBtn>
           )}
@@ -272,6 +298,7 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
       {showContent && !state.isLoading && (
         <>
           <TipTapEditorInner
+            key={state.editorKey}
             initialContent={state.initialContent}
             editable={canEdit}
             editorContentRef={editorContentRef}

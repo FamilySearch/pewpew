@@ -6,6 +6,7 @@ import type { Editor } from "@tiptap/react";
 import MarkdownPreview from "./MarkdownPreview";
 import React from "react";
 import TipTapEditorInner from "./TipTapEditorInner";
+import ViewModeToggle from "./ViewModeToggle";
 
 type ContentRef = React.RefObject<(() => string) | null>;
 
@@ -150,5 +151,54 @@ describe("MarkdownPreview (real TipTap)", () => {
     expect(await screen.findByRole("heading", { name: "First" })).toBeInTheDocument();
     rerender(<MarkdownPreview content={"## Second"} />);
     expect(await screen.findByRole("heading", { name: "Second" })).toBeInTheDocument();
+  });
+});
+
+describe("split view preview (real TipTap)", () => {
+  it("updates the preview after typing pauses, reusing the same preview editor", async () => {
+    const ref = React.createRef<(() => string) | null>() as ContentRef;
+    render(
+      <NotesProvider>
+        <ViewModeToggle />
+        <TipTapEditorInner initialContent="hello" editable={true} editorContentRef={ref} />
+      </NotesProvider>
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Split" }));
+    const [editorDom, previewDom] = await waitFor(() => {
+      const els = document.querySelectorAll(".ProseMirror");
+      expect(els).toHaveLength(2);
+      expect(els[1]).toHaveTextContent("hello");
+      return Array.from(els) as (HTMLElement & { editor: Editor })[];
+    });
+    const previewEditor = previewDom.editor;
+
+    act(() => { editorDom.editor.commands.insertContentAt(editorDom.editor.state.doc.content.size - 1, " world"); });
+    // Debounced: the preview has not caught up on the same tick as the keystroke
+    expect(previewDom).not.toHaveTextContent("hello world");
+
+    await waitFor(() => expect(document.querySelectorAll(".ProseMirror")[1]).toHaveTextContent("hello world"));
+    // Same editor instance updated in place, not torn down and rebuilt
+    expect((document.querySelectorAll(".ProseMirror")[1] as HTMLElement & { editor: Editor }).editor).toBe(previewEditor);
+  });
+
+  it("shows current content immediately when switching to Preview", async () => {
+    const ref = React.createRef<(() => string) | null>() as ContentRef;
+    render(
+      <NotesProvider>
+        <ViewModeToggle />
+        <TipTapEditorInner initialContent="hello" editable={true} editorContentRef={ref} />
+      </NotesProvider>
+    );
+    const editorDom = await waitFor(() => {
+      const el = document.querySelector(".ProseMirror");
+      expect(el).not.toBeNull();
+      return el as HTMLElement & { editor: Editor };
+    });
+    act(() => { editorDom.editor.commands.insertContentAt(editorDom.editor.state.doc.content.size - 1, " world"); });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+
+    expect(document.querySelector(".ProseMirror")).toHaveTextContent("hello world");
+    expect(document.querySelector(".ProseMirror")).toHaveAttribute("contenteditable", "false");
   });
 });

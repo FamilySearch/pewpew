@@ -4,6 +4,7 @@ import {
   AuthPermissions,
   NotesSearchResult,
   PAGE_NOTES,
+  PAGE_NOTES_FORMAT,
   PAGE_TEST_STATUS_FORMAT
 } from "../types";
 import {
@@ -124,9 +125,12 @@ const NotesPage = ({ authPermission, s3Folder: initialS3Folder, error: propsErro
   };
 
   const handleManualOpen = () => {
-    if (manualYamlFile && manualDateString) {
-      const folder = `${manualYamlFile}/${manualDateString}`;
-      router.push(`${formatPageHref(PAGE_NOTES)}?s3Folder=${folder}`);
+    // S3 folders use the test id name (lowercase, no extension, a-z0-9 only), not the YAML file name
+    const testName = manualYamlFile.trim().toLowerCase().replace(/\.ya?ml$/, "").replaceAll(/[^a-z0-9]/g, "");
+    const dateString = manualDateString.trim();
+    if (testName && dateString) {
+      const url = PAGE_NOTES_FORMAT(`${testName}/${dateString}`);
+      router.push(url, formatPageHref(url)).catch((pushError: unknown) => log("router.push error", LogLevel.ERROR, pushError));
     }
   };
 
@@ -185,13 +189,13 @@ const NotesPage = ({ authPermission, s3Folder: initialS3Folder, error: propsErro
 
         <H3>Open Notes by Test</H3>
         <ManualEntry>
-          <label htmlFor="notes-yaml-file-input">YAML File:</label>
+          <label htmlFor="notes-yaml-file-input">Test Name:</label>
           <input
             id="notes-yaml-file-input"
             type="text"
             value={manualYamlFile}
             onChange={(e) => setManualYamlFile(e.target.value)}
-            placeholder="e.g. mytest.yaml"
+            placeholder="e.g. mytest (from the test ID)"
           />
           <label htmlFor="notes-date-string-input">Date String:</label>
           <input
@@ -215,7 +219,7 @@ const NotesPage = ({ authPermission, s3Folder: initialS3Folder, error: propsErro
               {searchResults.map((result) => (
                 <NoteCard
                   key={result.s3Folder}
-                  href={formatPageHref(PAGE_NOTES) + `?s3Folder=${result.s3Folder}`}
+                  href={formatPageHref(PAGE_NOTES_FORMAT(result.s3Folder))}
                 >
                   <NoteCardTitle>{result.yamlFile}</NoteCardTitle>
                   <NoteCardMeta>{result.dateString}</NoteCardMeta>

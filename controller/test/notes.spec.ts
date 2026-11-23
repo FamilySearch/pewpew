@@ -488,10 +488,55 @@ providers:
       expect(markdownToConfluence("---")).to.include("<hr />");
     });
 
-    it("should handle image syntax (currently converted via link regex)", () => {
-      // Note: images are processed after links, so ![alt](url) gets captured by the link regex first
+    it("should convert images to Confluence image macros", () => {
       const result = markdownToConfluence("![alt text](https://example.com/image.png)");
-      expect(result).to.include("https://example.com/image.png");
+      expect(result).to.include("<ac:image><ri:url ri:value=\"https://example.com/image.png\" /></ac:image>");
+      expect(result).to.not.include("<a href");
+    });
+
+    it("should escape raw HTML in notes", () => {
+      const result = markdownToConfluence("Hello <script>alert(1)</script> & <img src=x onerror=alert(1)>");
+      expect(result).to.not.include("<script>");
+      expect(result).to.not.include("<img");
+      expect(result).to.include("&lt;script&gt;alert(1)&lt;/script&gt; &amp; &lt;img src=x onerror=alert(1)&gt;");
+    });
+
+    it("should escape quotes in link URLs so they cannot break out of the attribute", () => {
+      const result = markdownToConfluence("[x](https://example.com/\" onmouseover=\"alert(1))");
+      expect(result).to.not.include("\" onmouseover");
+      expect(result).to.include("<a href=\"https://example.com/&quot; onmouseover=&quot;alert(1\">");
+    });
+
+    it("should drop unsafe link and image schemes but keep the text", () => {
+      const link = markdownToConfluence("[click me](javascript:alert)");
+      expect(link).to.not.include("javascript:");
+      expect(link).to.not.include("<a ");
+      expect(link).to.include("click me");
+      const image = markdownToConfluence("![pic](data:image/svg+xml;base64,AAAA)");
+      expect(image).to.not.include("data:");
+      expect(image).to.not.include("ac:image");
+    });
+
+    it("should keep relative and mailto links", () => {
+      expect(markdownToConfluence("[status](/teststatus?testId=abc)")).to.include("<a href=\"/teststatus?testId=abc\">status</a>");
+      expect(markdownToConfluence("[mail](mailto:team@example.com)")).to.include("<a href=\"mailto:team@example.com\">mail</a>");
+    });
+
+    it("should leave code block content raw inside CDATA and not wrap it in a paragraph", () => {
+      const result = markdownToConfluence("Before\n\n```\nif (a < b && c > d) { return \"x\"; }\n```\n\nAfter");
+      expect(result).to.include("<![CDATA[if (a < b && c > d) { return \"x\"; }]]>");
+      expect(result).to.not.include("<p><ac:structured-macro");
+      expect(result).to.include("<p>Before</p>");
+      expect(result).to.include("<p>After</p>");
+    });
+
+    it("should split a CDATA terminator inside a code block", () => {
+      const result = markdownToConfluence("```\na]]>b\n```");
+      expect(result).to.include("<![CDATA[a]]]]><![CDATA[>b]]>");
+    });
+
+    it("should escape HTML inside inline code", () => {
+      expect(markdownToConfluence("`<div>`")).to.include("<code>&lt;div&gt;</code>");
     });
 
     it("should convert strikethrough", () => {

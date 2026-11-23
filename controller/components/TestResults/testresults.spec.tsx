@@ -383,17 +383,34 @@ describe("Test Result Component", () => {
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
-    it("stops polling when the test finishes", async () => {
+    it("stops polling when the test finishes and refreshes once for the final results", async () => {
       const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      const requestCount = requestedUrls.length;
+      const baseCount = countRequests("stats-runningtest.json");
+      const mergeCount = countRequests("stats-mergetest.json");
       rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await waitFor(() => expect(pollCallbacks.size).toBe(0));
-      // No final fetch: the last few seconds of results need a page reload
-      expect(requestedUrls.length).toBe(requestCount);
+      // One final refresh (base and merged files) picks up the seconds since the last poll, and keeps the merge
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1));
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeCount + 1));
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+      // ...and only one
+      await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 2), { timeout: 500 })).rejects.toThrow();
+    });
+
+    it("waits for an in-flight poll before the final refresh when the test finishes with results showing", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await initialLoad();
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      const baseCount = countRequests("stats-runningtest.json");
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      // No overlapping fetch while the poll is still out
+      await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1), { timeout: 500 })).rejects.toThrow();
+      releasePoll(statsText);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1));
     });
 
     it("doesn't restore the merge when a refresh finishes after switching files", async () => {

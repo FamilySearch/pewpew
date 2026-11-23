@@ -3,8 +3,8 @@ vi.mock("../../types/pages", () => ({
   API_NOTES_EXPORT_FORMAT: vi.fn((folder: string) => `/api/notes/${folder}/export`)
 }));
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import ExportMenu from "./ExportMenu";
+import ExportMenu, { REVOKE_OBJECT_URL_DELAY_MS } from "./ExportMenu";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 function makeRef (content = "# Markdown content"): React.RefObject<(() => string) | null> {
@@ -88,13 +88,21 @@ describe("ExportMenu", () => {
   });
 
   describe("Download Markdown", () => {
-    it("triggers a file download with createObjectURL", () => {
-      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => vi.fn());
-      render(<ExportMenu getContent={makeRef("# Hello")} s3Folder="unit/test" />);
-      fireEvent.click(screen.getByTestId("export-menu-toggle"));
-      fireEvent.click(screen.getByText("Download Markdown"));
-      expect(URL.createObjectURL).toHaveBeenCalled();
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    it("triggers a file download with createObjectURL and revokes the URL after the download starts", () => {
+      vi.useFakeTimers();
+      try {
+        vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => vi.fn());
+        render(<ExportMenu getContent={makeRef("# Hello")} s3Folder="unit/test" />);
+        fireEvent.click(screen.getByTestId("export-menu-toggle"));
+        fireEvent.click(screen.getByText("Download Markdown"));
+        expect(URL.createObjectURL).toHaveBeenCalled();
+        // Not in the same tick as the click, which can cancel the download
+        expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(REVOKE_OBJECT_URL_DELAY_MS); });
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("triggers anchor click for download", () => {
@@ -153,6 +161,51 @@ describe("ExportMenu", () => {
       fireEvent.click(screen.getByTestId("export-menu-toggle"));
       fireEvent.click(screen.getByText("Copy to Clipboard"));
       expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    });
+
+    it("shows an error and keeps the menu open when the clipboard write is rejected", async () => {
+      vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("NotAllowedError"));
+      render(<ExportMenu getContent={makeRef("hello")} s3Folder="unit/test" />);
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      fireEvent.click(screen.getByText("Copy to Clipboard"));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not copy");
+      expect(screen.getByText("Download Markdown")).toBeInTheDocument();
+    });
+
+    it("shows an error when the clipboard API is unavailable (non-secure origin)", async () => {
+      Object.assign(navigator, { clipboard: undefined });
+      render(<ExportMenu getContent={makeRef("hello")} s3Folder="unit/test" />);
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      fireEvent.click(screen.getByText("Copy to Clipboard"));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Could not copy");
+    });
+
+    it("clears the error when the menu is reopened", async () => {
+      vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("NotAllowedError"));
+      render(<ExportMenu getContent={makeRef("hello")} s3Folder="unit/test" />);
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      fireEvent.click(screen.getByText("Copy to Clipboard"));
+      await screen.findByRole("alert");
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("click outside", () => {
+    it("closes the dropdown when clicking outside the menu", () => {
+      render(<div><span data-testid="outside">outside</span><ExportMenu getContent={makeRef()} s3Folder="unit/test" /></div>);
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      expect(screen.getByText("Download Markdown")).toBeInTheDocument();
+      fireEvent.mouseDown(screen.getByTestId("outside"));
+      expect(screen.queryByText("Download Markdown")).not.toBeInTheDocument();
+    });
+
+    it("stays open when clicking inside the menu", () => {
+      render(<ExportMenu getContent={makeRef()} s3Folder="unit/test" />);
+      fireEvent.click(screen.getByTestId("export-menu-toggle"));
+      fireEvent.mouseDown(screen.getByText("Export to Confluence"));
+      expect(screen.getByText("Download Markdown")).toBeInTheDocument();
     });
   });
 });

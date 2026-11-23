@@ -56,7 +56,9 @@ export const API_YAML_FORMAT = (s3Folder: string, filename: string): Route => `$
 export const API_DOWNLOAD: Route = "/api/download" as Route;
 export const API_DOWNLOAD_FORMAT = (testId: string, filename?: string): Route => `${API_DOWNLOAD}?testId=${testId}${filename ? `&file=${filename}` : ""}` as Route;
 export const PAGE_NOTES: Route = "/notes";
-export const PAGE_NOTES_FORMAT = (s3Folder: string): Route => `${PAGE_NOTES}?s3Folder=${s3Folder}` as Route;
+// "/" is valid in a query string, so keep it readable while encoding everything else
+export const PAGE_NOTES_FORMAT = (s3Folder: string): Route =>
+  `${PAGE_NOTES}?s3Folder=${encodeURIComponent(s3Folder).replaceAll("%2F", "/")}` as Route;
 export const API_NOTES: Route = "/api/notes" as Route;
 export const API_NOTES_FORMAT = (s3Folder: string): Route => `${API_NOTES}/${s3Folder}` as Route;
 export const API_NOTES_TEMPLATE_FORMAT = (s3Folder: string): Route => `${API_NOTES}/template/${s3Folder}` as Route;

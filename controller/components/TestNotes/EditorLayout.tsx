@@ -1,9 +1,9 @@
+import React, { useEffect, useRef, useState } from "react";
 import { VIEW_MODES, useNotesContext } from "./NotesContext";
 import type { Editor } from "@tiptap/react";
 import EditorToolbar from "./EditorToolbar";
 import MarkdownEditor from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
-import React from "react";
 import styled from "styled-components";
 
 const LayoutContainer = styled.div`
@@ -29,6 +29,9 @@ const SinglePane = styled.div`
   min-height: 0;
 `;
 
+// In split view the preview trails typing by this much, instead of re-serializing and re-rendering on every keystroke.
+export const PREVIEW_DEBOUNCE_MS = 300;
+
 export default function EditorLayout ({ editor, getContent }: { editor: Editor | null; getContent: () => string }) {
   const { viewMode } = useNotesContext();
 
@@ -36,7 +39,21 @@ export default function EditorLayout ({ editor, getContent }: { editor: Editor |
   const showPreview = viewMode === VIEW_MODES.PREVIEW || viewMode === VIEW_MODES.SPLIT;
   const isSplit = viewMode === VIEW_MODES.SPLIT;
 
-  const previewContent = showPreview ? getContent() : "";
+  // The editor re-renders on every transaction, so this effect runs per keystroke: debounce while typing in split view,
+  // and update right away when the view mode changes so switching to the preview never shows stale content.
+  const [previewContent, setPreviewContent] = useState("");
+  const lastViewModeRef = useRef<typeof viewMode | undefined>(undefined);
+  useEffect(() => {
+    if (!showPreview) { return; }
+    const viewModeChanged = lastViewModeRef.current !== viewMode;
+    lastViewModeRef.current = viewMode;
+    if (viewModeChanged || !isSplit) {
+      setPreviewContent(getContent());
+      return;
+    }
+    const timer = setTimeout(() => setPreviewContent(getContent()), PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  });
 
   return (
     <LayoutContainer data-testid="notes-editor-layout">

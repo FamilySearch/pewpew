@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { API_NOTES_EXPORT_FORMAT } from "../../types/pages";
 import { colors } from "./editorStyles";
 import { formatPageHref } from "../../src/clientutil";
@@ -63,6 +63,15 @@ const MenuItem = styled.button`
   }
 `;
 
+const MenuError = styled.div`
+  padding: 8px 14px;
+  font-size: 12px;
+  color: ${colors.danger};
+`;
+
+// Revoking the object URL in the same tick as the click can cancel the download in some browsers
+export const REVOKE_OBJECT_URL_DELAY_MS = 1000;
+
 export interface ExportMenuProps {
   getContent: React.RefObject<(() => string) | null>;
   s3Folder: string;
@@ -71,7 +80,23 @@ export interface ExportMenuProps {
 
 export default function ExportMenu ({ getContent, s3Folder, hasNotes }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
+  const [copyError, setCopyError] = useState<string | undefined>();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close when clicking anywhere outside the menu
+  useEffect(() => {
+    if (!open) { return; }
+    const onMouseDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) { setOpen(false); }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [open]);
+
+  // A copy error belongs to the menu it was shown in
+  useEffect(() => {
+    if (!open) { setCopyError(undefined); }
+  }, [open]);
 
   const handleExportMarkdown = useCallback(() => {
     const markdown = getContent.current?.();
@@ -82,7 +107,7 @@ export default function ExportMenu ({ getContent, s3Folder, hasNotes }: ExportMe
     a.href = url;
     a.download = `notes-${s3Folder.replace("/", "-")}.md`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), REVOKE_OBJECT_URL_DELAY_MS);
     setOpen(false);
   }, [getContent, s3Folder]);
 
@@ -96,8 +121,14 @@ export default function ExportMenu ({ getContent, s3Folder, hasNotes }: ExportMe
   const handleCopyMarkdown = useCallback(async () => {
     const markdown = getContent.current?.();
     if (!markdown) { return; }
-    await navigator.clipboard.writeText(markdown);
-    setOpen(false);
+    try {
+      // navigator.clipboard is undefined on non-secure (http) origins
+      if (!navigator.clipboard) { throw new Error("Clipboard is not available"); }
+      await navigator.clipboard.writeText(markdown);
+      setOpen(false);
+    } catch {
+      setCopyError("Could not copy to the clipboard. Use Download Markdown instead.");
+    }
   }, [getContent]);
 
   return (
@@ -108,6 +139,7 @@ export default function ExportMenu ({ getContent, s3Folder, hasNotes }: ExportMe
           <MenuItem onClick={handleExportMarkdown}>Download Markdown</MenuItem>
           <MenuItem onClick={handleExportConfluence} disabled={!hasNotes} style={!hasNotes ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>Export to Confluence</MenuItem>
           <MenuItem onClick={handleCopyMarkdown}>Copy to Clipboard</MenuItem>
+          {copyError && <MenuError role="alert">{copyError}</MenuError>}
         </DropdownMenu>
       )}
     </ExportContainer>

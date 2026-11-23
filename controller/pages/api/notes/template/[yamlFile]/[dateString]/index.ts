@@ -1,10 +1,12 @@
 import { AuthPermission, TestData, TestDataResponse } from "../../../../../../types";
+import { LOCAL_FILE_LOCATION, createErrorResponse } from "../../../../../../src/util";
 import { LogLevel, PpaasS3File, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { generateNotesMarkdown, validateNotesParams } from "../../../../../../src/notes";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { TestManager } from "../../../../../../src/testmanager";
 import { authApi } from "../../../../../../src/authserver";
-import { createErrorResponse } from "../../../../../../src/util";
-import { generateNotesMarkdown, validateNotesParams } from "../../../../../../src/notes"; // eslint-disable-line sort-imports
+import path from "node:path";
 
 export default async function handler (req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -42,16 +44,17 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
     }
 
     // Try to get YAML content from S3 (merge all yaml files)
+    // Download into a per-request directory so concurrent requests can't overwrite each other's files
     const yamlContents: string[] = [];
+    let localDirectory: string | undefined;
     try {
-      const s3Files = await PpaasS3File.getAllFilesInS3({ s3Folder, localDirectory: "/tmp" });
+      localDirectory = await mkdtemp(path.join(LOCAL_FILE_LOCATION, "notes-template-"));
+      const s3Files = await PpaasS3File.getAllFilesInS3({ s3Folder, localDirectory });
       const yamlFileList = s3Files.filter((f) => f.filename.endsWith(".yaml") || f.filename.endsWith(".yml"));
-      const { readFile } = await import("node:fs/promises");
-      const nodePath = await import("node:path");
       for (const yf of yamlFileList) {
         try {
           await yf.download();
-          const content = await readFile(nodePath.join("/tmp", yf.filename), "utf-8");
+          const content = await readFile(path.join(localDirectory, yf.filename), "utf-8");
           yamlContents.push(content);
         } catch (error) {
           log(`Could not load YAML file ${yf.filename} for template: ${s3Folder}`, LogLevel.DEBUG, error);
@@ -59,6 +62,11 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
       }
     } catch (error) {
       log(`Could not load YAML for template: ${s3Folder}`, LogLevel.DEBUG, error);
+    } finally {
+      if (localDirectory) {
+        await rm(localDirectory, { recursive: true, force: true })
+          .catch((error: unknown) => log(`Could not clean up ${localDirectory}`, LogLevel.DEBUG, error));
+      }
     }
 
     const { markdown, testOverview } = generateNotesMarkdown({

@@ -1,6 +1,7 @@
 import {
   PAGE_ADMIN,
   PAGE_CALENDAR,
+  PAGE_NOTES,
   PAGE_START_TEST,
   PAGE_TEST_HISTORY
 } from "../../types";
@@ -38,6 +39,16 @@ describe("Navigation Links", () => {
     await browser.waitUntil(async () => (await browser.getUrl()).includes(PAGE_CALENDAR));
     const heading = await $("h1");
     await expect(heading).toHaveText("Test Schedule");
+  });
+
+  it("clicking 'Notes' should navigate to the notes page", async () => {
+    await browser.url(PAGE_TEST_HISTORY);
+    await assertNoPageError();
+    const link = await $("[data-testid='nav-notes']");
+    await link.click();
+    await browser.waitUntil(async () => (await browser.getUrl()).includes(PAGE_NOTES));
+    const heading = await $("h1");
+    await expect(heading).toHaveText("Performance Test Notes");
   });
 
   it("clicking 'Admin' should navigate to the admin page", async () => {

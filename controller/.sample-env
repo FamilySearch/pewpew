@@ -41,3 +41,8 @@ OPENID_PERMISSIONS_USER="<openId profile for user>"
 OPENID_PERMISSIONS_ADMIN="<openId profile for administrator>"
 
 LOG_FILE_NAME="ppaas-controller"
+
+# Monitoring platform for the notes template: "splunk", "dynatrace", or "generic"
+# MONITORING_PLATFORM="generic"
+# MONITORING_DASHBOARD_URL=""
+# MONITORING_SEARCH_URL=""

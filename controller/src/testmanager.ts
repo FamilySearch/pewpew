@@ -56,6 +56,7 @@ import {
 import type { Fields, File, Files } from "formidable";
 import PpaasEncryptEnvironmentFile, { ENCRYPTED_ENVIRONMENT_VARIABLES_FILENAME } from "./ppaasencryptenvfile";
 import { formatError, isYamlFile, latestPewPewVersion } from "./clientutil";
+import { getNotesFilename, getNotesMetaFilename } from "./notes";
 import fs from "fs/promises";
 import { getCurrentPewPewLatestVersion } from "./pewpew";
 import semver from "semver";
@@ -971,7 +972,9 @@ export abstract class TestManager {
           encryptedEnvironmentVariablesFile = true;
         } else if (s3File.filename !== s3MessageFilename && s3File.filename !== s3StatusFilename
           && !s3File.filename.startsWith(statsFileName) && !s3File.filename.startsWith(pewpewOutFilename)
-          && !(s3File.filename.startsWith("stats-") && s3File.filename.endsWith(".json"))) {
+          && !(s3File.filename.startsWith("stats-") && s3File.filename.endsWith(".json"))
+          // Notes belong to this run, not to the test's inputs, so a rerun mustn't copy them
+          && s3File.filename !== getNotesFilename() && s3File.filename !== getNotesMetaFilename()) {
           // Leave pewpew executables. If they don't have permissions, the POST /test will reject it
           additionalFiles.push(s3File.filename);
         }

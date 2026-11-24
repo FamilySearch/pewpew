@@ -3,6 +3,7 @@ import {
   AuthPermission,
   PAGE_ADMIN,
   PAGE_CALENDAR,
+  PAGE_NOTES,
   PAGE_START_TEST,
   PAGE_TEST_HISTORY
 } from "../../types";
@@ -147,6 +148,9 @@ export const Layout = ({
           </LinkDiv>
           <LinkDiv>
             <LinkButton data-testid="nav-calendar" href={PAGE_CALENDAR} title="View the test calendar">Calendar</LinkButton>
+          </LinkDiv>
+          <LinkDiv>
+            <LinkButton data-testid="nav-notes" href={PAGE_NOTES} title="Browse and edit test notes">Notes</LinkButton>
           </LinkDiv>
           <LinkDiv>
             <a href={PAGE_YAML_WRITER} title="Create a PewPew YAML load test" target="_blank">

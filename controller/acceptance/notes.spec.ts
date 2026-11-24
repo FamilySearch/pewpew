@@ -43,7 +43,7 @@ describe("Notes API Acceptance", () => {
   });
 
   describe("GET /api/notes/:yamlFile/:dateString (no notes)", () => {
-    it("should return 404 when no notes exist", async () => {
+    it("should return 204 when no notes exist", async () => {
       const res = await fetch(notesUrl);
       expect(res.status).to.equal(204);
     });
@@ -204,7 +204,7 @@ describe("Notes API Acceptance", () => {
       expect(res.data.message).to.equal("Notes deleted");
     });
 
-    it("should return 404 after deletion", async () => {
+    it("should return 204 after deletion", async () => {
       const res = await fetch(notesUrl);
       expect(res.status).to.equal(204);
     });

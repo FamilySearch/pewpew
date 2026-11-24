@@ -865,6 +865,28 @@ providers:
         });
       });
 
+      it("should fail instead of replacing metadata it could not read", async () => {
+        mockUploadObject();
+        const s3Object: S3Object = {
+          Key: `${UNIT_TEST_KEYSPACE_PREFIX}${metaKey}`,
+          LastModified: new Date(),
+          Size: 1
+        };
+        mockListObjects([s3Object]);
+        mockedS3.on(GetObjectCommand).rejects(new Error("Access denied"));
+        try {
+          await savePewPewNotes({
+            yamlFile: testYamlFile,
+            dateString: testDateString,
+            content: "# Notes",
+            userId: "testuser"
+          });
+          expect.fail("Should have thrown");
+        } catch (error: any) {
+          expect(error.message).to.equal("Access denied");
+        }
+      });
+
       it("should throw when S3 upload fails", async () => {
         mockUploadObjectError("Upload failed");
         try {
@@ -993,7 +1015,7 @@ providers:
         expect(result).to.equal(undefined);
       });
 
-      it("should return undefined on S3 error", async () => {
+      it("should throw on S3 read error", async () => {
         const s3Object: S3Object = {
           Key: `${UNIT_TEST_KEYSPACE_PREFIX}${metaKey}`,
           LastModified: new Date(),
@@ -1001,6 +1023,22 @@ providers:
         };
         mockListObjects([s3Object]);
         mockedS3.on(GetObjectCommand).rejects(new Error("Access denied"));
+        try {
+          await getNotesMetadata({ yamlFile: testYamlFile, dateString: testDateString });
+          expect.fail("Should have thrown");
+        } catch (error: any) {
+          expect(error.message).to.equal("Access denied");
+        }
+      });
+
+      it("should return undefined when the metadata is not valid JSON", async () => {
+        const s3Object: S3Object = {
+          Key: `${UNIT_TEST_KEYSPACE_PREFIX}${metaKey}`,
+          LastModified: new Date(),
+          Size: 8
+        };
+        mockListObjects([s3Object]);
+        mockGetObjectWithEncoding("{corrupt");
         const result = await getNotesMetadata({ yamlFile: testYamlFile, dateString: testDateString });
         expect(result).to.equal(undefined);
       });
@@ -1140,6 +1178,29 @@ providers:
         });
         expect(result).to.include("## Conclusion");
         expect(result).to.include("Final conclusion");
+      });
+
+      it("should not match a sub-heading or a longer heading that starts with the section name", async () => {
+        const existingNotes = "# Notes\n\n## Objectives\n### Findings\nSub-heading text\n\n"
+          + "## Findings Summary\nSummary text\n\n## Findings\r\nReal findings\n\n## Conclusion\nDone";
+        const s3Object: S3Object = {
+          Key: `${UNIT_TEST_KEYSPACE_PREFIX}${notesKey}`,
+          LastModified: new Date(),
+          Size: existingNotes.length
+        };
+        mockListObjects([s3Object]);
+        mockGetObjectWithEncoding(existingNotes);
+        const result = await updateNotesSection({
+          yamlFile: testYamlFile,
+          dateString: testDateString,
+          section: "findings",
+          content: "Replacement findings",
+          append: false
+        });
+        expect(result).to.include("### Findings\nSub-heading text");
+        expect(result).to.include("## Findings Summary\nSummary text");
+        expect(result).to.not.include("Real findings");
+        expect(result).to.include("## Findings\nReplacement findings\n\n## Conclusion");
       });
 
       it("should handle section at end of file (no following section)", async () => {

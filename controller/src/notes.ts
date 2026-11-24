@@ -150,7 +150,7 @@ export async function savePewPewNotes ({ yamlFile, dateString, content, userId }
     });
     await s3File.upload();
 
-    // getNotesMetadata returns undefined rather than throwing when it can't load one
+    // undefined only when no metadata exists yet; a read error throws so we never overwrite createdAt/createdBy
     const existing = await getNotesMetadata({ yamlFile, dateString });
     const metadata = buildNotesMetadata({ existing, userId, now: new Date().toISOString() });
     await saveNotesMetadata({ yamlFile, dateString, metadata });
@@ -199,12 +199,18 @@ export async function getNotesMetadata ({ yamlFile, dateString }: { yamlFile: st
       } else {
         jsonString = await s3Object.Body.transformToString("utf-8");
       }
-      return JSON.parse(jsonString) as NotesMetadata;
+      try {
+        return JSON.parse(jsonString) as NotesMetadata;
+      } catch (parseError) {
+        // A corrupt file has nothing to preserve, and throwing would block every later save
+        log(`getNotesMetadata could not parse ${key}`, LogLevel.WARN, parseError);
+        return undefined;
+      }
     }
     return undefined;
   } catch (error) {
     log(`getNotesMetadata failed for ${s3Folder}`, LogLevel.WARN, error);
-    return undefined;
+    throw error;
   }
 }
 
@@ -441,7 +447,8 @@ export async function updateNotesSection ({ yamlFile, dateString, section, conte
   }
 
   // Find the section and the next section
-  const sectionIndex = existing.indexOf(sectionHeader);
+  // The header must fill its own line, so "### Findings" or "## Findings Summary" don't match
+  const sectionIndex = new RegExp(`^${sectionHeader}[ \\t\\r]*$`, "m").exec(existing)?.index ?? -1;
   if (sectionIndex === -1) {
     // Section not found, append it
     return existing + `\n${sectionHeader}\n${content}\n`;

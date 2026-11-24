@@ -72,7 +72,9 @@ export default function MyApp ({ Component, pageProps, router, runtimeConfig }: 
 MyApp.getInitialProps = async (appContext: AppContext): Promise<AppInitialProps & { runtimeConfig: RuntimeConfig }> => {
   const appProps = await App.getInitialProps(appContext);
   const runtimeConfig: RuntimeConfig = {
-    HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT || defaultRuntimeConfig.HIDE_ENVIRONMENT
+    HIDE_ENVIRONMENT: process.env.HIDE_ENVIRONMENT || defaultRuntimeConfig.HIDE_ENVIRONMENT,
+    // Read process.env directly rather than importing src/secrets, which would pull the AWS SDK into the client bundle
+    AI_ANALYSIS_ENABLED: !!process.env.PEWPEW_AI_API_KEY
   };
   return { ...appProps, runtimeConfig };
 };

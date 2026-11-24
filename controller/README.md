@@ -63,6 +63,11 @@ You also need to configure your Secrets Overrides. You have two options, get the
 2. Uncomment the `PEWPEW_OPENID_SECRET_OVERRIDE` from `.env.local`
 3. Enter the value for your secret into the quotes for `PEWPEW_OPENID_SECRET_OVERRIDE`.
 
+### Optional: AI Analysis
+AI Analysis (the "🤖 AI Analysis" buttons on test results and comparisons) sends a summary of the results to OpenAI. It is off unless `PEWPEW_AI_API_KEY` is set to the name of a secrets-manager secret holding an OpenAI API key. With it unset, the buttons are hidden and `/api/ai/analyze` returns 404.
+1. Uncomment `PEWPEW_AI_API_KEY` in `.env.local` (or set it in your deployment to the name of your secret)
+2. For local development, uncomment `PEWPEW_AI_API_KEY_OVERRIDE` and enter your OpenAI API key in the quotes
+
 ## Integration Tests
 ```bash
 # You must set your aws credentials, configure your Secrets overrides, and create a password.txt file as described above

@@ -45,6 +45,7 @@ vi.mock("chart.js", () => {
 });
 
 import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
+import { RuntimeConfigProvider, defaultRuntimeConfig } from "../../src/runtimeConfig";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { TestResultsCompare } from ".";
@@ -107,6 +108,22 @@ describe("TestResultsCompare", () => {
     beforeEach(() => {
       baselineData = makeTestData();
       comparisonData = makeTestData();
+    });
+
+    it("hides AI comparison when AI Analysis is not enabled", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.queryByText("AI Comparison Insights")).not.toBeInTheDocument();
+      expect(screen.queryByText("🤖 AI Comparison Analysis")).not.toBeInTheDocument();
+    });
+
+    it("shows an enabled AI comparison button when AI Analysis is enabled", () => {
+      render(
+        <RuntimeConfigProvider config={{ ...defaultRuntimeConfig, AI_ANALYSIS_ENABLED: true }}>
+          <TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />
+        </RuntimeConfigProvider>
+      );
+      expect(screen.getByText("AI Comparison Insights")).toBeInTheDocument();
+      expect(screen.getByText("🤖 AI Comparison Analysis").closest("button")).not.toBeDisabled();
     });
 
     it("shows Performance Comparison heading", () => {

@@ -9,14 +9,27 @@
  * - Side-by-side Final Results tables
  */
 
+import { Button, defaultButtonTheme } from "../LinkButton";
+import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { LogLevel, log } from "../../src/log";
+import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime } from "../TestResults/utils";
+import { ModalObject, useEffectModal } from "../Modal";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatError, formatPageHref } from "../../src/clientutil";
+import { API_AI_ANALYZE } from "../../types";
 import { Chart } from "chart.js";
 import { ChartBox } from "../TestResults/styled";
-import { compareEndpointAnchorId } from "../TestResults/utils";
+import type { ChatMessage } from "../AIAnalysisModal";
+import { Danger } from "../Alert";
+import axios from "axios";
+import dynamic from "next/dynamic";
 import styled from "styled-components";
+import { useRuntimeConfig } from "../../src/runtimeConfig";
+
+// Loaded only when AI Analysis is enabled and rendered, so deployments without it don't download react-markdown
+const AIAnalysisModal = dynamic(() => import("../AIAnalysisModal"), { ssr: false });
 
 // ============================================================================
 // Styled Components
@@ -444,6 +457,14 @@ export interface TestResultsCompareProps {
   comparisonData: ParsedFileEntry[];
   baselineLabel?: string;
   comparisonLabel?: string;
+}
+
+interface TestResultsCompareState {
+  comparisonResult: ComparisonResult | undefined;
+  baselineMinMaxTime: MinMaxTime | undefined;
+  comparisonMinMaxTime: MinMaxTime | undefined;
+  error: string | undefined;
+  loading: boolean;
 }
 
 // ============================================================================
@@ -1100,6 +1121,96 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"endpoint" | "final">("endpoint");
 
+  // Off unless the server has PEWPEW_AI_API_KEY configured
+  const { AI_ANALYSIS_ENABLED: aiAnalysisEnabled } = useRuntimeConfig();
+  const DEFAULT_AI_COMPARISON_QUESTION =
+    "Compare the performance between these two test runs. " +
+    "Identify key differences in response times, error rates, and any significant regressions or improvements. " +
+    "When evaluating timing changes, flag metrics that are significant in BOTH absolute time AND percentage terms — " +
+    "a change from 2ms to 2.5ms (25% but only 0.5ms) is negligible to users, " +
+    "while a change from 2000ms to 2200ms (10% but 200ms) is meaningful. " +
+    "Use combined thresholds: prioritize changes that are both ≥10% and ≥25ms for response times, " +
+    "or ≥5% and ≥20ms for tighter SLOs. " +
+    "Always report the absolute time difference alongside the percentage so the reader can judge impact. " +
+    "Please focus on the average and percentile response times rather than the min/max values.";
+  // The comparison payload the chat/report are analyzing. Preserved across modal re-opens only while the payload
+  // is identical; when the comparison changes (different baseline/comparison, filter, or merge) the chat/report
+  // are cleared, since they describe numbers that are no longer on screen. Enforced in handleAIAnalysis.
+  const [aiOriginalData, setAiOriginalData] = useState<unknown>(null);
+  const [aiQuestion, setAiQuestion] = useState(DEFAULT_AI_COMPARISON_QUESTION);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatError, setChatError] = useState<string | undefined>(undefined);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [reportContent, setReportContent] = useState<string | undefined>(undefined);
+  const [reportError, setReportError] = useState<string | undefined>(undefined);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  // Identity of the payload the current chat/report were built on, so a changed comparison can be detected
+  const aiDataKeyRef = useRef<string | undefined>(undefined);
+  // Bumped when a changed snapshot starts a new session, so the modal can reset its view even if nothing was cleared
+  const [aiSessionKey, setAiSessionKey] = useState(0);
+  const aiAnalysisModalRef = useRef<ModalObject | null>(null);
+  // Tracks an in-flight AI request for handleModalClose. Written at the request boundaries rather than during
+  // render, so it's already true before the state update commits and still true when the setTimeout callback runs.
+  const isAIBusyRef = useRef(false);
+  useEffectModal(aiAnalysisModalRef);
+
+  const [state, setState] = useState<TestResultsCompareState>({
+    comparisonResult: undefined,
+    baselineMinMaxTime: undefined,
+    comparisonMinMaxTime: undefined,
+    error: undefined,
+    loading: true
+  });
+
+  const updateState = (newState: Partial<TestResultsCompareState>) =>
+    setState((oldState) => ({ ...oldState, ...newState }));
+
+  const { matchedEndpoints = [], baselineOnly = [], comparisonOnly = [] } = state.comparisonResult || {};
+
+  // This comparison only feeds the AI payload, so skip the work when AI Analysis is off
+  useEffect(() => {
+    if (!aiAnalysisEnabled || !baselineData || !comparisonData || baselineData.length === 0 || comparisonData.length === 0) {
+      updateState({
+        comparisonResult: undefined,
+        baselineMinMaxTime: undefined,
+        comparisonMinMaxTime: undefined,
+        error: undefined,
+        loading: false
+      });
+      return;
+    }
+
+    updateState({ loading: true, error: undefined });
+
+    try {
+      const baselineMinMaxTime = minMaxTime(baselineData);
+      const comparisonMinMaxTime = minMaxTime(comparisonData);
+      const comparisonResult = compareResults(baselineData, comparisonData);
+
+      comparisonResult.matchedEndpoints.sort((a, b) => {
+        const aId = parseInt(a.bucketId._id, 10);
+        const bId = parseInt(b.bucketId._id, 10);
+        if (aId === bId) {
+          return JSON.stringify(a.bucketId) < JSON.stringify(b.bucketId) ? -1 : 1;
+        }
+        return aId - bId;
+      });
+
+      comparisonResult.baselineOnly = comprehensiveSort(comparisonResult.baselineOnly);
+      comparisonResult.comparisonOnly = comprehensiveSort(comparisonResult.comparisonOnly);
+
+      updateState({ comparisonResult, baselineMinMaxTime, comparisonMinMaxTime, error: undefined, loading: false });
+
+      log("TestResultsCompare comparison computed", LogLevel.DEBUG, {
+        matched: comparisonResult.matchedEndpoints.length,
+        baselineOnly: comparisonResult.baselineOnly.length,
+        comparisonOnly: comparisonResult.comparisonOnly.length
+      });
+    } catch (error) {
+      log("TestResultsCompare comparison error", LogLevel.ERROR, error);
+      updateState({ error: formatError(error), loading: false });
+    }
+  }, [aiAnalysisEnabled, baselineData, comparisonData]);
   // Shared column visibility for both Final Results tables — toggling one syncs the other
   const [visibleColumns, setVisibleColumns] = useState(INITIAL_VISIBLE_COLUMNS);
   const toggleColumn = useCallback((column: keyof typeof INITIAL_VISIBLE_COLUMNS) => {
@@ -1190,6 +1301,231 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [comparisonData, methodFilter]);
 
+  const generateAIComparisonPayload = useCallback(() => {
+    if (!state.comparisonResult || matchedEndpoints.length === 0) {
+      return null;
+    }
+
+    return {
+      comparisonType: "test-comparison",
+      baselineLabel,
+      comparisonLabel,
+      baselineMetadata: {
+        endpoints: baselineData?.length || 0,
+        timeRange: state.baselineMinMaxTime
+      },
+      comparisonMetadata: {
+        endpoints: comparisonData?.length || 0,
+        timeRange: state.comparisonMinMaxTime
+      },
+      matchedEndpoints: matchedEndpoints.map((comparison) => ({
+        bucketId: comparison.bucketId,
+        stats: {
+          avg: { baseline: comparison.stats.avg.baseline, comparison: comparison.stats.avg.comparison, diff: comparison.stats.avg.diff, percentChange: comparison.stats.avg.percentChange },
+          min: { baseline: comparison.stats.min.baseline, comparison: comparison.stats.min.comparison, diff: comparison.stats.min.diff, percentChange: comparison.stats.min.percentChange },
+          max: { baseline: comparison.stats.max.baseline, comparison: comparison.stats.max.comparison, diff: comparison.stats.max.diff, percentChange: comparison.stats.max.percentChange },
+          stdDev: { baseline: comparison.stats.stdDev.baseline, comparison: comparison.stats.stdDev.comparison, diff: comparison.stats.stdDev.diff, percentChange: comparison.stats.stdDev.percentChange },
+          p90: { baseline: comparison.stats.p90.baseline, comparison: comparison.stats.p90.comparison, diff: comparison.stats.p90.diff, percentChange: comparison.stats.p90.percentChange },
+          p95: { baseline: comparison.stats.p95.baseline, comparison: comparison.stats.p95.comparison, diff: comparison.stats.p95.diff, percentChange: comparison.stats.p95.percentChange },
+          p99: { baseline: comparison.stats.p99.baseline, comparison: comparison.stats.p99.comparison, diff: comparison.stats.p99.diff, percentChange: comparison.stats.p99.percentChange }
+        },
+        statusCounts: Object.fromEntries(
+          Object.entries(comparison.statusCounts).map(([status, counts]) => [
+            status,
+            { baseline: counts.baseline, comparison: counts.comparison, diff: counts.diff, percentChange: counts.percentChange }
+          ])
+        ),
+        otherErrors: {
+          baseline: comparison.otherErrors.baseline,
+          comparison: comparison.otherErrors.comparison
+        }
+      })),
+      baselineOnlyEndpoints: baselineOnly.map(([bucketId]) => bucketId),
+      comparisonOnlyEndpoints: comparisonOnly.map(([bucketId]) => bucketId),
+      summary: {
+        totalMatched: matchedEndpoints.length,
+        baselineOnly: baselineOnly.length,
+        comparisonOnly: comparisonOnly.length
+      },
+      timestamp: new Date().toISOString()
+    };
+  }, [state.comparisonResult, matchedEndpoints, baselineLabel, comparisonLabel, baselineData, comparisonData, state.baselineMinMaxTime, state.comparisonMinMaxTime, baselineOnly, comparisonOnly]);
+
+  const handleAIAnalysis = () => {
+    try {
+      const aiPayload = generateAIComparisonPayload();
+      log("Generated AI Comparison Payload Successfully", LogLevel.INFO);
+      if (aiPayload) {
+        if (!aiQuestion.trim()) {
+          setAiQuestion(DEFAULT_AI_COMPARISON_QUESTION);
+        }
+        // Preserve the chat/report across re-opens only while the comparison is the same one they were built on.
+        // The timestamp is excluded because it changes on every generation and says nothing about the data.
+        const aiDataKey = JSON.stringify({ ...aiPayload, timestamp: undefined });
+        if (aiDataKeyRef.current !== undefined && aiDataKeyRef.current !== aiDataKey) {
+          log("AI comparison payload changed, clearing prior chat and report", LogLevel.INFO);
+          setChatMessages([]);
+          setChatError(undefined);
+          setReportContent(undefined);
+          setReportError(undefined);
+          setAiSessionKey((key) => key + 1);
+        }
+        aiDataKeyRef.current = aiDataKey;
+        setAiOriginalData(aiPayload);
+        if (aiAnalysisModalRef.current) {
+          aiAnalysisModalRef.current.openModal();
+        }
+      } else {
+        log("No comparison payload generated", LogLevel.INFO);
+      }
+    } catch (error) {
+      log("Error generating AI comparison payload", LogLevel.ERROR, error);
+    }
+  };
+
+  const handleModalClose = () => {
+    if (isAIBusyRef.current) {
+      setTimeout(() => {
+        if (aiAnalysisModalRef.current && isAIBusyRef.current) {
+          aiAnalysisModalRef.current.openModal();
+        }
+      }, 0);
+    }
+  };
+
+  const extractErrorMessage = (error: unknown): string =>
+    error instanceof Error ? error.message : `${error || "Unknown error"}`;
+
+  // Send the current question to the chat, continuing the existing conversation with prior turns as context
+  const sendChatMessage = async () => {
+    const question = aiQuestion.trim();
+    if (!aiOriginalData || !question) {
+      return;
+    }
+    const historyForRequest = chatMessages; // history up to (not including) this new question
+    const keyAtSend = aiDataKeyRef.current; // the comparison this turn belongs to
+    isAIBusyRef.current = true;
+    setIsAnalyzing(true);
+    setChatError(undefined);
+    setChatMessages((prev) => [...prev, { role: "user", content: question }]);
+    setAiQuestion("");
+    try {
+      const requestBody = {
+        testData: aiOriginalData,
+        question,
+        mode: "chat",
+        history: historyForRequest
+      };
+      const response = await axios.post(formatPageHref(API_AI_ANALYZE), requestBody, {
+        headers: { "Content-Type": "application/json" }
+      });
+      if (aiDataKeyRef.current !== keyAtSend) {
+        // The analyzed comparison changed while this was in flight. Appending now would attach the answer to data
+        // it isn't about, and would land on a transcript the reset already cleared -- leaving it assistant-first,
+        // which the endpoint rejects on every later turn. Drop the response instead.
+        log("Discarding chat response for a superseded comparison snapshot", LogLevel.INFO);
+        return;
+      }
+      const content: string = response.data?.choices?.[0]?.message?.content ?? "";
+      if (!content.trim()) {
+        // Storing an empty turn would render a blank bubble and then fail validation on every later request,
+        // since the client resends the transcript as history. Roll back and let the user retry instead.
+        log("AI analysis returned an empty completion", LogLevel.WARN);
+        setChatMessages(historyForRequest);
+        setAiQuestion((current) => current.trim() ? current : question);
+        setChatError("The AI returned an empty response. Please try again.");
+        return;
+      }
+      setChatMessages((prev) => [...prev, { role: "assistant", content }]);
+    } catch (aiError) {
+      log("Error calling AI analysis API", LogLevel.ERROR, aiError);
+      if (aiDataKeyRef.current !== keyAtSend) {
+        return; // superseded snapshot -- rolling back would resurrect a transcript for data that's gone
+      }
+      // Drop the optimistic user turn so the transcript keeps alternating, and give the question back unless
+      // the user has already typed something new into the box
+      setChatMessages(historyForRequest);
+      setAiQuestion((current) => current.trim() ? current : question);
+      setChatError(`Failed to get AI analysis: ${extractErrorMessage(aiError)}`);
+    } finally {
+      isAIBusyRef.current = false;
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Generate the full structured comparison report. Independent of the chat above.
+  const generateReport = async () => {
+    if (!aiOriginalData) {
+      return;
+    }
+    const keyAtSend = aiDataKeyRef.current; // the comparison this report belongs to
+    isAIBusyRef.current = true;
+    setIsGeneratingReport(true);
+    setReportError(undefined);
+    try {
+      const requestBody = {
+        testData: aiOriginalData,
+        mode: "report",
+        // Comparison reports need the significance thresholds and percentile guidance, which live in the default
+        // question. Without it the report falls back to raw percentage deltas and calls trivial changes regressions.
+        question: DEFAULT_AI_COMPARISON_QUESTION
+      };
+      const response = await axios.post(formatPageHref(API_AI_ANALYZE), requestBody, {
+        headers: { "Content-Type": "application/json" }
+      });
+      if (aiDataKeyRef.current !== keyAtSend) {
+        log("Discarding report for a superseded comparison snapshot", LogLevel.INFO);
+        return; // the analyzed comparison changed while this was in flight
+      }
+      const content: string = response.data?.choices?.[0]?.message?.content ?? "";
+      if (!content.trim()) {
+        // An empty report would leave the panel unchanged and the download disabled, with nothing explaining why
+        log("AI report generation returned empty content", LogLevel.WARN);
+        setReportError("The AI returned an empty report. Please try again.");
+        return;
+      }
+      setReportContent(content);
+    } catch (aiError) {
+      log("Error calling AI analysis API", LogLevel.ERROR, aiError);
+      if (aiDataKeyRef.current !== keyAtSend) {
+        return; // superseded snapshot
+      }
+      setReportError(`Failed to generate report: ${extractErrorMessage(aiError)}`);
+    } finally {
+      isAIBusyRef.current = false;
+      setIsGeneratingReport(false);
+    }
+  };
+
+  // Download the generated report as a markdown file
+  const downloadReport = () => {
+    if (!reportContent) {
+      log("No report content to download", LogLevel.INFO);
+      return;
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `comparison-${baselineLabel}_vs_${comparisonLabel}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileContent = `AI Performance Comparison Analysis Report
+Generated: ${new Date().toLocaleString()}
+Baseline: ${baselineLabel}
+Comparison: ${comparisonLabel}
+
+${reportContent}
+
+---
+Generated by PaaS Performance Testing Controller
+`;
+
+    const blob = new Blob([fileContent], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ai-comparison-${fileName}-${timestamp}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   // Pre-compute request-count time series for each side so ComparisonRequestCountByFileChart
   // receives plain data and never needs to call getTotalCount() (a WASM boundary crossing)
   // during its own useMemo.
@@ -1240,6 +1576,51 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   return (
     <Container>
       <H1>Performance Comparison</H1>
+
+      {state.error && <Danger>{state.error}</Danger>}
+
+      {aiAnalysisEnabled && <>
+        {/* AI Analysis Section */}
+        <div style={{ textAlign: "center", marginBottom: "2em" }}>
+          <h1>AI Comparison Insights</h1>
+          <p>Want AI to analyze the differences between these test runs? Click below.</p>
+          <p>
+            <Button
+              theme={{
+                ...defaultButtonTheme,
+                buttonWidth: "200px",
+                buttonHeight: "50px",
+                buttonFontSize: "18px"
+              }}
+              onClick={handleAIAnalysis}
+              disabled={!state.comparisonResult || matchedEndpoints.length === 0}
+              style={{ cursor: (!state.comparisonResult || matchedEndpoints.length === 0) ? "not-allowed" : "pointer" }}
+            >
+              🤖 AI Comparison Analysis
+            </Button>
+          </p>
+        </div>
+
+        {/* AI Analysis Modal */}
+        <AIAnalysisModal
+          modalRef={aiAnalysisModalRef}
+          isAnalyzing={isAnalyzing}
+          hasTestData={aiOriginalData !== null}
+          messages={chatMessages}
+          chatError={chatError}
+          aiQuestion={aiQuestion}
+          onQuestionChange={setAiQuestion}
+          onSendMessage={sendChatMessage}
+          isGeneratingReport={isGeneratingReport}
+          reportContent={reportContent}
+          reportError={reportError}
+          onGenerateReport={generateReport}
+          onDownloadReport={downloadReport}
+          originalData={aiOriginalData ?? undefined}
+          sessionKey={aiSessionKey}
+          onClose={handleModalClose}
+        />
+      </>}
 
       <FilterContainer>
         <FilterDropdown>
@@ -1527,7 +1908,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             }
 
             // Find matching endpoints
-            const matchedEndpoints: {
+            const endpointMatches: {
               key: string;
               method: string;
               url: string;
@@ -1538,7 +1919,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             for (const [key, baselineEndpointData] of baselineMap.entries()) {
               if (comparisonMap.has(key)) {
                 const [method, url] = key.split("||");
-                matchedEndpoints.push({
+                endpointMatches.push({
                   key,
                   method,
                   url,
@@ -1582,7 +1963,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               );
             };
 
-            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }, endpointIndex) => {
+            return endpointMatches.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }, endpointIndex) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;

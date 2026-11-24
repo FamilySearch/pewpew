@@ -6,6 +6,7 @@ import {
   createSecret,
   decrypt,
   encrypt,
+  getAIApiKeyName,
   getClientSecretOpenId,
   getEncryptionKey,
   getGlobalSecretsConfig,
@@ -126,6 +127,17 @@ describe("Secrets Integration", () => {
         log("getClientSecretOpenId() error", LogLevel.ERROR, error);
         done(error);
       }
+    });
+  });
+
+  // Only runs where AI Analysis is configured; without PEWPEW_AI_API_KEY the feature is off and there's no key to load
+  (getAIApiKeyName() ? describe : describe.skip)("getKey AI API key", () => {
+    it("getKey AI API key should succeed", async () => {
+      const key: string = await getKey(getAIApiKeyName()!);
+      log("getKey(PEWPEW_AI_API_KEY)", LogLevel.TRACE, key);
+      // OpenAI API keys start with "sk-" and are quite long
+      expect(key).to.match(/^sk-/);
+      expect(key.length).to.be.greaterThan(20);
     });
   });
 });

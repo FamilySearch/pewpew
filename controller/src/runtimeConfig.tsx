@@ -2,10 +2,13 @@ import React, { createContext, useContext } from "react";
 
 export interface RuntimeConfig {
   HIDE_ENVIRONMENT: string;
+  /** True when PEWPEW_AI_API_KEY names a secret, which turns on the AI Analysis UI and API */
+  AI_ANALYSIS_ENABLED: boolean;
 }
 
 export const defaultRuntimeConfig: RuntimeConfig = {
-  HIDE_ENVIRONMENT: ""
+  HIDE_ENVIRONMENT: "",
+  AI_ANALYSIS_ENABLED: false
 };
 
 // Module-level singleton for non-React utility code (e.g. future additions to

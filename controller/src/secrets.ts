@@ -19,6 +19,19 @@ import crypto from "crypto";
 import { readFile } from "fs/promises";
 
 export const OVERRIDE = "_OVERRIDE";
+/**
+ * Secret name of the OpenAI API key for AI Analysis, from PEWPEW_AI_API_KEY. There is deliberately no default:
+ * AI Analysis is enabled only when this is set, so deployments that don't configure it never show the feature or
+ * call OpenAI. Read on each call (like pages/_app.tsx does) so the API and the UI always agree.
+ */
+export function getAIApiKeyName (): string | undefined {
+  return process.env.PEWPEW_AI_API_KEY || undefined;
+}
+
+/** AI Analysis is on only when a secret name for its API key is configured */
+export function isAIAnalysisEnabled (): boolean {
+  return !!getAIApiKeyName();
+}
 
 export interface SecretsConfig {
   encryptionKey: Buffer | undefined;

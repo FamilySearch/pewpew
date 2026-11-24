@@ -27,6 +27,7 @@ export const PAGE_CALENDAR: Route = "/calendar";
 export const PAGE_ADMIN: Route = "/admin";
 export const PAGE_LOGIN: Route = "/login";
 
+export const API_AI_ANALYZE: Route = "/api/ai/analyze" as Route;
 export const API_AUTH: Route = "/api/auth" as Route;
 export const API_ERROR: Route = "/api/error" as Route;
 export const API_ERROR_FORMAT = (s3Folder: string): Route => `${API_ERROR}/${s3Folder}` as Route;

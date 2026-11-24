@@ -55,7 +55,7 @@ describe("GET / (Test History Page)", () => {
       await expect(heading).toHaveText("Check the Test Status");
       const searchHeading = await $("[data-testid='search-results']");
       await expect(searchHeading).toExist();
-      const searchResultLink = await $(`button[name='${testId}']`);
+      const searchResultLink = await $(`[data-testid='search-results'] button[name='${testId}']`);
       await expect(searchResultLink).toExist();
     });
 
@@ -68,7 +68,7 @@ describe("GET / (Test History Page)", () => {
       await expect(heading).toHaveText("Check the Test Status");
       const searchHeading = await $("[data-testid='search-results']");
       await expect(searchHeading).toExist();
-      const searchResultLink = await $(`button[name='${testId}']`);
+      const searchResultLink = await $(`[data-testid='search-results'] button[name='${testId}']`);
       await expect(searchResultLink).toExist();
     });
   });
@@ -83,7 +83,7 @@ describe("GET / (Test History Page)", () => {
       await browser.keys("Enter");
       const searchHeading = await $("[data-testid='search-results']");
       await searchHeading.waitForExist({ timeout: 10000, timeoutMsg: "Expected search results to appear" });
-      const searchResultLink = await $(`button[name='${testId}']`);
+      const searchResultLink = await $(`[data-testid='search-results'] button[name='${testId}']`);
       await expect(searchResultLink).toExist();
     });
 

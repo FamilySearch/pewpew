@@ -194,10 +194,12 @@ export const getServerSideProps: GetServerSideProps =
     // Redirect old /?testId= links to the /teststatus page
     if (ctx.query?.testId && !Array.isArray(ctx.query.testId)) {
       const resultsStr = typeof ctx.query.results === "string" ? ctx.query.results : "";
+      const notesStr = typeof ctx.query.notes === "string" ? ctx.query.notes : "";
       const destination = formatPageHref(PAGE_TEST_STATUS_FORMAT({
         testId: ctx.query.testId,
         results: /^\d+$/.test(resultsStr) ? parseInt(resultsStr, 10) : undefined,
-        compare: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined
+        compare: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined,
+        notes: /^\d+$/.test(notesStr) ? parseInt(notesStr, 10) : undefined
       }));
       return { redirect: { destination, permanent: false } };
     }

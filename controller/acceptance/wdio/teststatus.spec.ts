@@ -41,6 +41,22 @@ describe("GET /teststatus (Test Status Page)", () => {
       if (!testDataWithResults) { this.skip(); }
     });
 
+    /** A single results file is auto-selected, so reset to the empty option first to make the next pick a real change */
+    const selectFirstResult = async () => {
+      const select = await $("[data-testid='results-select']");
+      await select.selectByIndex(0);
+      await select.selectByIndex(1);
+      return select;
+    };
+
+    it("should auto-load the results for a test with a single results file", async function () {
+      if (testDataWithResults!.resultsFileLocation?.length !== 1) { this.skip(); }
+      await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
+      await assertNoPageError();
+      const resultsLoaded = await $("[data-testid='results-loaded']");
+      await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not auto-load for a single results file" });
+    });
+
     it("should display the results dropdown for a test with results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
@@ -51,8 +67,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("selecting a result file should load the results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load after selecting from dropdown" });
     });
@@ -60,8 +75,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("deselecting the result should hide the results", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      const select = await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load before deselect" });
       await select.selectByIndex(0);
@@ -80,8 +94,7 @@ describe("GET /teststatus (Test Status Page)", () => {
     it("selecting a result should update the URL to include results=0", async () => {
       await browser.url(PAGE_TEST_STATUS_FORMAT(testDataWithResults!.testId));
       await assertNoPageError();
-      const select = await $("[data-testid='results-select']");
-      await select.selectByIndex(1);
+      await selectFirstResult();
       const resultsLoaded = await $("[data-testid='results-loaded']");
       await resultsLoaded.waitForExist({ timeout: 30000, timeoutMsg: "Results did not load" });
       await browser.waitUntil(async () => {
@@ -103,6 +116,68 @@ describe("GET /teststatus (Test Status Page)", () => {
         const currentUrl = await browser.getUrl();
         return !currentUrl.includes("results=");
       }, { timeout: 5000, timeoutMsg: "URL still contains results= after deselecting" });
+    });
+  });
+
+  describe("Notes", () => {
+    it("with no ?notes= should show notes section collapsed by default", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT(testId);
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await collapseButton.waitForExist({ timeout: 15000, timeoutMsg: "Notes collapse button did not appear" });
+      await expect(collapseButton).toHaveText("▼ Expand");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).not.toExist();
+    });
+
+    it("with ?notes=1 should display notes section expanded", async () => {
+      const url = PAGE_TEST_STATUS_FORMAT({ testId, notes: 1 });
+      log(`navigating to ${url}`, LogLevel.DEBUG);
+      await browser.url(url);
+      await assertNoPageError();
+      const notesEditor = await $("[data-testid='notes-editor']");
+      await notesEditor.waitForExist({ timeout: 15000, timeoutMsg: "Notes editor did not load" });
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await expect(collapseButton).toExist();
+      await expect(collapseButton).toHaveText("▲ Collapse");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).toBeDisplayed();
+    });
+
+    it("clicking the Expand button should reveal the notes editor and update the URL", async () => {
+      await browser.url(PAGE_TEST_STATUS_FORMAT(testId));
+      await assertNoPageError();
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await collapseButton.waitForExist({ timeout: 15000, timeoutMsg: "Notes collapse button did not appear" });
+      await expect(collapseButton).toHaveText("▼ Expand");
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await expect(editorLayout).not.toExist();
+      await collapseButton.click();
+      await editorLayout.waitForDisplayed({ timeout: 10000, timeoutMsg: "Notes editor did not expand after clicking Expand" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return currentUrl.includes("notes=1");
+      }, { timeout: 5000, timeoutMsg: "URL did not update to include notes=1 after expanding" });
+      await expect(collapseButton).toHaveText("▲ Collapse");
+    });
+
+    it("clicking the Collapse button should hide the notes editor and remove notes=1 from URL", async () => {
+      await browser.url(PAGE_TEST_STATUS_FORMAT({ testId, notes: 1 }));
+      await assertNoPageError();
+      const editorLayout = await $("[data-testid='notes-editor-layout']");
+      await editorLayout.waitForDisplayed({ timeout: 15000, timeoutMsg: "Notes editor did not load expanded" });
+      const collapseButton = await $("[data-testid='notes-collapse-button']");
+      await expect(collapseButton).toHaveText("▲ Collapse");
+      await collapseButton.click();
+      // The editor stays mounted (hidden) after the first expand so drafts survive collapsing
+      await editorLayout.waitForDisplayed({ reverse: true, timeout: 5000, timeoutMsg: "Notes editor did not collapse" });
+      await browser.waitUntil(async () => {
+        const currentUrl = await browser.getUrl();
+        return !currentUrl.includes("notes=1");
+      }, { timeout: 5000, timeoutMsg: "URL still contains notes=1 after collapsing" });
+      await expect(collapseButton).toHaveText("▼ Expand");
     });
   });
 

@@ -84,6 +84,15 @@ describe("Layout Component", () => {
     expect(screen.queryByTestId("nav-admin")).not.toBeInTheDocument();
   });
 
+  it("renders the Notes nav link", () => {
+    render(
+      <Layout authPermission={AuthPermission.User}>
+        <span>content</span>
+      </Layout>
+    );
+    expect(screen.getByTestId("nav-notes")).toBeInTheDocument();
+  });
+
   it("renders other controllers when provided", () => {
     const otherControllers = {
       beta: { url: "https://beta.example.com", hover: "Beta Controller" }

@@ -1,12 +1,14 @@
 import { LogLevel, log } from "@fs/ppaas-common";
-import type { NextApiRequest, NextApiResponse } from "next";
 import {
+  NOTES_SECTIONS,
   deletePewPewNotes,
   getPewPewNotes,
+  isNotesSection,
   savePewPewNotes,
   updateNotesSection,
   validateNotesParams
 } from "../../../../../src/notes";
+import type { NextApiRequest, NextApiResponse } from "next";
 import { AuthPermission } from "../../../../../types";
 import { authApi } from "../../../../../src/authserver";
 import { createErrorResponse } from "../../../../../src/util";
@@ -36,6 +38,10 @@ async function handlePost (req: NextApiRequest, res: NextApiResponse, yamlFile: 
     if (typeof section !== "string" || typeof content !== "string" || !content
       || (append !== undefined && typeof append !== "boolean")) {
       res.status(400).json({ message: "section and content must be non-empty strings; append must be a boolean" });
+      return;
+    }
+    if (!isNotesSection(section)) {
+      res.status(400).json({ message: `Unknown section: ${section}. Valid sections: ${NOTES_SECTIONS.join(", ")}` });
       return;
     }
     const updatedContent = await updateNotesSection({

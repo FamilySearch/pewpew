@@ -1,11 +1,11 @@
 import { AuthPermission, TestData, TestDataResponse } from "../../../../../../types";
-import { LOCAL_FILE_LOCATION, createErrorResponse } from "../../../../../../src/util";
 import { LogLevel, PpaasS3File, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { generateNotesMarkdown, validateNotesParams } from "../../../../../../src/notes";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { generateNotesMarkdown, makeTempDirectory, validateNotesParams } from "../../../../../../src/notes";
+import { readFile, rm } from "node:fs/promises";
 import { TestManager } from "../../../../../../src/testmanager";
 import { authApi } from "../../../../../../src/authserver";
+import { createErrorResponse } from "../../../../../../src/util";
 import path from "node:path";
 
 export default async function handler (req: NextApiRequest, res: NextApiResponse) {
@@ -48,7 +48,7 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
     const yamlContents: string[] = [];
     let localDirectory: string | undefined;
     try {
-      localDirectory = await mkdtemp(path.join(LOCAL_FILE_LOCATION, "notes-template-"));
+      localDirectory = await makeTempDirectory("notes-template-");
       const s3Files = await PpaasS3File.getAllFilesInS3({ s3Folder, localDirectory });
       const yamlFileList = s3Files.filter((f) => f.filename.endsWith(".yaml") || f.filename.endsWith(".yml"));
       for (const yf of yamlFileList) {

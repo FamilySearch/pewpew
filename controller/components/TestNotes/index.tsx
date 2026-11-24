@@ -5,7 +5,6 @@ import React, { JSX, useCallback, useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { AuthPermission } from "../../types";
 import ExportMenu from "./ExportMenu";
-import Router from "next/router";
 import StatusBar from "./StatusBar";
 import ViewModeToggle from "./ViewModeToggle";
 import { colors } from "./editorStyles";
@@ -165,30 +164,43 @@ function TestNotesInner ({ testData, authPermission, initialNotesContent, isExpa
     loadNotes();
   }, [testData.s3Folder, hasInitialContent]);
 
-  // Warn before leaving with unsaved changes. beforeunload covers full page loads ("View Test", "Back to Notes",
-  // reload, closing the tab); the router guard below covers client-side navigation (the nav bar's LinkButtons).
+  // Warn before leaving with unsaved changes. A capture-phase click listener catches in-app links (the nav bar's
+  // next/link LinkButtons and plain anchors) before next/link handles them, so a cancelled click simply never
+  // navigates. beforeunload covers reload, closing the tab, and typed URLs. Browser Back/Forward to another page
+  // isn't guarded: cancelling a popstate means rewinding history, which fights the router.
+  const leaveConfirmedRef = React.useRef(false);
   useEffect(() => {
     if (!isDirty) { return; }
+    leaveConfirmedRef.current = false;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Already confirmed through the link guard below; don't ask twice for a plain <a> page load
+      if (leaveConfirmedRef.current) { return; }
       event.preventDefault();
       event.returnValue = ""; // Required by some browsers to show the prompt
     };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [isDirty]);
-
-  useEffect(() => {
-    const routerEvents = Router?.events;
-    if (!isDirty || !routerEvents) { return; }
-    const onRouteChangeStart = (url: string, { shallow }: { shallow: boolean }) => {
-      // Shallow updates stay on this page (results file pick, notes expand/collapse)
-      if (shallow || window.confirm("You have unsaved notes. Leave this page and discard them?")) { return; }
-      routerEvents.emit("routeChangeError", new Error("Route change aborted: unsaved notes"), url, { shallow });
-      // Next.js has no API to cancel a navigation; throwing from routeChangeStart is the documented workaround
-      throw new Error("Route change aborted: unsaved notes");
+    const onLinkClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+      const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) { return; }
+      const destination = new URL(anchor.href, window.location.href);
+      const current = new URL(window.location.href);
+      destination.hash = "";
+      current.hash = "";
+      // Other sites open with their own unload prompt; links to this same URL don't leave the page
+      if (destination.origin !== current.origin || destination.href === current.href) { return; }
+      if (window.confirm("You have unsaved notes. Leave this page and discard them?")) {
+        leaveConfirmedRef.current = true;
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
     };
-    routerEvents.on("routeChangeStart", onRouteChangeStart);
-    return () => routerEvents.off("routeChangeStart", onRouteChangeStart);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onLinkClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onLinkClick, true);
+    };
   }, [isDirty]);
 
   // Clear success messages after 5 seconds

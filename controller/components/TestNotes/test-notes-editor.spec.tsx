@@ -11,20 +11,12 @@ vi.mock("next/dynamic", async () => {
   const { default: TipTapEditorInner } = await vi.importActual<typeof import("./TipTapEditorInner")>("./TipTapEditorInner");
   return { default: () => TipTapEditorInner };
 });
-vi.mock("next/router", async () => {
-  // A real event emitter, so the unsaved-changes navigation guard can be exercised
-  const { default: mitt } = await vi.importActual<{ default: () => { on: () => void; off: () => void; emit: () => void } }>("next/dist/shared/lib/mitt");
-  return {
-    default: { events: mitt() },
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} })
-  };
-});
+vi.mock("next/router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), pathname: "/", query: {} }) }));
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthPermission } from "../../types";
 import type { Editor } from "@tiptap/react";
 import React from "react";
-import Router from "next/router";
 import { TestNotes } from ".";
 import axios from "axios";
 
@@ -218,39 +210,76 @@ describe("TestNotes (real editor)", () => {
     await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toHaveTextContent("second notes"));
   });
 
-  describe("client-side navigation guard", () => {
-    const navigate = (shallow: boolean) => {
-      try {
-        Router.events.emit("routeChangeStart", "/calendar", { shallow });
-        return "allowed";
-      } catch {
-        return "blocked";
-      }
+  describe("unsaved-changes link guard", () => {
+    // Stands in for next/link's handler: it only runs if the guard let the click through.
+    // It also cancels the default so jsdom doesn't try to navigate.
+    let linkHandler: ReturnType<typeof vi.fn>;
+    const renderWithLinks = () => {
+      linkHandler = vi.fn((event: React.MouseEvent) => event.preventDefault());
+      render(
+        <>
+          <a href="/calendar" onClick={linkHandler}>Calendar</a>
+          <a href="#findings" onClick={linkHandler}>Same page</a>
+          <a href="/calendar" target="_blank" onClick={linkHandler}>New tab</a>
+          <Harness initialNotesContent="hello" />
+        </>
+      );
+    };
+    const fireBeforeUnload = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
     };
 
     it("does nothing without unsaved changes", async () => {
       const confirmSpy = vi.spyOn(window, "confirm");
-      render(<Harness initialNotesContent="hello" />);
+      renderWithLinks();
       await getEditor();
-      expect(navigate(false)).toBe("allowed");
+      fireEvent.click(screen.getByText("Calendar"));
       expect(confirmSpy).not.toHaveBeenCalled();
+      expect(linkHandler).toHaveBeenCalledTimes(1);
     });
 
-    it("blocks navigation away when the user cancels, and allows it when they confirm", async () => {
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
-      render(<Harness initialNotesContent="hello" />);
+    it("stops the navigation when the user cancels", async () => {
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+      renderWithLinks();
       await typeAtEnd(" world");
-      expect(navigate(false)).toBe("blocked");
-      expect(navigate(false)).toBe("allowed");
-      expect(confirmSpy).toHaveBeenCalledTimes(2);
+      const notPrevented = fireEvent.click(screen.getByText("Calendar"));
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(notPrevented).toBe(false);
+      expect(linkHandler).not.toHaveBeenCalled();
+      expect(screen.getByTestId("notes-dirty-indicator")).toBeInTheDocument();
     });
 
-    it("ignores shallow same-page updates", async () => {
+    it("lets the navigation through when the user confirms, without a second unload prompt", async () => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      renderWithLinks();
+      await typeAtEnd(" world");
+      fireEvent.click(screen.getByText("Calendar"));
+      expect(linkHandler).toHaveBeenCalledTimes(1);
+      expect(fireBeforeUnload()).toBe(false);
+    });
+
+    it("ignores modifier clicks, new-tab links, and same-page links", async () => {
       const confirmSpy = vi.spyOn(window, "confirm");
-      render(<Harness initialNotesContent="hello" />);
+      renderWithLinks();
       await typeAtEnd(" world");
-      expect(navigate(true)).toBe("allowed");
+      fireEvent.click(screen.getByText("Calendar"), { ctrlKey: true });
+      fireEvent.click(screen.getByText("New tab"));
+      fireEvent.click(screen.getByText("Same page"));
       expect(confirmSpy).not.toHaveBeenCalled();
+      expect(linkHandler).toHaveBeenCalledTimes(3);
+    });
+
+    it("stops guarding once the notes are saved", async () => {
+      const confirmSpy = vi.spyOn(window, "confirm");
+      renderWithLinks();
+      await typeAtEnd(" world");
+      fireEvent.click(screen.getByTestId("notes-save-button"));
+      await waitFor(() => expect(screen.queryByTestId("notes-dirty-indicator")).not.toBeInTheDocument());
+      fireEvent.click(screen.getByText("Calendar"));
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(linkHandler).toHaveBeenCalledTimes(1);
     });
   });
 });

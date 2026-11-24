@@ -46,6 +46,13 @@ const SECTION_HEADERS: Record<string, string> = {
   conclusion: "## Conclusion"
 };
 
+export const NOTES_SECTIONS: string[] = Object.keys(SECTION_HEADERS);
+
+/** Own keys only, so inherited names like "constructor" or "toString" aren't sections */
+export function isNotesSection (section: string): boolean {
+  return Object.hasOwn(SECTION_HEADERS, section);
+}
+
 export function getNotesFilename (): string {
   return NOTES_FILENAME;
 }
@@ -105,6 +112,15 @@ export async function getPewPewNotes ({ yamlFile, dateString }: { yamlFile: stri
   }
 }
 
+/**
+ * A new, uniquely named directory under LOCAL_FILE_LOCATION. mkdtemp doesn't create parents (the old mkdir -p did),
+ * and a short fixed prefix keeps long test names from exceeding the filename length limit.
+ */
+export async function makeTempDirectory (prefix: string): Promise<string> {
+  await fs.mkdir(LOCAL_FILE_LOCATION, { recursive: true });
+  return fs.mkdtemp(path.join(LOCAL_FILE_LOCATION, prefix));
+}
+
 /** Metadata for a save: the existing record with updatedAt/updatedBy bumped, or a new one that records createdBy. */
 export function buildNotesMetadata ({ existing, userId, now }: { existing?: NotesMetadata; userId?: string; now: string }): NotesMetadata {
   const metadata: NotesMetadata = existing
@@ -124,7 +140,7 @@ export async function savePewPewNotes ({ yamlFile, dateString, content, userId }
   // mkdtemp adds a random suffix, so concurrent saves (even of the same test) never share a directory
   let localPath: string | undefined;
   try {
-    localPath = await fs.mkdtemp(path.join(LOCAL_FILE_LOCATION, `notes-${yamlFile}${dateString}-`));
+    localPath = await makeTempDirectory("notes-");
     const localFilePath = path.join(localPath, NOTES_FILENAME);
     await fs.writeFile(localFilePath, content, "utf-8");
     const s3File = new PpaasS3File({
@@ -200,7 +216,7 @@ export async function saveNotesMetadata ({ yamlFile, dateString, metadata }: {
   const s3Folder = `${yamlFile}/${dateString}`;
   let localPath: string | undefined;
   try {
-    localPath = await fs.mkdtemp(path.join(LOCAL_FILE_LOCATION, `notes-meta-${yamlFile}${dateString}-`));
+    localPath = await makeTempDirectory("notes-meta-");
     const localFilePath = path.join(localPath, NOTES_META_FILENAME);
     await fs.writeFile(localFilePath, JSON.stringify(metadata, null, 2), "utf-8");
     const s3File = new PpaasS3File({
@@ -414,10 +430,10 @@ export async function updateNotesSection ({ yamlFile, dateString, section, conte
   content: string;
   append?: boolean;
 }): Promise<string> {
-  const sectionHeader = SECTION_HEADERS[section];
-  if (!sectionHeader) {
-    throw new Error(`Unknown section: ${section}. Valid sections: ${Object.keys(SECTION_HEADERS).join(", ")}`);
+  if (!isNotesSection(section)) {
+    throw new Error(`Unknown section: ${section}. Valid sections: ${NOTES_SECTIONS.join(", ")}`);
   }
+  const sectionHeader = SECTION_HEADERS[section];
 
   const existing = await getPewPewNotes({ yamlFile, dateString });
   if (!existing) {
@@ -509,7 +525,8 @@ const isSafeUrl = (url: string): boolean => /^(?:https?:|mailto:|[/#?]|[^:]*$)/i
 // Convert markdown to Confluence Storage Format.
 // The output is served as HTML, so all user text is HTML-escaped and only safe URL schemes are linked.
 export function markdownToConfluence (markdown: string): string {
-  let html = markdown;
+  // The placeholder characters can't come from the notes themselves, or a pasted placeholder could pull in another snippet
+  let html = markdown.replaceAll(/[\uE000\uE001]/g, "");
 
   // Code blocks become CDATA macros (raw, unescaped), so pull them out before escaping the rest
   const codeBlocks: string[] = [];
@@ -522,16 +539,17 @@ export function markdownToConfluence (markdown: string): string {
 
   html = escapeHtml(html);
 
-  // HTML comments (strip for Confluence). Matched in escaped form, after code blocks are out, so comments inside
-  // code snippets survive and raw HTML never goes through a sanitizing regex.
-  html = html.replaceAll(/&lt;!--[\s\S]*?--&gt;/g, "");
-
-  // Inline code (already escaped) is held out like code blocks so the formatting passes below don't touch it
+  // Inline code (already escaped) is held out like code blocks so the comment strip and formatting passes below
+  // don't touch it. Single line only, so one stray backtick can't swallow the paragraphs after it.
   const inlineCode: string[] = [];
-  html = html.replaceAll(/`([^`]+)`/g, (_match, code: string) => {
+  html = html.replaceAll(/`([^`\n]+)`/g, (_match, code: string) => {
     inlineCode.push(`<code>${code}</code>`);
     return `\uE001CODE${inlineCode.length - 1}\uE001`;
   });
+
+  // HTML comments (strip for Confluence). Matched in escaped form, after code is out, so comments inside code
+  // survive and raw HTML never goes through a sanitizing regex.
+  html = html.replaceAll(/&lt;!--[\s\S]*?--&gt;/g, "");
 
   // Headings
   html = html.replaceAll(/^######\s+(.+)$/gm, "<h6>$1</h6>");
@@ -573,12 +591,14 @@ export function markdownToConfluence (markdown: string): string {
   html = html.replaceAll(/^---+$/gm, "<hr />");
 
   // Ordered lists (simple single-level). A temporary tag keeps the <ul> pass below from grabbing these items.
-  html = html.replaceAll(/^\s*\d+\.\s+(.+)$/gm, "<oli>$1</oli>");
-  html = html.replaceAll(/((?:<oli>.*<\/oli>\n?)+)/g, "<ol>$1</ol>");
+  // [ \t] rather than \s so a match can't reach across a blank line. The wrappers leave the newline after the last
+  // item outside, so the next line still starts at ^ for the passes below.
+  html = html.replaceAll(/^[ \t]*\d+\.[ \t]+(.+)$/gm, "<oli>$1</oli>");
+  html = html.replaceAll(/((?:<oli>.*<\/oli>\n)*<oli>.*<\/oli>)/g, "<ol>$1</ol>");
 
   // Unordered lists (simple single-level)
-  html = html.replaceAll(/^(\s*)-\s+(.+)$/gm, "<li>$2</li>");
-  html = html.replaceAll(/((?:<li>.*<\/li>\n?)+)/g, "<ul>$1</ul>");
+  html = html.replaceAll(/^[ \t]*-[ \t]+(.+)$/gm, "<li>$1</li>");
+  html = html.replaceAll(/((?:<li>.*<\/li>\n)*<li>.*<\/li>)/g, "<ul>$1</ul>");
   html = html.replaceAll("<oli>", "<li>").replaceAll("</oli>", "</li>");
 
   // Blockquotes
@@ -591,10 +611,10 @@ export function markdownToConfluence (markdown: string): string {
   html = html.replaceAll(/<p>\s*<\/p>/g, "");
 
   // Restore inline code
-  html = html.replaceAll(/\uE001CODE(\d+)\uE001/g, (_match, index: string) => inlineCode[Number(index)]);
+  html = html.replaceAll(/\uE001CODE(\d+)\uE001/g, (match, index: string) => inlineCode[Number(index)] ?? match);
 
   // Restore code blocks (the paragraph pass may have wrapped their placeholders)
-  html = html.replaceAll(/(?:<p>)?\uE000CODE(\d+)\uE000(?:<\/p>)?/g, (_match, index: string) => codeBlocks[Number(index)]);
+  html = html.replaceAll(/(?:<p>)?\uE000CODE(\d+)\uE000(?:<\/p>)?/g, (match, index: string) => codeBlocks[Number(index)] ?? match);
 
   return html.trim();
 }

@@ -1,13 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, _Object as S3Object } from "@aws-sdk/client-s3";
 import {
-  UNIT_TEST_KEYSPACE_PREFIX,
-  mockListObjects,
-  mockS3,
-  mockUploadObject,
-  mockUploadObjectError,
-  resetMockS3
-} from "./mock";
-import {
+  NOTES_SECTIONS,
   buildNotesMetadata,
   deletePewPewNotes,
   generateNotesMarkdown,
@@ -16,6 +9,8 @@ import {
   getNotesMetaFilename,
   getNotesMetadata,
   getPewPewNotes,
+  isNotesSection,
+  makeTempDirectory,
   markdownToConfluence,
   parseYamlTestConfig,
   saveNotesMetadata,
@@ -24,11 +19,20 @@ import {
   updateNotesSection,
   validateNotesParams
 } from "../src/notes";
+import {
+  UNIT_TEST_KEYSPACE_PREFIX,
+  mockListObjects,
+  mockS3,
+  mockUploadObject,
+  mockUploadObjectError,
+  resetMockS3
+} from "./mock";
+import { readdir, rm, stat } from "node:fs/promises";
 import { LOCAL_FILE_LOCATION } from "../src/util";
 import { Readable } from "stream";
 import { expect } from "chai";
+import path from "node:path";
 import { promisify } from "node:util";
-import { readdir } from "node:fs/promises";
 import { s3 } from "@fs/ppaas-common";
 import { sdkStreamMixin } from "@smithy/util-stream";
 import { gzip as zlibGzip } from "node:zlib";
@@ -445,6 +449,19 @@ providers:
     });
   });
 
+  describe("isNotesSection", () => {
+    it("should accept the four sections", () => {
+      expect(NOTES_SECTIONS).to.deep.equal(["objectives", "environment", "findings", "conclusion"]);
+      for (const section of NOTES_SECTIONS) { expect(isNotesSection(section), section).to.equal(true); }
+    });
+
+    it("should reject unknown and inherited names", () => {
+      for (const section of ["bogus", "constructor", "toString", "hasOwnProperty", "__proto__", ""]) {
+        expect(isNotesSection(section), section).to.equal(false);
+      }
+    });
+  });
+
   describe("buildNotesMetadata", () => {
     const now = "2026-11-23T00:00:00.000Z";
 
@@ -589,9 +606,37 @@ providers:
       expect(result).to.not.include("<ul>");
     });
 
+    it("should keep formatting on the line right after a list", () => {
+      expect(markdownToConfluence("1. a\n2. b\n- c\n- d")).to.equal("<ol><li>a</li>\n<li>b</li></ol>\n<ul><li>c</li>\n<li>d</li></ul>");
+      expect(markdownToConfluence("1. a\n2. b\n> quote")).to.include("</ol>\n<blockquote><p>quote</p></blockquote>");
+      expect(markdownToConfluence("- a\n- b\nplain text after")).to.include("</ul>\n<p>plain text after</p>");
+    });
+
+    it("should not let a list item match reach across a blank line", () => {
+      const result = markdownToConfluence("Intro\n\n1. a");
+      expect(result).to.include("<p>Intro</p>\n\n<ol><li>a</li></ol>");
+    });
+
+    it("should keep HTML comments inside inline code", () => {
+      expect(markdownToConfluence("Use `<!-- x -->` here")).to.equal("<p>Use <code>&lt;!-- x --&gt;</code> here</p>");
+    });
+
+    it("should not let a stray backtick swallow later lines into inline code", () => {
+      const result = markdownToConfluence("text with `code\n\n# heading` end");
+      expect(result).to.include("<h1>heading` end</h1>");
+      expect(result).to.not.include("<code>");
+    });
+
+    it("should ignore placeholder characters pasted into the notes", () => {
+      const result = markdownToConfluence("before \uE001CODE5\uE001 and \uE000CODE3\uE000 after `x`");
+      expect(result).to.not.include("undefined");
+      expect(result).to.not.match(/[\uE000\uE001]/);
+      expect(result).to.include("<code>x</code>");
+    });
+
     it("should keep ordered and unordered lists separate", () => {
       const result = markdownToConfluence("- a\n- b\n\n1. one\n2. two");
-      expect(result).to.include("<ul><li>a</li>\n<li>b</li>\n</ul>");
+      expect(result).to.include("<ul><li>a</li>\n<li>b</li></ul>");
       expect(result).to.include("<ol><li>one</li>\n<li>two</li></ol>");
     });
 
@@ -861,10 +906,10 @@ providers:
     });
 
     describe("save temp directories", () => {
-      const leftoverDirs = async () => (await readdir(LOCAL_FILE_LOCATION))
-        .filter((name: string) => name.startsWith(`notes-${testYamlFile}${testDateString}-`) || name.startsWith(`notes-meta-${testYamlFile}${testDateString}-`));
+      const notesDirs = async () => (await readdir(LOCAL_FILE_LOCATION)).filter((name: string) => name.startsWith("notes-"));
 
       it("should give concurrent saves of the same test their own directories and clean them up", async () => {
+        const before = await notesDirs();
         mockUploadObject();
         mockListObjects([]);
         await Promise.all([1, 2, 3].map((index: number) => savePewPewNotes({
@@ -872,7 +917,21 @@ providers:
           dateString: testDateString,
           content: `# Notes ${index}`
         })));
-        expect(await leftoverDirs()).to.deep.equal([]);
+        expect(await notesDirs()).to.deep.equal(before);
+      });
+
+      it("makeTempDirectory should create a unique directory under LOCAL_FILE_LOCATION with a short prefix", async () => {
+        const [first, second] = await Promise.all([makeTempDirectory("notes-"), makeTempDirectory("notes-")]);
+        try {
+          expect(first).to.not.equal(second);
+          for (const dir of [first, second]) {
+            expect(path.dirname(dir)).to.equal(path.resolve(LOCAL_FILE_LOCATION));
+            expect(path.basename(dir)).to.match(/^notes-\w{6}$/);
+            expect((await stat(dir)).isDirectory()).to.equal(true);
+          }
+        } finally {
+          await Promise.all([first, second].map((dir: string) => rm(dir, { recursive: true, force: true })));
+        }
       });
     });
 
@@ -993,6 +1052,17 @@ providers:
         } catch (error: any) {
           expect(error.message).to.include("Unknown section");
           expect(error.message).to.include("nonexistent");
+        }
+      });
+
+      it("should treat inherited object properties as unknown sections", async () => {
+        for (const section of ["constructor", "toString", "__proto__"]) {
+          try {
+            await updateNotesSection({ yamlFile: testYamlFile, dateString: testDateString, section, content: "x" });
+            expect.fail(`Should have thrown for ${section}`);
+          } catch (error: any) {
+            expect(error.message, section).to.include("Unknown section");
+          }
         }
       });
 

@@ -98,7 +98,7 @@ function fetch (url: string, config?: AxiosRequestConfig): Promise<Response> {
     ["missing testData", { question: "What are the insights?" }],
     ["missing question in chat mode", { testData: mockTestData, mode: "chat" }],
     ["invalid question type", { testData: mockTestData, question: 123 as any }],
-    ["empty question", { testData: mockTestData, question: "   " }],
+    ["empty question in chat mode", { testData: mockTestData, question: "   ", mode: "chat" }],
     ["too long question", { testData: mockTestData, question: "A".repeat(1001) }],
     ["control characters", { testData: mockTestData, question: "What are the insights?\x00" }],
     ["unrecognized mode", { testData: mockTestData, question: "What are the insights?", mode: "bogus" }],

@@ -9,12 +9,12 @@
  * - Side-by-side Final Results tables
  */
 
+import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { Button, defaultButtonTheme } from "../LinkButton";
 import { ComparisonResult, compareResults } from "../TestResults/comparison";
-import { DataPoint, ParsedFileEntry } from "../TestResults/model";
 import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { LogLevel, log } from "../../src/log";
-import { MinMaxTime, compareEndpointAnchorId, comprehensiveSort, minMaxTime } from "../TestResults/utils";
+import { MinMaxTime, compareEndpointAnchorId, minMaxTime } from "../TestResults/utils";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAIAnalysisEnabled, useAIAnalysis } from "../AIAnalysisModal/useAIAnalysis";
 import { Chart } from "chart.js";
@@ -468,6 +468,27 @@ export interface TestResultsCompareProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Collapses entries to one per method+URL, the same grouping the comparison tables use. DataPoints are concatenated
+ * by reference (no histogram clones), which is all compareResults needs since it totals each list.
+ */
+const groupByMethodAndUrl = (entries: ParsedFileEntry[]): ParsedFileEntry[] => {
+  const groups = new Map<string, ParsedFileEntry>();
+  for (const [bucketId, dataPoints] of entries) {
+    const key = `${bucketId.method}||${bucketId.url}`;
+    const group = groups.get(key);
+    if (group) {
+      group[1].push(...dataPoints);
+    } else {
+      groups.set(key, [{ method: bucketId.method, url: bucketId.url }, [...dataPoints]]);
+    }
+  }
+  return Array.from(groups.values());
+};
+
+const compareMethodAndUrl = (a: BucketId, b: BucketId): number =>
+  a.url.localeCompare(b.url) || a.method.localeCompare(b.method);
 
 const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
@@ -1224,19 +1245,13 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     try {
       const baselineMinMaxTime = minMaxTime(filteredBaselineData);
       const comparisonMinMaxTime = minMaxTime(filteredComparisonData);
-      const result = compareResults(filteredBaselineData, filteredComparisonData);
+      // Match on method+URL like the comparison tables do, not every tag: compareResults keys on the whole BucketId,
+      // so an _id that moved between runs (a reordered YAML) would read as added/removed to the AI only
+      const result = compareResults(groupByMethodAndUrl(filteredBaselineData), groupByMethodAndUrl(filteredComparisonData));
 
-      result.matchedEndpoints.sort((a, b) => {
-        const aId = parseInt(a.bucketId._id, 10);
-        const bId = parseInt(b.bucketId._id, 10);
-        if (aId === bId) {
-          return JSON.stringify(a.bucketId) < JSON.stringify(b.bucketId) ? -1 : 1;
-        }
-        return aId - bId;
-      });
-
-      result.baselineOnly = comprehensiveSort(result.baselineOnly);
-      result.comparisonOnly = comprehensiveSort(result.comparisonOnly);
+      result.matchedEndpoints.sort((a, b) => compareMethodAndUrl(a.bucketId, b.bucketId));
+      result.baselineOnly.sort(([a], [b]) => compareMethodAndUrl(a, b));
+      result.comparisonOnly.sort(([a], [b]) => compareMethodAndUrl(a, b));
 
       log("TestResultsCompare comparison computed", LogLevel.DEBUG, {
         matched: result.matchedEndpoints.length,
@@ -1259,19 +1274,29 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     }
     const { matchedEndpoints, baselineOnly, comparisonOnly } = result;
 
+    // Small fields first and matchedEndpoints last: the server cuts oversized payloads from the end, so a cut drops
+    // endpoint detail rather than the summary and the added/removed endpoint lists
     return {
       comparisonType: "test-comparison",
       baselineLabel,
       comparisonLabel,
       methodFilter,
       baselineMetadata: {
-        endpoints: filteredBaselineData?.length || 0,
+        endpoints: matchedEndpoints.length + baselineOnly.length,
         timeRange: baselineMinMaxTime
       },
       comparisonMetadata: {
-        endpoints: filteredComparisonData?.length || 0,
+        endpoints: matchedEndpoints.length + comparisonOnly.length,
         timeRange: comparisonMinMaxTime
       },
+      summary: {
+        totalMatched: matchedEndpoints.length,
+        baselineOnly: baselineOnly.length,
+        comparisonOnly: comparisonOnly.length
+      },
+      baselineOnlyEndpoints: baselineOnly.map(([bucketId]) => bucketId),
+      comparisonOnlyEndpoints: comparisonOnly.map(([bucketId]) => bucketId),
+      timestamp: new Date().toISOString(),
       matchedEndpoints: matchedEndpoints.map((comparison) => ({
         bucketId: comparison.bucketId,
         stats: {
@@ -1293,17 +1318,9 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
           baseline: comparison.otherErrors.baseline,
           comparison: comparison.otherErrors.comparison
         }
-      })),
-      baselineOnlyEndpoints: baselineOnly.map(([bucketId]) => bucketId),
-      comparisonOnlyEndpoints: comparisonOnly.map(([bucketId]) => bucketId),
-      summary: {
-        totalMatched: matchedEndpoints.length,
-        baselineOnly: baselineOnly.length,
-        comparisonOnly: comparisonOnly.length
-      },
-      timestamp: new Date().toISOString()
+      }))
     };
-  }, [aiComparison, baselineLabel, comparisonLabel, methodFilter, filteredBaselineData, filteredComparisonData]);
+  }, [aiComparison, baselineLabel, comparisonLabel, methodFilter]);
 
   const aiAnalysis = useAIAnalysis({
     buildPayload: generateAIComparisonPayload,

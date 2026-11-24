@@ -1597,54 +1597,6 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     return state.mergedData || state.filteredData || state.resultsData;
   }, [state.mergedData, state.filteredData, state.resultsData]);
 
-  const generateAIPayload = useCallback(() => {
-    if (!displayData || displayData.length === 0) {
-      return null;
-    }
-
-    const aiPayload = {
-      summaryData: state.summaryData && Array.isArray(state.summaryData) && state.summaryData.length >= 2 ? {
-        bucketId: state.summaryData[0],
-        dataPointsCount: Array.isArray(state.summaryData[1]) ? state.summaryData[1].length : 0,
-        summaryStats: Array.isArray(state.summaryData[1]) && state.summaryData[1].length > 0 ? total(state.summaryData[1]) : null
-      } : null,
-      endpoints: displayData.filter(entry => Array.isArray(entry) && entry.length >= 2 && Array.isArray(entry[1])).map(([bucketId, dataPoints]) => {
-        const totalResults = total(dataPoints);
-        return {
-          bucketId,
-          totalResults,
-          metadata: {
-            dataPointsCount: dataPoints ? dataPoints.length : 0,
-            hasErrors: totalResults ? (totalResults.otherErrors.length > 0) : false
-          }
-        };
-      }),
-      testMetadata: {
-        testId: testData.testId,
-        s3Folder: testData.s3Folder,
-        status: testData.status,
-        minMaxTime: state.minMaxTime,
-        totalEndpoints: displayData.length,
-        hasFilterApplied: !!(state.summaryTagFilter || state.summaryTagValueFilter),
-        filterCriteria: {
-          tagFilter: state.summaryTagFilter,
-          valueFilter: state.summaryTagValueFilter
-        }
-      },
-      timestamp: new Date().toISOString()
-    };
-    return aiPayload;
-  }, [displayData, state.summaryData, state.minMaxTime, state.summaryTagFilter, state.summaryTagValueFilter, testData]);
-
-  const aiAnalysis = useAIAnalysis({
-    buildPayload: generateAIPayload,
-    defaultQuestion: DEFAULT_AI_QUESTION,
-    getReportDownload: () => {
-      const testName = testData.s3Folder.replace(/\//g, "_");
-      return { title: "AI Performance Analysis Report", details: [`Test: ${testName}`], fileNamePrefix: `ai-analysis-${testName}` };
-    }
-  });
-
   // Extract unique HTTP methods from displayData
   const availableMethods = useMemo(() => {
     if (!displayData) {
@@ -1669,6 +1621,58 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     }
     return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [displayData, methodFilter]);
+
+  // Built from filteredDisplayData so the AI analyzes what the charts and tables show, method filter included
+  const generateAIPayload = useCallback(() => {
+    if (!filteredDisplayData || filteredDisplayData.length === 0) {
+      return null;
+    }
+
+    // Small fields first and the endpoint array last: the server cuts oversized payloads from the end, so a cut drops
+    // endpoint detail rather than the metadata and summary that frame it
+    const aiPayload = {
+      testMetadata: {
+        testId: testData.testId,
+        s3Folder: testData.s3Folder,
+        status: testData.status,
+        minMaxTime: state.minMaxTime,
+        totalEndpoints: filteredDisplayData.length,
+        hasFilterApplied: !!(state.summaryTagFilter || state.summaryTagValueFilter || methodFilter !== "all"),
+        filterCriteria: {
+          tagFilter: state.summaryTagFilter,
+          valueFilter: state.summaryTagValueFilter,
+          methodFilter
+        }
+      },
+      summaryData: state.summaryData && Array.isArray(state.summaryData) && state.summaryData.length >= 2 ? {
+        bucketId: state.summaryData[0],
+        dataPointsCount: Array.isArray(state.summaryData[1]) ? state.summaryData[1].length : 0,
+        summaryStats: Array.isArray(state.summaryData[1]) && state.summaryData[1].length > 0 ? total(state.summaryData[1]) : null
+      } : null,
+      timestamp: new Date().toISOString(),
+      endpoints: filteredDisplayData.filter(entry => Array.isArray(entry) && entry.length >= 2 && Array.isArray(entry[1])).map(([bucketId, dataPoints]) => {
+        const totalResults = total(dataPoints);
+        return {
+          bucketId,
+          totalResults,
+          metadata: {
+            dataPointsCount: dataPoints ? dataPoints.length : 0,
+            hasErrors: totalResults ? (totalResults.otherErrors.length > 0) : false
+          }
+        };
+      })
+    };
+    return aiPayload;
+  }, [filteredDisplayData, methodFilter, state.summaryData, state.minMaxTime, state.summaryTagFilter, state.summaryTagValueFilter, testData]);
+
+  const aiAnalysis = useAIAnalysis({
+    buildPayload: generateAIPayload,
+    defaultQuestion: DEFAULT_AI_QUESTION,
+    getReportDownload: () => {
+      const testName = testData.s3Folder.replace(/\//g, "_");
+      return { title: "AI Performance Analysis Report", details: [`Test: ${testName}`], fileNamePrefix: `ai-analysis-${testName}` };
+    }
+  });
 
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {

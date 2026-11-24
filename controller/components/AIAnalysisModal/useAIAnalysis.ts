@@ -44,8 +44,9 @@ export interface UseAIAnalysisResult {
   modalProps: AIAnalysisModalProps;
 }
 
-const extractErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : `${error || "Unknown error"}`;
+// Matches MAX_HISTORY_LENGTH in pages/api/ai/analyze.ts. The server keeps only this many, so sending more only risks
+// a long chat outgrowing Next's request body limit and failing every later turn.
+const MAX_HISTORY_TO_SEND = 40;
 
 /** The chat/report state and requests behind one AI Analysis button and its modal */
 export function useAIAnalysis ({
@@ -161,7 +162,12 @@ export function useAIAnalysis ({
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setAiQuestion("");
     try {
-      const content = await requestAnalysis({ question, mode: "chat", history: historyForRequest }, keyAtSend);
+      // The full transcript stays local for display and rollback; only the window the server keeps is sent
+      let historyToSend = historyForRequest.slice(-MAX_HISTORY_TO_SEND);
+      if (historyToSend[0]?.role === "assistant") {
+        historyToSend = historyToSend.slice(1);
+      }
+      const content = await requestAnalysis({ question, mode: "chat", history: historyToSend }, keyAtSend);
       if (content === undefined) {
         return;
       }
@@ -178,7 +184,7 @@ export function useAIAnalysis ({
       if (dataKeyRef.current !== keyAtSend) {
         return; // superseded snapshot -- rolling back would resurrect a transcript for data that's gone
       }
-      rollBack(`Failed to get AI analysis: ${extractErrorMessage(aiError)}`);
+      rollBack(`Failed to get AI analysis: ${formatError(aiError)}`);
     } finally {
       isBusyRef.current = false;
       setIsAnalyzing(false);
@@ -211,7 +217,7 @@ export function useAIAnalysis ({
       if (dataKeyRef.current !== keyAtSend) {
         return; // superseded snapshot
       }
-      setReportError(`Failed to generate report: ${extractErrorMessage(aiError)}`);
+      setReportError(`Failed to generate report: ${formatError(aiError)}`);
     } finally {
       isBusyRef.current = false;
       setIsGeneratingReport(false);

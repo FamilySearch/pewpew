@@ -52,7 +52,6 @@ vi.mock("chart.js", () => {
   };
 });
 
-import { RuntimeConfigProvider, defaultRuntimeConfig } from "../../src/runtimeConfig";
 import TestResults, { configureURL } from ".";
 import { configure, fireEvent, getConfig, render, screen, waitFor } from "@testing-library/react";
 import { TestData } from "../../types/testmanager";
@@ -301,15 +300,17 @@ describe("Test Result Component", () => {
     });
 
     it("shows AI Insights once results load when AI Analysis is enabled", async () => {
-      render(
-        <RuntimeConfigProvider config={{ ...defaultRuntimeConfig, AI_ANALYSIS_ENABLED: true }}>
-          <TestResults testData={runningTest} />
-        </RuntimeConfigProvider>
-      );
-      expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
-      await initialLoad();
-      expect(screen.getByText("AI Insights")).toBeInTheDocument();
-      expect(screen.getByText("🤖 AI Analysis")).toBeInTheDocument();
+      // AI_ANALYSIS_ENABLED is inlined at build time in the app; under vitest it's read from process.env
+      vi.stubEnv("AI_ANALYSIS_ENABLED", "true");
+      try {
+        render(<TestResults testData={runningTest} />);
+        expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
+        await initialLoad();
+        expect(screen.getByText("AI Insights")).toBeInTheDocument();
+        expect(screen.getByText("🤖 AI Analysis")).toBeInTheDocument();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it("keeps the merge when the base file changes", async () => {

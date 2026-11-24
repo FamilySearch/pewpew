@@ -111,6 +111,8 @@ describe("AI Analyze API", () => {
         ["non-string content", [{ role: "user", content: 42 }], "Invalid history entry"],
         ["a null entry", [null], "Invalid history entry"],
         ["empty content", [{ role: "user", content: "   " }], "History message cannot be empty"],
+        // Control characters are stripped rather than rejected, so a message of nothing else ends up empty
+        ["content of only control characters", [{ role: "user", content: "\x1B\x0C" }], "History message cannot be empty"],
         [
           "a history starting with an assistant turn",
           [{ role: "assistant", content: "unprompted" }],

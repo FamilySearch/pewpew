@@ -45,7 +45,6 @@ vi.mock("chart.js", () => {
 });
 
 import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
-import { RuntimeConfigProvider, defaultRuntimeConfig } from "../../src/runtimeConfig";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { TestResultsCompare } from ".";
@@ -117,13 +116,15 @@ describe("TestResultsCompare", () => {
     });
 
     it("shows an enabled AI comparison button when AI Analysis is enabled", () => {
-      render(
-        <RuntimeConfigProvider config={{ ...defaultRuntimeConfig, AI_ANALYSIS_ENABLED: true }}>
-          <TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />
-        </RuntimeConfigProvider>
-      );
-      expect(screen.getByText("AI Comparison Insights")).toBeInTheDocument();
-      expect(screen.getByText("🤖 AI Comparison Analysis").closest("button")).not.toBeDisabled();
+      // AI_ANALYSIS_ENABLED is inlined at build time in the app; under vitest it's read from process.env
+      vi.stubEnv("AI_ANALYSIS_ENABLED", "true");
+      try {
+        render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+        expect(screen.getByText("AI Comparison Insights")).toBeInTheDocument();
+        expect(screen.getByText("🤖 AI Comparison Analysis").closest("button")).not.toBeDisabled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it("shows Performance Comparison heading", () => {

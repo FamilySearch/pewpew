@@ -122,6 +122,9 @@ const nextConfig: NextConfig = {
     // HIDE_ENVIRONMENT moved to RuntimeConfig (src/runtimeConfig.tsx) — runtime value read
     // via App.getInitialProps so it can differ per deployment without a rebuild.
     // AUTH_MODE is server-side only (API routes/authserver); no client-side usage.
+    // Shows the AI Analysis UI. Only a boolean, so the secret name never reaches the client bundle. The API route
+    // still checks PEWPEW_AI_API_KEY at request time, so set it in the build environment as well as at runtime.
+    AI_ANALYSIS_ENABLED: process.env.PEWPEW_AI_API_KEY ? "true" : "", // TestResults/TestResultsCompare
     AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME, // Used by auth client/Layout
     AUTH_HEADER_NAME: process.env.AUTH_HEADER_NAME, // Used by auth client/Layout
     // Client-side test configuration

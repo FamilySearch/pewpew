@@ -2,6 +2,7 @@ import { AuthPermission, AuthPermissions } from "../../../types";
 import { LogLevel, log } from "@fs/ppaas-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAIApiKeyName, getKey, isAIAnalysisEnabled } from "../../../src/secrets";
+import type OpenAI from "openai";
 import { authApi } from "../../../src/authserver";
 import { createErrorResponse } from "../../../src/util";
 
@@ -43,7 +44,14 @@ interface AIResponse {
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_REGEX: RegExp = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_REGEX_GLOBAL: RegExp = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 const MAX_QUESTION_LENGTH = 1000;
+// Compact JSON, so this fits a few dozen endpoints' stats. Pretty-printed with an 8000 cap it fit only 3-4.
+const MAX_TEST_DATA_LENGTH = 40000;
+// A hung OpenAI call keeps the modal locked open, so fail well before the SDK's 10 minute default
+const OPENAI_TIMEOUT_MS = 90_000;
+const OPENAI_MAX_RETRIES = 1;
 const MAX_HISTORY_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY_LENGTH = 40; // 20 back-and-forth turns
 
@@ -68,13 +76,50 @@ const REPORT_SYSTEM_PROMPT = "You are a Performance Analysis Engineer. You analy
   "focused on system or page health and efficiency. You always adapt your analysis to whatever metrics are " +
   "actually present in the data rather than assuming a fixed schema.";
 
-// Prepare data preview (limit to avoid token limits)
+// Prepare data preview (limit to avoid token limits). When it has to cut, say how much is missing so the model doesn't
+// report "no regressions" for data it never saw.
 function truncateTestData (testData: unknown): string {
-  const dataPreview = JSON.stringify(testData, null, 2);
-  const maxLength = 8000; // Limit data size to avoid token issues
-  return dataPreview.length > maxLength
-    ? dataPreview.substring(0, maxLength) + "\n... (data truncated due to size)"
-    : dataPreview;
+  const dataPreview = JSON.stringify(testData);
+  if (dataPreview.length <= MAX_TEST_DATA_LENGTH) {
+    return dataPreview;
+  }
+  const keptPercent = Math.floor((MAX_TEST_DATA_LENGTH / dataPreview.length) * 100);
+  return dataPreview.substring(0, MAX_TEST_DATA_LENGTH)
+    + `\n... (data truncated due to size: only the first ${keptPercent}% of ${dataPreview.length} characters is shown. `
+    + "Say that your answer covers only the data shown, and draw no conclusions about anything that was cut off.)";
+}
+
+// One client per secret name, reused across requests so each chat turn doesn't call Secrets Manager
+let cachedClient: { keyName: string; client: Promise<OpenAI> } | undefined;
+
+async function createOpenAIClient (apiKeyName: string): Promise<OpenAI> {
+  // Dynamically import OpenAI so deployments without AI Analysis never load it
+  const OpenAIClient = (await import("openai")).default;
+  const apiKey = await getKey(apiKeyName);
+  if (!apiKey) {
+    throw new Error("OpenAI API key not found. Check your Secret Manager provider configuration.");
+  }
+  return new OpenAIClient({ apiKey, timeout: OPENAI_TIMEOUT_MS, maxRetries: OPENAI_MAX_RETRIES });
+}
+
+function getOpenAIClient (apiKeyName: string): Promise<OpenAI> {
+  if (!cachedClient || cachedClient.keyName !== apiKeyName) {
+    const client = createOpenAIClient(apiKeyName);
+    cachedClient = { keyName: apiKeyName, client };
+    // Don't cache a failed key lookup, or every later request would fail the same way
+    client.catch(() => clearOpenAIClient(client));
+  }
+  return cachedClient.client;
+}
+
+function clearOpenAIClient (client: Promise<OpenAI>): void {
+  if (cachedClient?.client === client) {
+    cachedClient = undefined;
+  }
+}
+
+function stripControlChars (text: string): string {
+  return text.replace(CONTROL_CHAR_REGEX_GLOBAL, "");
 }
 
 function buildChatMessages (truncatedData: string, question: string, history: ChatMessage[]) {
@@ -140,22 +185,14 @@ async function analyzeLoadTestData (
   question: string | undefined,
   history: ChatMessage[]
 ): Promise<AIResponse> {
+  // The key comes from AWS Secrets Manager, or a local _OVERRIDE environment variable for development
+  const apiKeyName = getAIApiKeyName();
+  if (!apiKeyName) {
+    throw new Error("PEWPEW_AI_API_KEY is not set"); // The handler returns 404 before reaching here
+  }
+  const clientPromise = getOpenAIClient(apiKeyName);
   try {
-    // Dynamically import OpenAI and initialize client inside the function
-    const OpenAI = (await import("openai")).default;
-    // Try to get API key from AWS Secrets Manager first (for deployed instances)
-    // Fall back to environment variable for local development
-    const apiKeyName = getAIApiKeyName();
-    if (!apiKeyName) {
-      throw new Error("PEWPEW_AI_API_KEY is not set"); // The handler returns 404 before reaching here
-    }
-    const apiKey = await getKey(apiKeyName);
-    if (!apiKey) {
-      throw new Error("OpenAI API key not found. Check your Secret Manager provider configuration.");
-    }
-    const openai = new OpenAI({
-      apiKey
-    });
+    const openai = await clientPromise;
     const truncatedData = truncateTestData(testData);
 
     const messages = mode === "report"
@@ -191,6 +228,10 @@ async function analyzeLoadTestData (
 
     return completion as AIResponse;
   } catch (error) {
+    // A rotated or revoked key fails with 401. Drop the cached client so the next request reloads the key.
+    if ((error as { status?: unknown } | undefined)?.status === 401) {
+      clearOpenAIClient(clientPromise);
+    }
     log("Error in analyzeLoadTestData", LogLevel.ERROR, error);
     throw error;
   }
@@ -241,10 +282,14 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
     const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
     log(`${req.method} ${req.url} received`, LogLevel.INFO, {
       userId: authPermissions.userId,
+      mode: requestedMode,
+      questionLength: typeof question === "string" ? question.length : undefined
+    });
+    // Request details beyond the user id stay out of INFO (PERF-4758)
+    log(`${req.method} ${req.url} request details`, LogLevel.DEBUG, {
       ipAddress,
       userAgent: req.headers["user-agent"],
       referer: req.headers["referer"],
-      mode: requestedMode,
       question: typeof question === "string" ? question.slice(0, 100) : undefined
     });
 
@@ -263,7 +308,9 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
     if (mode === "chat" && (!question || typeof question !== "string")) {
       return res.status(400).json({ error: "Missing or invalid question" });
     }
-    if (question !== undefined) {
+    // In report mode the question is an optional focus, so a blank one means "no focus" rather than an error
+    const hasQuestion = question !== undefined && !(mode === "report" && typeof question === "string" && !question.trim());
+    if (hasQuestion) {
       if (typeof question !== "string") {
         return res.status(400).json({ error: "Missing or invalid question" });
       }
@@ -296,7 +343,11 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
         if (!message || (message.role !== "user" && message.role !== "assistant") || typeof message.content !== "string") {
           return res.status(400).json({ error: "Invalid history entry" });
         }
-        // Length is handled by truncation below; an empty or control-character message is still a malformed client
+      }
+      // Control characters are stripped rather than rejected: an assistant reply can contain one, and the client
+      // resends it verbatim, so rejecting it would dead-end every later turn. Length is handled by truncation below.
+      boundedHistory = boundedHistory.map(({ role, content }) => ({ role, content: stripControlChars(content) }));
+      for (const message of boundedHistory) {
         const historyError = validateText("History message", message.content);
         if (historyError) {
           return res.status(400).json({ error: historyError });
@@ -321,7 +372,7 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
       history = boundedHistory.map(({ role, content }) => ({ role, content: truncateHistoryMessage(content.trim()) }));
     }
 
-    const trimmedQuestion = typeof question === "string" ? question.trim() : undefined;
+    const trimmedQuestion = hasQuestion && typeof question === "string" ? question.trim() : undefined;
     log("Processing AI analysis request", LogLevel.DEBUG, {
       mode,
       questionLength: trimmedQuestion?.length,
@@ -332,7 +383,6 @@ export default async function handler (req: NextApiRequest, res: NextApiResponse
     log("AI analysis completed successfully", LogLevel.DEBUG, aiResponse);
     log(`${req.method} ${req.url} completed`, LogLevel.INFO, {
       userId: authPermissions.userId,
-      ipAddress,
       status: 200,
       mode,
       model: aiResponse.model,

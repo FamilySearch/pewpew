@@ -11,7 +11,7 @@
  * - Individual endpoint details with RTT and status charts
  */
 
-import { API_AI_ANALYZE, API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
+import { API_JSON, API_SEARCH, API_SEARCH_FORMAT, API_TEST_FORMAT } from "../../types";
 import { BucketId, DataPoint, ParsedFileEntry } from "./model";
 import { Button, defaultButtonTheme } from "../LinkButton";
 import {
@@ -36,18 +36,18 @@ import type { TestData, TestManagerError, TestManagerMessage } from "../../types
 import axios, { AxiosResponse } from "axios";
 import { cloneParsedEntries, detectOverlap, mergeResults, requestCountTimeSeries } from "./merge";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
+import { isAIAnalysisEnabled, useAIAnalysis } from "../AIAnalysisModal/useAIAnalysis";
 import { Chart } from "chart.js";
-import type { ChatMessage } from "../AIAnalysisModal";
 import { Danger } from "../Alert";
 import { MergeSearchModal } from "./MergeSearchModal";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import dynamic from "next/dynamic";
 import styled from "styled-components";
-import { useRuntimeConfig } from "../../src/runtimeConfig";
 
 // Loaded only when AI Analysis is enabled and rendered, so deployments without it don't download react-markdown
 const AIAnalysisModal = dynamic(() => import("../AIAnalysisModal"), { ssr: false });
+const DEFAULT_AI_QUESTION = "Can you summarize the most important facts about this performance test data? Focus on response times, error rates, and any performance bottlenecks.";
 
 const TimeTaken = styled.div`
   text-align: left;
@@ -997,34 +997,13 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   // The status the polling effect last saw, so it can tell a test that just stopped from one that already had
   const previousStatusRef = useRef(testData.status);
 
-  // Off unless the server has PEWPEW_AI_API_KEY configured
-  const { AI_ANALYSIS_ENABLED: aiAnalysisEnabled } = useRuntimeConfig();
-  const DEFAULT_AI_QUESTION = "Can you summarize the most important facts about this performance test data? Focus on response times, error rates, and any performance bottlenecks.";
-  // The test data snapshot the chat/report are analyzing. Preserved across modal re-opens only while the payload
-  // is identical; when it changes (different results file, filter, or merge) the chat/report are cleared, since
-  // they describe numbers that are no longer on screen. Enforced in handleAIAnalysis via aiDataKeyRef.
-  const [aiOriginalData, setAiOriginalData] = useState<unknown>(null);
-  const [aiQuestion, setAiQuestion] = useState(DEFAULT_AI_QUESTION);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatError, setChatError] = useState<string | undefined>(undefined);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [reportContent, setReportContent] = useState<string | undefined>(undefined);
-  const [reportError, setReportError] = useState<string | undefined>(undefined);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  // Off unless PEWPEW_AI_API_KEY was set at build time
+  const aiAnalysisEnabled = isAIAnalysisEnabled();
   const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [endpointDataExpanded, setEndpointDataExpanded] = useState(false);
-  // Identity of the payload the current chat/report were built on, so a changed snapshot can be detected
-  const aiDataKeyRef = useRef<string | undefined>(undefined);
-  // Bumped when a changed snapshot starts a new session, so the modal can reset its view even if nothing was cleared
-  const [aiSessionKey, setAiSessionKey] = useState(0);
   const compareSearchModalRef = useRef<ModalObject| null>(null);
-  const aiAnalysisModalRef = useRef<ModalObject| null>(null);
-  // Tracks an in-flight AI request for handleModalClose. Written at the request boundaries rather than during
-  // render, so it's already true before the state update commits and still true when the setTimeout callback runs.
-  const isAIBusyRef = useRef(false);
   useEffectModal(compareSearchModalRef);
-  useEffectModal(aiAnalysisModalRef);
   const mergeSearchModalRef = useRef<ModalObject | null>(null);
   useEffectModal(mergeSearchModalRef);
   // Keep a ref so onMergeLoad / onClearMerge can call the current callback without
@@ -1657,188 +1636,14 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     return aiPayload;
   }, [displayData, state.summaryData, state.minMaxTime, state.summaryTagFilter, state.summaryTagValueFilter, testData]);
 
-  // Handle AI analysis button click
-  const handleAIAnalysis = () => {
-    try {
-      const aiPayload = generateAIPayload();
-      log("Generated AI Payload Successfully", LogLevel.INFO);
-      if (aiPayload) {
-        // Reset question to default if it's empty
-        if (!aiQuestion.trim()) {
-          setAiQuestion(DEFAULT_AI_QUESTION);
-        }
-        // Preserve the chat/report across re-opens only while the snapshot is the same one they were built on.
-        // The timestamp is excluded because it changes on every generation and says nothing about the data.
-        const aiDataKey = JSON.stringify({ ...aiPayload, timestamp: undefined });
-        if (aiDataKeyRef.current !== undefined && aiDataKeyRef.current !== aiDataKey) {
-          log("AI payload changed, clearing prior chat and report", LogLevel.INFO);
-          setChatMessages([]);
-          setChatError(undefined);
-          setReportContent(undefined);
-          setReportError(undefined);
-          setAiSessionKey((key) => key + 1);
-        }
-        aiDataKeyRef.current = aiDataKey;
-        setAiOriginalData(aiPayload);
-        // Open modal using ref for compatibility with existing Modal component
-        if (aiAnalysisModalRef.current) {
-          aiAnalysisModalRef.current.openModal();
-        }
-      } else {
-        log("No payload generated", LogLevel.INFO);
-      }
-    } catch (error) {
-      log("Error generating AI payload", LogLevel.ERROR, error);
+  const aiAnalysis = useAIAnalysis({
+    buildPayload: generateAIPayload,
+    defaultQuestion: DEFAULT_AI_QUESTION,
+    getReportDownload: () => {
+      const testName = testData.s3Folder.replace(/\//g, "_");
+      return { title: "AI Performance Analysis Report", details: [`Test: ${testName}`], fileNamePrefix: `ai-analysis-${testName}` };
     }
-  };
-
-  // Custom close handler that prevents closing while a request is in flight
-  const handleModalClose = () => {
-    if (isAIBusyRef.current) {
-      // Prevent closing by immediately reopening
-      setTimeout(() => {
-        if (aiAnalysisModalRef.current && isAIBusyRef.current) {
-          aiAnalysisModalRef.current.openModal();
-        }
-      }, 0);
-    }
-    // Allow normal closing when idle - modal will close automatically
-  };
-
-  const extractErrorMessage = (error: unknown): string =>
-    error instanceof Error ? error.message : `${error || "Unknown error"}`;
-
-  // Send the current question to the chat, continuing the existing conversation with prior turns as context
-  const sendChatMessage = async () => {
-    const question = aiQuestion.trim();
-    if (!aiOriginalData || !question) {
-      return;
-    }
-    const historyForRequest = chatMessages; // history up to (not including) this new question
-    const keyAtSend = aiDataKeyRef.current; // the snapshot this turn belongs to
-    isAIBusyRef.current = true;
-    setIsAnalyzing(true);
-    setChatError(undefined);
-    setChatMessages((prev) => [...prev, { role: "user", content: question }]);
-    setAiQuestion("");
-    try {
-      const requestBody = {
-        testData: aiOriginalData,
-        question,
-        mode: "chat",
-        history: historyForRequest
-      };
-      const response = await axios.post(formatPageHref(API_AI_ANALYZE), requestBody, {
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-      if (aiDataKeyRef.current !== keyAtSend) {
-        // The analyzed snapshot changed while this was in flight. Appending now would attach the answer to data
-        // it isn't about, and would land on a transcript the reset already cleared -- leaving it assistant-first,
-        // which the endpoint rejects on every later turn. Drop the response instead.
-        log("Discarding chat response for a superseded data snapshot", LogLevel.INFO);
-        return;
-      }
-      const content: string = response.data?.choices?.[0]?.message?.content ?? "";
-      if (!content.trim()) {
-        // Storing an empty turn would render a blank bubble and then fail validation on every later request,
-        // since the client resends the transcript as history. Roll back and let the user retry instead.
-        log("AI analysis returned an empty completion", LogLevel.WARN);
-        setChatMessages(historyForRequest);
-        setAiQuestion((current) => current.trim() ? current : question);
-        setChatError("The AI returned an empty response. Please try again.");
-        return;
-      }
-      setChatMessages((prev) => [...prev, { role: "assistant", content }]);
-    } catch (aiError) {
-      log("Error calling AI analysis API", LogLevel.ERROR, aiError);
-      if (aiDataKeyRef.current !== keyAtSend) {
-        return; // superseded snapshot -- rolling back would resurrect a transcript for data that's gone
-      }
-      // Drop the optimistic user turn so the transcript keeps alternating, and give the question back unless
-      // the user has already typed something new into the box
-      setChatMessages(historyForRequest);
-      setAiQuestion((current) => current.trim() ? current : question);
-      setChatError(`Failed to get AI analysis: ${extractErrorMessage(aiError)}`);
-    } finally {
-      isAIBusyRef.current = false;
-      setIsAnalyzing(false);
-    }
-  };
-
-  // Generate the full structured report. Independent of the chat above -- it's not affected by whatever
-  // question is currently typed in the chat box.
-  const generateReport = async () => {
-    if (!aiOriginalData) {
-      return;
-    }
-    const keyAtSend = aiDataKeyRef.current; // the snapshot this report belongs to
-    isAIBusyRef.current = true;
-    setIsGeneratingReport(true);
-    setReportError(undefined);
-    try {
-      const requestBody = {
-        testData: aiOriginalData,
-        mode: "report"
-      };
-      const response = await axios.post(formatPageHref(API_AI_ANALYZE), requestBody, {
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-      if (aiDataKeyRef.current !== keyAtSend) {
-        log("Discarding report for a superseded data snapshot", LogLevel.INFO);
-        return; // the analyzed snapshot changed while this was in flight
-      }
-      const content: string = response.data?.choices?.[0]?.message?.content ?? "";
-      if (!content.trim()) {
-        // An empty report would leave the panel unchanged and the download disabled, with nothing explaining why
-        log("AI report generation returned empty content", LogLevel.WARN);
-        setReportError("The AI returned an empty report. Please try again.");
-        return;
-      }
-      setReportContent(content);
-    } catch (aiError) {
-      log("Error calling AI analysis API", LogLevel.ERROR, aiError);
-      if (aiDataKeyRef.current !== keyAtSend) {
-        return; // superseded snapshot
-      }
-      setReportError(`Failed to generate report: ${extractErrorMessage(aiError)}`);
-    } finally {
-      isAIBusyRef.current = false;
-      setIsGeneratingReport(false);
-    }
-  };
-
-  // Download the generated report as a markdown file
-  const downloadReport = () => {
-    if (!reportContent) {
-      log("No report content to download", LogLevel.INFO);
-      return;
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const testName = testData.s3Folder.replace(/\//g, "_");
-    const fileContent = `AI Performance Analysis Report
-Generated: ${new Date().toLocaleString()}
-Test: ${testName}
-
-${reportContent}
-
----
-Generated by PaaS Performance Testing Controller
-`;
-
-    const blob = new Blob([fileContent], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `ai-analysis-${testName}-${timestamp}.md`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  });
 
   // Extract unique HTTP methods from displayData
   const availableMethods = useMemo(() => {
@@ -1941,26 +1746,7 @@ Generated by PaaS Performance Testing Controller
           {/* This is the compare search modal */}
           <TestsListModal ref={compareSearchModalRef} tests={state.compareTests} onClick={onPriorTestLoad} />
           {/* AI Analysis Modal */}
-          {aiAnalysisEnabled && (
-            <AIAnalysisModal
-              modalRef={aiAnalysisModalRef}
-              isAnalyzing={isAnalyzing}
-              hasTestData={aiOriginalData !== null}
-              messages={chatMessages}
-              chatError={chatError}
-              aiQuestion={aiQuestion}
-              onQuestionChange={setAiQuestion}
-              onSendMessage={sendChatMessage}
-              isGeneratingReport={isGeneratingReport}
-              reportContent={reportContent}
-              reportError={reportError}
-              onGenerateReport={generateReport}
-              onDownloadReport={downloadReport}
-              originalData={aiOriginalData ?? undefined}
-              sessionKey={aiSessionKey}
-              onClose={handleModalClose}
-            />
-          )}
+          {aiAnalysisEnabled && <AIAnalysisModal {...aiAnalysis.modalProps} />}
           {/* This is the merge results search modal */}
           <MergeSearchModal
             ref={mergeSearchModalRef}
@@ -1987,7 +1773,7 @@ Generated by PaaS Performance Testing Controller
                   buttonHeight: "50px",
                   buttonFontSize: "18px"
                 }}
-                onClick={handleAIAnalysis}
+                onClick={aiAnalysis.openAnalysis}
                 style={{
                   cursor: "pointer"
                 }}
@@ -1995,6 +1781,7 @@ Generated by PaaS Performance Testing Controller
                 🤖 AI Analysis
               </Button>
             </p>
+            {aiAnalysis.openError && <Danger>{aiAnalysis.openError}</Danger>}
           </>}
           <div id="overview-charts">
             <SectionHeading>

@@ -542,7 +542,7 @@ export function medianDurationChart (el: HTMLCanvasElement, allEndpoints: [strin
       x: dp.time,
       y: dp.rttHistogram.getTotalCount()
         ? Number(dp.rttHistogram.getValueAtPercentile(50)) / MICROS_TO_MS
-        : NaN
+        : Number.NaN
     }));
 
     const borderColor = colors[index % colors.length];

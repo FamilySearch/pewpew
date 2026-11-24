@@ -263,9 +263,10 @@ export class TestScheduler implements TestSchedulerItem {
    */
   protected static async startNewTest (testToRun: TestSchedulerItem, nextStart: number): Promise<TestData | undefined> {
     // Use the saved userId if we have it
+    const userId: string = testToRun.userId || AUTH_PERMISSIONS_SCHEDULER.userId!;
     const authPermissions: AuthPermissions = {
       ...AUTH_PERMISSIONS_SCHEDULER,
-      userId: testToRun.userId || AUTH_PERMISSIONS_SCHEDULER.userId
+      userId
     };
     const { queueName, testMessage, environmentVariables: environmentVariablesFile } = testToRun.scheduledTestData;
     const { testId, envVariables, restartOnFailure, version, bypassParser, yamlFile, additionalFiles } = testMessage;
@@ -301,7 +302,7 @@ export class TestScheduler implements TestSchedulerItem {
       testToRun.eventInput.startRecur = nextStart;
       // Update the scheduleDate so it will still show as delete-able
       testToRun.scheduledTestData.scheduleDate = nextStart;
-      log("Test Scheduler Loop: New Load Test started", LogLevel.INFO, { queueName, testData, authPermissions, nextStart });
+      log("Test Scheduler Loop: New Load Test started", LogLevel.INFO, { testId, userId, queueName, testData, authPermissions, nextStart });
       log("Test Scheduler: Updated EventInput", LogLevel.DEBUG, testToRun.eventInput);
       // Just like add and remove, we need to call this so the calendar and scheduler get updated and saved
       TestScheduler.updateNextStart();
@@ -323,9 +324,10 @@ export class TestScheduler implements TestSchedulerItem {
    */
   protected static async startExistingTest (testToRun: TestSchedulerItem): Promise<TestData | undefined> {
     // Use the saved userId if we have it
+    const userId: string = testToRun.userId || AUTH_PERMISSIONS_SCHEDULER.userId!;
     const authPermissions: AuthPermissions = {
       ...AUTH_PERMISSIONS_SCHEDULER,
-      userId: testToRun.userId || AUTH_PERMISSIONS_SCHEDULER.userId
+      userId
     };
     const { queueName, testMessage } = testToRun.scheduledTestData;
     const { testId, testRunTimeMn } = testMessage;
@@ -333,7 +335,7 @@ export class TestScheduler implements TestSchedulerItem {
     try {
       // Not recurring, or the last run for this set, use the same dir and message
       const testData: StoredTestData = await TestManager.sendTestToQueue(testMessage, queueName, PpaasTestId.getFromTestId(testId), testRunTimeMn, authPermissions);
-      log ("Test Scheduler Loop: New Load Test started", LogLevel.INFO, { testMessage: { ...testMessage, envVariables: undefined }, queueName, testData, authPermissions });
+      log("Test Scheduler Loop: Existing Load Test started", LogLevel.INFO, { testId, userId, testMessage: { ...testMessage, envVariables: undefined }, queueName, testData, authPermissions });
       // It's not recurring or it's the last one, Delete it from the calendar if it's succesful
       await TestScheduler.removeTest(testId, authPermissions);
       return testData;
@@ -985,7 +987,7 @@ export class TestScheduler implements TestSchedulerItem {
           log("TestScheduler: loadTestsFromS3 json", LogLevel.DEBUG, json);
           TestScheduler.historicalTests = new Map<string, TestSchedulerItem>(json);
           log("TestScheduler: loadTestsFromS3 historicalTests.size: " + TestScheduler.historicalTests.size, LogLevel.INFO, {
-            testIds: Array.from(TestScheduler.historicalTests.keys())
+            testIds: Array.from(TestScheduler.historicalTests.keys())?.slice(0, 20)
           });
         } else {
           TestScheduler.historicalTests = new Map<string, TestSchedulerItem>();

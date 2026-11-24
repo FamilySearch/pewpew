@@ -17,7 +17,7 @@ import {
 import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestData } from "../src/clientutil";
 import { Danger } from "../components/Alert";
@@ -75,6 +75,14 @@ const TestHistoryPage = ({
   const [state, setFormData] = useState(defaultState);
   const setState = (newState: Partial<TestHistoryState>) => setFormData((oldState: TestHistoryState) => ({ ...oldState, ...newState}));
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof router.query.search === "string") {
+      setState({ testIdSearch: router.query.search });
+    } else {
+      setState({ testIdSearch: "", searchTestResult: undefined });
+    }
+  }, [router.query.search]);
 
   let body: React.JSX.Element = <Div>Unknown Error</Div>;
   if (allTests) {

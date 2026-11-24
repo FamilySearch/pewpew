@@ -35,6 +35,13 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "POST") {
+    const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
+    log("POST /test received", LogLevel.INFO, {
+      userId: authPermissions.userId,
+      ipAddress,
+      userAgent: req.headers["user-agent"],
+      referer: req.headers["referer"]
+    });
     let localPath: string | undefined;
     try {
       const testIdTime: string = PpaasTestId.getDateString();
@@ -49,6 +56,12 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         return;
       }
       const testManagerResponse: TestManagerResponse = await TestManager.postTest(parsedForm, authPermissions, localPath);
+      log("POST /test completed", LogLevel.INFO, {
+        userId: authPermissions.userId,
+        ipAddress,
+        status: testManagerResponse.status,
+        testId: (testManagerResponse.json as Record<string, unknown>)?.testId
+      });
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above

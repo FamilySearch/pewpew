@@ -14,7 +14,7 @@ import { authApi } from "../../src/authserver";
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 
   if (req.method === "GET") {
-    if (!await authApi(req, res)) {
+    if (!await authApi(req, res, AuthPermission.ReadOnly)) {
       // If it's undefined we failed auth and already have set a response
       return;
     }
@@ -32,11 +32,23 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       // If it's undefined we failed auth and already have set a response
       return;
     }
+    const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
+    log(`${req.method} /pewpew received`, LogLevel.INFO, {
+      userId: authPermissions.userId,
+      ipAddress,
+      userAgent: req.headers["user-agent"],
+      referer: req.headers["referer"]
+    });
     let localPath: string | undefined;
     try {
       if (req.method === "DELETE") {
         // Check query param
         const testManagerResponse: TestManagerResponse = await deletePewPew(req.query, authPermissions);
+        log("DELETE /pewpew completed", LogLevel.INFO, {
+          userId: authPermissions.userId,
+          ipAddress,
+          status: testManagerResponse.status
+        });
         res.status(testManagerResponse.status).json(testManagerResponse.json);
       } else { // req.method === "POST"
         localPath = await createTestFolder(PpaasTestId.getDateString());
@@ -51,6 +63,11 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         }
 
         const testManagerResponse: TestManagerResponse = await postPewPew(parsedForm, authPermissions);
+        log("POST /pewpew completed", LogLevel.INFO, {
+          userId: authPermissions.userId,
+          ipAddress,
+          status: testManagerResponse.status
+        });
         res.status(testManagerResponse.status).json(testManagerResponse.json);
       }
     } catch (error) {

@@ -5,9 +5,12 @@ import {
 } from "./util";
 import {
   API_LOGIN,
+  API_NOTES_FORMAT,
   PAGE_ADMIN,
   PAGE_CALENDAR,
   PAGE_LOGIN,
+  PAGE_NOTES,
+  PAGE_NOTES_FORMAT,
   PAGE_START_TEST,
   PAGE_START_TEST_FORMAT,
   PAGE_TEST_HISTORY,
@@ -118,8 +121,8 @@ describe("Web Page Acceptance Tests", () => {
       expect(res.headers.location, `redirect includes testId '${testId}'`).to.include(encodeURIComponent(testId));
     });
 
-    it("with ?testId= and results and compare should redirect 307 preserving all params", async () => {
-      const url = `${integrationUrl}${PAGE_TEST_HISTORY}?testId=${encodeURIComponent(testId)}&results=0&compare=${encodeURIComponent(testId)}`;
+    it("with ?testId= and results, compare, notes should redirect 307 preserving all params", async () => {
+      const url = `${integrationUrl}${PAGE_TEST_HISTORY}?testId=${encodeURIComponent(testId)}&results=0&compare=${encodeURIComponent(testId)}&notes=1`;
       log(`GET ${url}`, LogLevel.DEBUG);
       const res: AxiosResponse = await fetchNoRedirects(url);
       expect(res.status, "status").to.equal(307);
@@ -128,6 +131,7 @@ describe("Web Page Acceptance Tests", () => {
       expect(res.headers.location, "redirect includes testId").to.include(encodeURIComponent(testId));
       expect(res.headers.location, "redirect includes results=0").to.include("results=0");
       expect(res.headers.location, "redirect includes compare").to.include(`compare=${encodeURIComponent(testId)}`);
+      expect(res.headers.location, "redirect includes notes=1").to.include("notes=1");
     });
   });
 
@@ -206,6 +210,57 @@ describe("Web Page Acceptance Tests", () => {
       const html: string = res.data;
       assertNoPageError(html);
       expect(html, "h1: Test Schedule").to.include("Test Schedule");
+    });
+  });
+
+  // =====================
+  // GET /notes
+  // =====================
+  describe(`GET ${PAGE_NOTES}`, () => {
+    before(async () => {
+      // Create a note so the notes query parameter test has content
+      try {
+        const notesUrl = integrationUrl + API_NOTES_FORMAT(s3Folder);
+        await _axios.post(notesUrl, { content: "Acceptance test note" }, { headers: { "Content-Type": "application/json" } });
+        log("Created test note for " + s3Folder, LogLevel.WARN, { s3Folder, notesUrl });
+      } catch (error) {
+        log("Could not create test note (may already exist)", LogLevel.WARN, error);
+      }
+    });
+
+    it("should respond 200 with the notes heading", async () => {
+      const res: AxiosResponse = await fetchNoRedirects(integrationUrl + PAGE_NOTES);
+      log(`GET ${PAGE_NOTES} status=${res.status}`, LogLevel.DEBUG);
+      expect(res.status, "status").to.equal(200);
+      const html: string = res.data;
+      assertNoPageError(html);
+      expect(html, "h1: Performance Test Notes").to.include("Performance Test Notes");
+      expect(html, "search input").to.include("notes-search-input");
+      expect(html, "search button").to.include("Search");
+    });
+
+    it("with ?s3Folder= should respond 200 with the notes editor", async () => {
+      const url = integrationUrl + PAGE_NOTES_FORMAT(s3Folder);
+      log(`GET ${url}`, LogLevel.DEBUG);
+      const res: AxiosResponse = await fetchNoRedirects(url);
+      expect(res.status, "status").to.equal(200);
+      const html: string = res.data;
+      assertNoPageError(html);
+      expect(html, "h1: Test Notes").to.include("Test Notes");
+      const parts = s3Folder.split("/");
+      expect(html, "yaml file name in page").to.include(parts[0]);
+      expect(html, "date string in page").to.include(parts[1]);
+      expect(html, "View Test link").to.include("View Test");
+      expect(html, "Back to Notes link").to.include("Back to Notes");
+    });
+
+    it("with invalid ?s3Folder= should respond 200 with error", async () => {
+      const url = integrationUrl + PAGE_NOTES_FORMAT("invalidformat");
+      log(`GET ${url}`, LogLevel.DEBUG);
+      const res: AxiosResponse = await fetchNoRedirects(url);
+      expect(res.status, "status").to.equal(200);
+      const html: string = res.data;
+      expect(html, "Invalid s3Folder format").to.include("Invalid s3Folder format");
     });
   });
 

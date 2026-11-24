@@ -189,6 +189,25 @@ const FilterDropdown = styled.div`
   }
 `;
 
+// When a test has several results files and none is picked yet, make choosing one the obvious next step
+const ResultsFileDropdown = styled(FilterDropdown)<{ $needsChoice: boolean }>`
+  flex-wrap: wrap;
+  border: 2px solid ${({ $needsChoice }) => $needsChoice ? "#6a7bb4" : "transparent"};
+
+  label {
+    font-weight: ${({ $needsChoice }) => $needsChoice ? "bold" : "normal"};
+  }
+
+  select {
+    border-color: ${({ $needsChoice }) => $needsChoice ? "#6a7bb4" : "#444"};
+  }
+
+  .results-select-hint {
+    color: #c8c8c8;
+    font-size: 14px;
+  }
+`;
+
 const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
@@ -536,6 +555,15 @@ const getSummaryData = ({
 
 // Constants moved outside component to avoid recreation on every render
 const DEFAULT_MESSAGE = "Select Results File";
+const WAITING_FOR_RESULTS_MESSAGE = "Waiting for the first results...";
+const NO_RESULTS_MESSAGE = "No Results Found";
+
+/**
+ * The results file to show without asking, when there is exactly one. Most tests have one; there are
+ * more only when a test with restart-on-failure restarted, and then the user picks which run to view.
+ */
+const getOnlyResultsPath = (testData: TestData): string | undefined =>
+  testData.resultsFileLocation?.length === 1 ? testData.resultsFileLocation[0] : undefined;
 // How often a running test's results are fetched again
 const POLL_INTERVAL = 15000;
 const DEFAULT_STATE: TestResultState = {
@@ -946,16 +974,22 @@ export const QuadPanelCharts: React.FC<QuadPanelChartsProps> = ({ displayData, m
 };
 
 export const TestResults = React.memo(({ testData, initialResultsIndex, onResultsIndexChange, initialCompareTestId, initialCompareTestData, onCompareTestIdChange, initialMergeTestIds, initialMergeTestData, onMergeTestIdsChange, initialMergeEndpoints, onMergeEndpointsChange }: TestResultProps) => {
-  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : "No Results Found";
+  const defaultMessage = () => testData.resultsFileLocation && testData.resultsFileLocation.length > 0 ? "Select Results File" : NO_RESULTS_MESSAGE;
 
   const [state, setState] = useState(() => {
     const init = { ...DEFAULT_STATE, defaultMessage: defaultMessage() };
-    if (initialResultsIndex !== undefined && testData.resultsFileLocation?.[initialResultsIndex]) {
-      init.resultsPath = testData.resultsFileLocation[initialResultsIndex];
+    const initialPath = (initialResultsIndex !== undefined ? testData.resultsFileLocation?.[initialResultsIndex] : undefined)
+      ?? getOnlyResultsPath(testData);
+    if (initialPath) {
+      init.resultsPath = initialPath;
       init.defaultMessage = "Results Loading...";
     }
     return init;
   });
+  // Set when the user picks the empty option, so a single results file isn't auto-selected again
+  const userClearedResultsRef = useRef(false);
+  // The status the polling effect last saw, so it can tell a test that just stopped from one that already had
+  const previousStatusRef = useRef(testData.status);
   const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [endpointDataExpanded, setEndpointDataExpanded] = useState(false);
@@ -977,7 +1011,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   resultsPathRef.current = state.resultsPath;
   // Set while an interval refresh is running, so a slow one finishes instead of being replaced by the next tick.
   // Holds the file it's for, so one still running for a file the user switched away from doesn't block the new one.
-  const refreshInFlightRef = useRef<{ resultsPath: string } | undefined>(undefined);
+  const refreshInFlightRef = useRef<{ resultsPath: string, done: Promise<void> } | undefined>(undefined);
 
   const updateState = (newState: Partial<TestResultState>) =>
     setState((oldState: TestResultState) => ({ ...oldState, ...newState }));
@@ -1097,9 +1131,23 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
         };
       });
     } catch (error) {
+      // A running test lists its results file from creation, before the agent's first upload, so while it
+      // runs a load that finds no file yet (404 from the results route) is waiting for results rather
+      // than failing; the next poll retries. Once the test has stopped there is no next poll, so a 404 is
+      // reported. A 403 is the route refusing this user, so it is always an error.
+      const httpStatus = (error as { response?: { status?: number } } | undefined)?.response?.status;
+      if (httpStatus === 404 && testData.status === TestStatus.Running) {
+        log("Results not uploaded yet: " + s3ResultPath, LogLevel.WARN, error);
+        // A response for a file the user has since cleared or switched away from is dropped, as on success
+        if (resultsPathRef.current !== s3ResultPath) { return; }
+        updateState({ defaultMessage: WAITING_FOR_RESULTS_MESSAGE });
+        return;
+      }
       log("Error Fetching Data: " + s3ResultPath, LogLevel.ERROR, error);
       updateState({
-        error: formatError(error)
+        error: formatError(error),
+        // Don't leave "Waiting for the first results..." behind once the error banner clears
+        ...(httpStatus === 404 ? { defaultMessage: NO_RESULTS_MESSAGE } : {})
       });
       setTimeout(() => updateState({ error: undefined}), 30000);
     }
@@ -1114,6 +1162,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
     const selectedIndex = event.target.selectedIndex;
+    userClearedResultsRef.current = selectedIndex === 0;
     // Set now rather than on the next render so an in-flight refresh sees the switch
     resultsPathRef.current = selectedIndex !== 0 ? event.target.value : undefined;
     // Picking a file drops the merge. Clear it before any await so an in-flight refresh can't restore it.
@@ -1135,7 +1184,15 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       };
     });
     if (selectedIndex !== 0) {
-      await updateResults(event.target.value);
+      // Counts as in flight, so the polling effect's immediate refresh doesn't fetch the same file again
+      const load = updateResults(event.target.value);
+      const inFlight = { resultsPath: event.target.value, done: load.then(() => undefined, () => undefined) };
+      refreshInFlightRef.current = inFlight;
+      try {
+        await load;
+      } finally {
+        if (refreshInFlightRef.current === inFlight) { refreshInFlightRef.current = undefined; }
+      }
       onResultsIndexChange?.(selectedIndex - 1);
     } else {
       setState((oldState: TestResultState) => {
@@ -1436,34 +1493,73 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   }, []);
 
   useEffect(() => {
+    const wasRunning = previousStatusRef.current === TestStatus.Running;
+    previousStatusRef.current = testData.status;
     if (!state.resultsPath) { return undefined; }
     if (testData.status === TestStatus.Running) {
       // Keep polling even when data is already showing (e.g. the user switched results files mid-test).
-      // Polling stops when this test does, so the last few seconds of results need a page reload.
+      // Polling stops when this test does; the terminal branch below loads the final results once.
       const resultsPath = state.resultsPath;
-      const intervalId = setInterval(() => {
+      const refresh = () => {
         // Let a slow refresh finish rather than replace it every tick. Only skip for the same file, so one
         // still running for a file the user switched away from doesn't block the new one.
         if (refreshInFlightRef.current?.resultsPath === resultsPath) { return; }
-        const inFlight = { resultsPath };
+        const inFlight = { resultsPath, done: Promise.resolve() };
         refreshInFlightRef.current = inFlight;
-        updateResultsRef.current(resultsPath, true).catch((error) =>
+        inFlight.done = updateResultsRef.current(resultsPath, true).catch((error) =>
           log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error)
         ).finally(() => {
           // A refresh of a file the user switched away from mustn't unlock a newer one
           if (refreshInFlightRef.current === inFlight) { refreshInFlightRef.current = undefined; }
         });
-      }, POLL_INTERVAL);
+      };
+      // Nothing showing yet (opened from the URL or auto-selected): load now rather than waiting for the first poll
+      if (!state.resultsData) { refresh(); }
+      const intervalId = setInterval(refresh, POLL_INTERVAL);
       return () => clearInterval(intervalId);
     }
-    if (!state.resultsData && !state.error
-      && (testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed)) {
-      updateResults(state.resultsPath).catch((error) =>
-        log("Error Fetching Data: " + state.resultsPath, LogLevel.WARN, error)
-      );
+    const isStopped = testData.status === TestStatus.Finished || testData.status === TestStatus.Unknown || testData.status === TestStatus.Failed;
+    if (isStopped && wasRunning && state.resultsData) {
+      // The test stopped while results were showing. Polling has ended, so refresh once more for the final
+      // seconds of results, after any in-flight refresh of this file finishes rather than overlapping it.
+      const resultsPath = state.resultsPath;
+      const inFlight = refreshInFlightRef.current?.resultsPath === resultsPath ? refreshInFlightRef.current : undefined;
+      (inFlight?.done ?? Promise.resolve()).then(() => {
+        if (resultsPathRef.current !== resultsPath) { return; }
+        return updateResultsRef.current(resultsPath, true);
+      }).catch((error) => log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error));
+      return undefined;
+    }
+    // A test that just stopped gets its final load even if an earlier (running) load errored; a test that was
+    // already stopped doesn't retry a failed load, or every render would loop on it.
+    if (!state.resultsData && (!state.error || wasRunning) && isStopped) {
+      const resultsPath = state.resultsPath;
+      const inFlight = refreshInFlightRef.current?.resultsPath === resultsPath ? refreshInFlightRef.current : undefined;
+      if (!inFlight) {
+        updateResults(resultsPath).catch((error) =>
+          log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error)
+        );
+      } else if (wasRunning) {
+        // The test finished during a load of this file. Let that load finish rather than overlap it, then load
+        // once more as a refresh: it may have found no file yet (404), and the final results can be newer.
+        inFlight.done.then(() => {
+          if (resultsPathRef.current !== resultsPath) { return; }
+          return updateResultsRef.current(resultsPath, true);
+        }).catch((error) => log("Error Fetching Data: " + resultsPath, LogLevel.WARN, error));
+      }
+      // Otherwise the test had already stopped and the in-flight load is the user's pick, which covers it
     }
     return undefined;
   }, [testData.status, state.resultsPath]);
+
+  // A running test's first results file can show up after the page loaded; select it like we do at mount
+  useEffect(() => {
+    if (state.resultsPath || userClearedResultsRef.current) { return; }
+    const onlyPath = getOnlyResultsPath(testData);
+    if (!onlyPath) { return; }
+    resultsPathRef.current = onlyPath;
+    setState((old: TestResultState) => ({ ...old, resultsPath: onlyPath, defaultMessage: "Results Loading..." }));
+  }, [testData.resultsFileLocation, state.resultsPath]);
 
   useEffect(() => {
     if (initialCompareTestId && state.resultsData && !state.compareData && !state.compareTest) {
@@ -1540,23 +1636,29 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       {testData &&
         testData.resultsFileLocation &&
         testData.resultsFileLocation.length > 0 && (
-          <FilterDropdown>
+          <ResultsFileDropdown data-testid="results-file-dropdown" $needsChoice={!state.resultsPath && testData.resultsFileLocation.length > 1}>
             <label htmlFor="results-file-select">Results File:</label>
             <select
               id="results-file-select"
               data-testid="results-select"
-              value={state.resultsPath}
+              value={state.resultsPath ?? ""}
               onChange={onResultsFileChange}
               style={{ minWidth: "220px" }}
             >
-              <option>Select Result File</option>
+              <option value="">Select Result File</option>
               {testData.resultsFileLocation.map((fileLocation, idx) => (
                 <option key={fileLocation} value={fileLocation}>
                   Test Result - {idx}
                 </option>
               ))}
             </select>
-          </FilterDropdown>
+            {testData.resultsFileLocation.length > 1 && (
+              <span className="results-select-hint" data-testid="results-select-hint">
+                This test has {testData.resultsFileLocation.length} results files because it restarted after a failure.
+                {state.resultsPath ? "" : " Pick one to view its results."}
+              </span>
+            )}
+          </ResultsFileDropdown>
         )}
       {filteredDisplayData !== undefined ? (
         <TimeTaken data-testid="results-loaded">

@@ -25,6 +25,7 @@ import { H1 } from "../components/Headers";
 import { Layout } from "../components/Layout";
 import { TestInfo } from "../components/TestInfo";
 import { TestManager } from "../src/testmanager";
+import { TestNotes } from "../components/TestNotes";
 import { TestResults } from "../components/TestResults";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
 import { authPage } from "../src/authserver";
@@ -57,6 +58,7 @@ export interface TestStatusProps {
   errorLoading: string | undefined;
   authPermission?: AuthPermission;
   userId?: string | null;
+  notesExpanded?: boolean;
   resultsIndex?: number;
   compareTestId?: string;
   mergeTestIds?: string[];
@@ -75,6 +77,7 @@ const TestStatusPage = ({
   errorLoading,
   authPermission,
   userId,
+  notesExpanded: propsNotesExpanded = false,
   resultsIndex: propsResultsIndex,
   compareTestId: propsCompareTestId,
   mergeTestIds: propsMergeTestIds,
@@ -89,6 +92,11 @@ const TestStatusPage = ({
   const [state, setFormData] = useState(defaultState);
   const setState = (newState: Partial<TestStatusState>) => setFormData((oldState: TestStatusState) => ({ ...oldState, ...newState}));
   const router = useRouter();
+  const [notesExpanded, setNotesExpanded] = useState(propsNotesExpanded);
+
+  useEffect(() => {
+    setNotesExpanded(router.query.notes === "1");
+  }, [router.query.notes]);
 
   const updateQuery = (changes: Record<string, string | string[] | undefined>): void => {
     const testId = Array.isArray(router.query.testId) ? router.query.testId[0] : router.query.testId;
@@ -131,6 +139,12 @@ const TestStatusPage = ({
 
   const handleMergeEndpointsChange = (checked: boolean): void => {
     updateQuery({ mergeEndpoints: checked ? "true" : undefined });
+  };
+
+  const toggleNotes = (): void => {
+    const newExpanded = !notesExpanded;
+    setNotesExpanded(newExpanded);
+    updateQuery({ notes: newExpanded ? "1" : undefined });
   };
 
   const fetchData = async (testId: string) => {
@@ -287,6 +301,8 @@ const TestStatusPage = ({
           onMergeEndpointsChange={handleMergeEndpointsChange}
         />
       </TestResultsContainer>}
+      {/* Notes below Results, so the results are the first thing under the test status */}
+      {testData && <TestNotes testData={testData} authPermission={authPermission} isExpanded={notesExpanded} onToggle={toggleNotes} />}
     </Layout>
   );
 };
@@ -328,6 +344,7 @@ export const getServerSideProps: GetServerSideProps =
         errorLoading: undefined,
         authPermission: authPermissions.authPermission,
         userId: authPermissions.userId,
+        notesExpanded: ctx.query.notes === "1",
         resultsIndex: !isNaN(resultsParam) ? resultsParam : undefined,
         compareTestId: typeof ctx.query.compare === "string" ? ctx.query.compare : undefined,
         mergeTestIds,

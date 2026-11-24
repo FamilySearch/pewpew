@@ -102,14 +102,69 @@ describe("Test Result Component", () => {
     expect(screen.getByText("Test Result - 1")).toBeInTheDocument();
   });
 
-  it("should show Select Results File message when results file is present but not yet selected", () => {
+  it("should show Select Results File message and a restart hint when there are multiple results files", () => {
+    const multipleResults: TestData = {
+      ...noResult,
+      resultsFileLocation: [
+        "unittest/20200424T191934978/stats-test1.json",
+        "unittest/20200424T191934978/stats-test2.json"
+      ],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={multipleResults} />);
+    expect(screen.getByText("Select Results File")).toBeInTheDocument();
+    expect(screen.getByTestId("results-select-hint")).toHaveTextContent("This test has 2 results files because it restarted after a failure");
+    expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  it("should fall back to the only results file when ?results= is out of range", () => {
+    const oneResult: TestData = {
+      ...noResult,
+      resultsFileLocation: ["unittest/20200424T191934978/stats-test.json"],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={oneResult} initialResultsIndex={3} />);
+    expect(screen.getByTestId("results-select")).toHaveValue("unittest/20200424T191934978/stats-test.json");
+    expect(screen.getByText("Results Loading...")).toBeInTheDocument();
+  });
+
+  it("should highlight the selector only when there are multiple files and none is chosen", () => {
+    const twoResults: TestData = {
+      ...noResult,
+      resultsFileLocation: ["unittest/20200424T191934978/stats-test1.json", "unittest/20200424T191934978/stats-test2.json"],
+      status: TestStatus.Finished
+    };
+    const { unmount } = render(<TestResults testData={twoResults} />);
+    expect(screen.getByTestId("results-file-dropdown")).toHaveStyle("border: 2px solid #6a7bb4");
+    unmount();
+
+    render(<TestResults testData={{ ...twoResults, resultsFileLocation: [twoResults.resultsFileLocation![0]] }} />);
+    fireEvent.change(screen.getByTestId("results-select"), { target: { value: "" } });
+    expect(screen.getByTestId("results-file-dropdown")).not.toHaveStyle("border: 2px solid #6a7bb4");
+  });
+
+  it("should keep the restart hint while one of several results files is selected", () => {
+    const twoResults: TestData = {
+      ...noResult,
+      resultsFileLocation: ["unittest/20200424T191934978/stats-test1.json", "unittest/20200424T191934978/stats-test2.json"],
+      status: TestStatus.Finished
+    };
+    render(<TestResults testData={twoResults} initialResultsIndex={0} />);
+    const hint = screen.getByTestId("results-select-hint");
+    expect(hint).toHaveTextContent("This test has 2 results files because it restarted after a failure.");
+    expect(hint).not.toHaveTextContent("Pick one");
+  });
+
+  it("should start loading automatically when there is a single results file", () => {
     const oneResult: TestData = {
       ...noResult,
       resultsFileLocation: ["unittest/20200424T191934978/stats-test.json"],
       status: TestStatus.Finished
     };
     render(<TestResults testData={oneResult} />);
-    expect(screen.getByText("Select Results File")).toBeInTheDocument();
+    expect(screen.getByText("Results Loading...")).toBeInTheDocument();
+    expect(screen.getByTestId("results-select")).toHaveValue("unittest/20200424T191934978/stats-test.json");
+    expect(screen.queryByTestId("results-select-hint")).not.toBeInTheDocument();
   });
 
   it("should show loading message when initialResultsIndex is provided", () => {
@@ -201,6 +256,12 @@ describe("Test Result Component", () => {
       vi.mocked(axios.get).mockReset();
     });
 
+    /** Waits for the load that starts on mount (no poll needed) to fetch and render the base file */
+    const initialLoad = async () => {
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+    };
+
     /** Fires the poll without waiting for it to make a request */
     const tick = () => {
       expect(pollCallbacks.size).toBe(1);
@@ -233,7 +294,7 @@ describe("Test Result Component", () => {
 
     it("keeps the merge when the base file changes", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
       fileTexts["stats-runningtest.json"] = secondText();
@@ -247,7 +308,7 @@ describe("Test Result Component", () => {
 
     it("re-fetches the merged files on each poll even when the base file has not changed", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
       fileTexts["stats-mergetest.json"] = secondText();
@@ -268,7 +329,7 @@ describe("Test Result Component", () => {
       };
       fileTexts["stats-runningtest2.json"] = statsText;
       render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
-      await poll();
+      await initialLoad();
 
       fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
       await waitFor(() => expect(countRequests("stats-runningtest2.json")).toBe(1));
@@ -284,7 +345,7 @@ describe("Test Result Component", () => {
       // A different endpoint so the two files are told apart on screen
       fileTexts["stats-runningtest2.json"] = statsText.split("https://ident.pewpew.org/oauth2/v3/token").join("https://second.pewpew.org/switched");
       render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
 
       // Hold the next poll of the first file until after the switch
@@ -302,7 +363,7 @@ describe("Test Result Component", () => {
       // Hold the auto-merge's fetch so the merge lands while the next poll is in flight
       const releaseMerge = holdNextRequest("stats-mergetest.json");
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
+      await initialLoad();
       await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(1));
 
       const releasePoll = holdNextRequest("stats-runningtest.json");
@@ -322,17 +383,48 @@ describe("Test Result Component", () => {
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
     });
 
-    it("stops polling when the test finishes", async () => {
+    it("stops polling when the test finishes and refreshes once for the final results", async () => {
       const { rerender } = render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
-      const requestCount = requestedUrls.length;
+      const baseCount = countRequests("stats-runningtest.json");
+      const mergeCount = countRequests("stats-mergetest.json");
       rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await waitFor(() => expect(pollCallbacks.size).toBe(0));
-      // No final fetch: the last few seconds of results need a page reload
-      expect(requestedUrls.length).toBe(requestCount);
+      // One final refresh (base and merged files) picks up the seconds since the last poll, and keeps the merge
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1));
+      await waitFor(() => expect(countRequests("stats-mergetest.json")).toBe(mergeCount + 1));
       expect(screen.getByText(mergedLabel)).toBeInTheDocument();
+      // ...and only one
+      await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 2), { timeout: 500 })).rejects.toThrow();
+    });
+
+    it("still loads the final results when the test stops after the first load failed", async () => {
+      vi.mocked(axios.get).mockImplementationOnce((url: string) => {
+        requestedUrls.push(url);
+        return Promise.reject(Object.assign(new Error("Request failed with status code 500"), { response: { status: 500 } }));
+      });
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      // Let the failed load settle into the error state before the test stops
+      await waitFor(() => expect(screen.queryAllByText(/500/).length).toBeGreaterThan(0));
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(2));
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
+    it("waits for an in-flight poll before the final refresh when the test finishes with results showing", async () => {
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await initialLoad();
+      const releasePoll = holdNextRequest("stats-runningtest.json");
+      await poll();
+      const baseCount = countRequests("stats-runningtest.json");
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      // No overlapping fetch while the poll is still out
+      await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1), { timeout: 500 })).rejects.toThrow();
+      releasePoll(statsText);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(baseCount + 1));
     });
 
     it("doesn't restore the merge when a refresh finishes after switching files", async () => {
@@ -343,7 +435,7 @@ describe("Test Result Component", () => {
       fileTexts["stats-runningtest2.json"] = secondText();
       const onMergeTestIdsChange = vi.fn();
       render(<TestResults testData={twoFiles} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} onMergeTestIdsChange={onMergeTestIdsChange} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
       const releasePoll = holdNextRequest("stats-runningtest.json");
@@ -358,7 +450,7 @@ describe("Test Result Component", () => {
 
     it("keeps refreshing when a merged file stops parsing", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findByText(mergedLabel)).toBeInTheDocument();
 
       fileTexts["stats-mergetest.json"] = "<html>Bad Gateway</html>";
@@ -371,7 +463,7 @@ describe("Test Result Component", () => {
 
     it("lets a slow poll finish instead of replacing it on the next tick", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
 
       const releasePoll = holdNextRequest("stats-runningtest.json");
@@ -392,7 +484,7 @@ describe("Test Result Component", () => {
       };
       fileTexts["stats-runningtest2.json"] = statsText;
       render(<TestResults testData={twoFiles} initialResultsIndex={0} />);
-      await poll();
+      await initialLoad();
       expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
 
       // Never released, like a request that hangs
@@ -409,7 +501,7 @@ describe("Test Result Component", () => {
 
     it("keeps the compare when the base file changes", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialCompareTestId={compareTest.testId} initialCompareTestData={compareTest} />);
-      await poll();
+      await initialLoad();
       const compareHeading = `${compareTest.testId} - Request Count by Endpoint`;
       expect(await screen.findByText(compareHeading)).toBeInTheDocument();
 
@@ -420,6 +512,194 @@ describe("Test Result Component", () => {
       expect(screen.getByText(compareHeading)).toBeInTheDocument();
       // Kept as-is, not dropped and then reloaded by the initialCompareTestId effect
       expect(countRequests("stats-comparetest.json")).toBe(compareRequests);
+    });
+
+    it("loads a running test's results on mount instead of waiting for the first poll", async () => {
+      render(<TestResults testData={runningTest} initialResultsIndex={0} />);
+      await initialLoad();
+      // The poll is still set up for later refreshes
+      expect(pollCallbacks.size).toBe(1);
+    });
+
+    it("waits quietly when a running test's results file is not uploaded yet", async () => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return Promise.reject(Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } }));
+      });
+      render(<TestResults testData={runningTest} />);
+      expect(await screen.findByText("Waiting for the first results...")).toBeInTheDocument();
+      expect(screen.queryByText(/Request failed/)).not.toBeInTheDocument();
+      // Still polling, so results show up once the agent uploads them
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return Promise.resolve({ data: statsText });
+      });
+      await poll();
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
+    for (const status of [403, 500]) {
+      it(`still shows an error for a ${status} while waiting for results`, async () => {
+        vi.mocked(axios.get).mockImplementation(() =>
+          Promise.reject(Object.assign(new Error(`Request failed with status code ${status}`), { response: { status } })));
+        render(<TestResults testData={runningTest} />);
+        expect(await screen.findByText(new RegExp(`status code ${status}`))).toBeInTheDocument();
+        expect(screen.queryByText("Waiting for the first results...")).not.toBeInTheDocument();
+      });
+    }
+
+    it("fetches a file picked from the empty option only once", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      fileTexts["stats-runningtest2.json"] = statsText;
+      render(<TestResults testData={twoFiles} />);
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+      await expect(waitFor(() => expect(countRequests("stats-runningtest2.json")).toBeGreaterThan(1), { timeout: 1000 })).rejects.toThrow();
+      expect(countRequests("stats-runningtest2.json")).toBe(1);
+    });
+
+    it("waits for the in-flight load before the final load when the test finishes during the first load", async () => {
+      const releaseLoad = holdNextRequest("stats-runningtest.json");
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      // No overlapping fetch while the first one is still out
+      await expect(waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(2), { timeout: 500 })).rejects.toThrow();
+      releaseLoad(statsText);
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(2));
+    });
+
+    it("loads the final results when the test finishes while the first load finds no file yet", async () => {
+      let notUploaded = true;
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return notUploaded
+          ? Promise.reject(Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } }))
+          : Promise.resolve({ data: statsText });
+      });
+      const releaseLoad = holdNextRequest("stats-runningtest.json");
+      vi.mocked(axios.get).mockImplementationOnce((url: string) => {
+        requestedUrls.push(url);
+        return heldRequests["stats-runningtest.json"].then(() => {
+          throw Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } });
+        });
+      });
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      // The agent uploads its results and the test finishes while the first load is still out
+      notUploaded = false;
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Finished }} />);
+      releaseLoad("");
+      expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+    });
+
+    it("reports a missing file once the test stops instead of waiting forever", async () => {
+      const notFound = () => Promise.reject(Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } }));
+      let releaseFirst: () => void = () => undefined;
+      const firstLoad = new Promise<void>((resolve) => { releaseFirst = resolve; });
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        // The first load is still out when the test stops; it and the final load both find no file
+        return requestedUrls.length === 1 ? firstLoad.then(notFound) : notFound();
+      });
+      const { rerender } = render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      rerender(<TestResults testData={{ ...runningTest, status: TestStatus.Failed }} />);
+      releaseFirst();
+      expect(await screen.findByText(/status code 404/)).toBeInTheDocument();
+      expect(countRequests("stats-runningtest.json")).toBe(2);
+      expect(screen.queryByText("Waiting for the first results...")).not.toBeInTheDocument();
+      expect(screen.getByText("No Results Found")).toBeInTheDocument();
+    });
+
+    it("waits quietly when a file picked by hand on a running test is not uploaded yet", async () => {
+      const twoFiles: TestData = {
+        ...runningTest,
+        resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+      };
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return Promise.reject(Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } }));
+      });
+      render(<TestResults testData={twoFiles} />);
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+      expect(await screen.findByText("Waiting for the first results...")).toBeInTheDocument();
+      expect(screen.queryByText(/status code 404/)).not.toBeInTheDocument();
+    });
+
+    it("keeps Select Results File when a cleared file's pending load returns 404", async () => {
+      let releaseLoad: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => { releaseLoad = resolve; });
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        requestedUrls.push(url);
+        return pending.then(() => Promise.reject(Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } })));
+      });
+      render(<TestResults testData={runningTest} />);
+      await waitFor(() => expect(countRequests("stats-runningtest.json")).toBe(1));
+      fireEvent.change(screen.getByTestId("results-select"), { target: { value: "" } });
+      await waitFor(() => expect(screen.getByText("Select Results File")).toBeInTheDocument());
+      releaseLoad();
+      await expectNotToAppear(/Waiting for the first results/);
+      expect(screen.getByText("Select Results File")).toBeInTheDocument();
+    });
+
+    for (const status of [TestStatus.Finished, TestStatus.Failed, TestStatus.Unknown]) {
+      it(`fetches a file picked from the empty option only once on a ${status} test`, async () => {
+        const twoFiles: TestData = {
+          ...runningTest,
+          status,
+          resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+        };
+        fileTexts["stats-runningtest2.json"] = statsText;
+        render(<TestResults testData={twoFiles} />);
+        fireEvent.change(screen.getByTestId("results-select"), { target: { value: twoFiles.resultsFileLocation![1] } });
+        expect(await screen.findAllByText(/ident\.pewpew\.org/)).not.toHaveLength(0);
+        await expect(waitFor(() => expect(countRequests("stats-runningtest2.json")).toBeGreaterThan(1), { timeout: 1000 })).rejects.toThrow();
+        expect(countRequests("stats-runningtest2.json")).toBe(1);
+      });
+    }
+
+    describe("auto-selecting the only results file", () => {
+      it("selects and loads a single results file without initialResultsIndex", async () => {
+        render(<TestResults testData={runningTest} />);
+        await initialLoad();
+        expect(screen.getByTestId("results-select")).toHaveValue(runningTest.resultsFileLocation![0]);
+      });
+
+      it("selects the results file when it first appears after mount", async () => {
+        const noFilesYet: TestData = { ...runningTest, resultsFileLocation: [] };
+        const { rerender } = render(<TestResults testData={noFilesYet} />);
+        expect(screen.getByText("No Results Found")).toBeInTheDocument();
+        rerender(<TestResults testData={runningTest} />);
+        await initialLoad();
+      });
+
+      it("does not re-select the file after the user picks the empty option", async () => {
+        const { rerender } = render(<TestResults testData={runningTest} />);
+        await initialLoad();
+        fireEvent.change(screen.getByTestId("results-select"), { target: { value: "" } });
+        await waitFor(() => expect(screen.getByText("Select Results File")).toBeInTheDocument());
+        // A status update brings a new testData object with the same single file
+        rerender(<TestResults testData={{ ...runningTest, resultsFileLocation: [...runningTest.resultsFileLocation!] }} />);
+        await expectNotToAppear(/Results Loading\.\.\./);
+        expect(countRequests("stats-runningtest.json")).toBe(1);
+      });
+
+      it("does not auto-select when there are multiple results files", async () => {
+        const twoFiles: TestData = {
+          ...runningTest,
+          resultsFileLocation: [...runningTest.resultsFileLocation!, "s3/runningtest/20200311T200153210/stats-runningtest2.json"]
+        };
+        render(<TestResults testData={twoFiles} />);
+        expect(screen.getByTestId("results-select-hint")).toBeInTheDocument();
+        await expectNotToAppear(/ident\.pewpew\.org/);
+        expect(requestedUrls).toHaveLength(0);
+        expect(pollCallbacks.size).toBe(0);
+      });
     });
   });
 });

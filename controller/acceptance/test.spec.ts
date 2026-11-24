@@ -1,4 +1,5 @@
 import {
+  API_NOTES_FORMAT,
   API_TEST,
   AllTests,
   EnvironmentVariablesFile,
@@ -2068,6 +2069,24 @@ describe("Test API Integration", () => {
           expect(test.scheduleDate, "scheduleDate").to.equal(undefined);
           done();
       }).catch((error) => done(error));
+    });
+
+    it("GET /test?newTest&testId=validInS3 should not list the test's notes as additional files", async () => {
+      expect(sharedPpaasTestId).to.not.equal(undefined);
+      const { testId, s3Folder } = sharedPpaasTestId!;
+      const notesUrl = integrationUrl + API_NOTES_FORMAT(s3Folder);
+      try {
+        // Saving notes writes notes.md and notes-meta.json into the test's folder
+        const saveRes = await fetch(notesUrl, { method: "put", data: { content: "# Acceptance rerun notes" }, headers: { "Content-Type": "application/json" } });
+        expect(saveRes.status, JSON.stringify(saveRes.data)).to.equal(200);
+        const res = await fetch(url + "?newTest&testId=" + testId);
+        expect(res.status, JSON.stringify(res.data)).to.equal(200);
+        const additionalFiles: string[] = (res.data as PreviousTestData).additionalFiles || [];
+        expect(additionalFiles, "additionalFiles").to.not.include("notes.md");
+        expect(additionalFiles, "additionalFiles").to.not.include("notes-meta.json");
+      } finally {
+        await fetch(notesUrl, { method: "delete" }).catch((error: unknown) => log("Could not delete acceptance rerun notes", LogLevel.WARN, error));
+      }
     });
 
     it("GET /test?newTest&testId=validInS3WithVersion should respond 200 OK", (done: Mocha.Done) => {

@@ -1689,8 +1689,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     buildPayload: generateAIPayload,
     defaultQuestion: DEFAULT_AI_QUESTION,
     getReportDownload: () => {
-      const testName = testData.s3Folder.replace(/\//g, "_");
-      return { title: "AI Performance Analysis Report", details: [`Test: ${testName}`], fileNamePrefix: `ai-analysis-${testName}` };
+      // Only the file name is sanitized; the report's "Test:" line keeps the readable s3Folder
+      const fileNamePrefix = `ai-analysis-${testData.s3Folder.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      return { title: "AI Performance Analysis Report", details: [`Test: ${testData.s3Folder}`], fileNamePrefix };
     }
   });
 

@@ -48,7 +48,7 @@ const CONTROL_CHAR_REGEX: RegExp = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const CONTROL_CHAR_REGEX_GLOBAL: RegExp = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 const MAX_QUESTION_LENGTH = 1000;
 // Compact JSON, so this fits a few dozen endpoints' stats. Pretty-printed with an 8000 cap it fit only 3-4.
-const MAX_TEST_DATA_LENGTH = 40000;
+export const MAX_TEST_DATA_LENGTH = 40000;
 // A hung OpenAI call keeps the modal locked open, so fail well before the SDK's 10 minute default
 const OPENAI_TIMEOUT_MS = 90_000;
 const OPENAI_MAX_RETRIES = 1;
@@ -78,7 +78,7 @@ const REPORT_SYSTEM_PROMPT = "You are a Performance Analysis Engineer. You analy
 
 // Prepare data preview (limit to avoid token limits). When it has to cut, say how much is missing so the model doesn't
 // report "no regressions" for data it never saw.
-function truncateTestData (testData: unknown): string {
+export function truncateTestData (testData: unknown): string {
   const dataPreview = JSON.stringify(testData);
   if (dataPreview.length <= MAX_TEST_DATA_LENGTH) {
     return dataPreview;

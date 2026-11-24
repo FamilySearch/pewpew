@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import analyze from "../pages/api/ai/analyze";
+import analyze, { MAX_TEST_DATA_LENGTH, truncateTestData } from "../pages/api/ai/analyze";
 import { expect } from "chai";
 
 describe("AI Analyze API", () => {
@@ -141,6 +141,23 @@ describe("AI Analyze API", () => {
           expect(responseData).to.deep.equal({ error: expectedError });
         });
       }
+    });
+  });
+
+  describe("truncateTestData", () => {
+    it("should return compact JSON unchanged when under the cap", () => {
+      const data = { endpoints: [{ url: "/api/test", avg: 250 }], summary: { totalMatched: 1 } };
+      expect(truncateTestData(data)).to.equal(JSON.stringify(data));
+    });
+
+    it("should cut an oversized payload at the cap and say how much was kept", () => {
+      const data = { summary: { totalMatched: 1 }, endpoints: "x".repeat(2 * MAX_TEST_DATA_LENGTH) };
+      const json = JSON.stringify(data);
+      const result = truncateTestData(data);
+      expect(result.startsWith(json.substring(0, MAX_TEST_DATA_LENGTH))).to.equal(true);
+      expect(result.indexOf("\n... (data truncated")).to.equal(MAX_TEST_DATA_LENGTH);
+      const keptPercent = Math.floor((MAX_TEST_DATA_LENGTH / json.length) * 100);
+      expect(result).to.include(`only the first ${keptPercent}% of ${json.length} characters`);
     });
   });
 });

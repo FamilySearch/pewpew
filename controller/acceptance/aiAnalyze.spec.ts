@@ -289,7 +289,7 @@ function fetch (url: string, config?: AxiosRequestConfig): Promise<Response> {
     log("AI chat mode truncated an oversized history message instead of rejecting it", LogLevel.INFO);
   });
 
-  it("POST /api/ai/analyze should handle OpenAI API errors gracefully", async function () {
+  it("POST /api/ai/analyze with a long question → 200 OK", async function () {
     this.timeout(45000); // Allow extra time for AI processing
     const res = await fetch(url, {
       method: "post",

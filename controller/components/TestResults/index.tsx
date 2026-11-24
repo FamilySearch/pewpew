@@ -1628,6 +1628,30 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
       return null;
     }
 
+    // state.summaryData totals every method, so with a method filter the summary is built from the same filtered
+    // endpoints the payload sends. total() clones one histogram per call, like the per-endpoint path below.
+    const buildAISummary = () => {
+      const stateSummary = state.summaryData && Array.isArray(state.summaryData) && state.summaryData.length >= 2 ? state.summaryData : undefined;
+      if (methodFilter === "all") {
+        return stateSummary ? {
+          bucketId: stateSummary[0],
+          dataPointsCount: Array.isArray(stateSummary[1]) ? stateSummary[1].length : 0,
+          summaryStats: Array.isArray(stateSummary[1]) && stateSummary[1].length > 0 ? total(stateSummary[1]) : null
+        } : null;
+      }
+      const filteredPoints = filteredDisplayData.flatMap(([, dataPoints]) => dataPoints);
+      if (filteredPoints.length === 0) {
+        return null;
+      }
+      const summaryBucketId = stateSummary?.[0] ?? { method: "Summary", url: "" };
+      return {
+        bucketId: { ...summaryBucketId, method: `${summaryBucketId.method} (${methodFilter})` },
+        // getSummaryData merges by time, so count distinct times to match what an unfiltered summary reports
+        dataPointsCount: new Set(filteredPoints.map((dataPoint) => Number(dataPoint.time))).size,
+        summaryStats: total(filteredPoints)
+      };
+    };
+
     // Small fields first and the endpoint array last: the server cuts oversized payloads from the end, so a cut drops
     // endpoint detail rather than the metadata and summary that frame it
     const aiPayload = {
@@ -1644,11 +1668,7 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           methodFilter
         }
       },
-      summaryData: state.summaryData && Array.isArray(state.summaryData) && state.summaryData.length >= 2 ? {
-        bucketId: state.summaryData[0],
-        dataPointsCount: Array.isArray(state.summaryData[1]) ? state.summaryData[1].length : 0,
-        summaryStats: Array.isArray(state.summaryData[1]) && state.summaryData[1].length > 0 ? total(state.summaryData[1]) : null
-      } : null,
+      summaryData: buildAISummary(),
       timestamp: new Date().toISOString(),
       endpoints: filteredDisplayData.filter(entry => Array.isArray(entry) && entry.length >= 2 && Array.isArray(entry[1])).map(([bucketId, dataPoints]) => {
         const totalResults = total(dataPoints);

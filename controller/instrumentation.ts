@@ -46,6 +46,10 @@ export async function register () {
       log("Instrumentation register Secrets failed", logger?.LogLevel.ERROR, error);
       throw error;
     }
+    if (process.env.SKIP_COMMUNICATIONS === "true") {
+      log("Instrumentation register SKIP_COMMUNICATIONS=true", logger?.LogLevel.WARN);
+      return;
+    }
     try {
       const { start: startCommuncations } = await import("./src/communications");
       log("Instrumentation register startCommuncations imported", logger?.LogLevel.DEBUG, typeof startCommuncations);

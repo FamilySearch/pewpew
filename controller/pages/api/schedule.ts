@@ -3,6 +3,7 @@ import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
+  auditRequest,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
@@ -31,6 +32,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "DELETE") {
+    auditRequest(req, res, "DELETE /schedule", authPermissions.userId, req.query.testId);
     if (req.query.testId && !Array.isArray(req.query.testId)) {
       try {
         const result: ErrorResponse = await TestScheduler.removeTest(req.query.testId, authPermissions, true);
@@ -43,6 +45,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "PUT") {
+    const auditContext = auditRequest(req, res, "PUT /schedule", authPermissions.userId);
     let localPath: string | undefined;
     try {
       const testIdTime: string = PpaasTestId.getDateString();
@@ -59,7 +62,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       }
       log(`${req.method} ${req.url} parsedForm`, LogLevel.DEBUG, { files: parsedForm.files, fields: { ...parsedForm.fields, environmentVariables: undefined } });
       const testManagerResponse: TestManagerResponse = await TestManager.postTest(parsedForm, authPermissions, localPath, true);
-      log(`${req.method} ${req.url} testManagerResponse`, LogLevel.DEBUG, testManagerResponse);
+      auditContext.testId = (testManagerResponse.json as Record<string, unknown>)?.testId;
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above

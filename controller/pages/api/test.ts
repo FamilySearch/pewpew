@@ -3,6 +3,7 @@ import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
+  auditRequest,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
@@ -35,6 +36,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "POST") {
+    const auditContext = auditRequest(req, res, "POST /test", authPermissions.userId);
     let localPath: string | undefined;
     try {
       const testIdTime: string = PpaasTestId.getDateString();
@@ -49,6 +51,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         return;
       }
       const testManagerResponse: TestManagerResponse = await TestManager.postTest(parsedForm, authPermissions, localPath);
+      auditContext.testId = (testManagerResponse.json as Record<string, unknown>)?.testId;
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above
@@ -59,6 +62,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "PUT") {
+    const auditContext = auditRequest(req, res, "PUT /test", authPermissions.userId);
     let localPath: string | undefined;
     try {
       // This testId is a throwaway just to create a temp local folder for uploads
@@ -73,6 +77,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         res.status(400).json(createErrorResponse(req, error));
         return;
       }
+      auditContext.testId = parsedForm.fields.testId?.length === 1 ? parsedForm.fields.testId[0] : undefined;
       const testManagerResponse: TestManagerResponse = await TestManager.putTest(parsedForm, authPermissions);
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {

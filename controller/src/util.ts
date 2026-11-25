@@ -9,6 +9,7 @@ import {
   log,
   sleep
 } from "@fs/ppaas-common";
+import { NextApiRequest as Request, NextApiResponse as Response } from "next";
 import { Entry as ZipEntry, ZipFile, Options as ZipOptions, open as _yauzlOpen } from "yauzl";
 import { formatError, isYamlFile } from "./clientutil";
 // V3 is moving to ESM. We'll need to await import formidable and import type the rest
@@ -20,7 +21,6 @@ import formidable, {
   Options as FormidableOptions
 } from "formidable";
 import { platform, tmpdir } from "os";
-import { NextApiRequest as Request } from "next";
 import { createWriteStream } from "fs";
 import fs from "fs/promises";
 import { pipeline } from "stream/promises";
@@ -353,6 +353,45 @@ export function makeRandomString (length: number): string {
 // Truncate the sessionId token for security
 export function getLogAuthPermissions (authPermissions: AuthPermissions) {
   return { ...authPermissions, token: authPermissions && authPermissions.token?.slice(-10) };
+}
+
+export interface AuditContext {
+  /** Set by the handler once it knows the testId so the completed log can include it */
+  testId?: unknown;
+}
+
+/**
+ * Logs an INFO "<label> received" audit record now and an INFO "<label> completed" record when the
+ * response closes, so every outcome (including 400s from parsing, 500s from thrown errors, and
+ * clients that disconnect mid-request) gets a completed record. `finished` is false when the
+ * connection closed before the response was fully written.
+ * @param req the incoming request
+ * @param res the response, used to hook the completed log on "close"
+ * @param label e.g. "POST /test"
+ * @param userId the authenticated user id
+ * @param testId optional testId known up front (handlers can also set it on the returned context)
+ * @returns a context whose testId is read when the completed log fires
+ */
+export function auditRequest (req: Request, res: Response, label: string, userId: string | null | undefined, testId?: unknown): AuditContext {
+  const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
+  const auditContext: AuditContext = { testId };
+  log(`${label} received`, LogLevel.INFO, {
+    userId,
+    ipAddress,
+    userAgent: req.headers["user-agent"],
+    referer: req.headers["referer"],
+    testId
+  });
+  res.once("close", () => {
+    log(`${label} completed`, LogLevel.INFO, {
+      userId,
+      ipAddress,
+      status: res.statusCode,
+      finished: res.writableFinished,
+      testId: auditContext.testId
+    });
+  });
+  return auditContext;
 }
 
 export function sortAndValidateDaysOfWeek (inputDays: number[]): number[] {

@@ -9,14 +9,33 @@
  * - Side-by-side Final Results tables
  */
 
-import { DataPoint, ParsedFileEntry } from "../TestResults/model";
+import { BucketId, DataPoint, ParsedFileEntry } from "../TestResults/model";
+import { Button, defaultButtonTheme } from "../LinkButton";
+import { ComparisonResult, compareResults } from "../TestResults/comparison";
 import { ExcelResultRow, exportResultsToExcel } from "../../src/excelexport";
 import { LogLevel, log } from "../../src/log";
+import { MinMaxTime, compareEndpointAnchorId, minMaxTime } from "../TestResults/utils";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAIAnalysisEnabled, useAIAnalysis } from "../AIAnalysisModal/useAIAnalysis";
 import { Chart } from "chart.js";
 import { ChartBox } from "../TestResults/styled";
-import { compareEndpointAnchorId } from "../TestResults/utils";
+import { Danger } from "../Alert";
+import dynamic from "next/dynamic";
+import { formatError } from "../../src/clientutil";
 import styled from "styled-components";
+
+// Loaded only when AI Analysis is enabled and rendered, so deployments without it don't download react-markdown
+const AIAnalysisModal = dynamic(() => import("../AIAnalysisModal"), { ssr: false });
+const DEFAULT_AI_COMPARISON_QUESTION =
+  "Compare the performance between these two test runs. " +
+  "Identify key differences in response times, error rates, and any significant regressions or improvements. " +
+  "When evaluating timing changes, flag metrics that are significant in BOTH absolute time AND percentage terms — " +
+  "a change from 2ms to 2.5ms (25% but only 0.5ms) is negligible to users, " +
+  "while a change from 2000ms to 2200ms (10% but 200ms) is meaningful. " +
+  "Use combined thresholds: prioritize changes that are both ≥10% and ≥25ms for response times, " +
+  "or ≥5% and ≥20ms for tighter SLOs. " +
+  "Always report the absolute time difference alongside the percentage so the reader can judge impact. " +
+  "Please focus on the average and percentile response times rather than the min/max values.";
 
 // ============================================================================
 // Styled Components
@@ -449,6 +468,27 @@ export interface TestResultsCompareProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Collapses entries to one per method+URL, the same grouping the comparison tables use. DataPoints are concatenated
+ * by reference (no histogram clones), which is all compareResults needs since it totals each list.
+ */
+const groupByMethodAndUrl = (entries: ParsedFileEntry[]): ParsedFileEntry[] => {
+  const groups = new Map<string, ParsedFileEntry>();
+  for (const [bucketId, dataPoints] of entries) {
+    const key = `${bucketId.method}||${bucketId.url}`;
+    const group = groups.get(key);
+    if (group) {
+      group[1].push(...dataPoints);
+    } else {
+      groups.set(key, [{ method: bucketId.method, url: bucketId.url }, [...dataPoints]]);
+    }
+  }
+  return Array.from(groups.values());
+};
+
+const compareMethodAndUrl = (a: BucketId, b: BucketId): number =>
+  a.url.localeCompare(b.url) || a.method.localeCompare(b.method);
 
 const mergeAllDataPoints = (dataPoints: DataPoint[]): DataPoint[] => {
   const combinedData = new Map<number, DataPoint>();
@@ -1100,6 +1140,8 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<"endpoint" | "final">("endpoint");
 
+  // Off unless PEWPEW_AI_API_KEY was set at build time
+  const aiAnalysisEnabled = isAIAnalysisEnabled();
   // Shared column visibility for both Final Results tables — toggling one syncs the other
   const [visibleColumns, setVisibleColumns] = useState(INITIAL_VISIBLE_COLUMNS);
   const toggleColumn = useCallback((column: keyof typeof INITIAL_VISIBLE_COLUMNS) => {
@@ -1190,6 +1232,108 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
     return comparisonData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [comparisonData, methodFilter]);
 
+  // The comparison of what's on screen (method filter applied). It only feeds the AI payload, so skip it when AI is off.
+  const aiComparison = useMemo((): {
+    result?: ComparisonResult;
+    baselineMinMaxTime?: MinMaxTime;
+    comparisonMinMaxTime?: MinMaxTime;
+    error?: string;
+  } => {
+    if (!aiAnalysisEnabled || !filteredBaselineData?.length || !filteredComparisonData?.length) {
+      return {};
+    }
+    try {
+      const baselineMinMaxTime = minMaxTime(filteredBaselineData);
+      const comparisonMinMaxTime = minMaxTime(filteredComparisonData);
+      // Match on method+URL like the comparison tables do, not every tag: compareResults keys on the whole BucketId,
+      // so an _id that moved between runs (a reordered YAML) would read as added/removed to the AI only
+      const result = compareResults(groupByMethodAndUrl(filteredBaselineData), groupByMethodAndUrl(filteredComparisonData));
+
+      result.matchedEndpoints.sort((a, b) => compareMethodAndUrl(a.bucketId, b.bucketId));
+      result.baselineOnly.sort(([a], [b]) => compareMethodAndUrl(a, b));
+      result.comparisonOnly.sort(([a], [b]) => compareMethodAndUrl(a, b));
+
+      log("TestResultsCompare comparison computed", LogLevel.DEBUG, {
+        matched: result.matchedEndpoints.length,
+        baselineOnly: result.baselineOnly.length,
+        comparisonOnly: result.comparisonOnly.length
+      });
+      return { result, baselineMinMaxTime, comparisonMinMaxTime };
+    } catch (error) {
+      log("TestResultsCompare comparison error", LogLevel.ERROR, error);
+      return { error: formatError(error) };
+    }
+  }, [aiAnalysisEnabled, filteredBaselineData, filteredComparisonData]);
+
+  const hasMatchedEndpoints = !!aiComparison.result?.matchedEndpoints.length;
+
+  const generateAIComparisonPayload = useCallback(() => {
+    const { result, baselineMinMaxTime, comparisonMinMaxTime } = aiComparison;
+    if (!result || result.matchedEndpoints.length === 0) {
+      return null;
+    }
+    const { matchedEndpoints, baselineOnly, comparisonOnly } = result;
+
+    // Small fields first and matchedEndpoints last: the server cuts oversized payloads from the end, so a cut drops
+    // endpoint detail rather than the summary and the added/removed endpoint lists
+    return {
+      comparisonType: "test-comparison",
+      baselineLabel,
+      comparisonLabel,
+      methodFilter,
+      baselineMetadata: {
+        endpoints: matchedEndpoints.length + baselineOnly.length,
+        timeRange: baselineMinMaxTime
+      },
+      comparisonMetadata: {
+        endpoints: matchedEndpoints.length + comparisonOnly.length,
+        timeRange: comparisonMinMaxTime
+      },
+      summary: {
+        totalMatched: matchedEndpoints.length,
+        baselineOnly: baselineOnly.length,
+        comparisonOnly: comparisonOnly.length
+      },
+      baselineOnlyEndpoints: baselineOnly.map(([bucketId]) => bucketId),
+      comparisonOnlyEndpoints: comparisonOnly.map(([bucketId]) => bucketId),
+      timestamp: new Date().toISOString(),
+      matchedEndpoints: matchedEndpoints.map((comparison) => ({
+        bucketId: comparison.bucketId,
+        stats: {
+          avg: { baseline: comparison.stats.avg.baseline, comparison: comparison.stats.avg.comparison, diff: comparison.stats.avg.diff, percentChange: comparison.stats.avg.percentChange },
+          min: { baseline: comparison.stats.min.baseline, comparison: comparison.stats.min.comparison, diff: comparison.stats.min.diff, percentChange: comparison.stats.min.percentChange },
+          max: { baseline: comparison.stats.max.baseline, comparison: comparison.stats.max.comparison, diff: comparison.stats.max.diff, percentChange: comparison.stats.max.percentChange },
+          stdDev: { baseline: comparison.stats.stdDev.baseline, comparison: comparison.stats.stdDev.comparison, diff: comparison.stats.stdDev.diff, percentChange: comparison.stats.stdDev.percentChange },
+          p90: { baseline: comparison.stats.p90.baseline, comparison: comparison.stats.p90.comparison, diff: comparison.stats.p90.diff, percentChange: comparison.stats.p90.percentChange },
+          p95: { baseline: comparison.stats.p95.baseline, comparison: comparison.stats.p95.comparison, diff: comparison.stats.p95.diff, percentChange: comparison.stats.p95.percentChange },
+          p99: { baseline: comparison.stats.p99.baseline, comparison: comparison.stats.p99.comparison, diff: comparison.stats.p99.diff, percentChange: comparison.stats.p99.percentChange }
+        },
+        statusCounts: Object.fromEntries(
+          Object.entries(comparison.statusCounts).map(([status, counts]) => [
+            status,
+            { baseline: counts.baseline, comparison: counts.comparison, diff: counts.diff, percentChange: counts.percentChange }
+          ])
+        ),
+        otherErrors: {
+          baseline: comparison.otherErrors.baseline,
+          comparison: comparison.otherErrors.comparison
+        }
+      }))
+    };
+  }, [aiComparison, baselineLabel, comparisonLabel, methodFilter]);
+
+  const aiAnalysis = useAIAnalysis({
+    buildPayload: generateAIComparisonPayload,
+    defaultQuestion: DEFAULT_AI_COMPARISON_QUESTION,
+    // Comparison reports need the significance thresholds and percentile guidance, which live in the default
+    // question. Without it the report falls back to raw percentage deltas and calls trivial changes regressions.
+    reportQuestion: DEFAULT_AI_COMPARISON_QUESTION,
+    getReportDownload: () => ({
+      title: "AI Performance Comparison Analysis Report",
+      details: [`Baseline: ${baselineLabel}`, `Comparison: ${comparisonLabel}`],
+      fileNamePrefix: "ai-comparison-" + `comparison-${baselineLabel}_vs_${comparisonLabel}`.replace(/[^a-zA-Z0-9_-]/g, "_")
+    })
+  });
   // Pre-compute request-count time series for each side so ComparisonRequestCountByFileChart
   // receives plain data and never needs to call getTotalCount() (a WASM boundary crossing)
   // during its own useMemo.
@@ -1240,6 +1384,35 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
   return (
     <Container>
       <H1>Performance Comparison</H1>
+
+      {aiComparison.error && <Danger>{aiComparison.error}</Danger>}
+
+      {aiAnalysisEnabled && <>
+        {/* AI Analysis Section */}
+        <div style={{ textAlign: "center", marginBottom: "2em" }}>
+          <h1>AI Comparison Insights</h1>
+          <p>Want AI to analyze the differences between these test runs? Click below.</p>
+          <p>
+            <Button
+              theme={{
+                ...defaultButtonTheme,
+                buttonWidth: "200px",
+                buttonHeight: "50px",
+                buttonFontSize: "18px"
+              }}
+              onClick={aiAnalysis.openAnalysis}
+              disabled={!hasMatchedEndpoints}
+              style={{ cursor: hasMatchedEndpoints ? "pointer" : "not-allowed" }}
+            >
+              🤖 AI Comparison Analysis
+            </Button>
+          </p>
+          {aiAnalysis.openError && <Danger>{aiAnalysis.openError}</Danger>}
+        </div>
+
+        {/* AI Analysis Modal */}
+        <AIAnalysisModal {...aiAnalysis.modalProps} />
+      </>}
 
       <FilterContainer>
         <FilterDropdown>
@@ -1527,7 +1700,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             }
 
             // Find matching endpoints
-            const matchedEndpoints: {
+            const endpointMatches: {
               key: string;
               method: string;
               url: string;
@@ -1538,7 +1711,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
             for (const [key, baselineEndpointData] of baselineMap.entries()) {
               if (comparisonMap.has(key)) {
                 const [method, url] = key.split("||");
-                matchedEndpoints.push({
+                endpointMatches.push({
                   key,
                   method,
                   url,
@@ -1582,7 +1755,7 @@ export const TestResultsCompare: React.FC<TestResultsCompareProps> = ({
               );
             };
 
-            return matchedEndpoints.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }, endpointIndex) => {
+            return endpointMatches.map(({ key, method, url, baselineData: endpointBaselineData, comparisonData: endpointComparisonData }, endpointIndex) => {
               // Aggregate baseline data for this endpoint
               let baselineRTT = null;
               let baselineCallCount = 0;

@@ -41,6 +41,7 @@ export async function getS3Response ({ request, response, filename, s3Folder, re
       const isFileTooLarge: boolean = files.length === 1 && files[0].Size !== undefined && files[0].Size >= MAX_API_SIZE;
       // Downloads that are too large we sould redirect to S3
       const redirectDownloadFiles = downloadFile && isFileTooLarge;
+      log(`getS3Response: filename redirect: ${filename}, s3Folder: ${s3Folder}`, LogLevel.DEBUG, { filename, redirectToS3, unzipS3Objects, downloadFile, size: files[0].Size, isFileTooLarge, redirectDownloadFiles });
       // https://github.com/vercel/next.js/issues/49963
       // Next 13.4.x has a bug that stops this from working. 13.3.4 still works.
       // Possible options for going forward:

@@ -293,6 +293,46 @@ load_pattern:
       expect(result.loadPatterns).to.have.length(1);
       expect(result.loadPatterns[0].type).to.equal("linear");
     });
+
+    it("should parse scripting configs with provider, logger and body tags", () => {
+      const yaml = `
+vars:
+  rampTime: 1m
+load_pattern:
+  - !linear
+      from: 1%
+      to: 100%
+      over: \${v:rampTime}
+loggers:
+  local_logger:
+    query:
+      select: response.status
+    to: !file errors.csv
+  console:
+    to: !stdout
+providers:
+  sessionId: !response
+    auto_return: force
+  localFile: !file
+    path: 'text.txt'
+    repeat: true
+  range: !range
+    start: 1
+    end: 10
+  names: !list
+    - a
+    - b
+endpoints:
+  - method: POST
+    url: http://127.0.0.1:8080/healthcheck
+    body: !str '{"id": "\${p:sessionId}"}'
+    peak_load: 30hpm
+`;
+      const result = parseYamlTestConfig(yaml);
+      expect(result.endpoints).to.deep.equal(["POST http://127.0.0.1:8080/healthcheck (30hpm)"]);
+      expect(result.loadPatterns).to.deep.equal([{ type: "linear", from: "1%", to: "100%", duration: "${v:rampTime}" }]);
+      expect(result.providers).to.deep.equal(["sessionId", "localFile", "range", "names"]);
+    });
   });
 
   describe("generateNotesMarkdown", () => {

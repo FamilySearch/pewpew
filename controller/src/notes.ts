@@ -303,11 +303,15 @@ function extractProviders (parsed: Record<string, unknown>): string[] {
   return [];
 }
 
-// Custom YAML schema to handle PewPew tags like !linear
-const PEWPEW_YAML_TYPES = ["linear", "step", "fixed"].map(
-  (tag) => new yaml.Type(`!${tag}`, {
-    kind: "mapping",
-    construct: (data: Record<string, unknown>) => ({ [tag]: data })
+// Custom YAML schema to handle PewPew tags. Scripting configs tag load patterns (!linear),
+// providers (!file, !response, !list, !range), logger targets (!stdout, !stderr, !file),
+// bodies (!str, !file, !multipart) and declares (!x, !c), so accept any "!tag" on a
+// scalar, sequence or mapping and turn it into { tag: value } instead of failing the parse.
+const PEWPEW_YAML_TYPES = (["scalar", "sequence", "mapping"] as const).map(
+  (kind) => new yaml.Type("!", {
+    kind,
+    multi: true,
+    construct: (data: unknown, tag?: string) => ({ [(tag || "!").slice(1)]: data ?? {} })
   })
 );
 const PEWPEW_SCHEMA = yaml.DEFAULT_SCHEMA.extend(PEWPEW_YAML_TYPES);

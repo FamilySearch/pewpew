@@ -35,6 +35,8 @@ const config: StorybookConfig = {
     if (!webpackConfig.output) { webpackConfig.output = {}; }
     // config.output.publicPath = "/";
     webpackConfig.output.webassemblyModuleFilename = "static/wasm/[modulehash].wasm";
+    if (!webpackConfig.output.environment) { webpackConfig.output.environment = {}; }
+    webpackConfig.output.environment.asyncFunction = true;
     return webpackConfig;
   },
   framework: {

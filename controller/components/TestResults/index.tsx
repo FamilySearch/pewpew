@@ -36,12 +36,18 @@ import type { TestData, TestManagerError, TestManagerMessage } from "../../types
 import axios, { AxiosResponse } from "axios";
 import { cloneParsedEntries, detectOverlap, mergeResults, requestCountTimeSeries } from "./merge";
 import { formatError, formatPageHref, isTestManagerMessage } from "../../src/clientutil";
+import { isAIAnalysisEnabled, useAIAnalysis } from "../AIAnalysisModal/useAIAnalysis";
 import { Chart } from "chart.js";
 import { Danger } from "../Alert";
 import { MergeSearchModal } from "./MergeSearchModal";
 import { TestResultsCompare } from "../TestResultsCompare";
 import { TestStatus } from "@fs/ppaas-common/dist/types";
+import dynamic from "next/dynamic";
 import styled from "styled-components";
+
+// Loaded only when AI Analysis is enabled and rendered, so deployments without it don't download react-markdown
+const AIAnalysisModal = dynamic(() => import("../AIAnalysisModal"), { ssr: false });
+const DEFAULT_AI_QUESTION = "Can you summarize the most important facts about this performance test data? Focus on response times, error rates, and any performance bottlenecks.";
 
 const TimeTaken = styled.div`
   text-align: left;
@@ -990,6 +996,9 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
   const userClearedResultsRef = useRef(false);
   // The status the polling effect last saw, so it can tell a test that just stopped from one that already had
   const previousStatusRef = useRef(testData.status);
+
+  // Off unless PEWPEW_AI_API_KEY was set at build time
+  const aiAnalysisEnabled = isAIAnalysisEnabled();
   const [mergeEndpoints, setMergeEndpoints] = useState(initialMergeEndpoints ?? false);
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [endpointDataExpanded, setEndpointDataExpanded] = useState(false);
@@ -1613,6 +1622,79 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
     return displayData.filter(([bucketId]) => bucketId.method === methodFilter);
   }, [displayData, methodFilter]);
 
+  // Built from filteredDisplayData so the AI analyzes what the charts and tables show, method filter included
+  const generateAIPayload = useCallback(() => {
+    if (!filteredDisplayData || filteredDisplayData.length === 0) {
+      return null;
+    }
+
+    // state.summaryData totals every method, so with a method filter the summary is built from the same filtered
+    // endpoints the payload sends. total() clones one histogram per call, like the per-endpoint path below.
+    const buildAISummary = () => {
+      const stateSummary = state.summaryData && Array.isArray(state.summaryData) && state.summaryData.length >= 2 ? state.summaryData : undefined;
+      if (methodFilter === "all") {
+        return stateSummary ? {
+          bucketId: stateSummary[0],
+          dataPointsCount: Array.isArray(stateSummary[1]) ? stateSummary[1].length : 0,
+          summaryStats: Array.isArray(stateSummary[1]) && stateSummary[1].length > 0 ? total(stateSummary[1]) : null
+        } : null;
+      }
+      const filteredPoints = filteredDisplayData.flatMap(([, dataPoints]) => dataPoints);
+      if (filteredPoints.length === 0) {
+        return null;
+      }
+      const summaryBucketId = stateSummary?.[0] ?? { method: "Summary", url: "" };
+      return {
+        bucketId: { ...summaryBucketId, method: `${summaryBucketId.method} (${methodFilter})` },
+        // getSummaryData merges by time, so count distinct times to match what an unfiltered summary reports
+        dataPointsCount: new Set(filteredPoints.map((dataPoint) => Number(dataPoint.time))).size,
+        summaryStats: total(filteredPoints)
+      };
+    };
+
+    // Small fields first and the endpoint array last: the server cuts oversized payloads from the end, so a cut drops
+    // endpoint detail rather than the metadata and summary that frame it
+    const aiPayload = {
+      testMetadata: {
+        testId: testData.testId,
+        s3Folder: testData.s3Folder,
+        status: testData.status,
+        minMaxTime: state.minMaxTime,
+        totalEndpoints: filteredDisplayData.length,
+        hasFilterApplied: !!(state.summaryTagFilter || state.summaryTagValueFilter || methodFilter !== "all"),
+        filterCriteria: {
+          tagFilter: state.summaryTagFilter,
+          valueFilter: state.summaryTagValueFilter,
+          methodFilter
+        }
+      },
+      summaryData: buildAISummary(),
+      timestamp: new Date().toISOString(),
+      endpoints: filteredDisplayData.filter(entry => Array.isArray(entry) && entry.length >= 2 && Array.isArray(entry[1])).map(([bucketId, dataPoints]) => {
+        const totalResults = total(dataPoints);
+        return {
+          bucketId,
+          totalResults,
+          metadata: {
+            dataPointsCount: dataPoints ? dataPoints.length : 0,
+            hasErrors: totalResults ? (totalResults.otherErrors.length > 0) : false
+          }
+        };
+      })
+    };
+    return aiPayload;
+  }, [filteredDisplayData, methodFilter, state.summaryData, state.minMaxTime, state.summaryTagFilter, state.summaryTagValueFilter, testData]);
+
+  const aiAnalysis = useAIAnalysis({
+    buildPayload: generateAIPayload,
+    defaultQuestion: DEFAULT_AI_QUESTION,
+    getReportDownload: () => {
+      // Only the file name is sanitized; the report's "Test:" line keeps the readable s3Folder
+      const fileNamePrefix = `ai-analysis-${testData.s3Folder.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      return { title: "AI Performance Analysis Report", details: [`Test: ${testData.s3Folder}`], fileNamePrefix };
+    }
+  });
+
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {
     if (filteredDisplayData === undefined) {
@@ -1688,6 +1770,8 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
           </p>
           {/* This is the compare search modal */}
           <TestsListModal ref={compareSearchModalRef} tests={state.compareTests} onClick={onPriorTestLoad} />
+          {/* AI Analysis Modal */}
+          {aiAnalysisEnabled && <AIAnalysisModal {...aiAnalysis.modalProps} />}
           {/* This is the merge results search modal */}
           <MergeSearchModal
             ref={mergeSearchModalRef}
@@ -1703,6 +1787,27 @@ export const TestResults = React.memo(({ testData, initialResultsIndex, onResult
             baselineLabel={state.compareTest?.testId}
             comparisonLabel={testData.testId}
           />}
+          {aiAnalysisEnabled && <>
+            <h1>AI Insights</h1>
+            <p>Want to know more about your test results? Click below.</p>
+            <p>
+              <Button
+                theme={{
+                  ...defaultButtonTheme,
+                  buttonWidth: "180px",
+                  buttonHeight: "50px",
+                  buttonFontSize: "18px"
+                }}
+                onClick={aiAnalysis.openAnalysis}
+                style={{
+                  cursor: "pointer"
+                }}
+              >
+                🤖 AI Analysis
+              </Button>
+            </p>
+            {aiAnalysis.openError && <Danger>{aiAnalysis.openError}</Danger>}
+          </>}
           <div id="overview-charts">
             <SectionHeading>
               Overview charts

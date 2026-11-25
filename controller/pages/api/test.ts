@@ -77,8 +77,8 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
         res.status(400).json(createErrorResponse(req, error));
         return;
       }
+      auditContext.testId = parsedForm.fields.testId?.length === 1 ? parsedForm.fields.testId[0] : undefined;
       const testManagerResponse: TestManagerResponse = await TestManager.putTest(parsedForm, authPermissions);
-      auditContext.testId = (testManagerResponse.json as Record<string, unknown>)?.testId;
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above

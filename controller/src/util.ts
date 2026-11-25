@@ -362,10 +362,11 @@ export interface AuditContext {
 
 /**
  * Logs an INFO "<label> received" audit record now and an INFO "<label> completed" record when the
- * response finishes, so every outcome (including 400s from parsing and 500s from thrown errors)
- * gets a completed record with the real status code.
+ * response closes, so every outcome (including 400s from parsing, 500s from thrown errors, and
+ * clients that disconnect mid-request) gets a completed record. `finished` is false when the
+ * connection closed before the response was fully written.
  * @param req the incoming request
- * @param res the response, used to hook the completed log on "finish"
+ * @param res the response, used to hook the completed log on "close"
  * @param label e.g. "POST /test"
  * @param userId the authenticated user id
  * @param testId optional testId known up front (handlers can also set it on the returned context)
@@ -381,11 +382,12 @@ export function auditRequest (req: Request, res: Response, label: string, userId
     referer: req.headers["referer"],
     testId
   });
-  res.once("finish", () => {
+  res.once("close", () => {
     log(`${label} completed`, LogLevel.INFO, {
       userId,
       ipAddress,
       status: res.statusCode,
+      finished: res.writableFinished,
       testId: auditContext.testId
     });
   });

@@ -17,7 +17,7 @@ import {
 import { H1, H3 } from "../components/Headers";
 import { LogLevel, log } from "../src/log";
 import { LogLevel as LogLevelServer, log as logServer } from "@fs/ppaas-common";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axios, { AxiosResponse } from "axios";
 import { formatError, formatPageHref, isTestData } from "../src/clientutil";
 import { Danger } from "../components/Alert";
@@ -75,13 +75,55 @@ const TestHistoryPage = ({
   const [state, setFormData] = useState(defaultState);
   const setState = (newState: Partial<TestHistoryState>) => setFormData((oldState: TestHistoryState) => ({ ...oldState, ...newState}));
   const router = useRouter();
+  // The search whose results are on screen (initially the server-rendered one) so the
+  // ?search= effect only fetches when the URL actually moves to a different search
+  const lastSearch = useRef<string | undefined>(propsTestIdSearch);
+  // Incremented per fetch so a slow older response can't overwrite a newer one
+  const searchCounter = useRef(0);
 
-  useEffect(() => {
-    if (typeof router.query.search === "string") {
-      setState({ testIdSearch: router.query.search });
-    } else {
-      setState({ testIdSearch: "", searchTestResult: undefined });
+  const runSearch = async (searchString: string): Promise<void> => {
+    lastSearch.current = searchString;
+    const searchId = ++searchCounter.current;
+    setState({ testIdSearch: searchString, searchTestResult: undefined, error: undefined });
+    if (!SEARCH_REGEX.test(searchString)) {
+      setState({ error: "Only Alphanumeric characters are allowed" });
+      return;
     }
+    try {
+      const url = formatPageHref(API_SEARCH_FORMAT(searchString));
+      const response: AxiosResponse = await axios.get(url);
+      if (searchId !== searchCounter.current) { return; }
+      if (response.status === 204) {
+        setState({ error: noTestsFoundEror(searchString) });
+        return;
+      }
+      if (!Array.isArray(response.data) || !(response.data as TestData[]).every((data) => isTestData(data))) {
+        const errorString = "/api/search did not return a TestData array";
+        log(errorString, LogLevel.ERROR, response.data);
+        throw new Error(errorString);
+      }
+      const searchTestResult: TestData[] = response.data;
+      setState({ searchTestResult });
+    } catch (error) {
+      if (searchId !== searchCounter.current) { return; }
+      log("Error searching for testId", LogLevel.ERROR, error);
+      setState({ error: formatError(error) });
+    }
+  };
+
+  // Keep the results in sync with ?search= so Back/Forward show results that match the search box
+  useEffect(() => {
+    const search: string | undefined = typeof router.query.search === "string" ? router.query.search : undefined;
+    if (search === lastSearch.current) {
+      return;
+    }
+    if (search === undefined) {
+      lastSearch.current = undefined;
+      searchCounter.current++; // Drop any in-flight search
+      setState({ testIdSearch: "", searchTestResult: undefined, error: undefined });
+      return;
+    }
+    runSearch(search).catch(() => { /* runSearch sets its own error state */ });
   }, [router.query.search]);
 
   let body: React.JSX.Element = <Div>Unknown Error</Div>;
@@ -112,44 +154,29 @@ const TestHistoryPage = ({
   };
 
   const onClickHandlerSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (doubleClickCheck) {
       return;
     }
     try {
       doubleClickCheck = true;
-      event.preventDefault();
-      setState({
-        searchTestResult: undefined,
-        error: undefined
-      });
       const searchString = state.testIdSearch;
-
       if (!SEARCH_REGEX.test(searchString)) {
         setState({
+          searchTestResult: undefined,
           error: "Only Alphanumeric characters are allowed"
         });
         return;
       }
-      const url = formatPageHref(API_SEARCH_FORMAT(searchString));
-      const response: AxiosResponse = await axios.get(url);
-      const searchUrl = `${router.pathname}?search=${searchString}`;
-      log("searchUrl", LogLevel.DEBUG, { searchUrl, pathname: router.pathname, asPath: router.asPath, query: router.query });
-      router.push(searchUrl, formatPageHref(searchUrl), { shallow: true });
-      if (response.status === 204) {
-        setState({
-          error: noTestsFoundEror(searchString)
-        });
+      if (router.query.search === searchString) {
+        // Same URL, so the ?search= effect won't fire. Re-run the search directly.
+        await runSearch(searchString);
         return;
       }
-      if (!Array.isArray(response.data) || !(response.data as TestData[]).every((data) => isTestData(data))) {
-        const errorString = "/api/search did not return a TestData array";
-        log(errorString, LogLevel.ERROR, response.data);
-        throw new Error(errorString);
-      }
-      const searchTestResult: TestData[] = response.data;
-      setState({
-        searchTestResult
-      });
+      // The ?search= effect runs the search once the URL changes
+      const searchUrl = `${router.pathname}?search=${searchString}`;
+      log("searchUrl", LogLevel.DEBUG, { searchUrl, pathname: router.pathname, asPath: router.asPath, query: router.query });
+      await router.push(searchUrl, formatPageHref(searchUrl), { shallow: true });
     } catch (error) {
       log("Error searching for testId", LogLevel.ERROR, error);
       setState({

@@ -302,7 +302,7 @@ export class TestScheduler implements TestSchedulerItem {
       testToRun.eventInput.startRecur = nextStart;
       // Update the scheduleDate so it will still show as delete-able
       testToRun.scheduledTestData.scheduleDate = nextStart;
-      log("Test Scheduler Loop: New Load Test started", LogLevel.INFO, { testId, userId, queueName, testData, authPermissions, nextStart });
+      log("Test Scheduler Loop: New Load Test started", LogLevel.INFO, { testId: testData.testId, scheduledTestId: testId, userId, queueName, testData, authPermissions, nextStart });
       log("Test Scheduler: Updated EventInput", LogLevel.DEBUG, testToRun.eventInput);
       // Just like add and remove, we need to call this so the calendar and scheduler get updated and saved
       TestScheduler.updateNextStart();

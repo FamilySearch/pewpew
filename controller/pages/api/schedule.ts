@@ -3,6 +3,7 @@ import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
+  auditRequest,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
@@ -31,23 +32,10 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "DELETE") {
-    const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
-    log("DELETE /schedule received", LogLevel.INFO, {
-      userId: authPermissions.userId,
-      ipAddress,
-      userAgent: req.headers["user-agent"],
-      referer: req.headers["referer"],
-      testId: req.query.testId
-    });
+    auditRequest(req, res, "DELETE /schedule", authPermissions.userId, req.query.testId);
     if (req.query.testId && !Array.isArray(req.query.testId)) {
       try {
         const result: ErrorResponse = await TestScheduler.removeTest(req.query.testId, authPermissions, true);
-        log("DELETE /schedule completed", LogLevel.INFO, {
-          userId: authPermissions.userId,
-          ipAddress,
-          status: result.status,
-          testId: req.query.testId
-        });
         res.status(result.status).json(result.json);
       } catch (error) {
         res.status(500).json(createErrorResponse(req, error, LogLevel.ERROR));
@@ -57,13 +45,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
     }
 
   } else if (req.method === "PUT") {
-    const ipAddress = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
-    log("PUT /schedule received", LogLevel.INFO, {
-      userId: authPermissions.userId,
-      ipAddress,
-      userAgent: req.headers["user-agent"],
-      referer: req.headers["referer"]
-    });
+    const auditContext = auditRequest(req, res, "PUT /schedule", authPermissions.userId);
     let localPath: string | undefined;
     try {
       const testIdTime: string = PpaasTestId.getDateString();
@@ -80,12 +62,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       }
       log(`${req.method} ${req.url} parsedForm`, LogLevel.DEBUG, { files: parsedForm.files, fields: { ...parsedForm.fields, environmentVariables: undefined } });
       const testManagerResponse: TestManagerResponse = await TestManager.postTest(parsedForm, authPermissions, localPath, true);
-      log("PUT /schedule completed", LogLevel.INFO, {
-        userId: authPermissions.userId,
-        ipAddress,
-        status: testManagerResponse.status,
-        testId: (testManagerResponse.json as Record<string, unknown>)?.testId
-      });
+      auditContext.testId = (testManagerResponse.json as Record<string, unknown>)?.testId;
       res.status(testManagerResponse.status).json(testManagerResponse.json);
     } catch (error) {
       // If we get here it's a 500. All the "bad requests" are handled above

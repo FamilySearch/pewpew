@@ -40,6 +40,38 @@ const StartNewTest = (props: StartTestPageProps) => {
   );
 };
 
+function parseScheduleDate (ctx: GetServerSidePropsContext): number | undefined {
+  if (!ctx.query.scheduleDate || Array.isArray(ctx.query.scheduleDate)) {
+    return undefined;
+  }
+  try {
+    // If it's a timestamp we have to parse it into a number before passing it to new Date()
+    const numberDate =  Number(ctx.query.scheduleDate);
+    const scheduleDate = new Date(Number.isNaN(numberDate) ? ctx.query.scheduleDate : numberDate);
+    if (!Number.isNaN(scheduleDate.getTime())) {
+      return scheduleDate.getTime();
+    }
+  } catch (error) {
+    logServer("Error parsing date", LogLevelServer.WARN, error);
+  }
+  return undefined;
+}
+
+async function loadPreviousTestData (ctx: GetServerSidePropsContext): Promise<{ previousTestData?: PreviousTestData; editSchedule?: boolean }> {
+  if (!ctx.query.testId || Array.isArray(ctx.query.testId)) {
+    return {};
+  }
+  // If we get more than one testId, just return all, don't try to pick one
+  const testId: string = ctx.query.testId;
+  const previousTestDataResponse: ErrorResponse | PreviousTestDataResponse = await TestManager.getPreviousTestData(testId);
+  if (previousTestDataResponse.status > 300) {
+    throw new Error((previousTestDataResponse as ErrorResponse).json.message);
+  }
+  const previousTestData = (previousTestDataResponse as PreviousTestDataResponse).json;
+  const editSchedule = ctx.query["edit"] !== undefined && previousTestData?.status === TestStatus.Scheduled;
+  return { previousTestData, editSchedule };
+}
+
 export const getServerSideProps: GetServerSideProps =
   async (ctx: GetServerSidePropsContext): Promise<GetServerSidePropsResult<StartTestPageProps>> => {
   let authPermissions: AuthPermissions | string | undefined;
@@ -69,31 +101,11 @@ export const getServerSideProps: GetServerSideProps =
     queueInitialProps = getPropsTestQueues();
     versionInitalProps = await getPropsPewPewVersions();
 
-    if (ctx.query.scheduleDate && !Array.isArray(ctx.query.scheduleDate)) {
-      try {
-        // If it's a timestamp we have to parse it into a number before passing it to new Date()
-        const numberDate =  Number(ctx.query.scheduleDate);
-        const scheduleDate = new Date(isNaN(numberDate) ? ctx.query.scheduleDate : numberDate);
-        if (!isNaN(scheduleDate.getTime())) {
-          queryScheduleDate = scheduleDate.getTime();
-        }
-      } catch (error) {
-        logServer("Error parsing date", LogLevelServer.WARN, error);
-        queryScheduleDate = undefined;
-      }
-    }
+    queryScheduleDate = parseScheduleDate(ctx);
 
-    if (ctx.query.testId && !Array.isArray(ctx.query.testId)) {
-
-      // If we get more than one testId, just return all, don't try to pick one
-      const testId: string = ctx.query.testId;
-      const previousTestDataResponse: ErrorResponse | PreviousTestDataResponse = await TestManager.getPreviousTestData(testId);
-      if (previousTestDataResponse.status > 300) {
-        throw new Error((previousTestDataResponse as ErrorResponse).json.message);
-      }
-      previousTestData = (previousTestDataResponse as PreviousTestDataResponse).json;
-      editSchedule = ctx.query["edit"] !== undefined && previousTestData?.status === TestStatus.Scheduled;
-    }
+    const testDataResult = await loadPreviousTestData(ctx);
+    previousTestData = testDataResult.previousTestData;
+    editSchedule = testDataResult.editSchedule;
 
     const formKey = (previousTestData?.testId
         ? previousTestData?.testId + editSchedule

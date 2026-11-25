@@ -1491,7 +1491,7 @@ export abstract class TestManager {
     // Put a message on the scale in queue so we don't scale back in
     await sqs.sendTestScalingMessage(queueName);
     // We succeeded! Yay!
-    log ("TestManager: New Load Test started", LogLevel.INFO, { testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
+    log ("TestManager: New Load Test started", LogLevel.INFO, { testId, userId, testMessage: ppaasTestMessage.sanitizedCopy(), queueName, testData, authPermissions: getLogAuthPermissions(authPermissions) });
 
     // Add it to the runningTests
     // We don't want to remove any since the communications loop will do it.

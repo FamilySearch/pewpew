@@ -3,6 +3,7 @@ import { LogLevel, PpaasTestId, log } from "@fs/ppaas-common";
 import { NextApiRequest, NextApiResponse } from "next";
 import {
   ParsedForm,
+  auditRequest,
   cleanupTestFolder,
   createErrorResponse,
   createTestFolder,
@@ -14,7 +15,7 @@ import { authApi } from "../../src/authserver";
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
 
   if (req.method === "GET") {
-    if (!await authApi(req, res)) {
+    if (!await authApi(req, res, AuthPermission.ReadOnly)) {
       // If it's undefined we failed auth and already have set a response
       return;
     }
@@ -32,6 +33,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       // If it's undefined we failed auth and already have set a response
       return;
     }
+    auditRequest(req, res, `${req.method} /pewpew`, authPermissions.userId);
     let localPath: string | undefined;
     try {
       if (req.method === "DELETE") {

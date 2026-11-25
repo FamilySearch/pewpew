@@ -292,6 +292,27 @@ describe("Test Result Component", () => {
       await expect(waitFor(() => expect(screen.queryAllByText(pattern)).not.toHaveLength(0), { timeout: 1000 })).rejects.toThrow();
     };
 
+    it("hides AI Insights when AI Analysis is not enabled", async () => {
+      render(<TestResults testData={runningTest} />);
+      await initialLoad();
+      expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
+      expect(screen.queryByText("🤖 AI Analysis")).not.toBeInTheDocument();
+    });
+
+    it("shows AI Insights once results load when AI Analysis is enabled", async () => {
+      // AI_ANALYSIS_ENABLED is inlined at build time in the app; under vitest it's read from process.env
+      vi.stubEnv("AI_ANALYSIS_ENABLED", "true");
+      try {
+        render(<TestResults testData={runningTest} />);
+        expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
+        await initialLoad();
+        expect(screen.getByText("AI Insights")).toBeInTheDocument();
+        expect(screen.getByText("🤖 AI Analysis")).toBeInTheDocument();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("keeps the merge when the base file changes", async () => {
       render(<TestResults testData={runningTest} initialResultsIndex={0} initialMergeTestIds={[mergeTest.testId]} initialMergeTestData={[mergeTest]} />);
       await initialLoad();

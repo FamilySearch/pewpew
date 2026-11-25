@@ -1,9 +1,9 @@
 import { AuthPermissions, TestManagerResponse } from "../../types";
 import { NextApiRequest, NextApiResponse } from "next";
+import { auditRequest, createErrorResponse } from "../../src/util";
 import { LogLevel } from "@fs/ppaas-common";
 import { TestManager } from "../../src/testmanager";
 import { authApi } from "../../src/authserver";
-import { createErrorResponse } from "../../src/util";
 
 export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // We don't actually need a body, only querystring so let's support both.
@@ -13,6 +13,7 @@ export default async (req: NextApiRequest, res: NextApiResponse): Promise<void> 
       // If it's undefined we failed auth and already have set a response
       return;
     }
+    auditRequest(req, res, `${req.method} /stop`, authPermissions.userId, req.query.testId);
     try {
       const testManagerResponse: TestManagerResponse = await TestManager.stopTest(req.query.testId, authPermissions, req.query.kill === "true");
       res.status(testManagerResponse.status).json(testManagerResponse.json);

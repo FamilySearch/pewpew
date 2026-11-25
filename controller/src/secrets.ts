@@ -19,6 +19,20 @@ import crypto from "crypto";
 import { readFile } from "fs/promises";
 
 export const OVERRIDE = "_OVERRIDE";
+/**
+ * Secret name of the OpenAI API key for AI Analysis, from PEWPEW_AI_API_KEY. There is deliberately no default:
+ * AI Analysis is enabled only when this is set, so deployments that don't configure it never show the feature or
+ * call OpenAI. The API reads this on each request; the UI is gated at build time by next.config.ts
+ * `env.AI_ANALYSIS_ENABLED`, so set it in both the build and the runtime environment or the two will disagree.
+ */
+export function getAIApiKeyName (): string | undefined {
+  return process.env.PEWPEW_AI_API_KEY || undefined;
+}
+
+/** AI Analysis is on only when a secret name for its API key is configured */
+export function isAIAnalysisEnabled (): boolean {
+  return !!getAIApiKeyName();
+}
 
 export interface SecretsConfig {
   encryptionKey: Buffer | undefined;

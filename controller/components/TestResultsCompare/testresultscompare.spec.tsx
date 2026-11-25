@@ -109,6 +109,24 @@ describe("TestResultsCompare", () => {
       comparisonData = makeTestData();
     });
 
+    it("hides AI comparison when AI Analysis is not enabled", () => {
+      render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+      expect(screen.queryByText("AI Comparison Insights")).not.toBeInTheDocument();
+      expect(screen.queryByText("🤖 AI Comparison Analysis")).not.toBeInTheDocument();
+    });
+
+    it("shows an enabled AI comparison button when AI Analysis is enabled", () => {
+      // AI_ANALYSIS_ENABLED is inlined at build time in the app; under vitest it's read from process.env
+      vi.stubEnv("AI_ANALYSIS_ENABLED", "true");
+      try {
+        render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
+        expect(screen.getByText("AI Comparison Insights")).toBeInTheDocument();
+        expect(screen.getByText("🤖 AI Comparison Analysis").closest("button")).not.toBeDisabled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("shows Performance Comparison heading", () => {
       render(<TestResultsCompare baselineData={baselineData} comparisonData={comparisonData} />);
       expect(screen.getByRole("heading", { name: "Performance Comparison" })).toBeInTheDocument();

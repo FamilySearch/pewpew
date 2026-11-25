@@ -31,6 +31,14 @@ SECRETS_OPENID_CLIENT_SECRET_NAME="pewpew-openid-secret"
 # variable name is the client secret name in caps/underscores with _OVERRIDE at the end
 # PEWPEW_OPENID_SECRET_OVERRIDE="<local value to not use secrets-manager>"
 
+# Optional: AI Analysis (OpenAI) secret name in secrets-manager. Leave unset to turn AI Analysis off: the UI is
+# hidden and /api/ai/analyze returns 404. Setting it turns AI Analysis on.
+# PEWPEW_AI_API_KEY="pewpew-ai-api-key"
+
+# Optional local override for the OpenAI API key value (needs PEWPEW_AI_API_KEY set above).
+# variable name is the secret name in caps/underscores with _OVERRIDE at the end
+# PEWPEW_AI_API_KEY_OVERRIDE="<local value to not use secrets-manager>"
+
 # OpenId Client Id
 OPENID_CLIENT_ID="my-client-id"
 

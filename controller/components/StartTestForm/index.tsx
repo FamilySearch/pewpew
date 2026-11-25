@@ -698,8 +698,9 @@ export const StartTestForm = ({
             instanceId: previousTestData?.instanceId,
             ipAddress: previousTestData?.ipAddress,
             lastChecked: previousTestData?.lastChecked,
-            lastUpdated: previousTestData?.lastUpdated
-          } } />
+            lastUpdated: previousTestData?.lastUpdated,
+            userId: previousTestData?.userId
+          } } authPermission={authPermission} userId={authPermissions?.userId} />
           <LinkButton theme={{ buttonFontSize: "1.25rem", buttonWidth: "200px", buttonHeight: "50px" , buttonMargin: "10px"}}
                       href={PAGE_TEST_STATUS_FORMAT(state.testId)}>Test Status</LinkButton>
         </Column>}

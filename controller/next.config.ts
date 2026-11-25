@@ -55,6 +55,10 @@ const nextConfig: NextConfig = {
 
     if (!config.output) { config.output = {}; }
     config.output.webassemblyModuleFilename = "static/wasm/[modulehash].wasm";
+    // Tell webpack the target environment supports native async functions (required for asyncWebAssembly).
+    // Without this, webpack 5 warns and generates broken WASM loaders for modern browser targets.
+    if (!config.output.environment) { config.output.environment = {}; }
+    config.output.environment.asyncFunction = true;
     if (!config.experiments) { config.experiments = {}; }
     config.experiments.asyncWebAssembly = true;
 

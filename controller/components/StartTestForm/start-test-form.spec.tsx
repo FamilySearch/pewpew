@@ -262,6 +262,43 @@ describe("StartTestForm Component", () => {
     expect(screen.getByTestId("prior-yaml-section")).toBeInTheDocument();
   });
 
+  describe("Download Test Files on a rerun", () => {
+    const ownedTestData: PreviousTestData = {
+      testId: "test20240115T120000000",
+      s3Folder: "test/20240115T120000000",
+      status: TestStatus.Finished,
+      startTime: new Date("2024-01-15T12:00:00Z").getTime(),
+      lastChecked: "2024-01-15T13:00:00Z",
+      yamlFile: "load-test.yaml",
+      environmentVariables: {},
+      userId: defaultAuthPermissions.userId!
+    };
+
+    const renderWith = (authPermissions: AuthPermissions) => render(
+      <StartTestForm
+        queueInitialProps={defaultQueueProps}
+        versionInitalProps={defaultVersionProps}
+        authPermissions={authPermissions}
+        previousTestData={ownedTestData}
+      />
+    );
+
+    it("shows the button to an Admin", () => {
+      renderWith({ ...defaultAuthPermissions, authPermission: AuthPermission.Admin, userId: "admin@example.com" });
+      expect(screen.getByTestId("download-files-button")).toBeInTheDocument();
+    });
+
+    it("shows the button to the User who owns the test", () => {
+      renderWith(defaultAuthPermissions);
+      expect(screen.getByTestId("download-files-button")).toBeInTheDocument();
+    });
+
+    it("hides the button from a User who does not own the test", () => {
+      renderWith({ ...defaultAuthPermissions, userId: "someone.else@example.com" });
+      expect(screen.queryByTestId("download-files-button")).not.toBeInTheDocument();
+    });
+  });
+
   it("uses previousTestData queueName when it exists in available queues", () => {
     const multiQueueProps: QueueInitialProps = {
       queueName: "unittestqueue",

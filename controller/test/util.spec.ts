@@ -1,6 +1,8 @@
 import type { File, Files } from "formidable";
-import { LogLevel, log } from "@fs/ppaas-common";
-import { createFormidableFile, parseZip, unzipFile } from "../src/util";
+import { LogLevel, log, logger } from "@fs/ppaas-common";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { auditRequest, createFormidableFile, parseZip, unzipFile } from "../src/util";
+import { EventEmitter } from "events";
 import { expect } from "chai";
 import fs from "fs/promises";
 import path from "path";
@@ -109,6 +111,103 @@ describe("Util", () => {
           done(error2);
         }
       });
+    });
+  });
+
+  describe("auditRequest", () => {
+    interface LogRecord {
+      message: string;
+      testId?: string;
+      userId?: string;
+      data?: Record<string, unknown>;
+    }
+    // Bunyan has no removeStream, so the stream stays attached and only records while capturing
+    let capturing = false;
+    const records: LogRecord[] = [];
+    const label = "POST /audit-test";
+    const userId = "audit-user";
+
+    before(() => {
+      logger.getLogger().addStream({
+        type: "raw",
+        level: "info",
+        stream: { write: (record: LogRecord) => { if (capturing) { records.push(record); } } } as unknown as NodeJS.WritableStream
+      });
+    });
+
+    beforeEach(() => {
+      records.length = 0;
+      capturing = true;
+    });
+
+    afterEach(() => {
+      capturing = false;
+    });
+
+    const findRecord = (message: string): LogRecord | undefined => records.find((record) => record.message === message);
+
+    const createMocks = () => {
+      const req = {
+        headers: { "user-agent": "audit-agent", "referer": "audit-referer", "x-forwarded-for": "1.2.3.4" },
+        socket: {}
+      } as unknown as NextApiRequest;
+      const res = Object.assign(new EventEmitter(), { statusCode: 200, writableFinished: false });
+      return { req, res };
+    };
+
+    it("should log received immediately and completed with status on close", () => {
+      const { req, res } = createMocks();
+      auditRequest(req, res as unknown as NextApiResponse, label, userId, "initial-test-id");
+
+      const received = findRecord(`${label} received`);
+      expect(received, "received record").to.not.equal(undefined);
+      expect(received!.userId).to.equal(userId);
+      expect(received!.testId).to.equal("initial-test-id");
+      expect(received!.data).to.deep.include({ ipAddress: "1.2.3.4", userAgent: "audit-agent", referer: "audit-referer" });
+      expect(findRecord(`${label} completed`), "completed before close").to.equal(undefined);
+
+      res.statusCode = 201;
+      res.writableFinished = true;
+      res.emit("close");
+
+      const completed = findRecord(`${label} completed`);
+      expect(completed, "completed record").to.not.equal(undefined);
+      expect(completed!.userId).to.equal(userId);
+      expect(completed!.testId).to.equal("initial-test-id");
+      expect(completed!.data).to.deep.include({ ipAddress: "1.2.3.4", status: 201, finished: true });
+    });
+
+    it("should use a testId set on the returned context after the call", () => {
+      const { req, res } = createMocks();
+      const auditContext = auditRequest(req, res as unknown as NextApiResponse, label, userId);
+      expect(findRecord(`${label} received`)!.testId).to.equal(undefined);
+
+      auditContext.testId = "late-test-id";
+      res.writableFinished = true;
+      res.emit("close");
+
+      expect(findRecord(`${label} completed`)!.testId).to.equal("late-test-id");
+    });
+
+    it("should log finished false when the client disconnects before the response is written", () => {
+      const { req, res } = createMocks();
+      auditRequest(req, res as unknown as NextApiResponse, label, userId, "aborted-test-id");
+
+      res.emit("close");
+
+      const completed = findRecord(`${label} completed`);
+      expect(completed, "completed record").to.not.equal(undefined);
+      expect(completed!.data).to.deep.include({ finished: false });
+    });
+
+    it("should only log completed once", () => {
+      const { req, res } = createMocks();
+      auditRequest(req, res as unknown as NextApiResponse, label, userId);
+
+      res.emit("close");
+      res.emit("close");
+
+      expect(records.filter((record) => record.message === `${label} completed`).length).to.equal(1);
     });
   });
 
